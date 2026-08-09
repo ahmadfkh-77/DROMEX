@@ -448,3 +448,667 @@ Is this accurate?
 ## Turn 104
 **INTERVIEWER:** I agree. A third document would duplicate the same information and make the workflow confusing. We should have only a delivery authorization and a receipt, also called the invoice bill. Both can be printed, saved as PDF, and sent from the phone. Should we confirm this as the final document setup?
 **INTERVIEWEE:** looks good to me
+
+## Turn 105
+**INTERVIEWER:** Should the trash contain only intentionally deleted business-record drafts, since confirmed records cannot be deleted and configuration options use deactivation?
+**INTERVIEWEE:** yes
+
+## Turn 106
+**INTERVIEWER:** To make “all sizes” testable, should version one support selectable 58 mm and 80 mm POS paper widths, with additional widths added later if needed?
+**INTERVIEWEE:** yes
+
+## Turn 107
+**INTERVIEWER:** Should a printer be officially supported only after successful physical testing with the app, while untested Bluetooth printer models are treated as not guaranteed to work?
+**INTERVIEWEE:** technically yes i need to test the priter for it to work
+
+## Turn 108
+**INTERVIEWER:** Should version one be accepted only after successfully printing both documents using the existing Xprinter terminal's built-in 58 mm printer, a separate 58 mm Bluetooth printer from Android and iPhone, and a separate 80 mm Bluetooth printer from Android and iPhone?
+**INTERVIEWEE:** yes
+
+## Turn 109
+**INTERVIEWER:** For every priced receipt, should the total be calculated as converted quantity multiplied by price per selected output unit—for example, tons multiplied by price per ton for asphalt and cubic metres multiplied by price per cubic metre for concrete?
+**INTERVIEWEE:** yes
+
+## Turn 110
+**INTERVIEWER:** When preparing a receipt, should you be able to enter a special price for that transaction without changing the saved default price, or should every price change become the new default?
+**INTERVIEWEE:** clarify
+
+## Turn 111
+**INTERVIEWER:** Example: your normal asphalt price is $70 per ton. One customer has a special agreement for $65 per ton on one order. Should entering $65 apply only to that receipt while the next receipt returns to $70, or change the default so future receipts also use $65?
+**INTERVIEWEE:** i can change when ever i want
+
+## Turn 112
+**INTERVIEWER:** If you change the price from $70 to $65, should future receipts keep using $65 until you manually change it again?
+**INTERVIEWEE:** no i can edit the price but its back to what it was done , if i want to change it i edit the price from its section
+
+## Turn 113
+**INTERVIEWER:** Should each item have its own saved default price per output unit—for example, Asphalt Mix A at $70 per ton, Asphalt Mix B at $75 per ton, and Concrete C25 at $90 per cubic metre—or should there be one global default price for all items?
+**INTERVIEWEE:** there should be a global price for each item that can be changed and can be changed in the receipt
+
+## Turn 114
+**INTERVIEWER:** Which currency or currencies should version one support for prices, payments, balances, receipts, and financial reports—for example USD, Lebanese pounds, or both?
+**INTERVIEWEE:** usd
+
+## Turn 115
+**INTERVIEWER:** Should version one use whole-kilogram weighbridge entries, converted quantities with three decimal places, USD amounts with two decimal places, and standard rounding applied only to the final displayed quantity and total—for example, 20,555 kg equals 20.555 tons and at $70 per ton totals $1,438.85?
+**INTERVIEWEE:** clarify
+
+## Turn 116
+**INTERVIEWER:** When entering empty and full truck weights, can the weighbridge produce decimal kilograms such as 12,500.5 kg, or does it always show whole kilograms such as 12,500 kg?
+**INTERVIEWEE:** no it can only 12500
+
+## Turn 117
+**INTERVIEWER:** If the net weight is 20,555 kg, should the receipt show 20.555 tons—three decimal places preserving exact kilograms—or 20.56 tons—two decimal places rounded?
+**INTERVIEWEE:** the weight bridge is entered manually so i can write what i see
+
+## Turn 118
+**INTERVIEWER:** You enter 20,555 kg exactly as shown. The app then converts it automatically. On the printed receipt, should the converted result be 20.555 tons or 20.56 tons?
+**INTERVIEWEE:** exactly as written
+
+## Turn 119
+**INTERVIEWER:** For concrete and future conversions, should each saved conversion option include a decimal-places setting, so you can choose how precisely its result is shown—for example, two or three decimal places?
+**INTERVIEWEE:** yes
+
+## Turn 120
+**INTERVIEWER:** Should all USD prices, totals, payments, and balances display two decimal places, rounded to the nearest cent—for example, $1,438.849 becomes $1,438.85?
+**INTERVIEWEE:** yes
+
+## Turn 121
+**INTERVIEWER:** Should each saved conversion be linked to specific items, so a receipt shows only relevant conversions—for example, asphalt items show kg-to-ton options and concrete items show kg-to-cubic-metre options—or should every active conversion appear for every item?
+**INTERVIEWEE:** i choose the conversion
+
+## Turn 122
+**INTERVIEWER:** Should the dropdown show all active saved conversions for every item, without filtering them by the selected item?
+**INTERVIEWEE:** what do u think
+
+## Turn 123
+**INTERVIEWER:** I recommend showing all active conversions in the dropdown because you are the sole user and may need flexibility. Each option should clearly show its name, units, and rate—for example, “Asphalt — kg to ton — 1,000:1.” This keeps manual control while reducing selection mistakes. Should we use this rule?
+**INTERVIEWEE:** yes looks good
+
+## Turn 124
+**INTERVIEWER:** For an outside-customer receipt, should confirmation require a price greater than $0.00, while your own-company project receipts may leave the price blank? This would block zero or negative prices for external sales.
+**INTERVIEWEE:** allow both for all sometimes i put 0
+
+## Turn 125
+**INTERVIEWER:** I recommend that a blank price means not priced yet, is excluded from financial totals, and shows status “Unpriced,” while a $0.00 price means intentionally free, is included as a zero-value order, and has no payment due. Should the app use this distinction?
+**INTERVIEWEE:** yes
+
+## Turn 126
+**INTERVIEWER:** Should the app reject negative prices such as −$5.00, while continuing to allow blank, $0.00, and positive prices?
+**INTERVIEWEE:** yes
+
+## Turn 127
+**INTERVIEWER:** Example: a conversion produces 7.3486 cubic metres, but its setting displays three decimals, so the receipt shows 7.349 cubic metres. At $90 per cubic metre, using the displayed quantity gives $661.41, while using the hidden precise quantity gives $661.37. I recommend using the displayed quantity so the receipt arithmetic matches what the customer sees. Should we use $661.41?
+**INTERVIEWEE:** yes
+
+## Turn 128
+**INTERVIEWER:** If a customer receives 10 tons of asphalt and 8 cubic metres of concrete, should their profile show separate quantity totals by item and unit, with no combined “18” quantity total?
+**INTERVIEWEE:** no keep seperate so i can do 2 receipts and in their history is separate
+
+## Turn 129
+**INTERVIEWER:** Should each receipt and its delivery authorization represent exactly one truck load and one item, so multiple items or truck loads always require separate document pairs?
+**INTERVIEWEE:** yes. what do you think
+
+## Turn 130
+**INTERVIEWER:** If the actual loaded quantity differs from the customer’s requested quantity, should the app allow confirmation, bill using the actual measured quantity, and show the requested quantity only for comparison?
+**INTERVIEWEE:** what do you think give me ur opinion
+
+## Turn 131
+**INTERVIEWER:** I recommend always billing the actual net quantity measured by the weighbridge, keeping the requested quantity as an informational target, allowing confirmation when they differ, clearly showing over-target or under-target variance, and warning about a large difference without blocking confirmation after review. Should we use this rule?
+**INTERVIEWEE:** okay
+
+## Turn 132
+**INTERVIEWER:** Should the “large difference” warning threshold be a configurable percentage in settings, starting with a default of 5%? For example, a 20-ton target would warn when the actual load differs by more than 1 ton.
+**INTERVIEWEE:** there will not be differ in quantity just i write the quantity
+
+## Turn 133
+**INTERVIEWER:** Should I remove the requested-quantity field and variance warning entirely, so the receipt records only the actual quantity calculated from the manually entered empty and full weights?
+**INTERVIEWEE:** yes but keep the requested as a comaprison
+
+## Turn 134
+**INTERVIEWER:** Final rule: keep requested quantity for comparison, show actual quantity calculated from empty and full weights, bill using actual quantity, and do not use a variance threshold or warning. Is that correct?
+**INTERVIEWEE:** yes
+
+## Turn 135
+**INTERVIEWER:** For document numbering, I recommend one automatic sequential load number shared by the pair—for example, delivery authorization DA-000123 and receipt REC-000123 both refer to load 000123. Should we use this numbering method?
+**INTERVIEWEE:** clarify
+
+## Turn 136
+**INTERVIEWER:** One truck load creates two documents. The app automatically gives that load a number, such as 123. Both the delivery authorization and receipt show 123, making it clear that they belong to the same load. Should both documents use the same automatic number?
+**INTERVIEWEE:** yes ofcourse
+
+## Turn 137
+**INTERVIEWER:** Because two phones could both create the same next number while offline, I recommend an automatic number containing the date, device code, and sequence, such as 20260807-A-00123. It works offline, remains unique across devices, appears identically on both documents, and never changes or gets reused after confirmation. Should we use this numbering approach?
+**INTERVIEWEE:** yes why not
+
+## Turn 138
+**INTERVIEWER:** Should the transaction number and document date/time be assigned automatically when you confirm the load, with both documents showing that same original date/time permanently—even after corrections or reprints?
+**INTERVIEWEE:** yes reprints show the time of reprint and marks the reprent as copies
+
+## Turn 139
+**INTERVIEWER:** For simplicity with offline printing, I recommend marking every reprint “COPY” and showing its reprint date/time, without numbering copies or keeping a permanent print-history log. Copy counters could conflict when two devices print offline. Should we use this simpler rule?
+**INTERVIEWEE:** keep a log of reprints just showing a reprint now all of it
+
+## Turn 140
+**INTERVIEWER:** Do you mean the reprint log should store only which document was reprinted, the reprint date and time, and the device used, but not store another full copy of the document's contents?
+**INTERVIEWEE:** yes
+
+## Turn 141
+**INTERVIEWER:** Who should sign the delivery authorization: the driver/customer receiving the load, you as issuer, or both?
+**INTERVIEWEE:** driver should sign and i can send a copy to the customer as pdf
+
+## Turn 142
+**INTERVIEWER:** Should the driver sign on the phone screen with a finger, so the signature is stored and appears on the printed delivery authorization and customer PDF, or sign only the printed paper by hand?
+**INTERVIEWEE:** can you make a digital sign so the driver can sign from the phone and then every reciept we can see its signed in histiry
+
+## Turn 143
+**INTERVIEWER:** I recommend displaying the driver's signature on the delivery authorization only, because it acknowledges the load. The receipt shares the same transaction number, and transaction history still shows Signed. Should we use that rule, or print the signature on both documents?
+**INTERVIEWEE:** on driver authorization and when i print it the signaute is also printed
+
+## Turn 144
+**INTERVIEWER:** Should the driver's digital signature be required before the transaction can be confirmed, or may you confirm an unsigned transaction and add the signature later?
+**INTERVIEWEE:** i may confirm anf add signature later or leavw with no signayure so its flexible
+
+## Turn 145
+**INTERVIEWER:** After a driver's signature has been saved, should you be able to clear and replace it if the wrong person signed or the signature was unreadable, or should it become permanently locked?
+**INTERVIEWEE:** yes can clear and replace
+
+## Turn 146
+**INTERVIEWER:** Should the app log when a signature is added, cleared, or replaced, including date/time and device, while storing only the current signature image rather than old signature images?
+**INTERVIEWEE:** no  no need its not an immage its a drawing
+
+## Turn 147
+**INTERVIEWER:** I recommend that every load must have a customer; loads for your own company must also select a saved project; outside-customer loads may optionally select a project and otherwise use only the destination address; and every daily work report must select a saved project. Should we use this rule?
+**INTERVIEWEE:** yes i like it
+
+## Turn 148
+**INTERVIEWER:** For each saved project, I recommend required project name, customer/company, location or destination address, and Active or Completed status, with optional start date, end date, and notes. Should we use these project fields?
+**INTERVIEWEE:** yes
+
+## Turn 149
+**INTERVIEWER:** Can one truck load contain material from more than one production batch, or does each truck load always correspond to exactly one batch?
+**INTERVIEWEE:** each truck load always correspond to exactly one batch
+
+## Turn 150
+**INTERVIEWER:** Since every load has exactly one batch, I recommend creating the batch record automatically inside the load/receipt workflow instead of requiring a separate batch-entry screen. This prevents missing batch history. Should the app work this way?
+**INTERVIEWEE:** clarify
+
+## Turn 151
+**INTERVIEWER:** Example workflow: you start one load record; enter customer, truck, item, empty weight, and later full weight; that same record represents the production batch; and when confirmed it automatically appears in both load history and batch history. There is no separate Create Batch form. Should it work this way?
+**INTERVIEWEE:** yes i guess
+
+## Turn 152
+**INTERVIEWER:** For batch history, I recommend showing transaction number and confirmation date/time, item, customer and project when applicable, driver and truck plate, empty/full/net/converted quantity, optional notes, and a link to open the full transaction and documents. Price, payment, and signature details remain in the full transaction rather than cluttering the batch list. Should we use this layout?
+**INTERVIEWEE:** A link to open the full transaction and documents what do you mean
+
+## Turn 153
+**INTERVIEWER:** In batch history, you would tap a batch row to open its full detail screen inside the app. That screen shows all load and weight information, price and payment details, driver signature status, delivery authorization, receipt, and print/PDF/send actions. It is not a website link—just opening the complete transaction record. Should batch rows open this full detail screen?
+**INTERVIEWEE:** what is batch history is it the receipt And delivery auth?
+
+## Turn 154
+**INTERVIEWER:** The batch/load is the actual transaction: one item produced and loaded into one truck. That transaction creates a delivery authorization and receipt. I recommend one unified Load History screen, not a separate batch-history screen. Each entry represents one batch/load; opening it shows the complete transaction and both documents. Should we use this simpler structure?
+**INTERVIEWEE:** what is load history
+
+## Turn 155
+**INTERVIEWER:** Load History is simply a list of all completed receipts, such as “000123 — Asphalt — Customer A — 20.555 tons.” Tapping an entry opens its receipt, delivery authorization, weights, payment details, and signature. We can call it Receipt History instead. Which name should we use?
+**INTERVIEWEE:** load history is fine
+
+## Turn 156
+**INTERVIEWER:** On the Load History list, should each entry show transaction number and date, customer and project when applicable, item and quantity, truck plate, Signed or Unsigned, and payment status, with selection opening all remaining details and both documents?
+**INTERVIEWEE:** true
+
+## Turn 157
+**INTERVIEWER:** For each customer profile, I recommend required customer type—Individual or Company—and name/company name, with optional phone number, email, address, Tax/VAT number, and notes. Should we use these customer fields?
+**INTERVIEWEE:** yes
+
+## Turn 158
+**INTERVIEWER:** When creating a receipt, should you select the customer from saved profiles, with a quick Add Customer option if they are new, rather than confirming a receipt with only a free-text customer name? This keeps each customer's history accurate.
+**INTERVIEWEE:** also yeah i forgot somethingt o tell you anout i neeed to add VAT at the end of the receipt so the price will be price +vat and i can set the % from tax setting and used universal
+
+## Turn 159
+**INTERVIEWER:** To confirm: one universal VAT percentage is set in Tax Settings; it applies automatically to every receipt with a numeric price; a $0.00 receipt has $0.00 VAT; an Unpriced receipt has no VAT calculation; the receipt shows subtotal, VAT percentage, VAT amount, and final total; and confirmed receipts keep the VAT rate they originally used even if the setting changes later. Is this correct?
+**INTERVIEWEE:** correct and ask me question at turn 157
+
+## Turn 160
+**INTERVIEWER:** Returning to the earlier question: when creating a receipt, should you select the customer from saved profiles, with a quick Add Customer option for a new customer, instead of confirming with only a free-text customer name? This keeps each customer's history accurate.
+**INTERVIEWEE:** yes
+
+## Turn 161
+**INTERVIEWER:** If a new customer has the same name, phone number, or Tax/VAT number as an existing profile, I recommend showing a possible-duplicate warning and the matching profile, while still allowing you to create the new profile after review because different people can share a name. Should we use this rule?
+**INTERVIEWEE:** yes
+
+## Turn 162
+**INTERVIEWER:** If duplicate profiles were created accidentally for the same customer, should you be able to merge them, moving all receipts, quantities, payments, and balances into one chosen profile and archiving the duplicate?
+**INTERVIEWEE:** what do you think
+
+## Turn 163
+**INTERVIEWER:** I recommend supporting customer merges with safeguards: choose the profile to keep and duplicate to merge; preview affected receipts, payments, balances, and totals; require explicit confirmation; move all transaction associations to the retained profile and recalculate its summary; archive the duplicate as Merged into the retained customer; and keep previously issued document contents unchanged. Should we use this merge workflow?
+**INTERVIEWEE:** okay but if i dont want to merge doplicaqte i can keep them
+
+## Turn 164
+**INTERVIEWER:** If a customer gives one in-person payment covering several unpaid orders, should the app let you enter the payment once and allocate portions across selected orders, or require a separate payment entry for each order? Each order would still retain its own payment amount and balance.
+**INTERVIEWEE:** Require a separate payment entry for each order?
+
+## Turn 165
+**INTERVIEWER:** Yes, I recommend separate payment entries for each order. It keeps every order's balance and payment history clear. Should I confirm that as the requirement?
+**INTERVIEWEE:** yes
+
+## Turn 166
+**INTERVIEWER:** I recommend these automatic order statuses: Unpriced for blank price; No Payment Due for a $0.00 total; Unpaid for a positive total with no payments; Partially Paid when some balance remains; Paid when payments equal the total; and Overpaid when payments exceed a corrected total. Should we use these status labels?
+**INTERVIEWEE:** okay
+
+## Turn 167
+**INTERVIEWER:** If you confirm a payment by mistake but no payment actually occurred, I recommend marking that payment Cancelled rather than deleting it. A cancelled payment remains visible in the order's payment history but no longer affects paid amount or balance. Should we use this rule?
+**INTERVIEWEE:** yes we can cancel payment
+
+## Turn 168
+**INTERVIEWER:** Should cancelling a payment require an explicit confirmation warning, a required cancellation reason, and an automatic cancellation date and time, with these details remaining visible beside the cancelled payment?
+**INTERVIEWEE:** okay
+
+## Turn 169
+**INTERVIEWER:** Should payment cancellation be final, meaning a cancelled payment cannot be reactivated and you must create a new payment entry if cancellation was a mistake? I recommend this because it keeps the cancellation reason and financial history clear.
+**INTERVIEWEE:** okay
+
+## Turn 170
+**INTERVIEWER:** For quarry deliveries, should you select a saved quarry/supplier profile, with quick creation during entry? I recommend required quarry/supplier name and optional phone, email, address, Tax/VAT number, and notes, giving each supplier its own purchase and payment history. Should we use this structure?
+**INTERVIEWEE:** yes
+
+## Turn 171
+**INTERVIEWER:** For each quarry delivery, should the app record a price per cubic metre and calculate quantity multiplied by price per cubic metre as the purchase subtotal, or do you want to enter only the final total price directly?
+**INTERVIEWEE:** no price i  want to record quantity because iam getting it from a supplier but keep thr price as an option
+
+## Turn 172
+**INTERVIEWER:** When you choose to record a quarry price, should you enter price per cubic metre with the app calculating the total, or final total price only?
+**INTERVIEWEE:** price per m cube
+
+## Turn 173
+**INTERVIEWER:** When a quarry delivery has a price, should the same universal VAT percentage be added automatically to the purchase subtotal, or should quarry purchases have no VAT calculation?
+**INTERVIEWEE:** yes
+
+## Turn 174
+**INTERVIEWER:** Should the app automatically add the same universal VAT percentage to priced quarry purchases?
+**INTERVIEWEE:** yes
+
+## Turn 175
+**INTERVIEWER:** For each quarry delivery, should the app record automatic confirmation date and time and an optional supplier delivery-ticket or invoice number, so you can match the app record to the supplier's paper document? Should we include both?
+**INTERVIEWEE:** yes
+
+## Turn 176
+**INTERVIEWER:** Should a quarry delivery optionally allow attaching one or more photos of the supplier's paper ticket or invoice using the phone camera?
+**INTERVIEWEE:** yes why not
+
+## Turn 177
+**INTERVIEWER:** For a quarry delivery, should the cubic-metre quantity be entered exactly as written on the supplier's ticket or invoice?
+**INTERVIEWEE:** yes i do that manually
+
+## Turn 178
+**INTERVIEWER:** Can the supplier ticket show decimal quantities such as 12.5 cubic metres or 12.75 cubic metres, or are quarry quantities always whole cubic metres?
+**INTERVIEWEE:** always whole
+
+## Turn 179
+**INTERVIEWER:** Should a priced quarry purchase use the same payment rules as a customer order: separate partial payments linked to that purchase; paid amount and remaining balance; Unpaid, Partially Paid, Paid, or Overpaid status; mistaken payments may be cancelled using the confirmed rules; and quantity-only unpriced purchases have no payment balance? Should we apply all these rules?
+**INTERVIEWEE:** yes
+
+## Turn 180
+**INTERVIEWER:** When you first start using fuel tracking, should you enter the physically measured litres currently in the tank as the opening fuel balance?
+**INTERVIEWEE:** i see the number of liters on the measure and record the equipment filled
+
+## Turn 181
+**INTERVIEWER:** Should the fuel balance work like this: enter the tank-gauge reading as the opening balance; fuel deliveries add litres; equipment fills subtract litres; and a later tank-gauge reading can replace the calculated balance as a physical correction? Is this correct?
+**INTERVIEWEE:** okay
+
+## Turn 182
+**INTERVIEWER:** For fuel fills, should you select equipment from saved profiles, with quick creation during entry? I recommend required equipment name and optional equipment type, plate/serial/internal code, and notes, providing separate fuel-consumption history for each machine or vehicle. Should we use this structure?
+**INTERVIEWEE:** yes
+
+## Turn 183
+**INTERVIEWER:** For each equipment fuel fill, I recommend required equipment and positive litres filled, automatic confirmation date/time, and optional project, hour-meter or odometer reading, and notes. Should we use these fill fields?
+**INTERVIEWEE:** okay good if you take the hours with liters and then hours with liters again you can calculate how much it takes per hour?
+
+## Turn 184
+**INTERVIEWER:** Yes. Example: if the previous fill was at 1,000 hours, and the next fill adds 50 litres at 1,010 hours, should the app calculate 50 L ÷ (1,010 − 1,000 hours) = 5 L/hour? The first recorded fill would show no rate until a later hour-meter reading exists. This rate is most accurate when the equipment is filled to roughly the same tank level each time. Should we use this rule?
+**INTERVIEWEE:** yes sounds good
+
+## Turn 185
+**INTERVIEWER:** For vehicles that use an odometer instead of an hour meter, I recommend showing litres per 100 km. Example: 50 litres ÷ 500 km × 100 = 10 L/100 km. Should the app use this rule for odometer-based equipment?
+**INTERVIEWEE:** nah no need
+
+## Turn 186
+**INTERVIEWER:** If a new hour-meter reading is equal to or lower than the previous one, I recommend warning but allowing the fuel fill, calculating no L/hour for that interval, and allowing “Hour meter reset/replaced” to establish a new baseline. Should it work this way?
+**INTERVIEWEE:** remove the hour meter dont need it i can add it later if i want but now rremove it
+
+## Turn 187
+**INTERVIEWER:** For each fuel delivery added to the tank, I recommend required positive litres and automatic confirmation date/time, with optional saved supplier, delivery ticket/invoice number, price per litre, and notes. Should we use these fields?
+**INTERVIEWEE:** okay
+
+## Turn 188
+**INTERVIEWER:** For a fuel delivery with a price, I recommend using the same supplier financial rules as quarry purchases: subtotal equals litres multiplied by price per litre, then apply the universal VAT rate; track the supplier balance, partial payments, and cancelled payments separately for that delivery. If no price is entered, keep it quantity-only with no VAT or payment balance. Should fuel deliveries work this way?
+**INTERVIEWEE:** okay
+
+## Turn 189
+**INTERVIEWER:** For a physical tank-gauge correction, I recommend required actual gauge litres with zero allowed and negatives rejected; automatic previous calculated balance, difference added or removed, and correction date/time; required reason; and optional notes. The actual gauge reading becomes the new balance while earlier fuel movements remain unchanged. Should we use these correction fields?
+**INTERVIEWEE:** okay
+
+## Turn 190
+**INTERVIEWER:** For a mistaken confirmed fuel delivery or equipment fill, I recommend cancelling instead of deleting it, requiring a cancellation reason and automatic time, keeping it visible as Cancelled, and reversing its fuel-stock effect: remove the litres from a cancelled delivery or add them back for a cancelled fill. If a later physical gauge correction already exists, the current balance should remain based on that later actual reading. Should it work this way?
+**INTERVIEWEE:** okay
+
+## Turn 191
+**INTERVIEWER:** If a physical gauge correction itself was entered incorrectly, I recommend cancelling it with a required reason and automatic time, never deleting it. If it is the latest gauge correction, restore its stored previous balance and then apply any fuel movements recorded after it. If a newer physical gauge correction exists, leave the current balance unchanged because the newer reading already replaced it. Keep the cancelled correction visible in history. Should it work this way?
+**INTERVIEWEE:** okay
+
+## Turn 192
+**INTERVIEWER:** If an equipment fill is greater than the app's calculated fuel balance, I recommend warning but still allowing confirmation, showing a highlighted negative balance until a delivery or physical gauge correction fixes it. Should it work this way?
+**INTERVIEWEE:** dont over complicate it i just manually put the value and that sit dont complicate it
+
+## Turn 193
+**INTERVIEWER:** Kept simple: you manually enter the litres, with no stock warning or blocking. For version one, do you need to track only one fuel tank and one fuel type, or do you have multiple tanks or fuel types?
+**INTERVIEWEE:** i have one fuel tupe and tank i can add later if iwant if i had an uo\pgrade
+
+## Turn 194
+**INTERVIEWER:** To keep the daily project report simple, I recommend requiring only project, work date, and a short description of work performed. Workers, drivers, truck plates, machines, materials, and notes would all be optional. Should these be the minimum required fields?
+**INTERVIEWEE:** yes but the report must unclude everything
+
+## Turn 195
+**INTERVIEWER:** When you say the report must include everything, do you mean the report always shows sections for work description, workers, drivers, trucks, machines, materials, and notes, but only project, date, and work description are required and unused sections may be empty; or must every section have at least one entry before the report can be saved?
+**INTERVIEWEE:** 1st option
+
+## Turn 196
+**INTERVIEWER:** Should each daily project report allow optional photos—for example work progress, site conditions, delivery tickets, or problems—captured with the phone or selected from its library?
+**INTERVIEWEE:** yes
+
+## Turn 197
+**INTERVIEWER:** Should the daily project report generate a shareable and printable PDF containing every report section and all attached photos?
+**INTERVIEWEE:** yes
+
+## Turn 198
+**INTERVIEWER:** Do you also need an Excel export for each individual daily report, or is the complete PDF enough?
+**INTERVIEWEE:** yeah why not
+
+## Turn 199
+**INTERVIEWER:** For Excel, I recommend putting the structured report data in normal worksheets and embedding small copies of the attached photos in a separate Photos sheet. The PDF would still contain the full-size photos. Should the Excel export work this way?
+**INTERVIEWEE:** yes
+
+## Turn 200
+**INTERVIEWER:** To keep offline storage and synchronization reliable, I recommend allowing up to 10 photos per daily report or quarry delivery, with automatic compression while keeping text and site details readable. Should we use this limit?
+**INTERVIEWEE:** make it 20
+
+## Turn 201
+**INTERVIEWER:** Should the daily report also include a separate optional Problems, Delays, or Incidents section, in addition to the general notes?
+**INTERVIEWEE:** okay
+
+## Turn 202
+**INTERVIEWER:** Since daily reports remain editable, I recommend storing only Created at and Last updated at, without keeping a full history of every edit. This keeps the workflow simple. Should we use that rule?
+**INTERVIEWEE:** yes
+
+## Turn 203
+**INTERVIEWER:** For the work date, I recommend allowing today or any past date, rejecting future dates, and allowing only one report per project per date; selecting an existing project/date opens that report for editing instead of creating a duplicate. Should it work this way?
+**INTERVIEWEE:** okay
+
+## Turn 204
+**INTERVIEWER:** If printing fails after a receipt is confirmed, I recommend keeping the transaction confirmed and saved, showing Retry and Reconnect printer, treating retries as the original print until the app reports one successful print, and marking/logging only later successful prints as COPY. Should printing work this way?
+**INTERVIEWEE:** sounds good
+
+## Turn 205
+**INTERVIEWER:** For performance, I recommend that after you tap Confirm, the receipt is saved and ready for printing within 2 seconds, even offline. Actual printer time is separate. Is that fast enough?
+**INTERVIEWEE:** what do u think
+
+## Turn 206
+**INTERVIEWER:** I think 2 seconds maximum is a good requirement. The app should usually feel nearly immediate, but two seconds gives enough room to save the transaction, calculate totals, and prepare both documents reliably on an ordinary phone. Bluetooth printing should have its own separate timing because printer hardware varies. Shall we confirm the 2-second offline target?
+**INTERVIEWEE:** okay
+
+## Turn 207
+**INTERVIEWER:** On your busiest day, approximately how many truck loads or receipts might you record? This will set the correct history-search and reporting performance target.
+**INTERVIEWEE:** many
+
+## Turn 208
+**INTERVIEWER:** To make “many” safe and testable, I recommend designing for up to 200 loads per day, at least 5 years of history—about 365,000 loads—and history searches and filters returning within 2 seconds. Is that capacity enough?
+**INTERVIEWEE:** about 20 max
+
+## Turn 209
+**INTERVIEWER:** With a maximum of about 20 loads per day, I recommend testing the app with 10 years of history—about 73,000 loads—and requiring history searches and filters to return within 2 seconds. Does that sound good?
+**INTERVIEWEE:** great; confirm the first option
+
+## Turn 210
+**INTERVIEWER:** For backup recovery, I recommend keeping synchronized records permanently and also retaining daily recovery snapshots for 30 days. If data is corrupted or changed incorrectly, the system could restore the account to a selected recent day. Should we use this 30-day recovery window?
+**INTERVIEWEE:** i want an option that extraxt all data in the application so if i iwant i can do hardware backk up copy and what do you mean by this 30 days recov vindow
+
+## Turn 211
+**INTERVIEWER:** The 30-day recovery window does not delete permanent data; it means the server retains daily rollback snapshots for 30 days. I recommend also providing Complete Backup to export one encrypted file containing all records, settings, profiles, documents, payments, logs, signatures, photos, and everything required for restoration, saveable to a computer, USB/external storage, or cloud drive, plus Restore Complete Backup. Should the app provide both complete manual backup/restore and 30-day server recovery snapshots?
+**INTERVIEWEE:** okay
+
+## Turn 212
+**INTERVIEWER:** For restoring a complete backup, I recommend showing the backup date and record counts, requiring explicit confirmation, automatically exporting a safety backup of current data, replacing current application data with the selected backup, and not merging because merging could duplicate receipts, payments, and transaction numbers. Should complete restore work this way?
+**INTERVIEWEE:** sounds good
+
+## Turn 213
+**INTERVIEWER:** For security, I recommend that every complete-backup file use a password you choose when exporting it. Restoring requires that password; without it, the backup cannot be opened—even if someone finds the USB drive. Should complete backups use this separate backup password?
+**INTERVIEWEE:** yes
+
+## Turn 214
+**INTERVIEWER:** For the 30-day server snapshots, I recommend a self-service Restore Previous Day screen in Settings. You could select a date, preview its record counts, create an automatic safety backup, and confirm the replacement without contacting technical support. Should server-snapshot recovery work this way?
+**INTERVIEWEE:** okay i want also to be able to save the data on a cloud all of it
+
+## Turn 215
+**INTERVIEWER:** Do you want both automatic saving of all application data to the app's secure cloud whenever internet is available, and a manual option to save the encrypted complete-backup file to your own Google Drive, iCloud Drive, OneDrive, or another phone storage provider? I recommend supporting both.
+**INTERVIEWEE:** about cloud keep it fpr later not now and the others yes
+
+## Turn 216
+**INTERVIEWER:** I recommend keeping the app's own automatic cloud synchronization and server recovery in version one because they protect data and restore it on another phone, while deferring only direct personal Google Drive/iCloud/OneDrive integration. Is that what you mean by “cloud later”?
+**INTERVIEWEE:** forget about what i saidand continue
+
+## Turn 217
+**INTERVIEWER:** For the company details printed on receipts, delivery authorizations, and PDFs, I recommend one Company Settings section containing required company name and optional logo, address, phone, email, Tax/VAT registration number, and receipt footer message. Should we use these company fields?
+**INTERVIEWEE:** yes
+
+## Turn 218
+**INTERVIEWER:** I recommend that every confirmed transaction permanently stores the exact company name, logo, contact details, Tax/VAT number, and footer used at confirmation. Later Company Settings changes would affect only new documents; old reprints and PDFs would keep their original company details. Should it work this way?
+**INTERVIEWEE:** yes
+
+## Turn 219
+**INTERVIEWER:** For the receipt/invoice bill, I recommend showing transaction number/date, customer and Tax/VAT number, project or destination, driver/plate, item, requested quantity for comparison, empty/full/net weight, conversion and billed quantity, price/subtotal/VAT/final total, payment status/paid/remaining or overpaid amount, and company details/footer. Should the receipt include all these fields?
+**INTERVIEWEE:** Requested quantity for comparison if i keep it empty its okay dont print it and do you suggest anything else?
+
+## Turn 220
+**INTERVIEWER:** I recommend adding a clear RECEIPT / INVOICE title, units beside every measurement and price, and an optional customer order/reference number omitted when blank, while avoiding extra identifiers that overcrowd 58 mm paper. Should we add these and confirm the proposed receipt field list?
+**INTERVIEWEE:** also lets be clear about something for receipt i want only price and final weight (net ) in delivery auth i want all details except price
+
+## Turn 221
+**INTERVIEWER:** To preserve VAT while keeping the receipt minimal, I recommend: company header, title, transaction number/date, net weight, unit price, subtotal, VAT rate/amount, and final total; no driver, plate, requested quantity, empty/full weights, signature, or payment details. The delivery authorization contains all transaction, customer, project, truck, driver, requested quantity when entered, weight, conversion, destination, and signature details, but no monetary values. Is this the exact split?
+**INTERVIEWEE:** for receipt add customer name ofcourse and project name
+
+## Turn 222
+**INTERVIEWER:** Which language should the app and printed documents use: English only, Arabic only, or both English and Arabic?
+**INTERVIEWEE:** both with ltr and rtl
+
+## Turn 223
+**INTERVIEWER:** To keep 58 mm receipts readable, I recommend an app language switch between English LTR and Arabic RTL; each printed/PDF document uses one selected language at a time; and you can choose English or Arabic before printing without changing the saved transaction. Is that what you want rather than printing both languages together on the same receipt?
+**INTERVIEWEE:** yes better
+
+## Turn 224
+**INTERVIEWER:** For customer names, project names, item names, addresses, and notes, I recommend storing and printing them exactly as entered; allowing Arabic, English, or mixed text; automatically displaying each value in the appropriate text direction; and translating only labels, not entered business data. Should it work this way?
+**INTERVIEWEE:** yes and keep the numbers in english betteer
+
+## Turn 225
+**INTERVIEWER:** For version-one reports, I recommend five groups: loads and sales; customer balances and payments; quarry purchases and supplier balances; fuel deliveries, equipment fills, corrections, and current balance; and projects and daily work reports. All would support the already confirmed filters and PDF/Excel export. Do these five report groups cover what you need?
+**INTERVIEWEE:** okay
+
+## Turn 226
+**INTERVIEWER:** For the Loads and Sales report, I recommend columns for transaction number/date, customer/project, item, driver/plate, net weight, billed quantity/unit, unit price/subtotal/VAT/final total, paid/remaining or overpaid amount/payment status, and Signed/Unsigned status. Should this report include all these columns?
+**INTERVIEWEE:** okay
+
+## Turn 227
+**INTERVIEWER:** For Customer Balances and Payments, I recommend two sections: Customer Summary with customer name, total billed, total paid, remaining or overpaid balance, unpaid-order count, and latest payment date; and Payment Details with payment date, amount, linked transaction number, order total, balance after payment, and Cancelled status/reason when applicable. Excel would use separate Summary and Payment Details sheets. Should it work this way?
+**INTERVIEWEE:** yes
+
+## Turn 228
+**INTERVIEWER:** For Quarry Purchases and Supplier Balances, I recommend three sections: Supplier Summary with supplier, total quantity by item, billed/paid/remaining-or-overpaid, latest delivery/payment; Purchase Details with date, supplier, ticket/invoice, item, m³ quantity, driver/plate, price per m³, subtotal/VAT/final, paid/remaining/status/photo count; and Payment Details with payment date, amount, linked purchase, balance after payment, and cancellation details. Excel would use three sheets. Should it work this way?
+**INTERVIEWEE:** yes
+
+## Turn 229
+**INTERVIEWER:** For Fuel Movements and Current Balance, I recommend three sections: Balance Summary with current calculated litres, latest physical gauge reading/date, period totals delivered/filled/correction difference; Movement Details with date/time, type, supplier/equipment, project, ticket, litres in/out, balance after, applicable price/VAT/payment status, and cancellation details; and Equipment Totals with equipment and period litres, with no hour-meter calculations. Excel would use three sheets. Should it work this way?
+**INTERVIEWEE:** yes
+
+## Turn 230
+**INTERVIEWER:** For Projects and Daily Work Reports, I recommend three sections: Project Summary with project/customer/location/status/dates, load quantities by item/unit, report count/latest work date; Daily Report Index with work date/description/presence/equipment/incidents/photo count/created/updated and link to full report; and Materials Summary with project/item/unit/used/transported totals. Excel would use three sheets, while each daily report retains detailed PDF/Excel export. Should it work this way?
+**INTERVIEWEE:** yes
+
+## Turn 231
+**INTERVIEWER:** I showed PDF and Excel examples and clarified the proposed shared rules: company header/report title, generated date/time, active filter captions, totals for filtered records, repeated PDF headings/page numbers, frozen/filterable Excel headings, and selected English-LTR or Arabic-RTL output. Should all reports follow this design?
+**INTERVIEWEE:** okay
+
+## Turn 232
+**INTERVIEWER:** I recommend that PDF and Excel reports can be generated completely offline using the data already stored on the phone. Internet would only be needed for cloud synchronization or sending through an online service. Should offline report generation be required?
+**INTERVIEWEE:** yes
+
+## Turn 233
+**INTERVIEWER:** For a large report export, I recommend showing record-generation progress, providing Cancel, never leaving a partial/corrupted file, and cancelling safely if the app closes so the export can be restarted later. Should exports work this way?
+**INTERVIEWEE:** oksay
+
+## Turn 234
+**INTERVIEWER:** If a quarry delivery is rejected, I recommend keeping a Rejected Delivery record with supplier/date/item/driver/plate, required reason, optional ticket/photos/quantity, and no quantity totals, VAT, balance, or inventory effect. Should rejected deliveries be recorded this way?
+**INTERVIEWEE:** if rejected i can delete it
+
+## Turn 235
+**INTERVIEWER:** I recommend treating a rejected quarry delivery as an unconfirmed draft. Deleting it sends it to Trash, where it can be restored or permanently deleted later. It never affects quantities, VAT, payments, or reports. Should it use this existing Trash behavior?
+**INTERVIEWEE:** okay
+
+## Turn 236
+**INTERVIEWER:** I recommend that tapping any dashboard summary opens its corresponding report with the same filters already applied—for example, tapping Unpaid Orders opens Customer Balances filtered to unpaid and partially paid orders. Should every dashboard widget support this drill-down behavior?
+**INTERVIEWEE:** okay
+
+## Turn 237
+**INTERVIEWER:** To keep the dashboard simple, I recommend fixed defaults: Today's Loads for today; Unpaid Orders for all currently unpaid/partially paid orders; Fuel Balance as current calculated balance; Quarry Purchases as current-month total; and Missing Daily Reports for today. Other periods can be selected after opening the detailed report. Should we use these dashboard defaults?
+**INTERVIEWEE:** where is this on the dashboard in which section
+
+## Turn 238
+**INTERVIEWER:** They would appear on the main Home Dashboard: Quick Actions with a large Make Receipt button; Today's Overview with Today's Loads, Current Fuel Balance, and Quarry Purchases This Month; and Attention Needed with Unpaid/Partially Paid Orders and Missing Daily Reports Today. Each summary opens its detailed filtered report. Should we use these dashboard sections?
+**INTERVIEWEE:** where is the make report section
+
+## Turn 239
+**INTERVIEWER:** The Home Dashboard should include Make Receipt and Make Daily Report in Quick Actions. Make Daily Report opens the project/date daily-report form, while a separate Reports navigation section is used to view/filter/export the five report groups. Is this the placement you want?
+**INTERVIEWEE:** when i press repprt i can see sections of projects and then i press project that i need and make a report
+
+## Turn 240
+**INTERVIEWER:** I recommend a Reports screen with Active Projects, where selecting a project opens its daily-report history and Make Report; Completed Projects, where old reports can be viewed/exported but no new report is allowed unless reactivated; and Business Reports containing the five confirmed summary groups. Is this the Reports structure you want?
+**INTERVIEWEE:** okay
+
+## Turn 241
+**INTERVIEWER:** For Missing Daily Reports, I recommend marking a report as missing only when an active project has at least one recorded load for that date but no daily report. This avoids falsely warning about active projects that did no work that day. Should we use this rule?
+**INTERVIEWEE:** clarify
+
+## Turn 242
+**INTERVIEWER:** Example: Project A receives a recorded asphalt load today but has no daily report, so the dashboard shows one missing report; the warning disappears when today's report is created. Active Project B has no recorded load, so no warning appears because the app cannot know whether work happened. Is this the behavior you want?
+**INTERVIEWEE:** okay
+
+## Turn 243
+**INTERVIEWER:** Now that placement and missing-report behavior are clear, should the dashboard use fixed defaults of Today's Loads today, Unpaid Orders all currently unpaid/partially paid, Fuel Balance current, Quarry Purchases current month, and Missing Daily Reports today, with other periods available in the detailed report?
+**INTERVIEWEE:** okay great what else do you suggest to be in the report
+
+## Turn 244
+**INTERVIEWER:** For the daily project report, I suggest three optional sections: Weather and Site Conditions; Working Time with start, end, and break duration; and Next Work Planned for the following workday. Should we add all three?
+**INTERVIEWEE:** yes add them
+
+## Turn 245
+**INTERVIEWER:** When optional working times are entered, I recommend calculating Net working time = End time − Start time − Break duration, rejecting an end time before start or a break longer than the work period, and showing no calculation when the section is empty. Should we use this rule?
+**INTERVIEWEE:** okay
+
+## Turn 246
+**INTERVIEWER:** For version-one success, I recommend using the app as the primary business record system for 30 consecutive operating days, with every load/documents, quarry, fuel, payments, and required daily reports recorded; no confirmed data lost offline; dashboard/report totals reconciling; and paper used only for required printed documents and external supplier paperwork. Should this be the main operational success criterion?
+**INTERVIEWEE:** what else do you suggest
+
+## Turn 247
+**INTERVIEWER:** I suggested launch checks for normal receipt entry/confirmation/print readiness within two minutes, 100 accurate test loads, one full offline day with clean synchronization, full printer-matrix acceptance, cloud/manual-backup recovery, bilingual LTR/RTL acceptance, followed by the 30-operating-day pilot. Should these become version-one launch and success criteria?
+**INTERVIEWEE:** and ready to print within 2 minutes what do you mean what happens after 2 min ,
+
+## Turn 248
+**INTERVIEWER:** Nothing happens after two minutes; it is not a time limit. It is only a usability-testing goal that a familiar user can normally enter, review, confirm, and reach Print within about two minutes. Taking longer continues normally with draft autosave and never closes, cancels, or confirms automatically. Should we keep this testing goal?
+**INTERVIEWEE:** okay great commence
+
+## Turn 249
+**INTERVIEWER:** To keep version one focused, I recommend deferring payroll/wages/attendance management, equipment maintenance scheduling, non-fuel raw-material inventory balances, plant-machine or weighbridge hardware integration, GPS truck tracking, customer/supplier portals, online ordering/electronic payment processing, and full accounting/government tax filing. Previously confirmed operational, document, VAT, payment-recording, project, quarry, fuel, and reporting features remain. Should these areas remain outside version one?
+**INTERVIEWEE:** yes
+
+## Turn 250
+**INTERVIEWER:** For categories and items, I recommend one shared Item Catalog: category is an organizing group; item is the actual selectable material; each item has name, category, Active/Inactive status, optional default receipt price, and selectable usage areas of Loads, Quarry Purchases, and Daily Reports; the same item may be enabled in multiple areas to avoid duplicate lists. Should the catalog work this way?
+**INTERVIEWEE:** yes tell me more about the item workflow
+
+## Turn 251
+**INTERVIEWER:** I explained the proposed workflow: create category/item in settings; usage flags control appearance in Loads, Quarry, and Daily Reports; loads use optional default receipt price and separate conversion; quarry price remains optional per m³; daily reports record used/transported quantity/unit; confirmed records retain an item snapshot; edits affect future entries; deactivation hides new selection but preserves history. I recommended Quick Add Item inside all three workflows, saving to the shared catalog and selecting it immediately. Should Quick Add Item be available in all three workflows?
+**INTERVIEWEE:** yes i want the ability to creat items and fill it
+
+## Turn 252
+**INTERVIEWER:** For the item form, I recommend required item name, category, and at least one Loads/Quarry/Daily usage area; optional internal code, description/notes, default unit, and default receipt price when Loads is enabled; new items start Active; conversions remain separately selected during receipt creation. Should we use these fields?
+**INTERVIEWEE:** okay and also i want the receipt blueprint to be the same as iam filling so when i am filling the receipt i can see what the receiopt is going to be like
+
+## Turn 253
+**INTERVIEWER:** On phones, I recommend a full-width entry form with a sticky Preview button or tab. The preview opens the receipt as it will print, hides blank optional fields, permits English/Arabic and 58/80 mm switching, preserves the entered form values when closed, and appears beside the form on larger screens. Should it work this way?
+**INTERVIEWEE:** okay great also i think the layout for 58 mm differ from 80 mm or both can be the same layout?
+
+## Turn 254
+**INTERVIEWER:** I recommend separate optimized templates: a compact single-column 58 mm layout and a wider, more clearly aligned 80 mm layout, both containing the same required information and calculations. Should I confirm separate optimized templates for 58 mm and 80 mm?
+**INTERVIEWEE:** can you show me an example
+
+## Turn 255
+**INTERVIEWER:** I showed the same receipt transaction in separate 58 mm and 80 mm examples. The 58 mm template uses compact single-column rows; the 80 mm template uses wider aligned rows; both retain identical information and calculations. Should these separate optimized receipt templates be confirmed?
+**INTERVIEWEE:** great i like it and show me delivery auth iin both
+
+## Turn 256
+**INTERVIEWER:** I showed the delivery authorization in compact 58 mm and spacious 80 mm examples, containing operational/customer/project/item/driver/truck/requested-quantity/weight/signature details and no financial information. Should it use these two optimized layouts and appear as a second live-preview tab beside the receipt?
+**INTERVIEWEE:** dont show the conversion on the delivery auth
+
+## Turn 257
+**INTERVIEWER:** I removed the conversion rule and converted quantity from both delivery-authorization examples and asked whether the corrected 58 mm and 80 mm templates should be confirmed.
+**INTERVIEWEE:** no i want the converted quantitty to be but not the rule and also i want tp b e included under dromex my info such as my number and address where i can edit from the profule settings
+
+## Turn 258
+**INTERVIEWER:** I updated both examples to show the converted quantity and output unit without the conversion rule, and placed editable company address and phone details beneath DROMEX. Is this delivery authorization layout correct now?
+**INTERVIEWEE:** okay  great also can you add : or anything so the formal will be clear or what do you suggest
+
+## Turn 259
+**INTERVIEWER:** I recommended `Label: Value` fields and stronger section headings for the delivery authorization, then asked whether the receipt should use the same label convention for consistency.
+**INTERVIEWEE:** show me ho wiwll it loo k
+
+## Turn 260
+**INTERVIEWER:** I showed both receipt widths using the proposed `Label: Value` convention and asked whether that format should be confirmed for both receipt sizes.
+**INTERVIEWEE:** show me delivery auth
+
+## Turn 261
+**INTERVIEWER:** I showed the finalized delivery authorization in both 58 mm and 80 mm widths with colon-separated labels, company contact details, converted quantity but no conversion rule, and stronger section headings. Does this look correct now?
+**INTERVIEWEE:** okay great
+
+## Turn 262
+**INTERVIEWER:** I recommend two live-preview tabs while filling the load—Receipt and Delivery Authorization—both updating instantly from the same entered information. Should we confirm this?
+**INTERVIEWEE:** yes grwat
+
+## Turn 263
+**INTERVIEWER:** For incomplete entries, I recommend a clear DRAFT PREVIEW mark, em dashes for missing required values, omission of blank optional fields, validation errors in the form rather than the document, and no printing/PDF/sharing until confirmation. Should it work this way?
+**INTERVIEWEE:** yes great also Requested quantity make it an optinal if i don tfill it it doesnt show on the receipt
+
+## Turn 264
+**INTERVIEWER:** One clarification: when requested quantity is filled, should it appear on the receipt too, or did you mean it should appear only on the delivery authorization?
+**INTERVIEWEE:** i meant on the deliveery auth
+
+## Turn 265
+**INTERVIEWER:** Should the receipt also use the same clear `Label: Value` format with colons, as shown in the receipt example?
+**INTERVIEWEE:** yes
+
+## Turn 266
+**INTERVIEWER:** For item edits, I recommend every confirmed record permanently keeps the item name, code, category, and unit exactly as they were at confirmation. Renaming or editing the catalog item would affect only future entries, never old documents or reports. Should it work this way?
+**INTERVIEWEE:** yes
+
+## Turn 267
+**INTERVIEWER:** For removing items, I recommend that an item already used in any record cannot be deleted and may only be deactivated; a never-used item may be moved to Trash and restored; deactivated items disappear from new-entry lists, remain in history, and may be reactivated. Should we use this rule?
+**INTERVIEWEE:** okay
+
+## Turn 268
+**INTERVIEWER:** For duplicate items, I recommend that an optional internal code must be unique; a matching or very similar item name shows a warning and the existing item; the owner may still save the similar name when it intentionally represents a different item. Should duplicate handling work this way?
+**INTERVIEWEE:** okay
+
+## Turn 169
+**INTERVIEWER:** Should payment cancellation be final, meaning a cancelled payment cannot be reactivated and you must create a new payment entry if cancellation was a mistake? I recommend this because it keeps the cancellation reason and financial history clear.
+**INTERVIEWEE:** okay
+
+## Turn 156
+**INTERVIEWER:** On the Load History list, should each entry show transaction number and date, customer and project when applicable, item and quantity, truck plate, Signed or Unsigned, and payment status, with selection opening all remaining details and both documents?
+**INTERVIEWEE:** true
