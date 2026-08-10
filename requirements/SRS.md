@@ -3,9 +3,9 @@
 ## 1. Document Control
 
 - Status: Initial draft
-- Version: 0.95
-- Last updated: 2026-08-06
-- Interview status: In progress; core scope and lifecycle confirmed, with detailed workflows, interfaces, quality attributes, and success measures still being elicited
+- Version: 0.96
+- Last updated: 2026-08-09
+- Interview status: High-impact version-one requirements are sufficient for implementation planning; lower-impact refinements and physically discovered printer details remain open
 
 ## 2. Purpose and Product Vision
 
@@ -89,7 +89,7 @@ The proposed product is an asphalt-plant management application intended to cent
 
 ## 8. Assumptions and Dependencies
 
-- Whether the application will replace or supplement paper records requires confirmation.
+- Detailed digital transaction history starts at go-live. Initial setup carries forward currently used configuration/master data, active projects, equipment profiles, customer and supplier Opening Balances, and the current physical fuel-tank reading. Pre-go-live paper records remain authoritative. Version one provides no bulk import or manual recreation of pre-go-live operational transactions. (Sources: Turns 276–280; status: Confirmed migration boundary.)
 
 ## 9. Functional Requirements
 
@@ -224,14 +224,14 @@ The proposed product is an asphalt-plant management application intended to cent
 - Rationale: The delivery authorization is one of two required documents after loading.
 - Actors: Authorized plant personnel; recipient and issuer roles remain to be identified.
 - Trigger: The truck has completed final weighing and the load record is ready for authorization.
-- Preconditions: Required customer, driver, vehicle, weight, destination, and signature information is available.
+- Preconditions: A saved customer, item, driver name, truck plate, valid empty and full whole-kilogram weights, selected conversion, and applicable project/destination context are available. Signature is optional.
 - Main behavior: Generate a delivery authorization containing the snapshotted company header with configured contact details beneath the company name, document title, automatic shared transaction number and original date/time, customer and applicable project or destination, item, driver name, plate number, optional requested quantity when entered, empty weight, full weight, net weight, calculated converted quantity with its output unit, destination address, and optional driver signature. Omit the requested-quantity label and value when blank. Use colon-separated `Label: Value` fields. Render a compact primarily single-column 58 mm template and a more spacious aligned 80 mm template with identical applicable information. Show no selected conversion name, conversion rate/formula, unit price, subtotal, VAT, payment, or total values.
 - Alternate and exception behavior: Missing data, corrections, reprints, cancellations, and voiding remain to be elicited.
 - Postconditions: The authorization is associated with exactly one truck load, one item, and its corresponding receipt and is available in the required output form.
 - Priority: Must
-- Acceptance criteria: A generated authorization displays all applicable operational fields with values from the correct load, shows the converted result and output unit without its conversion name/rate/formula, omits a blank requested quantity, identifies the driver as signer, shows the same automatic transaction number as its corresponding receipt, contains no monetary values, and can be sent to the customer as PDF.
-- Source: Interview turns 7, 10–11, and 256–258
-- Status: Confirmed field split as corrected
+- Acceptance criteria: Confirmation is blocked without a saved customer, item, driver name, plate, valid weights, selected conversion, and applicable destination context. An own-company load requires a saved project; an outside-customer load requires a saved project or destination address. Requested quantity, price, signature, and notes may be blank. A generated authorization displays all applicable operational fields with values from the correct load, shows the converted result and output unit without its conversion name/rate/formula, omits a blank requested quantity, identifies the driver as signer, shows the same automatic transaction number as its corresponding receipt, contains no monetary values, and can be sent to the customer as PDF.
+- Source: Interview turns 7, 10–11, 256–258, and 274
+- Status: Confirmed field split and confirmation requirements
 
 ### FR-011
 - Statement: “The system shall generate one receipt for every completed truck load and item, whether for an owner project or an outside customer.”
@@ -648,12 +648,26 @@ The proposed product is an asphalt-plant management application intended to cent
 - Trigger: The owner selects Complete Backup or Restore Complete Backup.
 - Preconditions: The owner is authenticated, supplies and confirms an owner-chosen backup password for export, and has sufficient device or storage-provider capacity available.
 - Main behavior: Export one package containing all records, settings, profiles, transaction documents, payments, logs, signatures, photos, attachments, and restoration metadata, encrypted with the separate owner-chosen backup password; allow it to be saved through the phone to a computer, USB/external storage, or cloud-storage provider. Opening or restoring requires that password. Validate a selected compatible package, show its backup date and record counts, require explicit confirmation, automatically export a safety backup of current data, and then replace the current dataset without merging.
-- Alternate and exception behavior: Insufficient storage, interrupted export/import, invalid or corrupted file, incompatible application version, and incorrect or forgotten backup password remain to be handled. An incomplete or invalid restore shall not partially change live data; if replacement succeeds but proves unwanted, the automatic safety export supports reversal. The package cannot be opened without its password.
+- Alternate and exception behavior: A newer app version shall restore a valid backup created by an older version and automatically migrate its data. An older app version shall reject a backup created by a newer unsupported version before replacement and show a clear Update the app first instruction. Insufficient storage, interrupted export/import, invalid or corrupted file, incompatibility, and incorrect or forgotten backup password shall not partially change live data; if replacement succeeds but proves unwanted, the automatic safety export supports reversal. The package cannot be opened without its password.
 - Postconditions: A successful export creates an independently retained complete backup; a successful restore reconstructs its validated application state.
 - Priority: Must
-- Acceptance criteria: Export a representative full dataset and transfer it off-device. On restore, verify the preview date/counts, confirmation, and current-data safety export occur before replacement; verify all restored records, settings, documents, payments, logs, signatures, photos, attachments, and relationships match the backup with no duplicates or merge; verify invalid/interrupted restore leaves current data unchanged.
-- Source: Interview turns 210–211
-- Status: Confirmed package, password encryption, and replacement safeguards; compatibility details pending
+- Acceptance criteria: Export a representative full dataset and transfer it off-device. On restore, verify the preview date/counts, confirmation, and current-data safety export occur before replacement; verify all restored records, settings, documents, payments, logs, signatures, photos, attachments, and relationships match the backup with no duplicates or merge. Verify a newer version migrates a valid older backup, while an older version rejects an unsupported newer backup with Update the app first guidance. Invalid, incompatible, or interrupted restore leaves current data unchanged.
+- Source: Interview turns 210–213 and 275
+- Status: Confirmed package, password encryption, replacement safeguards, and version compatibility
+
+### FR-071
+- Statement: “The system shall allow the owner to establish and settle customer-receivable and supplier-payable opening balances at go-live.”
+- Rationale: Outstanding pre-go-live money must carry forward without inventing incomplete operational transactions from paper records.
+- Actors: Owner.
+- Trigger: Initial setup identifies an unpaid customer or supplier amount from the paper records.
+- Preconditions: The applicable saved customer or supplier profile exists and the positive USD amount and as-of date are known.
+- Main behavior: Create a separate Opening Balance containing the profile, positive USD original amount, required as-of date, and optional note or paper-book reference. Permit multiple partial payments under the established payment validation and final-cancellation rules, and derive paid, remaining, and payment status values.
+- Alternate and exception behavior: An Opening Balance has no item, quantity, VAT, load, quarry delivery, receipt, or delivery authorization. It remains separate from post-go-live transactions in histories and reports.
+- Postconditions: The applicable profile and financial reports include the outstanding carried-forward amount and its payment history without implying operational detail.
+- Priority: Must
+- Acceptance criteria: A $5,000 customer Opening Balance can receive a valid $2,000 partial payment and display $3,000 remaining with Partially Paid status. It appears separately from new receipts and creates no quantity, VAT, or transaction document. The same behavior applies to a supplier payable.
+- Source: Interview turns 278–279
+- Status: Confirmed
 
 ### FR-028
 - Statement: “The system shall allow a project foreman to create one daily work report for each project workday.”
@@ -759,13 +773,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: System; owner.
 - Trigger: Connectivity becomes available while unsynchronized changes exist.
 - Preconditions: The device can authenticate to the synchronization service.
-- Main behavior: Upload local changes and all associated settings, profiles, documents, payments, logs, signatures, photos, attachments, and restoration metadata, and make the complete synchronized dataset available to the owner's other device and cloud recovery service.
-- Alternate and exception behavior: On failure, retain local changes, show them as pending, and retry automatically. If the same record changed on two offline devices, keep the newest edit. The owner may then manually correct that resulting record.
+- Main behavior: Persist every change first in the on-device database and pending queue. When connected, authenticate through Firebase Authentication; synchronize structured records, settings, profiles, payments, logs, and restoration metadata to Cloud Firestore; synchronize photos, signatures, and attachments to Cloud Storage; and make the complete cloud state downloadable into the local database of another signed-in owner device. Production Firebase/Google Cloud resources shall reside in a project owned and controlled by the business.
+- Alternate and exception behavior: On failure, retain local changes, show the pending-change count and last-synchronized time, and retry automatically. Warn before sign-out, restore, or other destructive actions while changes remain pending. If the same record changed on two offline devices, keep the newest edit; the owner may then manually correct the result. Data held only on a permanently lost or destroyed offline phone and never synchronized is unrecoverable.
 - Postconditions: The complete successfully synchronized dataset is durable in cloud storage and available on other signed-in owner devices.
 - Priority: Must
-- Acceptance criteria: Create records with settings, documents, payments, logs, signatures, photos, and attachments offline, restore connectivity, and verify the complete dataset synchronizes and appears on another signed-in device. Create conflicting edits on two devices, verify the newest edit is retained, then manually correct the resulting record and verify the correction synchronizes.
-- Source: Interview turns 57, 67, and 214
-- Status: Confirmed
+- Acceptance criteria: Create records with settings, documents, payments, logs, signatures, photos, and attachments offline and verify they appear in the pending count. Attempt a destructive action and verify a pending-data warning. Restore connectivity and verify automatic retry, cleared pending state, updated last-sync time, and complete appearance on another signed-in device. Create conflicting edits on two devices, verify the newest edit is retained, then manually correct and synchronize the result. Recovery documentation explicitly states that never-synchronized data on a permanently lost device cannot be restored.
+- Source: Interview turns 57, 67, 214, and 284–288
+- Status: Confirmed, including production provider and component architecture
 
 ### FR-036
 - Statement: “The system shall restore all synchronized owner data after the owner installs the app and signs in on a replacement device.”
@@ -815,13 +829,27 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: The owner selects an export format while viewing a report.
 - Preconditions: The report and its data have been generated.
-- Main behavior: Within the Reports screen, present Active Projects, Completed Projects, and Business Reports. Active projects open history and Make Report; completed projects open history/export only until reactivated. Business Reports provides five groups—Loads and Sales, Customer Balances and Payments, Quarry Purchases and Supplier Balances, Fuel Movements and Current Balance, and Projects and Daily Work Reports. Allow applicable filtering by date range, category/item, customer/project, and payment status, then produce a PDF or Excel file representing the filtered report. Every export shows company header/report title, generation date/time, all active filters, and totals for each numeric section. PDF repeats column headings and shows page numbers; Excel freezes header rows and provides filterable columns. Output uses the selected English-LTR or Arabic-RTL layout.
+- Main behavior: Within the Reports screen, present Active Projects, Completed Projects, and Business Reports. Active projects open history and Make Report; completed projects open history/export only until reactivated. Business Reports provides five groups—Loads and Sales, Customer Balances and Payments, Quarry Purchases and Supplier Balances, Fuel Movements and Current Balance, and Projects and Daily Work Reports. Allow applicable filtering by date range, category/item, customer/project, and payment status, then produce a PDF or Excel file representing the filtered report. Also provide one offline Export Analysis Workbook action spanning every confirmed analysis domain, with structured raw-data sheets, a Data Dictionary, summaries, and standard charts. Every export shows company header/report title, generation date/time, all active filters, and totals for each numeric section. PDF repeats column headings and shows page numbers; Excel freezes header rows and provides filterable columns. Output uses the selected English-LTR or Arabic-RTL layout.
 - Alternate and exception behavior: Generate and locally save files from on-device data while offline. Internet is needed only for synchronization or an online share destination. For large exports, show records generated and provide Cancel. Cancellation, failure, or application closure removes incomplete output and creates no partial file; the owner may restart later. Empty results, sharing, and report printing remain to be defined.
 - Postconditions: The generated file is available locally on the phone regardless of internet connectivity.
 - Priority: Must
 - Acceptance criteria: With network disabled, each of the five groups can be viewed and locally exported in PDF and Excel from on-device data. Applying supported filters changes the displayed/exported dataset consistently; PDF and Excel contain the same records/totals within the selected scope and all shared presentation elements. Multi-page PDF headings repeat with correct page numbers; Excel opens with frozen header rows and per-column filters; both languages use the correct direction. Cancelling or closing a large export after progress begins leaves no incomplete file, and restarting can complete normally.
-- Source: Interview turns 65–66 and 225–233
-- Status: Confirmed content, presentation, offline generation, and large-export interruption behavior
+- Source: Interview turns 65–66, 225–233, and 291
+- Status: Confirmed content, presentation, offline generation, Analysis Workbook, and large-export interruption behavior
+
+### FR-072
+- Statement: “The system shall export one analysis-ready Excel workbook covering the complete confirmed reporting dataset.”
+- Rationale: The owner needs a portable dataset suitable for independent spreadsheet work, charting, and optional AI-assisted analysis.
+- Actors: Owner.
+- Trigger: The owner selects Export Analysis Workbook and chooses applicable filters.
+- Preconditions: The relevant records are stored locally on the phone.
+- Main behavior: Generate offline one workbook with separate raw-data sheets for loads/sales, customers/opening balances, payments, quarry purchases, supplier payments, fuel movements/equipment totals, projects/daily reports, and materials; include a Data Dictionary, summary sheets, and standard charts. Raw sheets use stable record identifiers, explicit dates and units, separate numeric columns, frozen/filterable headers, and no decorative merged cells.
+- Alternate and exception behavior: Large-workbook progress, cancellation, failure, and cleanup follow the common export rules. AI tools may generate additional interpretations or charts after the owner shares the workbook, but those outputs are advisory and do not modify application records.
+- Postconditions: A complete, internally reconcilable workbook is locally available for spreadsheet or AI-assisted analysis.
+- Priority: Must
+- Acceptance criteria: With internet disabled, export representative data and verify every confirmed domain has the expected raw sheet, identifiers, dates, units, numeric columns, Data Dictionary entries, summaries, and standard charts. Workbook totals reconcile with DROMEX reports. Uploading or editing the workbook cannot change application data.
+- Source: Interview turn 291
+- Status: Confirmed
 
 ### FR-065
 - Statement: “The system shall provide a Loads and Sales report combining operational and financial load information.”
@@ -957,12 +985,12 @@ The proposed product is an asphalt-plant management application intended to cent
 - Trigger: The owner selects Confirm from the receipt review.
 - Preconditions: The receipt is a draft and meets confirmation validation rules.
 - Main behavior: Change status to Confirmed and enable print actions.
-- Alternate and exception behavior: Invalid/missing data blocks confirmation; undoing confirmation remains undefined.
+- Alternate and exception behavior: Invalid/missing data blocks confirmation. Confirmation cannot be undone: a confirmed receipt never returns to Draft or Trash. Permitted corrections keep it confirmed and retain the same transaction identity.
 - Postconditions: The receipt is confirmed, printable, and non-deletable.
 - Priority: Must
 - Acceptance criteria: Print is unavailable for a draft and becomes available only after explicit confirmation.
-- Source: Interview turn 77
-- Status: Confirmed; validation rules pending
+- Source: Interview turns 77 and 272–273
+- Status: Confirmed, including irreversible confirmation; remaining validation rules pending
 
 ### FR-046
 - Statement: “The system shall require every business record to be explicitly confirmed before it becomes final.”
@@ -971,12 +999,12 @@ The proposed product is an asphalt-plant management application intended to cent
 - Trigger: The owner finishes entering and reviewing a record.
 - Preconditions: The record is a draft and all required fields and validation rules pass.
 - Main behavior: Provide an explicit confirmation action that changes the record from draft to final/confirmed.
-- Alternate and exception behavior: If required data is missing or invalid, block confirmation and highlight what must be fixed. Confirmed records cannot be deleted but may be corrected. Settings save directly.
+- Alternate and exception behavior: If required data is missing or invalid, block confirmation and highlight what must be fixed. Confirmation is irreversible: confirmed records never return to Draft or Trash, permanently retain their identity and confirmed state, and may be corrected only through their permitted correction behavior. Payments and fuel movements use their established cancellation rules to reverse effects. Settings save directly.
 - Postconditions: The business record is confirmed, non-deletable, correctable, and included in final histories, totals, and reports.
 - Priority: Must
-- Acceptance criteria: A draft missing a required field cannot be confirmed and identifies that field; after required data is corrected, confirmation succeeds. Confirmed records are non-deletable/correctable; settings save without confirmation.
-- Source: Interview turns 81–85
-- Status: Confirmed; record-specific rules pending
+- Acceptance criteria: A draft missing a required field cannot be confirmed and identifies that field; after required data is corrected, confirmation succeeds. A confirmed record cannot be returned to Draft or Trash and retains its identity after correction. Confirmed records are non-deletable/correctable; settings save without confirmation.
+- Source: Interview turns 81–85 and 272–273
+- Status: Confirmed lifecycle, including irreversible confirmation; record-specific rules pending
 
 ### FR-048
 - Statement: “The system shall clearly identify every missing or invalid field that prevents business-record confirmation.”
@@ -988,9 +1016,9 @@ The proposed product is an asphalt-plant management application intended to cent
 - Alternate and exception behavior: Multiple simultaneous errors shall all remain discoverable.
 - Postconditions: The record remains draft until the issues are corrected.
 - Priority: Must
-- Acceptance criteria: A receipt missing customer, plate, or required weights cannot confirm, and each missing value is visibly identified. Negative empty or full weights and negative prices are rejected. A full weight less than or equal to the empty weight blocks confirmation and visibly identifies the invalid weight relationship. Blank, intentional $0.00, and positive prices remain valid. Missing driver signature does not block confirmation.
-- Source: Interview turns 85–86 and 126
-- Status: Confirmed for required fields, weight validation, and price sign; other record-specific rules pending
+- Acceptance criteria: A load missing saved customer, item, driver name, plate, valid empty/full weights, selected conversion, or its applicable project/destination context cannot confirm, and each missing value is visibly identified. An own-company load requires a saved project; an outside-customer load requires a saved project or destination address. Negative empty or full weights and negative prices are rejected. A full weight less than or equal to the empty weight blocks confirmation and visibly identifies the invalid weight relationship. Requested quantity, price, signature, and notes are optional; blank, intentional $0.00, and positive prices remain valid.
+- Source: Interview turns 85–86, 126, 144, and 274
+- Status: Confirmed for load required fields, weight validation, optional fields, and price sign; other record-type validations pending
 
 ### FR-049
 - Statement: “The system shall validate each recorded order payment against the order's current remaining balance.”
@@ -1089,7 +1117,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - A requested-versus-actual quantity difference shall not prevent confirmation. Billing uses actual measured quantity, and the app shall not apply a variance threshold or warning. (Sources: Turns 131–134; status: Confirmed.)
 
 ### BR-032
-- At confirmation, a transaction number consisting of local date, device code, and device-local sequence and the original confirmation date/time are assigned. Both are shared by the document pair, immutable, and never reused or changed by correction/reprint. (Sources: Turns 137–138; status: Confirmed.)
+- At confirmation, a transaction number consisting of local date, device code, and device-local sequence and the original automatic device confirmation date/time with time-zone offset are assigned. Both are shared by the document pair, immutable, and never reused, manually edited, or changed by correction/reprint. When online, a material device/server clock difference produces a warning but never silently changes a confirmed identity. (Sources: Turns 137–138 and 283; status: Confirmed.)
 
 ### BR-033
 - Every reprint shall retain the original confirmation date/time, be visibly marked as a copy, and show the reprint date/time. It shall create a log entry containing document identity, reprint date/time, and device, without a copy number or duplicate document contents. (Sources: Turns 138–140; status: Confirmed.)
@@ -1279,10 +1307,13 @@ The proposed product is an asphalt-plant management application intended to cent
 ### DR-023
 - An item shall retain required name, one required category association, Active/Inactive status defaulting Active, and at least one enabled usage flag for Loads, Quarry Purchases, or Daily Reports. Internal code, description/notes, default unit, and a default receipt price when Loads is enabled are optional. Categories are organizing groups rather than transaction records. The same item identity may be referenced by multiple enabled workflows; receipt conversion remains separate. Each confirmed referencing record snapshots the item name, optional code, category, and unit used at confirmation, which later catalog edits cannot change. An item referenced by any record cannot be deleted, but may be deactivated and later reactivated; only never-used items may move to restorable Trash. A supplied internal code is unique; similar names produce a non-blocking warning showing the possible match. (Sources: Turns 250–252 and 266–268; status: Confirmed.)
 
+### DR-024
+- Each customer-receivable or supplier-payable Opening Balance shall reference one saved customer or supplier profile and retain a positive USD original amount, required as-of date, optional note or paper-book reference, derived active paid amount, remaining balance, and payment status. It contains no item, quantity, VAT, load, quarry delivery, receipt, or delivery authorization. It relates to zero or more separate partial-payment entries governed by the established positive/not-over-remaining validation and final cancellation rules. Opening balances appear separately in profile histories, balances, and applicable financial reports. (Sources: Turns 278–279; status: Confirmed.)
+
 ## 12. External Interface and Integration Requirements
 
 ### IR-001
-- The application shall print both transaction documents through the existing Xprinter Android POS terminal's built-in 58 mm printer and from Android and iPhone to compatible separate portable Bluetooth printers using 58 mm and 80 mm layouts. A printer model is officially supported only after successful physical testing with the app; compatibility with untested Bluetooth models is not guaranteed. Version-one acceptance requires successful printing of both documents through the existing terminal and through separate 58 mm and 80 mm Bluetooth printers from both phone platforms. The existing terminal may be model XP-POS-I100; exact models and protocols remain to be validated. (Sources: Turns 47–52 and 107–108; status: Confirmed scope, integration path, and test matrix; exact technical details draft.)
+- The application shall print both transaction documents through the existing unidentified Xprinter Android POS terminal's built-in 58 mm printer and from Android and iPhone to compatible separate portable Bluetooth printers using 58 mm and 80 mm layouts. The existing terminal permits installation of the version-one Android application through the Play Store or an APK, enabling direct built-in-printer testing. A printer model is officially supported only after successful physical testing with the app; compatibility with untested Bluetooth models is not guaranteed. Version-one acceptance requires successful printing of both documents through the existing terminal and through separate 58 mm and 80 mm Bluetooth printers from both phone platforms. The owner has no exact Xprinter model, protocol, SDK, or printable-width information and does not yet own the separate portable test printers. Exact technical discovery plus selection, procurement, and physical Android/iPhone testing of compatible 58 mm and 80 mm portable models are release dependencies. (Sources: Turns 47–52, 107–108, and 269–271; status: Confirmed scope, installability, test matrix, and procurement dependency; exact models pending.)
 
 ### IR-002
 - Receipt formatting shall adapt to a user-selected 58 mm or 80 mm POS paper layout rather than assuming one fixed width. Other widths are deferred and may be added later. (Sources: Turns 49–51 and 106; status: Confirmed.)
@@ -1296,19 +1327,19 @@ The proposed product is an asphalt-plant management application intended to cent
 ## 13. Non-Functional Requirements
 
 ### NFR-001 — Portability
-- The version-one user experience shall support both Android phones and iPhones. Screen-size baseline, minimum OS versions, and verification devices remain to be confirmed. (Sources: Turns 47–48; status: Confirmed at platform level.)
+- The version-one user experience shall support both Android phones and iPhones. Implementation and acceptance shall test iPhone first using the newest generally available iPhone model and iOS release when formal acceptance testing begins; the exact model and OS build shall be pinned in the test record. Ordinary Android phones shall support Android 10 or later. The existing Xprinter terminal is separately tested and may require lowering the minimum Android version to its older release where technically feasible. Exact Android verification hardware and remaining screen-size baselines are implementation test dependencies. (Sources: Turns 47–48 and 281–282; status: Confirmed platform priorities and OS baseline; Xprinter exception pending physical verification.)
 
 ### NFR-002 — Availability and Offline Operation
 - Core workflows shall remain available without internet and offline changes shall synchronize automatically after connectivity returns. Verification: execute FR-034 offline on Android and iPhone, restore connectivity, and verify FR-035 cross-device visibility. (Sources: Turns 56–57; status: Partially confirmed; recovery/conflict details pending.)
 
 ### NFR-003 — Backup and Recovery
-- The complete synchronized dataset—including current confirmed records, settings, profiles, documents, payments, logs, signatures, photos, attachments, and restoration metadata—shall remain available permanently with no automatic expiration and shall be recoverable on a replacement device. The server shall also retain complete daily point-in-time snapshots for a rolling 30-day recovery window; expiry of an old snapshot does not delete current live data. The owner shall self-restore an available snapshot by selecting its date, previewing record counts, automatically creating a safety backup, and explicitly confirming full replacement. Eligible deleted drafts remain in trash until manually permanently deleted after confirmation. The owner can independently export and restore an encrypted complete-backup package. Verification: restore the full dataset to a replacement device, self-restore an eligible complete server snapshot within 30 days, validate expiry of older snapshots without loss of live data, and round-trip a complete manual backup. (Sources: Turns 58, 75, 79, 94–95, 97, and 210–214; status: Confirmed data coverage and restore workflow; cloud destination and recovery timing pending.)
+- The complete synchronized dataset—including current confirmed records, settings, profiles, documents, payments, logs, signatures, photos, attachments, and restoration metadata—shall remain available permanently in the business-owned Firebase/Google Cloud project and be recoverable on a replacement device. A custom backup/orchestration layer spanning Firestore and Cloud Storage shall retain complete daily point-in-time snapshots for a rolling 30-day recovery window; expiry of an old snapshot does not delete current live data. The owner shall self-restore an available snapshot by selecting its date, previewing record counts, automatically creating a safety backup, and explicitly confirming full replacement. Eligible deleted drafts remain in Trash until manually permanently deleted after confirmation. The owner can independently export and restore an encrypted complete-backup package. Cloud/replacement recovery excludes records that remained solely on a permanently lost offline device and never synchronized. Verification: restore the full synchronized dataset to a replacement device, self-restore an eligible attachment-inclusive snapshot within 30 days, validate expiry of older snapshots without loss of live data, round-trip a complete manual backup, and verify pending-data risk is visibly communicated. (Sources: Turns 58, 75, 79, 94–95, 97, 210–214, and 284–288; status: Confirmed data coverage, provider, restore workflow, and unsynchronized-data boundary; recovery timing pending.)
 
 ### NFR-005 — Reliability
-- A failed synchronization attempt shall not lose locally saved records. Pending changes shall remain identifiable and retry automatically. Same-record conflicts shall retain the newest edit. Verification: inject failures and conflicting timestamps, then verify durability, pending indication, retry, and newest-edit result. (Sources: Turns 67–69; status: Confirmed.)
+- A failed synchronization attempt shall not lose locally saved records. Pending changes shall remain identifiable and retry automatically. Same-record conflicts shall retain the newest edit. Confirmed timestamps use automatic device time plus offset and remain immutable; when connected, material device/server clock divergence shall warn without modifying confirmed records or preventing offline work. Verification: inject failures, conflicting edits, and a materially incorrect device clock, then verify durability, pending indication, retry, newest-edit behavior, warning display, and unchanged confirmed identity. (Sources: Turns 67–69 and 283; status: Confirmed; clock-warning threshold pending implementation definition.)
 
 ### NFR-004 — Security
-- Initial access shall require email/password authentication. After initial sign-in, access remains available offline without repeated prompts. App-specific biometric/PIN locking is excluded. A successful password reset shall revoke all other device sessions once they can receive the revocation. Complete manual backups shall be encrypted with a separate owner-chosen password required to open or restore them. Password storage, transport protection, reset security, revocation timing, backup-password strength/forgetting behavior, and brute-force controls require measurable definition. (Sources: Turns 59–64 and 213; status: Draft.)
+- Initial access shall require email/password authentication with a verified owner email before cloud synchronization and a password of at least 12 characters. Repeated failed sign-in and password-reset attempts shall be rate-limited, and each new-device sign-in shall send an email notification. After initial sign-in, access remains available offline without repeated prompts. App-specific biometric/PIN locking and mandatory multi-factor authentication are excluded from version one. A successful password reset shall revoke all other device sessions once they can receive the revocation. Complete manual backups shall be encrypted with a separate owner-chosen password required to open or restore them. Verification shall cover unverified-email sync rejection, password length, rate limiting, new-device notification, reset revocation, and subsequent offline access. (Sources: Turns 59–64, 213, and 290; status: Confirmed version-one controls.)
 
 ### NFR-006 — Receipt Confirmation Performance
 - On a supported ordinary phone operating offline, tapping Confirm on a valid receipt shall durably save the transaction, complete its calculations, and make both transaction documents ready for printing within 2 seconds. Bluetooth transmission and physical printer time are excluded. Verification: test representative valid receipts offline on each supported verification device and measure from Confirm input until the saved transaction and both print-ready documents are available. (Sources: Turns 205–206; status: Confirmed target; exact verification devices pending.)
@@ -1342,6 +1373,9 @@ The proposed product is an asphalt-plant management application intended to cent
 
 ### CON-005
 - Version one is phone-first and depends on compatibility with the selected Bluetooth POS printer environment. (Source: Turn 47; status: Confirmed at platform level.)
+
+### CON-006
+- Production Firebase/Google Cloud billing shall belong to the business-owned account. Production configuration shall include monthly budget alerts and abnormal-usage monitoring; preserve attachment compression and avoidance of unnecessary document copies; expose administrative storage/synchronization usage; produce an expected monthly-cost estimate before launch; and require owner approval before enabling unusually expensive backup or infrastructure options. (Source: Turn 289; status: Confirmed governance; exact estimate pending architecture and load measurement.)
 
 ### CON-007
 - Version one supports exactly one fuel tank and one fuel type. Multiple tanks and fuel types are deferred to a future upgrade. (Source: Turn 193; status: Confirmed.)
@@ -1592,7 +1626,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - OQ-051: Which filters and periods apply to dashboard summaries?
 - OQ-052: Closed in Turn 46 — version one is owner-only; staff accounts are deferred.
 - OQ-053: Closed in Turn 48 — support both Android and iPhone.
-- OQ-054: Current Xprinter uses 58 mm paper and may be XP-POS-I100; exact model/protocol/printable width remains open.
+- OQ-054: Current Xprinter uses 58 mm paper, but its exact model/protocol/printable width is unavailable from the owner as of Turn 269 and must be discovered through later physical inspection/testing unless the acceptance approach is revised.
 - OQ-055: Closed through Turn 204 — confirmed records remain saved; Retry and Reconnect are offered; attempts remain original until first app-reported success; only successful later prints are marked and logged as copies.
 - OQ-056: Closed in Turn 106 — version one supports selectable 58 mm and 80 mm POS paper layouts; other widths are deferred.
 - OQ-057: Can the current Xprinter receive Bluetooth jobs from external Android/iPhone devices?
