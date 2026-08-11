@@ -35,7 +35,7 @@ The first version shall be phone-first and shall print receipts using a compatib
 
 ### 3.3 Future Considerations
 
-Additional workflows beyond outgoing loads and incoming purchases remain to be elicited.
+Version-one workflows are bounded by the confirmed load/document/customer/payment/project/quarry/fuel/reporting scope and the explicit exclusions in Section 3.2. Further adjacent workflows are future considerations rather than unbounded version-one elicitation.
 
 - Staff accounts, role-based permissions, and multi-user operation may be added after the first release. (Source: Turn 46; status: Deferred.)
 
@@ -51,12 +51,12 @@ Additional workflows beyond outgoing loads and incoming purchases remain to be e
 ## 5. Stakeholders and User Classes
 
 - Plant owner/manager/project foreman: The interviewee currently performs all three roles, needs plant-wide visibility, controls default pricing, and creates/edits project daily reports. (Sources: Turns 2, 9, 32, and 38; status: Confirmed.)
-- Other user classes: To be elicited.
-- Individual asphalt customers: People who obtain asphalt from the plant. Their direct system access is unknown. (Source: Turn 4; status: Confirmed stakeholder class.)
-- Company asphalt customers: External companies that obtain asphalt and require a quantity history. Their direct system access is unknown. (Source: Turn 4; status: Confirmed stakeholder class.)
-- Plant/batch operator: Produces asphalt batches for loading. System interaction is unknown. (Source: Turn 6; status: Draft user class.)
-- Wheel-loader operator: Feeds material to the plant. System interaction is unknown. (Source: Turn 6; status: Draft user class.)
-- Plant oversight role: Observes or supervises plant activity during loading; exact title and duties are unknown. (Source: Turn 6; status: Draft stakeholder class.)
+- Other application user classes are deferred beyond version one.
+- Individual asphalt customers: People who obtain asphalt from the plant. They are represented in records and have no direct version-one system access. (Sources: Turns 4 and 45-46; status: Confirmed stakeholder class.)
+- Company asphalt customers: External companies that obtain asphalt and require a quantity history. They are represented in records and have no direct version-one system access. (Sources: Turns 4 and 45-46; status: Confirmed stakeholder class.)
+- Plant/batch operator: Produces batches for loading but is not recorded on individual version-one load records and has no version-one account. (Sources: Turns 6 and 296; status: Confirmed represented-person exclusion.)
+- Wheel-loader operator: Feeds material to the plant but is not recorded on individual version-one load records and has no version-one account. (Sources: Turns 6 and 296; status: Confirmed represented-person exclusion.)
+- Plant oversight role: May observe or supervise loading but is not recorded on individual version-one load records and has no version-one account. (Sources: Turns 6 and 296; status: Confirmed represented-person exclusion.)
 - Truck driver: Brings the truck through empty weighing, loading, and loaded weighing. Truck ownership and system interaction are unknown. (Source: Turn 6; status: Draft stakeholder class.)
 - Weighbridge personnel or recordkeeper: Records truck weights; the responsible role has not been explicitly identified. (Source: Turn 6; status: Assumed stakeholder class.)
 - Project foreman: Creates reports describing project work, attendance, and material use or transport. (Source: Turn 32; status: Confirmed user class.)
@@ -71,9 +71,9 @@ Some production batches are not recorded, so no complete batch history exists. T
 
 The plant mainly produces asphalt for the owner's projects. Individuals and companies also sometimes request asphalt; the owner wants their quantities and histories recorded. (Source: Turn 4; status: Confirmed.)
 
-For an outside-customer collection, a truck is first weighed empty. It proceeds to the plant, where one person produces the batch, a wheel-loader operator feeds material to the plant, and another person oversees activity. The truck is loaded based on the customer's desired weight and then returns to the weighbridge for its loaded weight to be recorded. The subsequent document, customer, and payment steps are unknown. (Source: Turn 6; status: Confirmed through final weighing.)
+For an outside-customer collection, a truck is first weighed empty. It proceeds to the plant, where one person produces the batch, a wheel-loader operator feeds material to the plant, and another person oversees activity. The truck is loaded based on the customer's optional desired weight and then returns to the weighbridge for its loaded weight to be recorded. The owner then reviews and irreversibly confirms the shared load/batch record, which creates the delivery authorization and receipt/invoice bill and supports separate in-person-payment tracking. (Sources: Turns 6, 104, 155, 221, 264, and 273-274; status: Confirmed.)
 
-After final weighing, two documents are required: a delivery authorization and a receipt, with the receipt also referred to as the invoice bill. There is no third invoice document. The delivery authorization contains the company name and configured contact details, driver name, plate number, empty weight, full weight, net weight, converted quantity and output unit, destination address, and a signature. It omits the conversion name/rate/formula and all financial details. The receipt/invoice bill contains net weight and price. Both documents can be printed, generated as PDF, and sent from the phone. (Sources: Turns 7, 102–104, and 256–257; status: Confirmed at document-set level.)
+After final weighing, two documents are required: a delivery authorization and a receipt. There is no third invoice document. The delivery authorization contains the company name and configured contact details, driver name, plate number, empty weight, full weight, net weight, converted quantity and output unit, destination address, and a signature. It omits the conversion name/rate/formula and all financial details. The Receipt contains the converted quantity with output unit and applicable price/VAT totals. Both documents can be printed, generated as PDF, and sent from the phone. (Sources: Turns 7, 102–104, 256–257, 308–309; status: Confirmed at document-set level.)
 
 This workflow applies to both outside work and the owner's projects. For an owner project, the owner's company is recorded as the customer. (Sources: Turns 10–11; status: Confirmed.)
 
@@ -235,15 +235,15 @@ The proposed product is an asphalt-plant management application intended to cent
 
 ### FR-011
 - Statement: “The system shall generate one receipt for every completed truck load and item, whether for an owner project or an outside customer.”
-- Rationale: A receipt showing net weight and price is required after loading.
+- Rationale: A receipt showing the converted billable quantity and price is required after loading.
 - Actors: Authorized plant personnel; recipient and issuer roles remain to be identified.
 - Trigger: The load's net weight and applicable price are available.
 - Preconditions: The completed load is identifiable.
-- Main behavior: Generate a minimal receipt containing the snapshotted company header, document title, automatic shared transaction number and original date/time, customer name, project name when selected, final/net weight, unit price, subtotal, VAT rate and amount, and final total. Use colon-separated `Label: Value` fields in both the compact 58 mm and spacious 80 mm templates. Internally round converted quantity to the selected conversion's displayed decimal places for billing, but do not print conversion details or billed converted quantity. Always omit driver, plate, requested quantity, empty/full weights, destination, signature, and payment/balance information.
+- Main behavior: Generate a minimal financial document titled `Receipt` containing the snapshotted company header, automatic shared transaction number and original date/time, customer name, project name when selected, a `Quantity` field containing the calculated converted value with its output-unit symbol, unit price, subtotal, VAT rate and amount, and final total. Use colon-separated `Label: Value` fields in both the compact 58 mm and spacious 80 mm templates. Round converted quantity to the selected conversion's displayed decimal places for billing and display that value, while omitting the conversion name, rate, and formula. Always omit raw net weight, driver, plate, requested quantity, empty/full weights, destination, signature, and payment/balance information.
 - Alternate and exception behavior: Omit project when none is selected. Blank and intentional zero prices are permitted for own-company and outside-customer receipts: blank displays Unpriced without VAT/total, while zero displays the applicable zero-value financial lines. Reprints and corrections are covered elsewhere.
 - Postconditions: The receipt is associated with exactly one truck load, one item, and its corresponding delivery authorization and is available in the required output form.
 - Priority: Must
-- Acceptance criteria: Every completed load can produce a receipt showing its customer, applicable project, net weight, financial/VAT lines, and the same automatic transaction number as its delivery authorization while omitting operational and payment details. If a conversion result of 7.3486 is configured for three displayed decimals, billing uses 7.349; at $90 per unit subtotal displays $661.41 before applicable VAT, without printing the conversion detail. Any receipt can be confirmed with a blank price or an intentional $0.00 price under their established display rules.
+- Acceptance criteria: Every completed load can produce a receipt showing its customer, applicable project, `Quantity` with converted value/output unit, financial/VAT lines, and the same automatic transaction number as its delivery authorization while omitting raw weights, operational details, and payment details. If a conversion result of 7.3486 is configured for three displayed decimals, the Receipt displays `Quantity: 7.349` with its output unit and billing uses 7.349; at $90 per unit subtotal displays $661.41 before applicable VAT, without printing the conversion name/rate/formula. Any receipt can be confirmed with a blank price or an intentional $0.00 price under their established display rules.
 - Source: Interview turns 7 and 10–12
 - Status: Confirmed field split
 
@@ -324,12 +324,12 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: The owner opens Load History or selects an entry.
 - Preconditions: Zero or more confirmed load transactions exist.
-- Main behavior: List transaction number/date, customer, applicable project, item and quantity, truck plate, Signed/Unsigned state, and payment status. Selecting an entry opens all remaining transaction details, its delivery authorization, and receipt.
-- Alternate and exception behavior: An empty history displays a clear empty state; filtering remains covered by applicable report/history requirements.
+- Main behavior: List transaction number/date, customer, applicable project, item and quantity, truck plate, Signed/Unsigned state, and payment status. Allow results to be grouped under Project or Customer and narrowed through combinable Project, Customer, inclusive From date, To date, and free-text filters matching transaction number, item, driver, or truck plate. Selecting an entry opens all remaining transaction details, its delivery authorization, and receipt.
+- Alternate and exception behavior: An empty history displays a clear empty state; loads without a project appear under `No project`; clearing filters restores all loads.
 - Postconditions: The owner can identify and open any confirmed load transaction and its documents.
 - Priority: Must
-- Acceptance criteria: Each confirmed batch/load appears exactly once with all confirmed summary fields; selecting it opens the matching full transaction and both documents.
-- Source: Interview turns 155–156
+- Acceptance criteria: Each confirmed batch/load appears exactly once with all confirmed summary fields; grouping and combined filters show only matching loads and a matching count; clearing filters restores the full history; selecting a result opens the matching full transaction, signature workflow, and both documents.
+- Source: Interview turns 155–156 and 321
 - Status: Confirmed
 
 ### FR-058
@@ -353,10 +353,10 @@ The proposed product is an asphalt-plant management application intended to cent
 - Trigger: The owner selects or adds a customer while creating a receipt.
 - Preconditions: A receipt draft is open.
 - Main behavior: Search/select an existing profile or open a quick Add Customer form, save the valid new profile, and return it as the selected receipt customer.
-- Alternate and exception behavior: Free-text-only customer input cannot satisfy confirmation. When a new profile matches an existing name, phone number, or Tax/VAT number, show possible matches and a warning; the owner may continue after review and may keep profiles separate. Existing duplicates may be merged through FR-060.
+- Alternate and exception behavior: Free-text-only customer input cannot satisfy confirmation. When a new profile matches an existing name, phone number, or Tax/VAT number, show possible matches and a warning; the owner may continue after review and may keep profiles separate. Existing duplicates may be merged through FR-060. A referenced profile cannot be deleted and may only be deactivated/reactivated; it remains in history and reports but is hidden from new transaction selection. A never-used profile may enter recoverable Trash. The own-company profile cannot be deactivated while an Active project references it.
 - Postconditions: The receipt is associated with one saved customer profile and contributes to that profile's history.
 - Priority: Must
-- Acceptance criteria: The owner can add a new customer without abandoning the draft; the created profile becomes selected; confirmation is blocked until one saved profile is selected. Matching name, phone, or Tax/VAT number displays existing profiles and a warning but does not absolutely block creation.
+- Acceptance criteria: The owner can add a new customer without abandoning the draft; the created profile becomes selected; confirmation is blocked until one saved profile is selected. Matching name, phone, or Tax/VAT number displays existing profiles and a warning but does not absolutely block creation. A referenced inactive profile remains historical and can be reactivated but is absent from new choices; only a never-used profile can enter Trash; own-company deactivation is blocked while an Active project references it.
 - Source: Interview turn 160
 - Status: Confirmed
 
@@ -380,13 +380,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: The owner creates/selects a supplier or opens supplier history.
 - Preconditions: None for creation; a saved profile exists for history.
-- Main behavior: Require supplier name; optionally retain phone, email, address, Tax/VAT number, and notes; provide quick creation during quarry-delivery entry; list associated purchase and payment records.
-- Alternate and exception behavior: Duplicate-supplier handling remains to be defined.
+- Main behavior: Require supplier name; optionally retain phone, email, address, Tax/VAT number, and notes; provide quick creation during quarry-delivery entry; list associated purchase, opening-balance, and payment records. During creation, warn without blocking when name, phone, or Tax/VAT number resembles an existing profile.
+- Alternate and exception behavior: The owner may keep possible duplicates separate or preview and explicitly confirm a merge. A merge moves quarry-purchase, opening-balance, and payment-history associations to the retained supplier, recalculates summaries, archives the duplicate with a merged-into reference, and preserves historical transaction/document snapshots. A referenced supplier cannot be deleted and may only be deactivated/reactivated; it remains in history/reports but is hidden from new transactions. A never-used supplier may enter recoverable Trash. A merged duplicate remains archived under its merged-into reference.
 - Postconditions: Quarry deliveries reference a saved supplier and contribute to its history.
 - Priority: Must
-- Acceptance criteria: A new supplier can be created without abandoning a delivery draft, becomes selected, and later displays that confirmed delivery and its payment state in supplier history.
-- Source: Interview turn 170
-- Status: Confirmed; duplicate handling pending
+- Acceptance criteria: A new supplier can be created without abandoning a delivery draft, becomes selected, and later displays that confirmed delivery and its payment state in supplier history. Similar identifying values warn without blocking. A previewed and confirmed merge transfers all associations, recalculates the retained summary, archives the duplicate, and leaves historical snapshots unchanged. A referenced inactive supplier remains historical and can be reactivated but is absent from new choices; only a never-used supplier can enter Trash.
+- Source: Interview turns 170 and 297
+- Status: Confirmed, including duplicate handling
 
 ### FR-062
 - Statement: “The system shall track payments for a priced quarry purchase using the same rules as customer-order payments.”
@@ -408,11 +408,11 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Authorized operational personnel; exact roles remain to be identified.
 - Trigger: A load record is created.
 - Preconditions: The relevant customer is known; when applicable, a saved project with required identity fields exists.
-- Main behavior: Require every load to select a customer. If the customer is the owner's company, also require a saved project. For an outside customer, allow an optional saved project and otherwise use the load's destination address.
+- Main behavior: Always show a searchable dropdown of all active projects during Make Receipt. Selecting a project automatically selects its associated customer and stores the project link on confirmation. Require every load to select a customer. If the customer is the owner's company, also require a saved project. For an outside customer, allow an optional saved project and otherwise use the load's destination address.
 - Alternate and exception behavior: An own-company load without a project cannot be confirmed. An outside-customer load without a project may be confirmed when its required destination is present. Mixed-purpose and corrected associations remain to be elicited.
 - Postconditions: The load appears in the correct project or customer history.
 - Priority: Must
-- Acceptance criteria: An own-company load cannot confirm without a selected saved project. An outside-customer load can confirm without a project when it has a destination. All loads appear in the selected customer's history, and project-linked loads also appear in project history.
+- Acceptance criteria: The project dropdown is visible before customer selection; selecting a project selects its associated customer. An own-company load cannot confirm without a selected saved project. An outside-customer load can confirm without a project when it has a destination. All loads appear in the selected customer's history, and project-linked loads also appear in project history and in the matching project/work-date daily report.
 - Source: Interview turn 10
 - Status: Confirmed
 
@@ -436,17 +436,17 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: System; configuration actor to be identified.
 - Trigger: The receipt preparer selects a saved conversion option.
 - Preconditions: A valid conversion rule and output unit are selected.
-- Main behavior: Show all active saved conversion rates in a dropdown without filtering by selected item. Display each option's name, input/output units, and rate; apply the option manually selected by the owner and present the result using that option's configured decimal places. The asphalt option uses 1,000 kg = 1 ton and displays three decimal places so each whole kilogram is preserved exactly.
-- Alternate and exception behavior: Behavior without a conversion, invalid configuration, and changes affecting historical records remain to be defined.
+- Main behavior: Show all active saved conversion rates in a dropdown without filtering by selected item. Display each option's name, input/output units, and rate; apply the option manually selected by the owner and present the result using that option's configured decimal places. Before confirmation, the in-app entry/review interface clearly shows the selected conversion name, rate, input/output units, and calculated result. The asphalt option uses 1,000 kg = 1 ton and displays three decimal places so each whole kilogram is preserved exactly.
+- Alternate and exception behavior: A conversion is required for confirmation, but the app does not infer compatibility or block an active conversion based on the selected item. The owner is responsible for the selection. Historical conversion snapshots remain governed by FR-052 and DR-018.
 - Postconditions: The converted quantity is available to documents, history, reports, and pricing.
 - Priority: Must
-- Acceptance criteria: Every active conversion appears regardless of selected item and visibly identifies its name, input/output units, and rate. The receipt uses the manually chosen option; choosing the asphalt 1,000 kg/ton option displays 20.555 tons for 20,555 net kg rather than rounding it to 20.56 tons.
+- Acceptance criteria: Every active conversion appears regardless of selected item and visibly identifies its name, input/output units, and rate in the app. Review shows the selected rule and result before confirmation. Choosing the asphalt 1,000 kg/ton option displays 20.555 tons for 20,555 net kg rather than rounding it to 20.56 tons. The issued receipt omits conversion details; the delivery authorization shows the converted result and output unit but not the conversion name, rate, or formula.
 - Additional source: Interview turn 102
 - Source: Interview turns 13–14 and 18–19
-- Status: Confirmed behavior, option display, and configurable precision; rounding method pending
+- Status: Confirmed behavior, review safeguard, document privacy, and configurable precision
 
 ### FR-016
-- Statement: “The system shall record whether each load contains asphalt or concrete.”
+- Statement: “The system shall record the selected active load-enabled catalog item for each load; asphalt and concrete are initial examples rather than a fixed material enumeration.”
 - Rationale: Both materials are in scope and require different converted units and rates.
 - Actors: Authorized record-entry user.
 - Trigger: A new load record is created.
@@ -457,7 +457,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Priority: Must
 - Acceptance criteria: Every completed load identifies exactly one material, independently of the receipt's selected conversion option.
 - Source: Interview turns 15–18
-- Status: Confirmed as corrected in Turn 19
+- Status: Confirmed as refined through Turns 250-268
 
 ### FR-017
 - Statement: “The system shall allow authorized users to add saved conversion-rate options.”
@@ -465,13 +465,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: A required conversion option is not available or must be configured.
 - Preconditions: The user is the manager or has been authorized to manage conversion options and knows the rate and units.
-- Main behavior: Save a reusable conversion option containing its name, input unit, output unit, rate, displayed decimal places, and active state for later receipt selection.
-- Alternate and exception behavior: Duplicate, invalid, edited, deactivated, or deleted rates and historical impact remain to be defined.
+- Main behavior: Save a reusable conversion option containing its case-insensitively unique name, input unit, output unit, rate, displayed decimal places, and active state for later receipt selection. Distinct names may intentionally use the same rate.
+- Alternate and exception behavior: A conversion referenced by any confirmed record cannot be deleted. It may be deactivated, edited for future transactions, and reactivated; confirmed snapshots and calculated results remain unchanged. A never-used conversion may be moved to recoverable Trash. Conversion mechanics remain internal and absent from both issued documents.
 - Postconditions: The option is available for permitted receipt workflows.
 - Priority: Must
-- Acceptance criteria: The owner can add or change a valid conversion option, including its displayed decimal places, and subsequently select it while preparing a receipt.
+- Acceptance criteria: The owner can add or change a valid conversion option, including its displayed decimal places, and subsequently select it while preparing a receipt. Duplicate names are blocked regardless of case, while distinct names may share a rate. Used options cannot be deleted and edits do not alter confirmed results; never-used options may enter Trash.
 - Source: Interview turns 19–20 and 46
-- Status: Confirmed for version one
+- Status: Confirmed for version one, including lifecycle through Turn 304
 
 ### FR-018
 - Statement: “The system shall allow an authorized user to create and name categories.”
@@ -479,13 +479,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: The business needs a category that does not yet exist.
 - Preconditions: The user has permission.
-- Main behavior: Create and retain a named category.
-- Alternate and exception behavior: Duplicate names, editing, deactivation, and deletion remain to be defined.
+- Main behavior: Create and retain a named active category for organizing catalog items. Permit reactivation of a deactivated category.
+- Alternate and exception behavior: A category containing any item cannot be deleted. It may be deactivated only after all active items in it are moved to another active category or deactivated. A deactivated category is unavailable for new item creation and new-entry selection but remains represented by historical item snapshots. An empty category that has never been used may be moved to recoverable Trash.
 - Postconditions: The category is available for item organization.
 - Priority: Must
-- Acceptance criteria: The owner can create a named category and later select it when defining an item.
-- Source: Interview turns 21, 28, and 46
-- Status: Confirmed behavior; lifecycle pending
+- Acceptance criteria: The owner can create and select an active category when defining an item. Deactivation is blocked while active items remain. A deactivated category is absent from new choices, remains visible historically, and can be reactivated. Only an empty never-used category can move to Trash.
+- Source: Interview turns 21, 28, 46, and 294
+- Status: Confirmed behavior and lifecycle
 
 ### FR-019
 - Statement: “The system shall allow an authorized user to create and name items within a category.”
@@ -493,7 +493,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: A required item does not yet exist.
 - Preconditions: The target category exists and the user has permission.
-- Main behavior: Maintain one shared Item Catalog. Require item name, category, and at least one enabled usage area of Loads, Quarry Purchases, and/or Daily Reports. Optionally retain internal code, description/notes, default unit, and default receipt price when Loads is enabled. New items start Active. Filter each workflow to active items enabled for it, while allowing one item record to serve multiple areas. Provide Quick Add Item within all three workflows; saving immediately selects the new item. Receipt conversion remains separately selected and is not stored as an item default.
+- Main behavior: Maintain one shared Item Catalog. Require item name, category, and at least one enabled usage area of Loads, Quarry Purchases, and/or Daily Reports. Optionally retain internal code, description/notes, default unit, and default receipt price when Loads is enabled. New items start Active. Give every active item an Edit action covering all these fields. Filter each workflow to active items enabled for it, while allowing one item record to serve multiple areas. Provide Quick Add Item within all three workflows; saving immediately selects the new item. Receipt conversion remains separately selected and is not stored as an item default.
 - Alternate and exception behavior: At confirmation, snapshot the selected item's name, optional internal code, category, and unit. Later catalog edits or category movement affect only future entries and never alter confirmed documents or reports. An item referenced by any record cannot be deleted and may only be deactivated; a never-used item may move to restorable Trash. Deactivation hides it from new selections while retaining history and allowing reactivation. Reject a duplicate nonblank internal code. Warn without blocking when the name matches or closely resembles an existing item, show the possible match, and allow an intentionally distinct item to be saved.
 - Postconditions: The item is available for applicable records and reports.
 - Priority: Must
@@ -522,12 +522,12 @@ The proposed product is an asphalt-plant management application intended to cent
 - Trigger: A truck delivers a purchased item from a quarry.
 - Preconditions: A saved quarry/supplier profile and item can be selected or a new supplier can be created quickly; the supplier ticket/invoice provides the delivered quantity.
 - Main behavior: Select a saved quarry/supplier or create one quickly, manually copy the positive whole cubic-metre quantity from the supplier ticket/invoice without requiring empty/full weighbridge entries, and record item, driver, plate number, automatic confirmation date/time, optional supplier ticket/invoice number, up to 20 optional ticket/invoice photos, and payment information without processing the payment. Automatically compress photos at readable quality. Optionally accept USD price per cubic metre, calculate purchase subtotal as quantity multiplied by that unit price, apply universal VAT, and calculate final purchase total. Make the delivery and attachments available offline and in synchronized supplier history.
-- Alternate and exception behavior: Price is optional; a quantity-only delivery may be confirmed without financial tracking or VAT. A confirmed priced purchase retains its applied VAT rate and supports separate partial payments, balances, statuses, and final cancellation under the customer-order rules. A rejected delivery remains an unconfirmed draft and may be deleted to recoverable Trash; it affects no quantities, balances, inventory, or reports. Multiple trucks per purchase, corrections, and missing documents remain to be elicited.
+- Alternate and exception behavior: Price is optional; a quantity-only delivery may be confirmed without financial tracking or VAT. A confirmed priced purchase retains its applied VAT rate and supports separate partial payments, balances, statuses, and final payment cancellation under the customer-order rules. A rejected delivery remains an unconfirmed draft and may be deleted to recoverable Trash. A mistaken or duplicate confirmed purchase may be permanently marked Cancelled after a warning, required reason, and automatic cancellation time, but only when it has no active linked payments; ordinary field mistakes use direct correction. Rejected and cancelled purchases affect no active quantities, balances, inventory, or report totals.
 - Postconditions: The delivery is available in quarry purchase and payment history; no inventory balance is changed.
 - Priority: Must
 - Acceptance criteria: The owner can confirm a quantity-only quarry delivery with a positive whole number of cubic metres and without price, VAT, supplier reference, photos, or payment balance; zero, negative, and decimal quantities are rejected. A priced purchase supports multiple order-linked payments, derived balance/status, and final payment cancellation. Confirmation records date/time; up to 20 readable-quality compressed attachments work offline/sync; the record appears in supplier history and never alters inventory.
 - Source: Interview turns 21–22 and 26–30
-- Status: Confirmed identity/quantity behavior; pricing and remaining fields pending
+- Status: Confirmed identity, quantity, pricing, payment, rejection, and cancellation behavior through Turn 295
 
 ### FR-021
 - Statement: “The system shall display a customer profile summary containing total quantity taken and total price.”
@@ -591,13 +591,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: A required measurement unit is not available.
 - Preconditions: The user has permission.
-- Main behavior: Save a named measurement unit for selection in applicable item and transaction records.
-- Alternate and exception behavior: Duplicate units, editing, deactivation, and historical impact remain to be defined.
+- Main behavior: Require and save a display name and symbol for selection in applicable item and transaction records. Compare names and symbols case-insensitively and require each to be unique.
+- Alternate and exception behavior: A unit referenced by any record cannot be deleted and may only be deactivated. Deactivated units are hidden from new selections, remain in history, and may be reactivated. A never-used unit may be moved to recoverable Trash. Confirmed records permanently retain the unit name and symbol used at confirmation.
 - Postconditions: The unit is available for applicable configuration and records.
 - Priority: Must
-- Acceptance criteria: The owner can add a unit and subsequently select it in an applicable record or setting.
+- Acceptance criteria: The owner can add a uniquely named/symbolized unit and subsequently select it. Duplicate name or symbol is blocked regardless of letter case. A used unit cannot be deleted but can be deactivated/reactivated without changing history; a never-used unit can be moved to and restored from Trash.
 - Source: Interview turns 27–28 and 46
-- Status: Confirmed behavior; lifecycle pending
+- Status: Confirmed behavior, validation, lifecycle, and historical snapshot through Turn 301
 
 ### FR-026
 - Statement: “The system shall maintain a current fuel-stock balance.”
@@ -675,11 +675,11 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Project foreman.
 - Trigger: The owner opens Reports, selects the needed project, and chooses Make Report for a project workday.
 - Preconditions: A saved project has been selected from the Reports project list and the owner is identifiable.
-- Main behavior: From Reports, show projects for selection. Selecting a project opens its report area and existing report history with Make Report; that action creates the report already associated with the chosen project. Require work date and short description of work performed. Present sections for work description, workers, drivers, truck plates, machines, materials, notes, problems/delays/incidents, weather/site conditions, working time, and next work planned. Working time may contain start time, end time, and break duration; when supplied, calculate net working time as end minus start minus break. Allow manual presence entries and material entries containing item, quantity, unit, and used/transported classification; allow up to 20 optional photos from the phone camera or device library, automatically compressed at readable quality, that remain available offline and synchronize with the report; generate a shareable and printable PDF containing every section and all attached photos; and provide an Excel export with structured data in normal worksheets and embedded reduced-size photos in a separate Photos worksheet.
+- Main behavior: Provide a separate Projects management area on Home for creation and Active/Completed lifecycle management. From Reports, show an explicit searchable project selector and Open Project Reports action plus Active and Completed project lists. Opening a project displays its report area and existing report history with Make Report; that action creates the report already associated with the chosen project. Require work date and short description of work performed. Present sections for work description, workers, drivers, truck plates, machines, materials, notes, problems/delays/incidents, weather/site conditions, working time, and next work planned. Working time may contain start time, end time, and break duration; when supplied, calculate net working time as end minus start minus break. For workers, drivers, truck plates, and machines, provide both a searchable saved-value dropdown and a manual comma/new-line text field; both methods may be combined in one report and duplicate values are ignored. Saved driver/truck profiles appear in their applicable dropdowns, and previously entered values remain reusable. Allow material entries containing item, quantity, unit, and used/transported classification; allow up to 20 optional photos from the phone camera or device library, automatically compressed at readable quality, that remain available offline and synchronize with the report; generate a shareable and printable PDF containing every section and all attached photos; and provide an Excel export with structured data in normal worksheets and embedded reduced-size photos in a separate Photos worksheet.
 - Alternate and exception behavior: Workers, drivers, trucks, machines, materials, notes, problems/delays/incidents, weather/site conditions, working time, next work planned, and photos may remain empty. An empty working-time section produces no duration; when entered, end cannot precede start and break cannot exceed the start/end interval. The report remains editable after saving and does not require approval or locking. It retains creation and latest-update date/time only, with no detailed edit history or prior versions. Today and past work dates are allowed; future dates are rejected. If the selected project/date already has a report, open it for editing instead of creating a duplicate. Completed projects expose history/export but no Make Report action until reactivated.
 - Postconditions: The editable report is retained in project history.
 - Priority: Must
-- Acceptance criteria: Reports shows saved projects; selecting one opens that project's report history and Make Report action; the new report is pre-associated with that project. It cannot be saved without a non-future work date and non-empty work description. Every report displays all confirmed sections and may be saved when every optional section is empty. A time interval 07:00–17:00 with a 01:00 break yields 09:00 net; an end before start or break over 10 hours is rejected. Any supplied material entry identifies item, quantity, unit, and used/transported classification. Optional camera/library photos remain accessible with the report offline and after synchronization. Its generated PDF is printable/shareable and contains every section and all attached photos. Its Excel export contains structured worksheets and a separate Photos worksheet with embedded reduced-size copies of all attachments. A second creation attempt for the same project/date opens the existing report rather than saving a duplicate.
+- Acceptance criteria: Reports shows saved projects; selecting one opens that project's report history and Make Report action; the new report is pre-associated with that project. It cannot be saved without a non-future work date and non-empty work description. Every report displays all confirmed sections and may be saved when every optional section is empty. Each workers/drivers/truck-plates/machines field accepts dropdown selection, manual text, or both; adding the same value twice with different capitalization does not duplicate it. A time interval 07:00–17:00 with a 01:00 break yields 09:00 net; an end before start or break over 10 hours is rejected. Any supplied material entry identifies item, quantity, unit, and used/transported classification. Optional camera/library photos remain accessible with the report offline and after synchronization. Its generated PDF is printable/shareable and contains every section and all attached photos. Its Excel export contains structured worksheets and a separate Photos worksheet with embedded reduced-size copies of all attachments. A second creation attempt for the same project/date opens the existing report rather than saving a duplicate.
 - Source: Interview turns 32–38 and 194–202
 - Status: Confirmed
 
@@ -921,6 +921,20 @@ The proposed product is an asphalt-plant management application intended to cent
 - Source: Interview turns 225 and 230
 - Status: Confirmed
 
+### FR-073
+- Statement: “The system shall automatically show confirmed project-day loads in a read-only section of the matching project daily report.”
+- Rationale: The owner needs the daily report to reconcile with plant load records without duplicate editable entry.
+- Actors: Owner.
+- Trigger: The owner opens, prints, or exports a project daily report.
+- Preconditions: The report has a saved project and work date; zero or more confirmed loads may match both values.
+- Main behavior: Display a Loads Delivered That Day section populated from confirmed loads whose saved project and plant-local confirmation date match the report project and work date. Show transaction number, snapshotted item, converted quantity and unit, driver, and truck plate for each linked load.
+- Alternate and exception behavior: When no confirmed load matches, show an empty section. Manual presence and used/transported-material entries remain separate. A permitted correction made to a confirmed load in Load History automatically changes the linked read-only presentation; the daily report does not edit or copy the load record.
+- Postconditions: The daily report presents its current matching confirmed loads without duplicate load ownership.
+- Priority: Must
+- Acceptance criteria: Confirm a project load and verify it appears in the matching project/date daily report; verify it does not appear for another project or date; correct it in Load History and verify the report reflects the correction; verify manual presence and material entries remain unchanged.
+- Source: Interview turn 292
+- Status: Confirmed
+
 ### FR-040
 - Statement: “The system shall filter reports using the applicable date range, category/item, customer/project, and paid/unpaid criteria selected by the owner.”
 - Rationale: The owner needs to isolate relevant operational and financial records.
@@ -941,12 +955,12 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: The owner identifies incorrect receipt information.
 - Preconditions: The receipt exists and is accessible.
-- Main behavior: Allow permitted receipt fields to be edited and save the corrected receipt under the same receipt identity.
+- Main behavior: Allow permitted receipt fields to be edited and save the corrected receipt under the same receipt identity. The correction browser shall group matching loads under either Project or Customer and allow combinable Project, Customer, From date, To date, and free-text filters; free text matches transaction number, item, driver, or truck plate, and loads without a project appear under `No project`.
 - Alternate and exception behavior: Prior receipt values are overwritten and no receipt-change history is retained. Existing payment records are never rewritten by a receipt correction. If recalculation makes recorded payments exceed the corrected total, display the difference as an overpaid amount; the system does not process a refund.
 - Postconditions: Receipt history and reprints show corrected values; net/converted quantity, total price, remaining balance or overpaid amount, and customer summary are recalculated.
 - Priority: Must
-- Acceptance criteria: Correcting weight or price updates the receipt, recalculates all dependent values and customer totals, and causes later prints to show corrected values only. If a fully paid $1,000 order is corrected to $800, the original $1,000 payment remains and the app displays an overpaid amount of $200.
-- Source: Interview turns 70–72 and 91–92
+- Acceptance criteria: Correcting weight or price updates the receipt, recalculates all dependent values and customer totals, and causes later prints to show corrected values only. If a fully paid $1,000 order is corrected to $800, the original $1,000 payment remains and the app displays an overpaid amount of $200. Project/Customer grouping and combined date/search filters reduce the visible selection set correctly, and Clear filters restores all loads.
+- Source: Interview turns 70–72, 91–92, and 320
 - Status: Confirmed, including correction-created overpayments
 
 ### FR-042
@@ -1158,6 +1172,9 @@ The proposed product is an asphalt-plant management application intended to cent
 ### BR-013
 - Payments occur in person outside the system. The system only records and tracks payment information. (Source: Turn 22; status: Confirmed.)
 
+### BR-044
+- A confirmed quarry purchase entered entirely by mistake or duplicated may be marked Cancelled but never deleted or reactivated. Cancellation requires an explicit warning, required reason, and automatic cancellation date/time and is blocked while active linked payments exist. The retained cancelled purchase contributes nothing to active quantities, VAT, balances, payment status, or report totals. Ordinary field errors use permitted direct correction. (Source: Turn 295; status: Confirmed.)
+
 ### BR-014
 - Customer profiles shall aggregate quantities separately by item and unit and expose each separate receipt/order's automatic financial status and remaining balance. Unlike quantities shall never be combined. Blank-price orders are Unpriced; intentional $0.00 orders are No Payment Due; positive orders progress through Unpaid, Partially Paid, or Paid; correction-created excess is Overpaid. (Sources: Turns 23, 125, 128, and 166; status: Confirmed.)
 
@@ -1248,13 +1265,14 @@ The proposed product is an asphalt-plant management application intended to cent
 - Each customer profile shall retain a required type of Individual or Company and a required name/company name. Phone number, email, address, Tax/VAT number, and notes are optional. Every receipt references exactly one saved profile, which associates the customer with its load/order histories and quantities; quick creation is available during receipt entry. New-profile duplicate detection compares name, phone, and Tax/VAT number and warns without blocking. An optionally merged duplicate retains archived status and a merged-into reference, while associations move to the retained profile and issued document contents remain unchanged. (Sources: Turns 4, 157, and 160–163; status: Confirmed.)
 
 ### DR-004
-- Each truck load shall retain the desired weight, manually entered empty whole kilograms, manually entered full whole kilograms, calculated net whole kilograms, converted quantity, customer, applicable project, truck plate, exactly one production-batch association, signature state, payment status, transaction number, and confirmation date/time. Asphalt converted tons display three decimal places. Other timestamps, vehicle attributes, and correction behavior are covered elsewhere or remain to be elicited. (Sources: Turns 6, 10–11, 13, 116, 118, 149, and 156; status: Partially confirmed.)
+- Each truck load shall retain an optional requested quantity, manually entered empty whole kilograms, manually entered full whole kilograms, calculated net whole kilograms, selected conversion snapshot and converted quantity, saved customer, selected catalog-item snapshot, applicable project or destination context, driver name, truck plate, exactly one production-batch association, signature state, payment status, transaction number, and confirmation date/time. Asphalt converted tons display three decimal places. (Sources: Turns 6, 10–11, 13, 116, 118, 149, 156, 215, 223, 264, 266, and 274; status: Confirmed for version-one load identity and confirmation data.)
 
 ### DR-005
+- Delivery-authorization unit display rule: on both 58 mm and 80 mm layouts, each weight or converted quantity places its configured unit symbol directly beside the numeric value, such as `12,000 kg`, `20.555 t`, or `12.500 m³`. The conversion name, rate, and formula remain absent. (Source: Turn 300; status: Confirmed.)
 - A delivery authorization shall include the immutable shared transaction number in date-device-sequence format, original confirmation date/time, permanently snapshotted company header with configured contact details directly beneath the company name, customer, applicable project or destination, item, driver name, plate number, optional requested quantity, empty weight, full weight, net weight, calculated converted quantity with its output unit, destination address, and optional finger-drawn driver signature. A blank requested quantity is omitted. No selected conversion name, conversion rate/formula, unit price, subtotal, VAT, payment, balance, or final total appears. Every print/PDF includes the current signature drawing when present; a reprint additionally shows a copy mark and reprint date/time. History shows Signed or Unsigned, and an unsigned confirmed transaction may receive a signature later. Clearing or replacement retains no prior drawing or change log. (Sources: Turns 7, 134, 136–146, 217–218, 220–221, and 256–257; status: Confirmed field split as corrected.)
 
 ### DR-006
-- A receipt shall include the same immutable date-device-sequence transaction number and original confirmation date/time as its delivery authorization, permanently snapshotted company header, customer name, project name when selected, final/net weight, unit price, subtotal, applied universal VAT percentage, VAT amount, and final total. A null price is labeled Unpriced and has no VAT calculation; intentional USD 0.00 represents no payment due and produces zero VAT. Project is omitted when none is selected. Driver, plate, requested quantity, empty/full weights, conversion details, destination, signature, payment status, paid amount, remaining balance, and overpaid amount are omitted. A reprint additionally shows a copy mark and reprint date/time. (Sources: Turns 7–8, 12, 109, 114, 120, 124–125, 136–138, 158–159, 217–218, and 220–221; status: Confirmed field split.)
+- A receipt shall include the same immutable date-device-sequence transaction number and original confirmation date/time as its delivery authorization, permanently snapshotted company header, customer name, project name when selected, a `Quantity` field containing the calculated converted value with output-unit symbol, unit price, subtotal, applied universal VAT percentage, VAT amount, and final total. A null price is labeled Unpriced and has no VAT calculation; intentional USD 0.00 represents no payment due and produces zero VAT. Project is omitted when none is selected. Raw net weight, driver, plate, requested quantity, empty/full weights, conversion name/rate/formula, destination, signature, payment status, paid amount, remaining balance, and overpaid amount are omitted. A reprint additionally shows a copy mark and reprint date/time. (Sources: Turns 7–8, 12, 109, 114, 120, 124–125, 136–138, 158–159, 217–218, 220–221, and 309–310; status: Confirmed field split as revised.)
 
 ### DR-007
 - Each load record shall retain one required customer association and an optional project association. The project association is required when the customer is the owner's company and optional for outside customers. An outside load without a project retains a destination address. (Sources: Turns 10 and 147–148; status: Confirmed.)
@@ -1263,10 +1281,10 @@ The proposed product is an asphalt-plant management application intended to cent
 - Customer records shall support the owner's company as a customer so its own-project loads appear in customer history. (Source: Turn 11; status: Confirmed conceptually.)
 
 ### DR-009
-- A saved conversion option shall retain its name, rate, input unit, output unit, displayed decimal places, active state, and selection identity. Conversion options are not associated with or filtered by item; every active option is available for manual receipt selection. (Sources: Turns 14, 19, 99, 119, and 123; status: Confirmed.)
+- A saved conversion option shall retain its case-insensitively unique name, rate, input unit, output unit, displayed decimal places, active state, and stable selection identity. Distinct names may share a rate. Conversion options are not associated with or filtered by item; every active option is available for manual receipt selection. A used option cannot be deleted and may deactivate/edit-for-future/reactivate; a never-used option may enter recoverable Trash. Confirmed records retain immutable conversion snapshots and results. (Sources: Turns 14, 19, 99, 119, 123, and 303-304; status: Confirmed.)
 
 ### DR-010
-- Each load shall retain a material classification of asphalt or concrete. Future extensibility and any material subtype or mix association remain to be defined. (Source: Turn 15; status: Draft.)
+- Each load shall reference one active item enabled for Loads in the shared Item Catalog and permanently snapshot the item's name, optional internal code, category, and unit at confirmation. Asphalt and concrete are initial item examples; the catalog is not limited to them. Conversion selection remains separate from item selection. (Sources: Turns 15, 19, 250, 252, and 266; status: Confirmed.)
 
 ### DR-011
 - The conceptual model shall include categories and items, with each item associated with a category and retaining its own saved default price per output unit. Names, identifiers, status, validation, currency, and other item-specific attributes remain to be defined. (Sources: Turns 21 and 113; status: Draft.)
@@ -1281,13 +1299,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Each payment entry shall retain its USD amount to two decimal places, payment date, association with exactly one customer order, and Active or Cancelled state. A real-world payment covering multiple orders is represented by separate entries for their respective allocated amounts. A cancelled entry retains required reason and automatic cancellation date/time, remains in history, is excluded from calculations, and cannot be reactivated. Other fields remain open. (Sources: Turns 25, 120, 165, and 167–169; status: Partially confirmed.)
 
 ### DR-015
-- A measurement unit shall retain a name or symbol and identifier. Associations, validation, lifecycle, and historical behavior remain to be defined. (Source: Turn 27; status: Draft.)
+- A measurement unit shall retain a required display name, required symbol, stable identifier, and Active/Inactive state. Names and symbols are independently unique under case-insensitive comparison. A referenced unit cannot be deleted and may only be deactivated/reactivated; a never-used unit may enter recoverable Trash. Every confirmed referencing record retains an immutable snapshot of the unit name and symbol used at confirmation. (Sources: Turns 27 and 301; status: Confirmed.)
 
 ### DR-016
 - The conceptual model shall include one shared version-one fuel tank/type with opening/physical-gauge baselines, deliveries, equipment fills, physical corrections, and saved equipment profiles. Separate tank or fuel-type identities are not recorded. Equipment requires a name and may include type, plate/serial/internal code, and notes. A gauge reading contains required non-negative actual litres and reason, automatic previous calculated balance, signed difference and date/time, and optional notes; it establishes the current baseline. A fuel delivery contains positive litres added and automatic confirmation date/time, and may reference a saved supplier and contain delivery ticket/invoice number, USD price per litre, and notes. A priced delivery also retains subtotal, universal VAT-rate snapshot, VAT amount, final total, paid amount, remaining balance, status, and separate payment records; an unpriced delivery has none of those financial balances. An equipment fill references one saved equipment profile, contains positive litres subtracted and an automatic confirmation date/time, and may contain project, reference-only odometer reading, and notes. Each confirmed delivery, fill, or gauge correction may retain Cancelled status, required cancellation reason, and automatic cancellation time; cancelled entries remain visible and ledger recalculation respects later valid gauge baselines. Each equipment profile exposes its fill history. Version one has no hour-meter or derived fuel-consumption-rate field, and calculated stock does not validate or block fill quantities. (Sources: Turns 32, 39–41, and 181–193; status: Confirmed for version-one model.)
 
 ### DR-017
-- A project daily work report shall be uniquely associated with one required saved project and one required non-future work date and retain its foreman/author, required short activity description, creation date/time, and latest-update date/time. It shall contain always-present, optionally empty sections for manual worker names, driver names, truck plates, machine names, material entries, notes, problems/delays/incidents, weather/site conditions, working time, next work planned, and up to 20 photo attachments. Working time may retain start time, end time, and break duration. Each supplied material entry contains item, quantity, unit, and used/transported classification. Photos may come from the phone camera or library, are automatically compressed at readable quality, and remain available offline and synchronized. The report remains editable without approval or locking and retains no detailed edit log or prior versions; selecting an existing project/date opens it for editing. Its PDF includes every section and all photos, and its Excel export contains structured worksheets plus a separate Photos worksheet with embedded reduced-size copies. (Sources: Turns 32–38, 194–203, and 244; status: Confirmed.)
+- A project daily work report shall be uniquely associated with one required saved project and one required non-future work date and retain its foreman/author, required short activity description, creation date/time, and latest-update date/time. It shall contain always-present, optionally empty sections for manual worker names, driver names, truck plates, machine names, material entries, notes, problems/delays/incidents, weather/site conditions, working time, next work planned, and up to 20 photo attachments. It also presents a derived, read-only Loads Delivered That Day section containing every confirmed load whose saved project and plant-local confirmation date match the report, showing transaction number, snapshotted item, converted quantity/unit, driver, and truck plate. Working time may retain start time, end time, and break duration. Each manually supplied material entry contains item, quantity, unit, and used/transported classification and remains independent of linked delivered loads. Photos may come from the phone camera or library, are automatically compressed at readable quality, and remain available offline and synchronized. The report remains editable without approval or locking and retains no detailed edit log or prior versions; selecting an existing project/date opens it for editing. Its PDF includes every section and all photos, and its Excel export contains structured worksheets plus a separate Photos worksheet with embedded reduced-size copies. (Sources: Turns 32–38, 194–203, 244, and 292; status: Confirmed.)
 
 ### DR-018
 - Each confirmed receipt shall store the conversion name, input unit, output unit, conversion rate, displayed decimal places, source weight or quantity, and calculated converted quantity used at confirmation. These stored values shall remain unchanged by later configuration edits, deactivation, or reactivation. (Sources: Turns 99–101 and 119; status: Confirmed.)
@@ -1296,7 +1314,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Each reprint event shall retain the transaction/document identity, reprint date/time, and device identity. It shall not retain a duplicate snapshot of the document contents or a copy sequence number. (Source: Turn 140; status: Confirmed.)
 
 ### DR-020
-- Each project shall retain a required name, associated customer/company, location or destination address, and Active or Completed status. Start date, end date, and notes are optional. (Source: Turn 148; status: Confirmed.)
+- Each project shall retain a required name, associated customer/company, location or destination address, and Active or Completed status. Start date, end date, and notes are optional. A project referenced by any load or daily report cannot be deleted. Completed projects are unavailable for new load and daily-report selection but retain history/exports and may be reactivated. A never-used project may be moved to recoverable Trash. (Sources: Turns 148 and 305; status: Confirmed.)
 
 ### DR-021
 - Tax settings shall retain one universal VAT percentage. Each confirmed numeric-priced receipt or quarry purchase shall retain its own applied VAT-rate snapshot, calculated VAT amount, subtotal, and final total. (Sources: Turns 158–159 and 174; status: Confirmed.)
@@ -1406,10 +1424,10 @@ The proposed product is an asphalt-plant management application intended to cent
 - Manual transcription of weighbridge readings can introduce errors that propagate into net weight, price, documents, history, and reports. Validation and correction controls remain to be defined. (Source: Turn 13; status: Open.)
 
 ### RISK-004
-- A concrete conversion from kilograms to cubic metres could be inaccurate unless the applicable density or mix-specific conversion factor is correctly configured. (Source: Turn 14; status: Open.)
+- A concrete conversion from kilograms to cubic metres can be inaccurate if the owner selects an unsuitable density or mix-specific factor. This risk is accepted with mitigation: conversion selection remains manual and unrestricted, but the in-app entry/review interface shows the selected conversion name, rate, input/output units, and calculated result before confirmation. Issued receipts and delivery authorizations do not expose the rule. (Sources: Turns 14 and 293; status: Accepted with mitigation.)
 
 ### RISK-005
-- Freely configurable categories/items and an unbounded expectation of “all details” could result in inconsistent records unless required fields and workflow behavior are defined. (Source: Turn 21; status: Open.)
+- Freely configurable categories/items could result in inconsistent records. This is mitigated through required item fields and usage areas, unique optional codes, similar-name warnings, immutable historical snapshots, protected item lifecycle rules, and category deactivation/deletion safeguards that prevent orphaned active items. (Sources: Turns 21, 250–268, and 294; status: Mitigated.)
 
 ### RISK-006
 - The tracked fuel balance may overstate actual stock because plant consumption is not recorded. Manual physical-tank correction is the confirmed mitigation; the frequency and audit history remain open. (Sources: Turns 40–41; status: Mitigated in part.)
@@ -1573,18 +1591,20 @@ The proposed product is an asphalt-plant management application intended to cent
 
 ## 19. Open Questions and Unresolved Decisions
 
+Status note: this section preserves the original question trace, but some individual descriptions below predate later interview turns. Current status and wording are governed by `open-questions.md`, with confirmed or superseding decisions in `decisions.md`; where an older line below differs, the later recorded status applies. Through Turn 305, no unresolved elicitation question blocks implementation. Remaining record-specific exceptions are lower-impact development refinements, while exact printer models/protocols require later physical inspection and acceptance testing (OQ-054/RISK-007).
+
 - OQ-001: Which parts of asphalt-plant management are intended to be covered, and where is the system boundary?
 - OQ-002: What activities and records are included in “everything”?
 - OQ-003: Closed through Turn 230 — five owner report groups, sections/columns, common filters, and PDF/Excel outputs are defined.
 - OQ-004: Will the application replace paper records or supplement them?
 - OQ-005: Closed in Turn 4 — both the owner's projects and external-customer supply are in scope.
-- OQ-006: How should jobs, paving days, batches, trucks, drivers, destinations, and fuel records relate to one another?
-- OQ-007: Which batch, truck/driver, and fuel details must be recorded?
+- OQ-006: Closed through Turn 292 — one record represents one batch/load; project/destination and fuel associations are defined; matching confirmed project-day loads appear read-only in the daily report while manual entries remain separate.
+- OQ-007: Closed through Turn 292 — required load/batch, truck/driver, project/destination, and fuel record details are defined.
 - OQ-008: Closed through Turn 221 — post-weighing confirmation, document, signature, output, payment, and history behavior are defined.
 - OQ-009: Closed in Turn 118 — net equals full minus empty in whole kilograms; asphalt uses 1,000 kg per ton and displays three decimal places to preserve exact kilogram precision.
 - OQ-010: Closed through Turn 221 — external sale selection, pricing/VAT, payment tracking, pickup documents, saved customer history, and owner-only access are defined.
 - OQ-011: Closed in Turn 134 — requested quantity is comparison-only, actual measured quantity controls billing, and no variance threshold or warning applies.
-- OQ-012: Who oversees the plant during loading, and what is that person's responsibility?
+- OQ-012: Closed in Turn 296 — the batch/plant operator, wheel-loader operator, and loading supervisor/overseer are not recorded on individual version-one loads.
 - OQ-013: Closed in Turn 155 — one underlying record links customer, truck, weights, one batch, and one load; it appears in unified Load History and opens the full transaction/documents.
 - OQ-014: Closed in Turn 109 — a priced receipt total equals converted quantity multiplied by price per selected output unit; order-linked payments are recorded and tracked without being processed by the app.
 - OQ-015: Both documents share an immutable offline-safe number and original confirmation date/time; reprints show copy time. References, issuer, signatures, and other fields remain open.
@@ -1656,6 +1676,60 @@ The proposed product is an asphalt-plant management application intended to cent
 - OQ-081: Closed in Turn 114 — version one uses USD for all financial values; mixed currencies and currency conversion are out of scope.
 - OQ-082: Closed in Turn 159 — numeric-priced receipts use universal VAT; zero produces zero VAT; Unpriced has none; documents show subtotal/rate/amount/final total; confirmed receipts retain their applied rate.
 - OQ-083: Closed in Turn 163 — warnings do not block; optional manual merge uses preview/confirmation, moves associations, recalculates summary, archives the duplicate, and preserves issued document contents; profiles may remain separate.
+
+### FR-074
+- Statement: “The system shall present growing saved-record choices through compact searchable dropdowns.”
+- Rationale: Rendering every customer, project, item, conversion, unit, worker, driver, truck, or machine as an always-visible button makes phone forms crowded and increasingly unusable.
+- Actors: Owner.
+- Trigger: A form requires selection from a saved-record collection.
+- Main behavior: Show the selected value in one compact control; opening it displays a searchable list with useful identifying detail and permits one selection. Apply this to customer, project, item, conversion, unit, worker, driver, truck, and machine selection. Small fixed choices may remain segmented controls.
+- Postconditions: Large directories remain searchable without expanding the main form.
+- Priority: Must
+- Acceptance criteria: Adding many records does not create an equally long row of selection buttons; the owner can search and select each applicable saved record from a dropdown.
+- Source: Turn 306
+- Status: Confirmed
+
+### FR-075
+- Statement: “The system shall maintain reusable driver and truck profiles for load selection.”
+- Rationale: Re-entering names and plates for every load is slow and fragments operational history.
+- Actors: Owner.
+- Main behavior: Require driver name and optionally retain phone, licence number, and notes. Require a case-insensitively unique truck number plate and optionally retain make/model, positive whole-kilogram capacity, owner/company, and notes. Present active drivers and trucks through searchable dropdowns during load entry.
+- Alternate and exception behavior: Later profile edits affect future selection display only; every confirmed load retains its original driver-name and truck-plate snapshots.
+- Postconditions: Each new load references one saved driver and truck while issued history remains stable.
+- Priority: Must
+- Acceptance criteria: The owner can create a driver and truck once, find each through a dropdown, select them for a load, and later retrieve the confirmed original name and plate.
+- Source: Turn 307
+- Status: Confirmed
+
+### DR-025
+- Driver profiles shall retain required name and optional phone, licence number, notes, and active state. Truck profiles shall retain required case-insensitively unique plate and optional make/model, positive whole-kilogram capacity, owner/company, notes, and active state. Confirmed loads reference the selected profiles and snapshot driver name and plate. (Source: Turn 307; status: Confirmed.)
+
+### FR-076
+- Statement: “The system shall maintain reusable worker and machine profiles for project-report selection.”
+- Rationale: Frequently used workers and machines should not require repeated manual typing, while temporary entries must remain possible.
+- Actors: Owner.
+- Main behavior: Provide a People & Equipment directory with separate Workers, Drivers, Trucks, and Machines sections. A worker requires a unique name and may retain role/trade, phone, and notes. A machine requires a unique name and may retain type/make/model, a unique optional identifier/serial/plate, and notes. Active worker and machine profiles populate their project-report dropdowns.
+- Alternate and exception behavior: Project reports also accept manual comma/new-line text. Spaces, commas, and line breaks remain editable while typing; the values are normalized into entries without case-insensitive duplicates. Historical manually entered values remain reusable.
+- Postconditions: New project reports can quickly select saved people/equipment or record temporary entries.
+- Priority: Must
+- Acceptance criteria: The owner can create a worker and machine in the directory, immediately find both in a project-report dropdown, combine dropdown and manual entries, and type spaces, commas, and new lines without the input being rewritten during entry.
+- Source: Turn 315
+- Status: Confirmed and implemented
+
+### DR-026
+- Worker profiles shall retain required case-insensitively unique name and optional role/trade, phone, notes, and active state. Machine profiles shall retain required case-insensitively unique name and optional type/make/model, case-insensitively unique identifier/serial/plate, notes, and active state. (Source: Turn 315; status: Confirmed.)
+
+### FR-077
+- Statement: “The system shall track individual project waste dumps and summarize them in daily and completed-project reports.”
+- Rationale: Excavation and site work requires a fast count and traceable history of unwanted material removed to other locations.
+- Actors: Owner/operator.
+- Main behavior: For a selected active project, provide a prominent + Waste Dump action that immediately stores one record with automatic plant-local work date and timestamp. Allow optional material type, dump location, saved truck, saved driver, and notes. Show active daily/project counts and individual history. Automatically include matching active records in the same project/date Daily Report and group completed-project totals by material and dump location.
+- Alternate and exception behavior: Details may remain pending after the fast count and be corrected later. A mistaken dump is never deleted; it is permanently marked Cancelled after a warning and required reason, retains its automatic cancellation time, remains visible in history, and is excluded from daily and project totals. Completed projects allow history/summary but no new dumps until reactivated.
+- Postconditions: Every active dump contributes exactly one to its project/day count and appears in applicable summaries.
+- Priority: Must
+- Acceptance criteria: Selecting an active project and tapping + Waste Dump twice creates two separately timestamped records and increases the day count by two. Adding details updates the same records without changing count. Cancelling one with a reason retains it visibly but reduces active daily/project totals by one. The matching Daily Report shows active dump total/details, and the completed-project summary groups all active dumps by material and location.
+- Source: Turn 317
+- Status: Confirmed and implemented
 
 ## 20. Appendices
 

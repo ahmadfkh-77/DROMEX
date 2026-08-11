@@ -1204,3 +1204,123 @@ Is this accurate?
 ## Turn 291
 **INTERVIEWER:** I recommend adding one offline Export Analysis Workbook action. It generates an Excel workbook with structured raw-data sheets for loads/sales, customers/opening balances, payments, quarry purchases, supplier payments, fuel movements/equipment totals, projects/daily reports, and materials; a Data Dictionary; summary sheets; and standard charts. The clean workbook may be uploaded to an AI tool for advisory analysis and additional charts, while DROMEX's deterministic totals remain authoritative and AI analysis normally requires internet. Should this be included?
 **INTERVIEWEE:** okay
+
+## Turn 292
+**INTERVIEWER:** I recommend that each project daily report automatically show a read-only Loads Delivered That Day section populated from confirmed loads matching that project and work date. Each entry shows transaction number, item, quantity, driver, and truck plate. Manual attendance and used/transported-material entries remain separate because actual site activity may differ. Load corrections are made in Load History and reflected automatically in the report. Should daily reports work this way?
+**INTERVIEWEE:** okay
+
+## Turn 293
+**INTERVIEWER:** I recommend keeping conversion selection manual and unrestricted, but showing the selected conversion's name, rate, input/output units, and calculated result clearly on the in-app Review screen before confirmation. The app does not guess compatibility; the owner remains responsible for selection. Should conversion safety work this way?
+**INTERVIEWEE:** okay but the rule is not shown on the receipt or delivery auth
+
+## Turn 294
+**INTERVIEWER:** I recommend that a category containing items cannot be deleted. It may be deactivated only after its active items are moved or deactivated. A deactivated category disappears from new-entry choices but remains in historical records and can be reactivated. An empty, never-used category may be moved to Trash. Should category removal work this way?
+**INTERVIEWEE:** okay
+
+## Turn 295
+**INTERVIEWER:** I recommend allowing a confirmed quarry purchase entered entirely by mistake or duplicated to be marked Cancelled, never deleted. Cancellation requires a reason, records the automatic time, remains permanent, and excludes the purchase from quantities, VAT, balances, and report totals. Cancellation is blocked while the purchase has active payment entries; those payments must first be cancelled. Ordinary field mistakes use direct correction instead. Should confirmed quarry-purchase cancellation work this way?
+**INTERVIEWEE:** okay
+
+## Turn 296
+**INTERVIEWER:** Should each load optionally record the names of the batch/plant operator, wheel-loader operator, and loading supervisor or overseer as simple optional text fields retained in history/reports but omitted from both transaction documents?
+**INTERVIEWEE:** no
+
+## Turn 297
+**INTERVIEWER:** I recommend handling duplicate supplier profiles like duplicate customers: warn on similar name, phone, or Tax/VAT number without blocking save; allow profiles to remain separate; optionally merge after preview and explicit confirmation; move purchases, opening balances, and payment history to the retained supplier; and archive the duplicate without changing historical document snapshots. Should supplier duplicates work this way?
+**INTERVIEWEE:** okay
+
+## Turn 298
+**INTERVIEWER:** I recommend that every measurement unit require both a display name and symbol, with unique case-insensitive names/symbols, deactivation instead of deletion after use, Trash only for never-used units, and immutable historical unit snapshots. Should measurement-unit lifecycle work this way?
+**INTERVIEWEE:** show me how
+
+## Turn 299
+**INTERVIEWER:** I showed example unit settings and creation/deactivation/history behavior and asked whether that workflow should be confirmed.
+**INTERVIEWEE:** i mean in the delivery auth how will it be
+
+## Turn 300
+**INTERVIEWER:** I showed delivery-authorization examples where each value includes only its configured unit symbol, such as Empty Weight: 12,000 kg, Net Weight: 28,000 kg, and Converted Quantity: 12.500 m³. Conversion name, rate, and formula remain hidden. I recommended this compact unit-symbol display for both 58 mm and 80 mm authorizations. Should the delivery authorization display units this way?
+**INTERVIEWEE:** okay commence
+
+## Turn 301
+**INTERVIEWER:** Separate from document display, because documents use the symbol, I recommend requiring every measurement unit to have a name and symbol. Names and symbols are each unique regardless of case. Used units can only be deactivated and reactivated; never-used units may be moved to recoverable Trash; historical records keep their original unit snapshot. Should I confirm that lifecycle rule?
+**INTERVIEWEE:** okay
+
+## Turn 302
+**INTERVIEWER:** I recommend that customer and supplier profiles already referenced by any record cannot be deleted, only deactivated and later reactivated. Inactive profiles disappear from new transaction choices but remain in histories and reports. Never-used profiles may be moved to Trash. The owner's own-company customer cannot be deactivated while it has an active project. Should profile lifecycle work this way?
+**INTERVIEWEE:** okay
+
+## Turn 303
+**INTERVIEWER:** I recommend unique case-insensitive conversion-option names; used conversions cannot be deleted but may be deactivated, edited for future records, or reactivated; confirmed records retain their original snapshot; and never-used conversions may enter Trash. Should conversion-option lifecycle work this way?
+**INTERVIEWEE:** clarify
+
+## Turn 304
+**INTERVIEWER:** I clarified with a kg-to-ton example: changing the saved rate affects only future loads; old loads retain their original converted result; deactivation hides the option from new loads but preserves history and permits reactivation; a used conversion cannot be deleted; an unused mistake may enter recoverable Trash; names are unique although different names may share a rate; and the rule remains internal rather than printed on either document. Should we confirm these rules?
+**INTERVIEWEE:** okay
+
+## Turn 305
+**INTERVIEWER:** I recommend that a project referenced by any load or daily report cannot be deleted. It can be marked Completed, which removes it from new load and daily-report selections while preserving its history and exports. It may later be reactivated. A never-used project may be moved to Trash. Should project lifecycle work this way?
+**INTERVIEWEE:** okay and when do we start building
+
+## Turn 306
+**INTERVIEWEE:** I want item and similar selection sections presented as dropdowns so the app stays organized instead of displaying every option at once.
+**INTERVIEWER:** I confirmed searchable dropdowns for growing record sets such as customers, projects, items, conversions, and units, while small fixed choices may remain buttons.
+
+## Turn 307
+**INTERVIEWEE:** I also want sections to add drivers with their information and trucks identified by number plate and information, then choose both from dropdowns so large customer and operational directories do not make the app busy.
+**INTERVIEWER:** I interpreted this as reusable driver profiles with required name and optional phone/licence/notes, and reusable truck profiles with required unique plate and optional make/model, capacity, owner, and notes. Loads select saved profiles and retain confirmed name/plate snapshots.
+
+## Turn 308
+**INTERVIEWEE:** In the receipt, change “Receipt / Invoice Bill” to “Receipt.”
+**INTERVIEWER:** I applied `Receipt` as the displayed title while retaining the confirmed two-document set of Receipt plus Delivery Authorization.
+
+## Turn 309
+**INTERVIEWEE:** In the receipt, replace the printed net weight with the converted quantity.
+**INTERVIEWER:** I applied the converted result and output-unit symbol to the Receipt quantity line. The Delivery Authorization keeps its empty, full, and net weights and its converted quantity.
+
+## Turn 310
+**INTERVIEWEE:** Use `Quantity` rather than `Converted quantity` on the Receipt, and provide a separate Projects section because project selection in Reports is not clear or working.
+**INTERVIEWER:** I changed the Receipt field label to `Quantity` while retaining the calculated converted value/unit, added a dedicated Home → Projects management area, and added a searchable project selector with an explicit Open Project Reports button in Reports.
+
+## Turn 311
+**INTERVIEWEE:** Allow me to edit active items.
+**INTERVIEWER:** I added an Edit action to each active Item Catalog entry covering category, name, code, description/notes, default unit, default receipt price, and usage areas. Confirmed historical records keep their original item snapshots.
+
+## Turn 312
+**INTERVIEWEE:** Asked what happened to Loads Delivered That Day in project reports and why Make Receipt had no project dropdown that could link a load to the report.
+**INTERVIEWER:** I made the active-project dropdown always visible in Make Receipt. Selecting a project automatically selects its associated customer and links the confirmed load. The daily report continues to derive read-only loads whose project and plant-local confirmation date match its project and work date, with clearer empty-state guidance.
+
+## Turn 313
+**INTERVIEWEE:** Suggested making People and Equipment in the project report support both text entry and dropdown selection.
+**INTERVIEWER:** I confirmed and implemented both methods for Workers, Drivers, Truck plates, and Machines. Active saved driver/truck profiles and values previously used in reports appear in searchable dropdowns; manual comma/new-line input remains available for temporary entries; both methods combine without case-insensitive duplicates.
+
+## Turn 314
+**INTERVIEWEE:** Clarified that project-report start and end times are not the same every day.
+**INTERVIEWER:** I confirmed that working time belongs to each individual project/date daily report. Every report independently records its optional start time, end time, and break and calculates that day's net working time; no prior day's schedule is imposed. I clarified the editor labels accordingly.
+
+## Turn 315
+**INTERVIEWEE:** Requested new Add Worker and Add Machine sections and reported that People and Equipment text fields did not allow spaces, commas, or new lines; also asked what belongs to the next slice.
+**INTERVIEWER:** I added a People & Equipment directory containing Workers, Drivers, Trucks, and Machines. Worker profiles retain name, role/trade, phone, and notes; machine profiles retain name, type/model, identifier/serial/plate, and notes. Saved workers and machines populate project-report dropdowns. I corrected manual report entry so spaces, commas, and new lines remain editable while values still normalize into a duplicate-free list.
+
+## Turn 316
+**INTERVIEWEE:** Started the Payments and Balances slice.
+**INTERVIEWER:** I implemented a shared offline financial ledger for positive-priced loads, positive-priced quarry purchases, and separate customer/supplier Opening Balances. The Home Payments & Balances area records multiple partial in-person payments, blocks zero/negative/excessive amounts and future dates, derives paid/remaining and Unpaid/Partially Paid/Paid/Overpaid status, and permanently cancels mistaken payments only after a reason and warning while retaining cancellation evidence. Customer profiles now show real billed, paid, and remaining summaries.
+
+## Turn 317
+**INTERVIEWEE:** Added Waste Dump Tracking: a one-tap daily dump counter with individual timestamped records, optional material/location/truck/driver/notes, mistake correction/removal, automatic Daily Report inclusion, complete history, and a start-to-finish completed-project summary; requested an application preview, development, the start of Slice 6, and testing guidance.
+**INTERVIEWER:** I implemented the recommended non-deleting cancellation interpretation to remain consistent with confirmed-record permanence. Home now opens Waste Dump Tracking; each + Waste Dump tap creates an offline project/date/time record; details remain optional/editable; cancellation requires warning/reason and excludes the retained entry from totals. Daily Reports automatically show matching active dumps and their PDF groups totals by material/location. Completed-project summary aggregates waste, daily reports, loads, work hours, photos, and issue days. Slice 6 began with safeguarded confirmed-load corrections for requested/empty/full weights, price, destination, and notes, recalculating quantity/VAT/totals/payment status while retaining identity, time, project/customer/item/conversion, and payments.
+
+## Turn 318
+**INTERVIEWEE:** Requested a neater, friendlier Setup and Records interface, clearer report generation, and the next slice/step.
+**INTERVIEWER:** I reorganized Home into Daily Operations, Records, Reports & Finance, and Setup, kept Make Receipt dominant, changed the mixed cards into compact numbered rows with clear descriptions, and removed unimplemented Today placeholders. Reports now presents named report products with content scope, format, and READY/PLANNED state so unavailable exports are not misleading. The immediate next step is completing Slice 6 corrections; Fuel Tracking remains the next full slice afterward.
+
+## Turn 319
+**INTERVIEWEE:** Approved continuing the next implementation work.
+**INTERVIEWER:** I continued Slice 6 by making the Completed Project Report a real offline PDF export from the completed project's Reports area. It includes start-to-finish metrics, daily work timeline, daily-report materials, delivered loads, active waste dumps, working time, issues, people/equipment, detailed appendices, and project photos. I also made each quarry purchase openable from history for direct correction of quantity, driver, truck, supplier ticket, retained-VAT price, and notes. A mistaken or duplicate quarry purchase can now be permanently marked Cancelled with warning, reason, and automatic time, while active linked payments block cancellation and cancelled purchases are excluded from financial selection.
+
+## Turn 320
+**INTERVIEWEE:** Explained that a large confirmed-load history would be difficult to navigate and suggested keeping loads under a project or customer with easier search by date.
+**INTERVIEWER:** I recommended and implemented both organization paths rather than forcing one: Correct Confirmed Load can group results under Project or Customer, filter by a searchable project and customer, narrow by inclusive From/To dates, and search transaction number, item, driver, or truck plate. All filters are optional, can be combined or cleared together, and unassigned loads appear under No project.
+
+## Turn 321
+**INTERVIEWEE:** Requested applying the same filter to Load History.
+**INTERVIEWER:** I applied the same Project/Customer grouping, searchable Project and Customer filters, inclusive From/To dates, transaction/item/driver/truck search, matching count, Clear filters action, and No project grouping to unified Load History. Selecting a filtered result still opens the complete load details, signature pad, receipt and delivery-authorization previews, paper-size selection, and PDF sharing.

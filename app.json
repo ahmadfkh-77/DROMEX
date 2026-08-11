@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "DROMEX",
+    "slug": "dromex",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dromex.management"
+    },
+    "android": {
+      "package": "com.dromex.management",
+      "minSdkVersion": 29
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow DROMEX to select company logos and record photos.",
+          "cameraPermission": "Allow DROMEX to photograph project work and supplier tickets."
+        }
+      ]
+    ]
+  }
+}
