@@ -20,6 +20,7 @@ import {
   validateCustomerDraft,
 } from '../../domain/profiles';
 import { colors } from '../theme';
+import {FinancialsScreen} from './FinancialsScreen';
 
 const emptyDraft: CustomerDraft = {
   type: 'individual',
@@ -34,12 +35,10 @@ const emptyDraft: CustomerDraft = {
 export function CustomersScreen({
   repository,
   financialRepository,
-  onOpenFinancials,
   onBack,
 }: {
   repository: ProfileRepository;
   financialRepository: FinancialRepository;
-  onOpenFinancials: () => void;
   onBack: () => void;
 }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -50,6 +49,8 @@ export function CustomersScreen({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [financials, setFinancials] = useState<FinancialOverview | null>(null);
+  const [showCustomerFinancials,setShowCustomerFinancials]=useState(false);
+  const [demoMessage,setDemoMessage]=useState<string|null>(null);
 
   const refresh = useCallback(async () => {
     const [next, nextFinancials] = await Promise.all([repository.listCustomers(), financialRepository.getOverview()]);
@@ -124,6 +125,11 @@ export function CustomersScreen({
     }
   }
 
+  async function loadFinanceDemo(){setBusy(true);setError(null);try{const result=await financialRepository.seedCustomerFinanceDemo();await refresh();setDemoMessage(`Demo ready: ${result.customers} customers, ${result.projects} projects, ${result.loads} receipts, ${result.payments} payment events, and ${result.openingBalances} opening balance. Open DEMO - Cedar Infrastructure SAL.`);}catch(cause){setError(cause instanceof Error?cause.message:'Could not create finance demo data.');}finally{setBusy(false);}}
+  function removeFinanceDemo(){Alert.alert('Remove all linked demo data?','Demo customers, projects, receipts, reports, waste dumps, profiles, payments, and opening balances will be removed. Real records are not affected.',[{text:'Keep demo data',style:'cancel'},{text:'Remove demo data',style:'destructive',onPress:async()=>{setBusy(true);setError(null);try{const result=await financialRepository.removeCustomerFinanceDemo();setSelected(null);setShowCustomerFinancials(false);await refresh();setDemoMessage(`Removed ${result.customers} demo customers, ${result.projects} projects, ${result.loads} receipts, ${result.payments} payment events, and ${result.openingBalances} opening balance.`);}catch(cause){setError(cause instanceof Error?cause.message:'Could not remove finance demo data.');}finally{setBusy(false);}}}]);}
+
+  if(selected&&showCustomerFinancials)return <FinancialsScreen repository={financialRepository} customerId={selected.id} onBack={()=>setShowCustomerFinancials(false)}/>;
+
   if (selected) {
     const customerTargets = financials?.targets.filter((target) => target.partyType === 'customer' && target.partyId === selected.id) ?? [];
     const billed = customerTargets.reduce((sum, target) => sum + target.totalUsd, 0);
@@ -163,7 +169,7 @@ export function CustomersScreen({
           <Summary label="Billed" value={`$${billed.toFixed(2)}`} />
           <Summary label="Paid" value={`$${paid.toFixed(2)}`} />
         </View>
-        <View style={styles.emptyCard}><Text style={styles.emptyTitle}>Remaining balance: ${remaining.toFixed(2)}</Text><Text style={styles.helper}>{customerTargets.length ? customerTargets.map((target) => `${target.reference}: ${target.status}`).join('\n') : 'No priced loads or opening balances yet.'}</Text><TouchableOpacity style={styles.outlineButton} onPress={onOpenFinancials}><Text style={styles.outlineButtonLabel}>Open payments & balances</Text></TouchableOpacity></View>
+        <View style={styles.emptyCard}><Text style={styles.emptyTitle}>Remaining balance: ${remaining.toFixed(2)}</Text><Text style={styles.helper}>{customerTargets.length?`${customerTargets.filter(target=>target.remainingUsd>0).length} records need payment across this customer's projects, direct purchases, and opening balances.`:'No priced loads or opening balances yet.'}</Text><TouchableOpacity activeOpacity={.7} style={styles.financeButton} onPress={()=>setShowCustomerFinancials(true)}><Text style={styles.financeButtonLabel}>Open payments & balances</Text><Text style={styles.financeButtonHint}>Organized by project, direct purchases, and opening balances →</Text></TouchableOpacity></View>
       </ScrollView>
     );
   }
@@ -172,6 +178,8 @@ export function CustomersScreen({
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <ScreenHeader eyebrow="RECORDS" title="Customers" onBack={onBack} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <View style={styles.demoCard}><View style={styles.rowBetween}><View style={styles.demoCopy}><Text style={styles.cardTitle}>Customer finance demo</Text><Text style={styles.helper}>Creates one customer with multiple projects, detailed project receipts, direct purchases, opening balance, active payments, and cancelled-payment history.</Text></View><Text style={styles.demoBadge}>TEST</Text></View>{demoMessage?<Text style={styles.demoMessage}>{demoMessage}</Text>:null}<View style={styles.demoActions}><TouchableOpacity activeOpacity={.7} style={styles.demoLoad} disabled={busy} onPress={()=>void loadFinanceDemo()}><Text style={styles.demoLoadText}>{busy?'Working…':'Load full demo'}</Text></TouchableOpacity><TouchableOpacity activeOpacity={.7} style={styles.demoRemove} disabled={busy} onPress={removeFinanceDemo}><Text style={styles.demoRemoveText}>Remove demo</Text></TouchableOpacity></View></View>
 
       <TouchableOpacity style={styles.primaryButton} onPress={() => setShowForm((current) => !current)}>
         <Text style={styles.primaryButtonLabel}>{showForm ? 'Close form' : '+ Create customer'}</Text>
@@ -295,6 +303,18 @@ const styles = StyleSheet.create({
   detailValue: { color: colors.ink, fontSize: 15 },
   outlineButton: { marginTop: 4, borderWidth: 1, borderColor: colors.line, padding: 12, borderRadius: 10, alignItems: 'center' },
   outlineButtonLabel: { color: colors.ink, fontWeight: '800' },
+  financeButton:{marginTop:8,backgroundColor:'#173F67',borderRadius:12,padding:14,gap:4},
+  financeButtonLabel:{color:'#FFF',fontWeight:'900',fontSize:15},
+  financeButtonHint:{color:'#C9DCEB',fontSize:11},
+  demoCard:{padding:16,gap:12,borderRadius:16,backgroundColor:'#EDF6FC',borderWidth:1,borderColor:'#B9DDF2'},
+  demoCopy:{flex:1,gap:4},
+  demoBadge:{color:'#17648F',backgroundColor:'#D3EBF8',fontWeight:'900',fontSize:10,paddingHorizontal:8,paddingVertical:5,borderRadius:11},
+  demoMessage:{color:'#17648F',fontWeight:'700',lineHeight:18},
+  demoActions:{flexDirection:'row',gap:8},
+  demoLoad:{flex:1,backgroundColor:'#1473E6',borderRadius:10,padding:12,alignItems:'center'},
+  demoLoadText:{color:'#FFF',fontWeight:'900'},
+  demoRemove:{flex:1,borderWidth:1,borderColor:'#C7513A',borderRadius:10,padding:12,alignItems:'center'},
+  demoRemoveText:{color:'#A43B27',fontWeight:'900'},
   summaryRow: { flexDirection: 'row', gap: 9 },
   summary: { flex: 1, minHeight: 82, backgroundColor: colors.surface, borderRadius: 13, padding: 12 },
   summaryValue: { color: colors.ink, fontSize: 17, fontWeight: '900' },

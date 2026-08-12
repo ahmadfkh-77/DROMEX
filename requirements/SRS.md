@@ -1731,6 +1731,18 @@ Status note: this section preserves the original question trace, but some indivi
 - Source: Turn 317
 - Status: Confirmed and implemented
 
+### FR-078
+- Statement: “The system shall create and permanently retain full-size 58 mm and 80 mm Quick Text documents on company letterhead.”
+- Rationale: The owner needs a fast general-purpose printable company document whose physical page does not collapse when the message is very short.
+- Actors: Owner.
+- Main behavior: Provide a Quick Text form with required message and optional title, reference, customer, project, prepared-by name, and signature line. Permit left, center, or right alignment and normal, bold, or notice-box emphasis. Show the current company identity and footer, permit 58 mm or 80 mm selection, assign a unique document number when saved, snapshot displayed company/customer/project data, retain permanent searchable history, and permit later PDF sharing or printing offline.
+- Alternate and exception behavior: A message as short as one letter remains normal readable text on a Receipt-like minimum-length page; it shall not create a tiny cropped page and shall not automatically enlarge the message. Longer content expands vertically as required. Project selection automatically associates its customer.
+- Postconditions: A saved Quick Text can be found and reproduced with the identity and layout used at creation.
+- Priority: Must
+- Acceptance criteria: Saving `A` at either supported width produces a normal-sized `A` on a full minimum-length company document. The same record appears in searchable history and can be reopened, printed, and shared. Multiline and long messages preserve line breaks and expand without clipping.
+- Source: Turn 323
+- Status: Confirmed and implemented
+
 ## 20. Appendices
 
 No appendices yet.

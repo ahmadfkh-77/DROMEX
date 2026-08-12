@@ -10,10 +10,16 @@ describe('completed project PDF',()=>{
       [{id:'w1',workDate:'2026-01-02',dumpedAt:'2026-01-02T09:00:00Z',materialType:'Soil',dumpLocation:'North dump',truckPlate:'123 A',driverName:'Omar'}],
       {name:'DROMEX',logoUri:null,address:null,phone:null,email:null,taxVatNumber:null},null,[],
     );
-    expect(html).toContain('Completed Project Report');
+    expect(html).toContain('Project Completion');
     expect(html).toContain('Six Month Roadworks');
     expect(html).toContain('12.500');
-    expect(html).toContain('Waste dump appendix');
-    expect(html).toContain('9.0 hours net');
+    expect(html).toContain('Operational Summary');
+    expect(html).toContain('People and Equipment');
+    expect(html).toContain('Chronological Site Diary');
+    expect(html).toContain('APPENDIX A');
+    expect(html).toContain('Waste Dump History');
+    expect(html).toContain('9.0 h net');
+    expect(html.indexOf('Operational Summary')).toBeLessThan(html.indexOf('Chronological Site Diary'));
+    expect(html.indexOf('Chronological Site Diary')).toBeLessThan(html.indexOf('Delivered Loads'));
   });
 });

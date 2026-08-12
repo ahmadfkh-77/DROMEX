@@ -19,6 +19,8 @@ export interface LoadRepository {
   clearDraft(): Promise<void>;
   confirmLoad(draft: LoadDraft): Promise<ConfirmedLoad>;
   listLoads(): Promise<ConfirmedLoad[]>;
+  seedFilterTestLoads(): Promise<number>;
+  removeFilterTestLoads(): Promise<number>;
   saveLoadSignature(loadId: string, signaturePaths: string[]): Promise<ConfirmedLoad>;
   correctLoad(loadId: string, draft: LoadCorrectionDraft): Promise<ConfirmedLoad>;
 }

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
+import type { LoadRepository } from '../../data/repositories/LoadRepository';
 import type { ProfileRepository } from '../../data/repositories/ProfileRepository';
 import { validateCompanySettings } from '../../domain/profiles';
 import { pickPersistentImage } from '../../services/media';
 import { colors } from '../theme';
 
-export function SettingsScreen({ repository, onBack }: { repository: ProfileRepository; onBack: () => void }) {
+export function SettingsScreen({ repository, demoRepository, onBack }: { repository: ProfileRepository; demoRepository: LoadRepository; onBack: () => void }) {
   const [companyName, setCompanyName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
@@ -18,6 +19,8 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoMessage, setDemoMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -65,6 +68,37 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
     }
   }
 
+  async function loadDemoData() {
+    setDemoBusy(true);
+    setDemoMessage(null);
+    try {
+      const count = await demoRepository.seedFilterTestLoads();
+      setDemoMessage(`${count} linked demo receipts and their projects, DPRs, waste dumps, profiles, and payments are ready.`);
+    } catch (cause) {
+      setDemoMessage(cause instanceof Error ? cause.message : 'Could not load demo data.');
+    } finally {
+      setDemoBusy(false);
+    }
+  }
+
+  function removeDemoData() {
+    Alert.alert('Remove all linked demo data?', 'This removes only the reserved demo receipts, customers, projects, DPRs, waste dumps, profiles, and payments. Real records are not affected.', [
+      { text: 'Keep demo data', style: 'cancel' },
+      { text: 'Remove demo data', style: 'destructive', onPress: async () => {
+        setDemoBusy(true);
+        setDemoMessage(null);
+        try {
+          const count = await demoRepository.removeFilterTestLoads();
+          setDemoMessage(`${count} demo receipts and all linked demo records were removed. Real records were not changed.`);
+        } catch (cause) {
+          setDemoMessage(cause instanceof Error ? cause.message : 'Could not remove demo data.');
+        } finally {
+          setDemoBusy(false);
+        }
+      } },
+    ]);
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
@@ -94,6 +128,15 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
         <Text style={styles.cardTitle}>Tax settings</Text>
         <Text style={styles.helper}>This universal VAT rate will apply to future numeric-priced receipts and purchases.</Text>
         <Field label="VAT percentage" value={vatRate} onChangeText={setVatRate} keyboardType="decimal-pad" placeholder="0" />
+      </View>
+
+      <View style={styles.demoCard}>
+        <View style={styles.demoHeading}><View style={styles.demoCopy}><Text style={styles.cardTitle}>Demo data</Text><Text style={styles.helper}>Optional testing tools for linked receipts, projects, DPRs, waste dumps, profiles, and payment history.</Text></View><Text style={styles.demoBadge}>TEST ONLY</Text></View>
+        {demoMessage ? <Text style={styles.demoMessage}>{demoMessage}</Text> : null}
+        <View style={styles.demoActions}>
+          <TouchableOpacity style={styles.demoLoad} disabled={demoBusy} onPress={() => void loadDemoData()}><Text style={styles.demoLoadText}>{demoBusy ? 'Working...' : 'Load linked demo data'}</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.demoRemove} disabled={demoBusy} onPress={removeDemoData}><Text style={styles.demoRemoveText}>Remove demo data</Text></TouchableOpacity>
+        </View>
       </View>
 
       <TouchableOpacity style={styles.saveButton} onPress={() => void save()} disabled={busy}>
@@ -143,4 +186,9 @@ const styles = StyleSheet.create({
   logoActions: { flexDirection: 'row', alignItems: 'center', gap: 14 }, logoButton: { backgroundColor: colors.ink, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9 }, logoButtonText: { color: '#FFF', fontWeight: '800' }, removeLogo: { color: colors.danger, fontWeight: '800' },
   saveButton: { borderRadius: 12, backgroundColor: colors.brand, padding: 15, alignItems: 'center' },
   saveButtonLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  demoCard: { padding: 17, gap: 12, borderRadius: 16, backgroundColor: '#FFF3D8', borderWidth: 1, borderColor: '#D8A84E' },
+  demoHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, demoCopy: { flex: 1, minWidth: 0 }, demoBadge: { color: colors.warning, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  demoMessage: { color: colors.ink, fontSize: 12, lineHeight: 18, fontWeight: '700' }, demoActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  demoLoad: { flexGrow: 1, minWidth: 150, backgroundColor: colors.ink, borderRadius: 10, padding: 12, alignItems: 'center' }, demoLoadText: { color: '#FFF', fontWeight: '900' },
+  demoRemove: { flexGrow: 1, minWidth: 130, borderWidth: 1, borderColor: colors.danger, borderRadius: 10, padding: 12, alignItems: 'center' }, demoRemoveText: { color: colors.danger, fontWeight: '900' },
 });

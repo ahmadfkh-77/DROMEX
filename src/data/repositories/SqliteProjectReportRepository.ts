@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedProjectLoad, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption } from '../../domain/projectReports';
 import { validateDailyReport } from '../../domain/projectReports';
 import type { ProjectReportRepository } from './ProjectReportRepository';
+import {removeLinkedDemoData,seedLinkedDemoData} from '../testing/linkedDemoData';
 
 type ReportRow = {
   id: string; project_id: string; work_date: string; work_description: string; workers_json: string;
@@ -121,4 +122,10 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
     const saved = await this.db.getFirstAsync<ReportRow>('SELECT * FROM daily_project_reports WHERE id = ?', id);
     if (!saved) throw new Error('Daily report was not saved.'); return fromRow(saved);
   }
+
+  async seedReportTestData():Promise<{projects:number;reports:number;wasteDumps:number}>{
+    const seeded=await seedLinkedDemoData(this.db);return{projects:seeded.projects,reports:seeded.reports,wasteDumps:seeded.wasteDumps};
+  }
+
+  async removeReportTestData():Promise<{projects:number;reports:number;wasteDumps:number}>{const removed=await removeLinkedDemoData(this.db);return{projects:removed.projects,reports:removed.reports,wasteDumps:removed.wasteDumps};}
 }

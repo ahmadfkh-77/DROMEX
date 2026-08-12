@@ -9,4 +9,6 @@ export interface ProjectReportRepository {
   listProjectLoads(projectId: string): Promise<ProjectCompletionLoad[]>;
   listProjectWasteDumps(projectId: string): Promise<ProjectCompletionWasteDump[]>;
   saveReport(draft: DailyProjectReportDraft): Promise<DailyProjectReport>;
+  seedReportTestData(): Promise<{projects:number;reports:number;wasteDumps:number}>;
+  removeReportTestData(): Promise<{projects:number;reports:number;wasteDumps:number}>;
 }

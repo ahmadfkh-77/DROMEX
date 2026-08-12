@@ -1328,3 +1328,147 @@ Is this accurate?
 ## Turn 322
 **INTERVIEWEE:** Clarified that the requested PDF was the one-day Daily Project Report and asked for a neat, organized, friendly design using colored squares and clean tables; approved the resulting mockup.
 **INTERVIEWER:** I implemented the approved style in the app's live Daily Project Report export. Actual saved values now populate four colored summary squares for net working time, linked loads, active waste dumps, and photos; colored work/time/weather/notes/problems/next-work/status panels; organized people/equipment, materials, load, and grouped-waste tables; and a two-column photo gallery. Deliveries, waste, notes, and evidence begin on a deliberate second page, while long content can continue naturally.
+
+## Turn 323
+**INTERVIEWEE:** Requested a Quick Text section using the company layout, clarified that even one letter must retain a large/full page rather than enlarge the letter, required both 58 mm and 80 mm like the Receipt, approved optional layout fields, and approved saved history.
+**INTERVIEWER:** I implemented an offline Quick Text area with company letterhead, normal readable message sizing, a Receipt-like fixed minimum page for both 58 mm and 80 mm, natural expansion for longer text, optional title/reference/customer/project/alignment/emphasis/prepared-by/signature line, live preview, permanent uniquely numbered searchable history, snapshotted display data, and print/PDF-share actions.
+
+## Turn 324
+**INTERVIEWEE:** Requested removing the full Daily Project Report title and the Deliveries, waste, and notes page title, using only DPR in a smaller font.
+**INTERVIEWER:** I changed both report-page headers to the smaller `DPR` label while retaining the project/date context and all detailed report tables and sections.
+
+## Turn 325
+**INTERVIEWEE:** Requested filtering receipts by driver name and material name.
+**INTERVIEWER:** I added separate searchable Driver Name and Material Name dropdowns to Load History. They filter saved receipt/load records and combine with the existing project, customer, date, free-text, and grouping controls.
+
+## Turn 326
+**INTERVIEWEE:** Approved replacing manual date typing with date pickers after clarification that quarry confirmation timestamps remain automatic and only quarry-history date filters should be selectable.
+**INTERVIEWER:** I implemented one reusable offline calendar picker for Load History From/To filters, payment dates, opening-balance As-of dates, DPR work dates, and new Quarry Purchase History From/To filters. Selected fields show friendly localized dates while repositories retain ISO dates. Future record dates are blocked, and date-range limits prevent an invalid From/To order.
+
+## Turn 327
+**INTERVIEWEE:** Requested removable dummy Load History data to test the new filter settings.
+**INTERVIEWER:** I added a temporary test-data panel in Load History that creates 12 clearly marked `TEST-FILTER` receipts spanning three drivers, three materials, several customers/projects, an unassigned project, and dates from today through 45 days ago. Test rows use reserved internal IDs, do not enter the synchronization queue, and can be removed through a guarded action that targets only the reserved test prefix and leaves real loads unchanged.
+
+## Turn 328
+**INTERVIEWEE:** Requested dark-blue Project/Customer group titles in Load History and removable dummy Daily Project Report and Completed Project Report data.
+**INTERVIEWER:** I changed group headings to dark navy blue and added a Reports test-data panel. It creates one active drainage project with two current DPRs and one completed six-month road-rehabilitation project with five milestone DPRs, realistic workers/drivers/trucks/machines, materials, daily work times, weather, notes, problems, next work, and linked waste dumps. A guarded removal action targets only reserved report-test records and leaves real projects unchanged.
+
+## Turn 329
+**INTERVIEWEE:** Requested removing all existing dummy data and replacing it with new, fully detailed dummy receipts and projects that are linked to each other.
+**INTERVIEWER:** I replaced the two independent test-data generators with one shared linked demo scenario. Loading it removes both earlier reserved datasets and any previous copy of the new scenario, then creates two customers, one active project, one completed six-month project, seven detailed DPRs, seventeen detailed receipts linked to the correct project/customer and DPR work dates, seven linked waste dumps, driver/truck/worker/machine profiles, and seven payment records. The guarded removal action available from either Load History or Reports removes the complete linked scenario while preserving non-demo records.
+
+## Turn 330
+**INTERVIEWEE:** Reported that the Completed Project Report structure was not organized or clear and requested a neat, clear, organized redesign.
+**INTERVIEWER:** I rebuilt the PDF around a professional hierarchy. It now opens with a dedicated project identity and KPI overview, then separates operational material/waste totals, project-wide people and equipment participation, a chronological site diary with clearly bounded DPR cards, delivered-load and waste-history appendices, and an optional project-photo appendix. Dates, tables, colors, labels, page breaks, empty states, daily counters, time, site conditions, notes, issues, and next work are consistently formatted, while statements such as “No incidents” no longer inflate the issue-day total.
+
+## Turns 331–337
+**INTERVIEWEE:** Explained that Payments & Balances is opened from Home → Records → Customers → selected customer, reported that the selected customer's financial records were unorganized, clarified that one customer may have several projects or receipts with no project, approved a Customer → Project → Receipt → Payment hierarchy, and requested implementation with full demo history and design effects.
+**INTERVIEWER:** I preserved the selected customer when opening Payments & Balances instead of sending the owner into the global mixed ledger. The customer finance view now provides overall totals, a Needs Attention section, search/status/date/sort controls, expandable project cards with project-specific billed/paid/remaining totals, Direct Purchases / No Project, Opening Balances, and collapsed Paid History. Individual receipt/opening-balance pages still own their exact payment and cancellation histories. I added restrained entrance, expansion, and press feedback, and extended the removable linked demo to cover multiple projects for one customer, project and direct receipts, an opening balance, multiple active payments, unpaid/partial/paid states, and cancelled payment events.
+
+## Turn 338
+**INTERVIEWEE:** Approved the customer-finance effects and animation and requested applying that interaction style to the load section.
+**INTERVIEWER:** I applied the same restrained motion system to unified Load History. The screen enters with a short fade and upward settle; Project and Customer groups are now expandable cards; the first matching group opens automatically; opening, closing, clearing filters, and switching grouping modes use smooth layout transitions; and group headers, load rows, filters, and demo actions provide responsive press feedback. Existing filters, group totals, receipt details, signatures, document previews, and PDF actions remain unchanged.
+
+## Turns 339–340
+**INTERVIEWEE:** Asked what should be done with the global Financial Records → Payments & Balances page, approved making it an Overview/Customers/Suppliers/Activity/Needs Attention control center, approved the navy side border and proposed Home effects, and requested implementation of both changes.
+**INTERVIEWER:** I replaced the global mixed finance list with five animated views. Overview now shows receivable/payable and current-month payment totals, urgent-count drill-down, quick party access, and a collapsible Opening Balance action. Customers open the existing project-organized receipt/payment ledger; suppliers open separate quarry-purchase/opening-balance/payment sections; Activity lists chronological customer receipts, supplier payments, and cancelled entries; Attention ranks exact unpaid/partial source records. I also redesigned Home with navy left rails, current date, honest Offline Ready status, staggered entrance, smooth expandable Daily Operations/Records/Reports & Finance/Setup sections, subtle press movement and shadows, a dominant orange Make Receipt action, and offline persistence of each section's open/closed state.
+
+## Turn 341
+**INTERVIEWEE:** Reported that showing the same blue side mark across every Home category looked unorganized, considered separate category colors, then proposed a cleaner state-based design: closed category buttons in navy with white text and the open category in white with a navy side border. Also requested replacing the typed DROMEX heading with the previously restored DROMEX logo while retaining `PLANT MANAGEMENT`.
+**INTERVIEWER:** I implemented the state-based design. Closed Daily Operations, Records, Reports & Finance, and Setup headers are solid navy with white copy and plus marks; the selected open header becomes white with a navy left rail and minus mark, and its child actions remain indented beneath it with matching navy rails. I placed the enhanced navy-and-orange DROMEX logo in the Home header below `PLANT MANAGEMENT`, replacing the typed company name.
+
+## Turn 342
+**INTERVIEWEE:** Rejected the Home raster logo because it looked like a picture and requested a larger DROMEX mark rendered as text inside the app while preserving the same design.
+**INTERVIEWER:** I removed the image from the Home header and rebuilt the mark using native interface shapes and live text: a larger rounded navy plate, orange inner panel, and prominent navy serif DROMEX lettering with a light edge. `PLANT MANAGEMENT`, the date, and offline status remain part of the responsive header.
+
+## Turn 343
+**INTERVIEWEE:** Requested making the native-text wordmark slightly smaller while keeping the same structure as the reference picture.
+**INTERVIEWER:** I refined the native mark into a more compact and proportionally taller navy rounded plate, retained the centered orange panel and live serif lettering, and added subtle orange folded ends to reproduce the banner construction visible in the reference without returning to a raster image.
+
+## Turn 344
+**INTERVIEWEE:** Rejected the compact/tall folded-banner revision and requested returning to the prior clean construction, sized only a little wider than `PLANT MANAGEMENT`.
+**INTERVIEWER:** I removed the folded ends, restored the simple native navy plate/orange panel/live-text structure, and reduced it to a restrained horizontal mark approximately 168 × 64 device-independent pixels—slightly wider than the label above it rather than a dominant header graphic.
+
+## Turn 345
+**INTERVIEWEE:** Supplied a detailed production specification for the intended DROMEX logo and requested using it as the logo in the app.
+**INTERVIEWER:** I generated a high-resolution vector-style rendition following the supplied specification, including the navy rounded badge, orange banner with diagonal bottom-left/top-right flourishes, exact condensed serif DROMEX lettering, navy letter interiors, and thin white outlines. I removed the temporary chroma-key canvas to produce a transparent PNG and replaced the interim native-text approximation in the Home header with the clean asset at a restrained size modestly wider than `PLANT MANAGEMENT`.
+
+## Turn 346
+**INTERVIEWEE:** Approved the new logo and requested aligning it with `PLANT MANAGEMENT` for a cleaner header.
+**INTERVIEWER:** I cropped the remaining transparent outer padding from the production logo and removed the manual negative margin. The visible navy badge and `PLANT MANAGEMENT` now share the same exact left alignment while the badge remains slightly wider.
+
+## Turn 347
+**INTERVIEWEE:** Asked whether the positions of the logo and `PLANT MANAGEMENT` should be switched, then approved the recommended hierarchy.
+**INTERVIEWER:** I moved the DROMEX logo to the primary first position, placed `PLANT MANAGEMENT` directly beneath it as the smaller descriptor, retained the current date below, and kept the Offline Ready indicator at the upper right beside the logo.
+
+## Turn 348
+**INTERVIEWEE:** Requested moving `PLANT MANAGEMENT` slightly right so it is centered.
+**INTERVIEWER:** I centered the descriptor within the DROMEX logo's exact 168-point display width, creating one aligned brand block without changing the date alignment or Offline Ready position.
+
+## Turn 349
+**INTERVIEWEE:** Requested centering the date as well.
+**INTERVIEWER:** I centered the current date within the same 168-point width as the DROMEX logo and `PLANT MANAGEMENT`, completing one consistently aligned brand column.
+
+## Turn 350
+**INTERVIEWEE:** Suggested keeping a Home category title navy after it is opened instead of changing the header to white.
+**INTERVIEWER:** I kept every category header solid navy with white text in both states. Opening now changes only the plus mark to a minus and expands the white child actions beneath the stable navy header.
+
+## Turn 351
+**INTERVIEWEE:** Approved adding the recommended animations to the Home category titles.
+**INTERVIEWER:** I added a small press shift/scale response to each navy header, rotated the plus 45 degrees into an × during opening, swept a thin orange line across the bottom edge, and staggered each child action with a short upward fade. Closing reverses the animations cleanly before the child actions are removed.
+
+## Turn 352
+**INTERVIEWEE:** Requested an animation when pressing Make Receipt that feels as though the action is popping out of the phone and asked for an opinion.
+**INTERVIEWER:** I implemented a restrained launch effect: the card first compresses under the finger, then lifts toward the viewer, grows slightly, and sends a soft orange outline outward before opening receipt entry. The transition remains approximately 300 ms and locks repeat taps during launch so the stronger effect does not slow navigation or open duplicate screens.
+
+## Turn 353
+**INTERVIEWEE:** Reported that the Make Receipt pop-out animation was not working.
+**INTERVIEWER:** I corrected the likely transform conflict by replacing two competing scale transforms with one combined animated scale and moved the launch lock to a synchronous reference. I also strengthened the physical-phone effect: a deeper 96% press, 22-point lift, 114% forward expansion, brighter orange glow, thicker pale-orange expanding ring, and a short visible hold before navigation.
+
+## Turn 354
+**INTERVIEWEE:** Preferred an effect where the entire screen becomes orange and opens smoothly, and requested navy Make Receipt text matching the logo.
+**INTERVIEWER:** I replaced the isolated card-pop effect with a screen-wide branded transition. Pressing the card compresses it, then an orange layer grows upward and outward over all Home content, briefly presents navy `NEW OUTGOING LOAD`, `Make Receipt`, and a navy line, and opens receipt entry after the cover is complete. I also changed the primary card's eyebrow, title, and hint to deep navy.
+
+## Turn 355
+**INTERVIEWEE:** Approved the full-screen transition but requested changing the Make Receipt font color back to white.
+**INTERVIEWER:** I restored white text for all copy inside the orange Make Receipt card while retaining navy text and the navy rule in the full-screen orange transition.
+
+## Turn 356
+**INTERVIEWEE:** Corrected the preferred card font color to the logo-background navy and reported that the pop followed by page opening felt like lag; requested that the Make Receipt page itself be the page that opens.
+**INTERVIEWER:** I restored deep navy card text and removed the separate orange message overlay and its navigation delay. The real Make Receipt screen now mounts immediately on orange and is itself animated upward from 90 points and 94% scale into a full-size rounded page, so the destination is visible throughout the opening rather than appearing after a simulated transition.
+
+## Turn 357
+**INTERVIEWEE:** Requested removing the blue Project/Customer font treatment in Load History and styling each Project or Customer group navy like the Home sections, with creamy-white text matching the app background.
+**INTERVIEWER:** I replaced the bright-blue group title and blue side rail with a full solid navy header. Project/Customer names, hints, and expand marks now use the app's cream background color; counts use cream pills with navy numbers; and an orange divider introduces the white load records when a group is open.
+
+## Turn 358
+**INTERVIEWEE:** Requested allowing the receipt filter to close, showing receipts only after pressing a Project or Customer, and adding a thin vertical side line from top to bottom of the revealed receipts.
+**INTERVIEWER:** I made the warm-cream filter card collapsed by default with its matching count and plus/× disclosure control. Project/Customer groups now also start closed and reveal only their own receipts when pressed. Each opened list is inset beneath its navy header and connected by a continuous thin orange vertical rail from the top divider through the final receipt.
+
+## Turn 359
+**INTERVIEWEE:** Proposed making the collapsible filter orange like Make Receipt, keeping the filters inside on very light warm cream, and changing each Customer/Project receipt counter to an orange circle with creamy-white numbers; asked for an opinion.
+**INTERVIEWER:** I approved and implemented the hierarchy. The filter header is now orange with navy title/count/disclosure styling; its expanded body is `#FFF8ED` below a navy divider; and every receipt total is displayed in an orange circular badge with creamy-white numerals against the navy group header.
+
+## Turn 360
+**INTERVIEWEE:** Requested two thin navy/orange outlines around the open filter, moving the expanded receipt-list orange rail left onto the edge, and adding very thin navy separators between loads.
+**INTERVIEWER:** I added an orange outer and navy inner outline around all sides of the open filter card. I removed the receipt rail's former 12-point inset so it sits directly on the list's left edge, and changed each load-row divider to a hairline navy rule.
+
+## Turn 361
+**INTERVIEWEE:** Stopped the prior work, then requested removing the open filter's double outline and reported that the `+` changed into a strange `A^`/accented-A character instead of `×`; requested removing the strange character beside Project/Customer counters as well.
+**INTERVIEWER:** I removed the open-filter outline entirely and repaired the text encoding across Load History. Filter disclosure now uses an encoding-safe `+`/`×`, group disclosure uses `+`/minus, and corrupted ellipses, em dash, bullets, and related `Ã`/`Â`/`â` artifacts were removed from the same screen. The edge-aligned orange receipt rail and hairline navy load separators remain.
+
+## Turn 362
+**INTERVIEWEE:** Requested applying the Load History filter layout to all filters and giving the Reports menu the same structure, with Active Projects creamy white, Completed Projects orange, and Report Generation navy like the Load History groups.
+**INTERVIEWER:** I created a reusable orange-header/warm-cream-body collapsible filter component and applied it to Correct Confirmed Load, Quarry Purchase History, and customer financial-record filtering; Load History retains the same established visual behavior. Simple one-field searches remain compact. I also reorganized Reports into three collapsible menus: creamy-white Active Projects, orange Completed Projects, and navy Report Generation, each using encoding-safe disclosure controls and a warm-cream opened body.
+
+## Turn 363
+**INTERVIEWEE:** Clarified that the orange background should remain and only the uncomfortable navy font color should change.
+**INTERVIEWER:** Changed text on orange disclosure headers to warm creamy white, their smaller summary text to a softer cream, and their disclosure control to creamy white. This applies consistently to Load History, shared filter panels, and the orange Completed Projects report menu. Navy-background and cream-background report menus retain their appropriate contrasting text.
+
+## Turn 364
+**INTERVIEWEE:** Requested removing the Linked Demo Data headers from Loads and Reports, moving demo controls into Settings, and fixing report words such as Open and Planned that appeared outside or misaligned with their cards.
+**INTERVIEWER:** Moved the single linked demo-data load/remove control into a clearly marked optional Settings card and removed it from Load History and Reports. I rebuilt report project/action rows with flexible title space and fixed contained badges, so Open, Ready, and Planned remain aligned inside their cards on narrow iPhone layouts.
+
+## Turn 365
+**INTERVIEWEE:** Requested changing the Home arrows inside each section from navy to orange, then asked whether to continue improving the interface or begin the next slice and what that slice contains.
+**INTERVIEWER:** Changed every Home child-action navigation arrow to the app orange while retaining navy category headers and white category disclosure controls. Based on the confirmed implementation sequence, the recommended next step is Slice 7: Fuel Tracking; remaining cosmetic refinements can be handled after the functional slice unless physical testing reveals a usability blocker.

@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 11;
+const DATABASE_VERSION = 12;
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
@@ -439,6 +439,38 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX idx_quarry_purchases_status ON quarry_purchases(status, confirmed_at DESC);
     `);
     currentVersion = 11;
+  }
+
+  if (currentVersion === 11) {
+    await db.execAsync(`
+      ALTER TABLE device_state ADD COLUMN next_quick_text_sequence INTEGER NOT NULL DEFAULT 1 CHECK (next_quick_text_sequence > 0);
+      CREATE TABLE quick_text_documents (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_number TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        title TEXT NOT NULL,
+        reference TEXT,
+        customer_id TEXT REFERENCES customers(id),
+        customer_name TEXT,
+        project_id TEXT REFERENCES projects(id),
+        project_name TEXT,
+        message TEXT NOT NULL,
+        alignment TEXT NOT NULL CHECK (alignment IN ('left','center','right')),
+        emphasis TEXT NOT NULL CHECK (emphasis IN ('normal','bold','notice')),
+        prepared_by TEXT,
+        show_signature_line INTEGER NOT NULL DEFAULT 0 CHECK (show_signature_line IN (0,1)),
+        paper_width TEXT NOT NULL CHECK (paper_width IN ('58','80')),
+        company_name TEXT NOT NULL,
+        company_address TEXT,
+        company_phone TEXT,
+        company_email TEXT,
+        company_tax_vat_number TEXT,
+        company_receipt_footer TEXT,
+        company_logo_uri TEXT
+      );
+      CREATE INDEX idx_quick_text_created_at ON quick_text_documents(created_at DESC);
+    `);
+    currentVersion = 12;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

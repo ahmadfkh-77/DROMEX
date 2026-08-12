@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Animated, SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import { SqliteCatalogRepository } from '../data/repositories/SqliteCatalogRepository';
@@ -8,6 +8,7 @@ import { SqliteLoadRepository } from '../data/repositories/SqliteLoadRepository'
 import { SqliteProfileRepository } from '../data/repositories/SqliteProfileRepository';
 import { SqliteProjectReportRepository } from '../data/repositories/SqliteProjectReportRepository';
 import { SqliteQuarryRepository } from '../data/repositories/SqliteQuarryRepository';
+import { SqliteQuickTextRepository } from '../data/repositories/SqliteQuickTextRepository';
 import { SqliteWasteRepository } from '../data/repositories/SqliteWasteRepository';
 import { CatalogScreen } from './screens/CatalogScreen';
 import { CustomersScreen } from './screens/CustomersScreen';
@@ -21,11 +22,12 @@ import { ReceiptSetupScreen } from './screens/ReceiptSetupScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
 import { QuarryPurchasesScreen } from './screens/QuarryPurchasesScreen';
 import { ProjectsScreen } from './screens/ProjectsScreen';
+import { QuickTextScreen } from './screens/QuickTextScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { WasteDumpScreen } from './screens/WasteDumpScreen';
 import { colors } from './theme';
 
-type Screen = 'home' | 'makeReceipt' | 'loads' | 'loadCorrections' | 'receiptSetup' | 'directory' | 'customers' | 'catalog' | 'projects' | 'reports' | 'quarry' | 'waste' | 'financials' | 'settings';
+type Screen = 'home' | 'makeReceipt' | 'loads' | 'loadCorrections' | 'receiptSetup' | 'directory' | 'customers' | 'catalog' | 'projects' | 'reports' | 'quarry' | 'waste' | 'quickText' | 'financials' | 'settings';
 
 export function DromexApp() {
   const db = useSQLiteContext();
@@ -36,6 +38,7 @@ export function DromexApp() {
   const quarryRepository = useMemo(() => new SqliteQuarryRepository(db), [db]);
   const financialRepository = useMemo(() => new SqliteFinancialRepository(db), [db]);
   const wasteRepository = useMemo(() => new SqliteWasteRepository(db), [db]);
+  const quickTextRepository = useMemo(() => new SqliteQuickTextRepository(db), [db]);
   const [screen, setScreen] = useState<Screen>('home');
 
   let content;
@@ -53,12 +56,13 @@ export function DromexApp() {
         onOpenProjects={() => setScreen('projects')}
         onOpenFinancials={() => setScreen('financials')}
         onOpenWaste={() => setScreen('waste')}
+        onOpenQuickText={() => setScreen('quickText')}
         onOpenLoadCorrections={() => setScreen('loadCorrections')}
         onOpenSettings={() => setScreen('settings')}
       />
     );
   } else if (screen === 'makeReceipt') {
-    content = <MakeReceiptScreen repository={loadRepository} onBack={() => setScreen('home')} onOpenSetup={() => setScreen('receiptSetup')} onOpenDirectory={() => setScreen('directory')} onOpenProjects={() => setScreen('projects')} />;
+    content = <ReceiptEntrance><MakeReceiptScreen repository={loadRepository} onBack={() => setScreen('home')} onOpenSetup={() => setScreen('receiptSetup')} onOpenDirectory={() => setScreen('directory')} onOpenProjects={() => setScreen('projects')} /></ReceiptEntrance>;
   } else if (screen === 'loads') {
     content = <LoadHistoryScreen repository={loadRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'loadCorrections') {
@@ -68,7 +72,7 @@ export function DromexApp() {
   } else if (screen === 'directory') {
     content = <PeopleEquipmentScreen repository={loadRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'customers') {
-    content = <CustomersScreen repository={profileRepository} financialRepository={financialRepository} onOpenFinancials={() => setScreen('financials')} onBack={() => setScreen('home')} />;
+    content = <CustomersScreen repository={profileRepository} financialRepository={financialRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'catalog') {
     content = <CatalogScreen repository={catalogRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'reports') {
@@ -81,8 +85,10 @@ export function DromexApp() {
     content = <FinancialsScreen repository={financialRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'waste') {
     content = <WasteDumpScreen repository={wasteRepository} onBack={() => setScreen('home')} />;
+  } else if (screen === 'quickText') {
+    content = <QuickTextScreen repository={quickTextRepository} onBack={() => setScreen('home')} />;
   } else {
-    content = <SettingsScreen repository={profileRepository} onBack={() => setScreen('home')} />;
+    content = <SettingsScreen repository={profileRepository} demoRepository={loadRepository} onBack={() => setScreen('home')} />;
   }
 
   return (
@@ -107,6 +113,12 @@ export function DromexApp() {
   );
 }
 
+function ReceiptEntrance({children}:{children:ReactNode}) {
+  const progress=useState(()=>new Animated.Value(0))[0];
+  useEffect(()=>{const animation=Animated.spring(progress,{toValue:1,useNativeDriver:true,speed:18,bounciness:3});animation.start();return()=>animation.stop();},[progress]);
+  return <View style={styles.receiptStage}><Animated.View style={[styles.receiptPage,{opacity:progress.interpolate({inputRange:[0,.18,1],outputRange:[.35,.8,1]}),transform:[{translateY:progress.interpolate({inputRange:[0,1],outputRange:[90,0]})},{scale:progress.interpolate({inputRange:[0,1],outputRange:[.94,1]})}]}]}>{children}</Animated.View></View>;
+}
+
 function NavButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity style={styles.navButton} onPress={onPress} accessibilityRole="button">
@@ -119,6 +131,8 @@ function NavButton({ label, active, onPress }: { label: string; active: boolean;
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   shell: { flex: 1 },
+  receiptStage: { flex: 1, backgroundColor: colors.brand, overflow: 'hidden' },
+  receiptPage: { flex: 1, backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
   nav: {
     minHeight: 68,
     flexDirection: 'row',

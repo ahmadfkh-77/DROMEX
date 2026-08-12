@@ -47,6 +47,9 @@ The executable foundation and profile-management slice include:
   reports and quarry tickets, post-confirmation driver signature capture,
   58/80 mm Receipt and Delivery Authorization PDFs, project-report PDFs, and
   native iPhone/Android sharing; and
+- offline Quick Text company documents with 58/80 mm fixed minimum page
+  layouts, normal readable message sizing, live preview, searchable permanent
+  history, direct printing, and PDF sharing; and
 - a Payments & Balances area that combines priced loads, priced quarry
   purchases, and separate customer/supplier opening balances; records multiple
   partial in-person payments; derives remaining/status totals; preserves final
