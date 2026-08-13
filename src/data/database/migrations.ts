@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 12;
+const DATABASE_VERSION = 14;
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
@@ -471,6 +471,81 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX idx_quick_text_created_at ON quick_text_documents(created_at DESC);
     `);
     currentVersion = 12;
+  }
+
+  if (currentVersion === 12) {
+    await db.execAsync(`
+      CREATE TABLE fuel_movements (
+        id TEXT PRIMARY KEY NOT NULL,
+        movement_type TEXT NOT NULL CHECK (movement_type IN ('gauge','delivery','fill')),
+        confirmed_at TEXT NOT NULL,
+        litres REAL NOT NULL CHECK (litres >= 0),
+        previous_balance_litres REAL,
+        difference_litres REAL,
+        supplier_id TEXT REFERENCES suppliers(id),
+        supplier_name TEXT,
+        equipment_id TEXT REFERENCES machine_profiles(id),
+        equipment_name TEXT,
+        project_id TEXT REFERENCES projects(id),
+        project_name TEXT,
+        ticket_number TEXT,
+        odometer_reading TEXT,
+        reason TEXT,
+        notes TEXT,
+        price_per_litre_usd_cents INTEGER CHECK (price_per_litre_usd_cents IS NULL OR price_per_litre_usd_cents >= 0),
+        subtotal_usd_cents INTEGER,
+        vat_rate_basis_points INTEGER,
+        vat_amount_usd_cents INTEGER,
+        final_total_usd_cents INTEGER,
+        payment_status TEXT NOT NULL DEFAULT 'Unpriced' CHECK (payment_status IN ('Unpriced','No Payment Due','Unpaid','Partially Paid','Paid','Overpaid')),
+        status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active','Cancelled')),
+        cancellation_reason TEXT,
+        cancelled_at TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_fuel_movements_time ON fuel_movements(confirmed_at DESC);
+      CREATE INDEX idx_fuel_movements_equipment ON fuel_movements(equipment_id, confirmed_at DESC);
+      CREATE INDEX idx_fuel_movements_supplier ON fuel_movements(supplier_id, confirmed_at DESC);
+
+      CREATE TABLE payment_entries_v2 (
+        id TEXT PRIMARY KEY NOT NULL,
+        target_type TEXT NOT NULL CHECK (target_type IN ('load', 'quarryPurchase', 'openingBalance', 'fuelDelivery')),
+        load_id TEXT REFERENCES loads(id),
+        quarry_purchase_id TEXT REFERENCES quarry_purchases(id),
+        opening_balance_id TEXT REFERENCES opening_balances(id),
+        fuel_movement_id TEXT REFERENCES fuel_movements(id),
+        amount_usd_cents INTEGER NOT NULL CHECK (amount_usd_cents > 0),
+        payment_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled')),
+        cancellation_reason TEXT,
+        cancelled_at TEXT,
+        created_at TEXT NOT NULL,
+        CHECK (
+          (target_type = 'load' AND load_id IS NOT NULL AND quarry_purchase_id IS NULL AND opening_balance_id IS NULL AND fuel_movement_id IS NULL) OR
+          (target_type = 'quarryPurchase' AND load_id IS NULL AND quarry_purchase_id IS NOT NULL AND opening_balance_id IS NULL AND fuel_movement_id IS NULL) OR
+          (target_type = 'openingBalance' AND load_id IS NULL AND quarry_purchase_id IS NULL AND opening_balance_id IS NOT NULL AND fuel_movement_id IS NULL) OR
+          (target_type = 'fuelDelivery' AND load_id IS NULL AND quarry_purchase_id IS NULL AND opening_balance_id IS NULL AND fuel_movement_id IS NOT NULL)
+        )
+      );
+      INSERT INTO payment_entries_v2 (id,target_type,load_id,quarry_purchase_id,opening_balance_id,amount_usd_cents,payment_date,status,cancellation_reason,cancelled_at,created_at)
+        SELECT id,target_type,load_id,quarry_purchase_id,opening_balance_id,amount_usd_cents,payment_date,status,cancellation_reason,cancelled_at,created_at FROM payment_entries;
+      DROP TABLE payment_entries;
+      ALTER TABLE payment_entries_v2 RENAME TO payment_entries;
+      CREATE INDEX idx_payments_load ON payment_entries(load_id, payment_date DESC);
+      CREATE INDEX idx_payments_quarry ON payment_entries(quarry_purchase_id, payment_date DESC);
+      CREATE INDEX idx_payments_opening ON payment_entries(opening_balance_id, payment_date DESC);
+      CREATE INDEX idx_payments_fuel ON payment_entries(fuel_movement_id, payment_date DESC);
+    `);
+    currentVersion = 13;
+  }
+
+  if (currentVersion === 13) {
+    await db.execAsync(`
+      ALTER TABLE quarry_purchases ADD COLUMN project_id TEXT REFERENCES projects(id);
+      ALTER TABLE quarry_purchases ADD COLUMN project_name TEXT;
+      CREATE INDEX idx_quarry_purchases_project ON quarry_purchases(project_id, confirmed_at DESC);
+    `);
+    currentVersion = 14;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

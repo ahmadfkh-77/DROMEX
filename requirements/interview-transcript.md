@@ -1472,3 +1472,47 @@ Is this accurate?
 ## Turn 365
 **INTERVIEWEE:** Requested changing the Home arrows inside each section from navy to orange, then asked whether to continue improving the interface or begin the next slice and what that slice contains.
 **INTERVIEWER:** Changed every Home child-action navigation arrow to the app orange while retaining navy category headers and white category disclosure controls. Based on the confirmed implementation sequence, the recommended next step is Slice 7: Fuel Tracking; remaining cosmetic refinements can be handled after the functional slice unless physical testing reveals a usability blocker.
+
+## Turn 366
+**INTERVIEWEE:** Deferred the proposed measurable staged replacement-phone restoration timing targets for later and asked for the current build-slice position.
+**INTERVIEWER:** Recorded the recovery-time target as deferred without changing the confirmed recovery scope. The build is at the end of Slice 6: confirmed-load correction, quarry-purchase correction/cancellation, completed-project PDF work, and the subsequent history/finance/interface refinements are implemented, while the remaining confirmed-load association corrections are still subsequent work. Slice 7 Fuel Tracking is the next full functional slice and has not yet begun.
+
+## Turn 367
+**INTERVIEWEE:** Requested one consistent design structure and layout for buttons and pages across current and future work, then requested starting Slices 7 and 8.
+**INTERVIEWER:** Documented and implemented shared page, header, card, field, metric, feedback, empty-state, and four-role button primitives. Completed Slice 7's single-tank fuel workflow with physical gauge baselines, deliveries, equipment fills, optional supplier/project/reference fields, VAT-priced supplier balances, movement history, calculated balance, and safeguarded cancellation. The owner then clarified that work must stop at Slice 7, so Slice 8 remains unstarted.
+
+## Turn 368
+**INTERVIEWEE:** Clarified that Active Projects should have two diagonal orange-and-navy stripes, similar in visual rhythm to the BMW M mark, only at the side of the Active Projects button rather than across project cards; also requested a designed Select Project layout.
+**INTERVIEWER:** Added a compact two-stripe diagonal orange-and-navy side mark to the Active Projects disclosure button and left individual project cards clean. Redesigned Select Project as a navy-headed, warm-cream panel with searchable selection, a selected-project identity/location/status summary, a clear empty state, and a prominent navy Open Project Reports action with an orange arrow.
+
+## Turn 369
+**INTERVIEWEE:** Requested a designed Settings screen and more space between Completed Project Report writing and the page edges.
+**INTERVIEWER:** Migrated Settings to the shared DROMEX page, header, card, field, feedback, and button primitives; organized company identity, logo, contact, document, tax, and demo areas into a clear visual hierarchy. Increased the completed-project A4 report margins on every page to 18 mm top, 17 mm left/right, and 20 mm bottom.
+
+## Turn 370
+**INTERVIEWEE:** Requested a more eye-catching, creative, calm, and professional Make Receipt design, with a different visual treatment for each section and necessary animation.
+**INTERVIEWER:** Redesigned Make Receipt as a numbered four-stage workflow. Added a navy progress hero, orange-and-cream destination section, navy-and-blue load/weighing section, warm-clay conversion/value section, final-review panel, and coordinated preview/confirmation states. Added restrained staged entrance motion, animated conditional destination layout, and subtle calculated-value response while preserving autosave, validation, calculation, preview, and confirmation behavior.
+
+## Turn 371
+**INTERVIEWEE:** Approved starting Slice 8 after confirming it as Excel and Business Report Exports.
+**INTERVIEWER:** Started Slice 8 with a usable offline-XLSX increment. Reports now offers Loads and Sales, Customer Balances and Payments, Quarry Purchases and Supplier Balances, Fuel Movements and Current Balance, Projects and Daily Work Reports, and one Complete Analysis Workbook. Added a read-only SQLite report repository, stable-ID/numeric raw sheets, summaries, opening balances, payments, fuel/equipment totals, project/material rollups, a Data Dictionary, frozen/filterable headers, local generation, and phone sharing. Rejected the initially evaluated `xlsx` package after live audit found unresolved high-severity advisories, removed it, and used a small ZIP utility with locally generated Office Open XML instead. Slice 8 remains in progress for filters, long-export progress/cancellation, charts, localization, and individual daily-report Excel/photo output.
+
+## Turn 372
+**INTERVIEWEE:** Requested a filter in report generation.
+**INTERVIEWER:** Added one shared, default-open filter panel inside Report Generation. It supports inclusive From/To dates and searchable saved Project, Customer, Supplier, and Item choices, plus Payment Status. Filters combine across all six business workbooks, Clear All restores the complete scope, summaries and fuel-equipment totals are recalculated from matching rows, and each workbook begins with an Active Filters sheet so its scope remains visible after sharing.
+
+## Turn 373
+**INTERVIEWEE:** Clarified that the requested filter is for Excel generation.
+**INTERVIEWER:** Confirmed that the filter applies only to the six Excel workbook actions, not to Daily Project Report or Completed Project Report PDFs. Moved the filter panel into the Business Report Workbooks area and changed its labels and status text to explicitly say Excel.
+
+## Turn 374
+**INTERVIEWEE:** Requested clearer naming on the first Excel sheet, plus a better Home/Quarry Purchases design connected with projects and other records.
+**INTERVIEWER:** Replaced the ambiguous first sheet with Report Overview, showing report title, company, generation time, explanation, and readable filter names/values instead of internal IDs. Highlighted Quarry Purchases on Home as a connected workflow, added a navy relationship overview and clearer entry context, and added an optional saved-project relationship to quarry purchases. The project snapshot now appears in purchase history and Excel, and project filtering includes linked quarry purchases; existing supplier, catalog item, driver, truck, payment, VAT, photo, correction, and cancellation behavior remains connected.
+
+## Turn 375
+**INTERVIEWEE:** Reported data loss in filtered Excel generation, including intermittently missing loads and payments, and requested diagnosis and correction.
+**INTERVIEWER:** Traced the defect to independent payment-date filtering: payments linked to matching transactions were removed when the payment occurred outside the parent transaction's selected date range. Added stable Target Record ID relationships to report data and changed filtering to select loads, quarry purchases, fuel movements, and opening balances first, then retain every linked active or cancelled payment. Added Payment Details to Loads and Fuel workbooks, expanded the Projects workbook with matching loads, quarry purchases, fuel movements, and payments, and retained work dates on material rows so date filtering no longer loses or merges daily detail incorrectly. Regression tests cover later and cancelled payments linked to an in-range load.
+
+## Turn 376
+**INTERVIEWEE:** Requested a comprehensive application audit covering bugs, details, logic, extensive tests, and user-exhaustion risks.
+**INTERVIEWER:** Audited the authoritative requirements against the implemented domains, repositories, screens, exports, and platform configuration. Hardened date, money, quantity, and relationship validation; added a transactional payment-balance recheck; preserved fuel gauge audit values; added interrupted-draft recovery to long operational forms; repaired visible encoding artifacts; corrected Expo Android 10 configuration; and expanded the automated suite to 76 passing tests. TypeScript, Expo Doctor, and fresh Android/iOS production exports pass. Documented remaining UX friction, unimplemented scope, printer/device verification needs, and transitive build-tool advisory risk in `docs/app-audit-2026-08-14.md`.

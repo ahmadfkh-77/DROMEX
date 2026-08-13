@@ -110,6 +110,7 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
     if (!project) throw new Error('Selected project no longer exists.');
     if (!draft.id && project.status !== 'active') throw new Error('Completed projects cannot receive a new daily report.');
     const existing = await this.getReportForDate(draft.projectId, draft.workDate);
+    if(draft.id&&existing&&existing.id!==draft.id)throw new Error('A daily report already exists for this project and work date. Open that report instead.');
     const id = draft.id ?? existing?.id ?? makeId('daily_report'); const now = new Date().toISOString();
     await this.db.withTransactionAsync(async () => {
       await this.db.runAsync(`INSERT INTO daily_project_reports (id, project_id, work_date, work_description, workers_json, drivers_json, truck_plates_json, machines_json, materials_json, photos_json, notes, problems_delays_incidents, weather_site_conditions, work_start_time, work_end_time, break_minutes, next_work_planned, created_at, updated_at)

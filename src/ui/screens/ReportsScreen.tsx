@@ -2,18 +2,23 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { ProjectReportRepository } from '../../data/repositories/ProjectReportRepository';
+import type { BusinessReportRepository } from '../../data/repositories/BusinessReportRepository';
+import {activeBusinessFilterCount,businessReportLabels,emptyBusinessReportFilters,filterBusinessReportData,type BusinessReportFilters,type BusinessReportKind} from '../../domain/businessReports';
 import {
   addPresence, emptyDailyReport, netWorkMinutes, splitPresence,
   type DailyProjectReport, type DailyProjectReportDraft, type DailyReportMaterial,
   type LinkedProjectLoad, type LinkedWasteDump, type ProjectReportSetup, type ReportProject,
 } from '../../domain/projectReports';
 import { SearchableSelect } from '../components/SearchableSelect';
+import {CollapsibleFilterCard} from '../components/CollapsibleFilterCard';
 import {DatePickerField,todayIso} from '../components/DatePickerField';
 import { capturePersistentImage, pickPersistentImage } from '../../services/media';
 import { exportAndShareProjectCompletion, exportAndShareProjectReport } from '../../services/documentExport';
+import {exportBusinessWorkbook} from '../../services/businessWorkbookExport';
+import Storage from 'expo-sqlite/kv-store';
 import { colors } from '../theme';
 
-export function ReportsScreen({ repository, onBack }: { repository: ProjectReportRepository; onBack: () => void }) {
+export function ReportsScreen({ repository,businessReportRepository,onBack }: { repository: ProjectReportRepository;businessReportRepository:BusinessReportRepository;onBack: () => void }) {
   const [setup, setSetup] = useState<ProjectReportSetup | null>(null);
   const [project, setProject] = useState<ReportProject | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -23,10 +28,24 @@ export function ReportsScreen({ repository, onBack }: { repository: ProjectRepor
   const [linkedWasteDumps, setLinkedWasteDumps] = useState<LinkedWasteDump[]>([]);
   const [error, setError] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exporting,setExporting]=useState<BusinessReportKind|null>(null);
+  const [businessFilters,setBusinessFilters]=useState<BusinessReportFilters>(emptyBusinessReportFilters);
+  const [businessFilterOptions,setBusinessFilterOptions]=useState<{customers:{id:string;label:string}[];suppliers:{id:string;label:string}[];items:{id:string;label:string}[]}>({customers:[],suppliers:[],items:[]});
   const [menuOpen,setMenuOpen]=useState<Set<string>>(()=>new Set());
   const toggleMenu=(key:string)=>{setMenuOpen(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});};
   const refreshSetup = useCallback(async () => setSetup(await repository.getSetup()), [repository]);
   useEffect(() => { void refreshSetup(); }, [refreshSetup]);
+  useEffect(() => {
+    void businessReportRepository.getReportData().then(data => {
+      const itemNames=new Set<string>();
+      [...data.loads,...data.quarryPurchases,...data.materials].forEach(row=>{const value=String(row.Item??'').trim();if(value)itemNames.add(value);});
+      setBusinessFilterOptions({
+        customers:data.customers.map(row=>({id:String(row['Customer ID']??''),label:String(row.Customer??'Unnamed customer')})).filter(value=>value.id),
+        suppliers:data.suppliers.map(row=>({id:String(row['Supplier ID']??''),label:String(row.Supplier??'Unnamed supplier')})).filter(value=>value.id),
+        items:[...itemNames].sort((a,b)=>a.localeCompare(b)).map(value=>({id:value,label:value})),
+      });
+    }).catch(()=>setBusinessFilterOptions({customers:[],suppliers:[],items:[]}));
+  },[businessReportRepository]);
   useEffect(() => { if (project) void repository.listReports(project.id).then(setReports); }, [project, repository]);
   useEffect(() => {
     if (draft?.projectId && draft.workDate) void repository.listLinkedLoads(draft.projectId, draft.workDate).then(setLinkedLoads);
@@ -36,6 +55,25 @@ export function ReportsScreen({ repository, onBack }: { repository: ProjectRepor
     if (draft?.projectId && draft.workDate) void repository.listLinkedWasteDumps(draft.projectId, draft.workDate).then(setLinkedWasteDumps);
     else setLinkedWasteDumps([]);
   }, [draft?.projectId, draft?.workDate, repository]);
+  useEffect(() => {
+    if (!draft || draft.id) return;
+    const timer = setTimeout(() => void Storage.setItem(`dromex.draft.daily-report.${draft.projectId}.v1`, JSON.stringify(draft)), 450);
+    return () => clearTimeout(timer);
+  }, [draft]);
+
+  async function openNewReport(selectedProject: ReportProject) {
+    setError(null); setMessage(null);
+    const empty = emptyDailyReport(selectedProject.id);
+    try {
+      const stored = await Storage.getItem(`dromex.draft.daily-report.${selectedProject.id}.v1`);
+      if (!stored) { setDraft(empty); return; }
+      const restored = JSON.parse(stored) as Partial<DailyProjectReportDraft>;
+      setDraft({ ...empty, ...restored, id: null, projectId: selectedProject.id });
+      setMessage('Your unsaved daily report draft was restored.');
+    } catch {
+      setDraft(empty);
+    }
+  }
 
   function editReport(report: DailyProjectReport) {
     const { createdAt: _createdAt, updatedAt: _updatedAt, ...editable } = report;
@@ -44,7 +82,10 @@ export function ReportsScreen({ repository, onBack }: { repository: ProjectRepor
   async function save() {
     if (!draft) return; setBusy(true); setError(null); setMessage(null);
     try {
-      const saved = await repository.saveReport(draft); setDraft(null);
+      const wasNew = !draft.id;
+      const saved = await repository.saveReport(draft);
+      if (wasNew) await Storage.removeItem(`dromex.draft.daily-report.${saved.projectId}.v1`);
+      setDraft(null);
       const [nextReports, nextSetup] = await Promise.all([repository.listReports(saved.projectId), repository.getSetup()]);
       setReports(nextReports); setSetup(nextSetup); setMessage('Daily project report saved.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save the report.'); }
@@ -65,6 +106,7 @@ export function ReportsScreen({ repository, onBack }: { repository: ProjectRepor
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not export the completed project report.'); }
     finally { setBusy(false); }
   }
+  async function shareBusinessReport(kind:BusinessReportKind){setExporting(kind);setError(null);setMessage(null);try{const data=filterBusinessReportData(await businessReportRepository.getReportData(),businessFilters);await exportBusinessWorkbook(kind,data);setMessage(`${businessReportLabels[kind]} created with ${activeBusinessFilterCount(businessFilters)} active filter${activeBusinessFilterCount(businessFilters)===1?'':'s'}.`);}catch(cause){setError(cause instanceof Error?cause.message:'Could not create the workbook.');}finally{setExporting(null);}}
 
   if (!setup) return <View style={styles.loading}><Text style={styles.helper}>Loading reports…</Text></View>;
   if (draft && project) return <DailyReportEditor setup={setup} project={project} draft={draft} linkedLoads={linkedLoads} linkedWasteDumps={linkedWasteDumps} busy={busy} error={error} onChange={setDraft} onSave={() => void save()} onBack={() => setDraft(null)} />;
@@ -73,7 +115,7 @@ export function ReportsScreen({ repository, onBack }: { repository: ProjectRepor
       <Header eyebrow="PROJECT REPORTS" title={project.name} onBack={() => { setProject(null); setReports([]); setMessage(null); }} />
       <View style={styles.projectContext}><Text style={styles.projectContextTitle}>{project.customerName}</Text><Text style={styles.helper}>{project.location}</Text></View>
       {error ? <Text style={styles.error}>{error}</Text> : null}{message ? <Text style={styles.success}>{message}</Text> : null}
-      {project.status === 'active' ? <TouchableOpacity style={styles.primary} onPress={() => setDraft(emptyDailyReport(project.id))}><Text style={styles.primaryText}>Make Daily Report</Text><Text style={styles.primaryHint}>The project is selected automatically</Text></TouchableOpacity> : <><Text style={styles.notice}>This project is completed. Its reports remain available, but a new report cannot be created until the project is reactivated.</Text><TouchableOpacity style={styles.completionExport} disabled={busy} onPress={()=>void shareCompletion()}><Text style={styles.completionExportTitle}>{busy?'Creating final PDF…':'Create Full Project PDF'}</Text><Text style={styles.completionExportHint}>Start-to-finish summary, daily timeline, loads, waste, working time, issues, people, equipment, and photos</Text></TouchableOpacity></>}
+      {project.status === 'active' ? <TouchableOpacity style={styles.primary} onPress={() => void openNewReport(project)}><Text style={styles.primaryText}>Make Daily Report</Text><Text style={styles.primaryHint}>The project is selected automatically · draft autosaves locally</Text></TouchableOpacity> : <><Text style={styles.notice}>This project is completed. Its reports remain available, but a new report cannot be created until the project is reactivated.</Text><TouchableOpacity style={styles.completionExport} disabled={busy} onPress={()=>void shareCompletion()}><Text style={styles.completionExportTitle}>{busy?'Creating final PDF…':'Create Full Project PDF'}</Text><Text style={styles.completionExportHint}>Start-to-finish summary, daily timeline, loads, waste, working time, issues, people, equipment, and photos</Text></TouchableOpacity></>}
       <Text style={styles.sectionTitle}>Report history</Text>
       {reports.length ? reports.map((report) => <View key={report.id} style={styles.reportCard}><TouchableOpacity onPress={() => editReport(report)}><View style={styles.reportCardHeader}><Text style={styles.reportCardTitle}>{report.workDate}</Text><Text style={styles.openText}>Open</Text></View><Text style={styles.reportDescription} numberOfLines={3}>{report.workDescription}</Text><Text style={styles.helper}>Updated {new Date(report.updatedAt).toLocaleString()} · {report.photos.length} photos</Text></TouchableOpacity><TouchableOpacity style={styles.exportButton} disabled={busy} onPress={()=>void shareReport(report)}><Text style={styles.exportButtonText}>Create & Share PDF</Text></TouchableOpacity></View>) : <View style={styles.empty}><Text style={styles.cardTitle}>No daily reports yet</Text><Text style={styles.helper}>Choose Make Daily Report to record the first workday.</Text></View>}
     </ScrollView>
@@ -81,26 +123,31 @@ export function ReportsScreen({ repository, onBack }: { repository: ProjectRepor
 
   const active = setup.projects.filter((value) => value.status === 'active'); const completed = setup.projects.filter((value) => value.status === 'completed');
   const selectedProject = setup.projects.find((value) => value.id === selectedProjectId) ?? null;
+  const filterCount=activeBusinessFilterCount(businessFilters);const updateBusinessFilter=<K extends keyof BusinessReportFilters>(key:K,value:BusinessReportFilters[K])=>setBusinessFilters(current=>({...current,[key]:value}));
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Header eyebrow="OPERATIONS" title="Reports" onBack={onBack} />
       <Text style={styles.helper}>Choose a project for daily reports and project history. Export options below clearly show what can be generated now.</Text>
-      <View style={styles.sectionCard}>
-        <Text style={styles.cardTitle}>Select Project</Text>
+      {error?<Text style={styles.error}>{error}</Text>:null}{message?<Text style={styles.success}>{message}</Text>:null}
+      <View style={styles.projectSelector}>
+        <View style={styles.projectSelectorHeader}><View style={styles.projectSelectorCopy}><Text style={styles.projectSelectorEyebrow}>PROJECT ACCESS</Text><Text style={styles.projectSelectorTitle}>Select a project</Text><Text style={styles.projectSelectorHint}>Search once, then open its complete daily-report history.</Text></View><DoubleDiagonalMark contrast /></View>
+        <View style={styles.projectSelectorBody}>
         <SearchableSelect
           label="Project *"
           options={setup.projects.map((value) => ({ id: value.id, label: value.name, detail: `${value.customerName} · ${value.status}` }))}
           selectedId={selectedProjectId}
           onSelect={setSelectedProjectId}
-          placeholder="Search and select a project"
+          placeholder="Search project name or customer"
         />
+        {selectedProject?<View style={styles.selectedProjectPreview}><View style={styles.selectedProjectCopy}><Text style={styles.selectedProjectName}>{selectedProject.name}</Text><Text style={styles.selectedProjectMeta}>{selectedProject.customerName}</Text><Text style={styles.selectedProjectMeta}>{selectedProject.location}</Text></View><Text style={[styles.selectedProjectStatus,selectedProject.status==='active'?styles.selectedProjectActive:styles.selectedProjectCompleted]}>{selectedProject.status==='active'?'ACTIVE':'COMPLETED'}</Text></View>:<View style={styles.projectSelectorEmpty}><Text style={styles.projectSelectorEmptyTitle}>No project selected</Text><Text style={styles.helper}>Use the searchable field above to choose one.</Text></View>}
         <TouchableOpacity style={[styles.openProject, !selectedProject && styles.openProjectDisabled]} disabled={!selectedProject} onPress={() => selectedProject && setProject(selectedProject)}>
-          <Text style={styles.openProjectText}>Open Project Reports</Text>
+          <Text style={styles.openProjectText}>{selectedProject?'Open Project Reports':'Select a Project First'}</Text><Text style={styles.openProjectArrow}>›</Text>
         </TouchableOpacity>
+        </View>
       </View>
       <ReportMenu title="Active Projects" summary={`${active.length} active project${active.length===1?'':'s'}`} tone="cream" open={menuOpen.has('active')} onToggle={()=>toggleMenu('active')}>{active.length ? active.map((value) => <ProjectCard key={value.id} project={value} onPress={() => setProject(value)} />) : <View style={styles.empty}><Text style={styles.cardTitle}>No active projects</Text><Text style={styles.helper}>Add a project from Home → Projects first.</Text></View>}</ReportMenu>
       <ReportMenu title="Completed Projects" summary={`${completed.length} completed project${completed.length===1?'':'s'}`} tone="orange" open={menuOpen.has('completed')} onToggle={()=>toggleMenu('completed')}>{completed.length ? completed.map((value) => <ProjectCard key={value.id} project={value} onPress={() => setProject(value)} />) : <Text style={styles.helper}>No completed projects.</Text>}</ReportMenu>
-      <ReportMenu title="Report Generation" summary="Daily, completed, financial, and operational reports" tone="navy" open={menuOpen.has('generation')} onToggle={()=>toggleMenu('generation')}><ExportOption title="Daily Project Report" description="Work, people, equipment, materials, delivered loads, waste dumps, notes, time, photos, and project context." format="PDF · Available now" ready /><ExportOption title="Completed Project Report" description="Start-to-finish totals, daily work timeline, materials, loads, waste dumps, time, issues, people, equipment, appendices, and photos." format="PDF · Available for completed projects" ready /><ExportOption title="Financial & Operational Reports" description="Loads and Sales, Customer Balances, Quarry Purchases, Supplier Balances, and payment details." format="Detailed generation coming in the reports slice" /></ReportMenu>
+      <ReportMenu title="Report Generation" summary={`${filterCount?`${filterCount} active Excel filter${filterCount===1?'':'s'} · `:''}PDF reports and six Excel workbooks`} tone="navy" open={menuOpen.has('generation')} onToggle={()=>toggleMenu('generation')}><ExportOption title="Daily Project Report" description="Work, people, equipment, materials, delivered loads, waste dumps, notes, time, photos, and project context." format="PDF · Available from a project" ready /><ExportOption title="Completed Project Report" description="Start-to-finish totals, daily timeline, loads, waste, time, issues, people, equipment, and photos." format="PDF · Available from a completed project" ready /><Text style={styles.businessExportHeading}>BUSINESS REPORT WORKBOOKS</Text><CollapsibleFilterCard title="Filter Excel generation" summary={filterCount?`${filterCount} filter${filterCount===1?'':'s'} applied to every Excel workbook`:'All records · no Excel filters applied'} defaultOpen><View style={styles.dateRow}><View style={styles.flex}><DatePickerField label="From date" value={businessFilters.fromDate} onChange={value=>updateBusinessFilter('fromDate',value)} maxDate={businessFilters.toDate||todayIso()} allowClear/></View><View style={styles.flex}><DatePickerField label="To date" value={businessFilters.toDate} onChange={value=>updateBusinessFilter('toDate',value)} minDate={businessFilters.fromDate||undefined} maxDate={todayIso()} allowClear/></View></View><SearchableSelect label="Project" options={setup.projects.map(value=>({id:value.id,label:value.name,detail:value.customerName}))} selectedId={businessFilters.projectId} onSelect={value=>updateBusinessFilter('projectId',value)} placeholder="All projects" allowClear/><SearchableSelect label="Customer" options={businessFilterOptions.customers} selectedId={businessFilters.customerId} onSelect={value=>updateBusinessFilter('customerId',value)} placeholder="All customers" allowClear/><SearchableSelect label="Supplier" options={businessFilterOptions.suppliers} selectedId={businessFilters.supplierId} onSelect={value=>updateBusinessFilter('supplierId',value)} placeholder="All suppliers" allowClear/><SearchableSelect label="Item" options={businessFilterOptions.items} selectedId={businessFilters.item} onSelect={value=>updateBusinessFilter('item',value)} placeholder="All items" allowClear/><Text style={styles.label}>Payment status</Text><View style={styles.chips}>{['','Unpaid','Partially Paid','Paid','Overpaid','Unpriced'].map(value=><TouchableOpacity key={value||'all'} style={[styles.chip,businessFilters.paymentStatus===value&&styles.chipSelected]} onPress={()=>updateBusinessFilter('paymentStatus',value)}><Text style={[styles.chipText,businessFilters.paymentStatus===value&&styles.chipTextSelected]}>{value||'All'}</Text></TouchableOpacity>)}</View><View style={styles.filterFooter}><Text style={styles.filterScope}>{filterCount?`${filterCount} active Excel filter${filterCount===1?'':'s'}`:'Every record will be exported to Excel'}</Text>{filterCount?<TouchableOpacity onPress={()=>setBusinessFilters(emptyBusinessReportFilters)}><Text style={styles.clearFilter}>Clear All</Text></TouchableOpacity>:null}</View></CollapsibleFilterCard>{(['loads','customers','quarry','fuel','projects','analysis'] as BusinessReportKind[]).map(kind=><BusinessWorkbookOption key={kind} kind={kind} busy={exporting===kind} disabled={exporting!==null} onPress={()=>void shareBusinessReport(kind)}/>)}</ReportMenu>
     </ScrollView>
   );
 }
@@ -113,9 +160,9 @@ function DailyReportEditor({ setup, project, draft, linkedLoads, linkedWasteDump
   const update = <K extends keyof DailyProjectReportDraft>(key: K, value: DailyProjectReportDraft[K]) => onChange({ ...draft, [key]: value });
   function addMaterial() {
     const item = setup.items.find((value) => value.id === materialItemId); const unit = setup.units.find((value) => value.id === materialUnitId); const quantity = Number(materialQuantity.replace(',', '.'));
-    if (!item || !unit || !(quantity > 0)) return;
+    if (!item || !unit || !/^\d+([.,]\d+)?$/.test(materialQuantity.trim())||!Number.isFinite(quantity)||!(quantity > 0)){setMediaError('Select an item and unit, then enter a quantity greater than zero.');return;}
     const material: DailyReportMaterial = { id: `material_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, itemId: item.id, itemName: item.name, unitId: unit.id, unitName: unit.name, unitSymbol: unit.symbol, quantity, movement: materialMovement };
-    update('materials', [...draft.materials, material]); setMaterialQuantity('');
+    setMediaError(null);update('materials', [...draft.materials, material]); setMaterialQuantity('');
   }
   async function addPhoto(source:'camera'|'library') { if(draft.photos.length>=20){setMediaError('A report can contain up to 20 photos.');return;} try{setMediaError(null);const uri=source==='camera'?await capturePersistentImage('project-reports'):await pickPersistentImage('project-reports');if(uri)update('photos',[...draft.photos,uri]);}catch(cause){setMediaError(cause instanceof Error?cause.message:'Could not add photo.');} }
   return (
@@ -168,8 +215,10 @@ function DailyReportEditor({ setup, project, draft, linkedLoads, linkedWasteDump
 
 function Header({ eyebrow, title, onBack }: { eyebrow: string; title: string; onBack: () => void }) { return <View style={styles.header}><TouchableOpacity onPress={onBack} style={styles.back}><Text style={styles.backText}>Back</Text></TouchableOpacity><View style={styles.flex}><Text style={styles.eyebrow}>{eyebrow}</Text><Text style={styles.title}>{title}</Text></View></View>; }
 function ProjectCard({ project, onPress }: { project: ReportProject; onPress: () => void }) { return <TouchableOpacity style={styles.reportCard} onPress={onPress}><View style={styles.reportCardHeader}><Text style={styles.reportCardTitle}>{project.name}</Text><Text style={styles.openText}>Open</Text></View><Text style={styles.helper}>{project.customerName}</Text><Text style={styles.helper}>{project.location}</Text></TouchableOpacity>; }
+function DoubleDiagonalMark({contrast=false}:{contrast?:boolean}){return <View style={styles.doubleMark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><View style={[styles.diagonalMark,styles.diagonalOrange]}/><View style={[styles.diagonalMark,styles.diagonalNavy,contrast&&styles.diagonalContrast]}/></View>}
 function ExportOption({title,description,format,ready=false}:{title:string;description:string;format:string;ready?:boolean}){return <View style={styles.exportOption}><View style={styles.exportHeader}><Text style={styles.exportTitle}>{title}</Text><Text style={[styles.statusBadge,ready?styles.ready:styles.planned]}>{ready?'READY':'PLANNED'}</Text></View><Text style={styles.helper}>{description}</Text><Text style={styles.exportFormat}>{format}</Text></View>;}
-function ReportMenu({title,summary,tone,open,onToggle,children}:{title:string;summary:string;tone:'cream'|'orange'|'navy';open:boolean;onToggle:()=>void;children:React.ReactNode}){return <View style={styles.reportMenu}><TouchableOpacity activeOpacity={.72} style={[styles.reportMenuHeader,tone==='cream'?styles.reportMenuCream:tone==='orange'?styles.reportMenuOrange:styles.reportMenuNavy]} onPress={onToggle}><View style={styles.flex}><Text style={[styles.reportMenuTitle,tone!=='cream'&&styles.reportMenuTitleLight]}>{title}</Text><Text style={[styles.reportMenuSummary,tone!=='cream'&&styles.reportMenuSummaryLight]}>{summary}</Text></View><Text style={[styles.reportMenuMark,tone!=='cream'&&styles.reportMenuMarkLight]}>{open?'\u00D7':'+'}</Text></TouchableOpacity>{open?<View style={styles.reportMenuBody}>{children}</View>:null}</View>}
+function BusinessWorkbookOption({kind,busy,disabled,onPress}:{kind:BusinessReportKind;busy:boolean;disabled:boolean;onPress:()=>void}){const descriptions:Record<BusinessReportKind,string>={loads:'Confirmed load quantities, sales, VAT, payments, balances, and signatures.',customers:'Customer rollups, payment events, and carried-forward opening balances.',quarry:'Supplier rollups, purchase details, quantities, VAT, balances, and payments.',fuel:'Current balance, chronological movements, financial details, and equipment totals.',projects:'Project summaries, daily-report index, people/equipment context, and materials.',analysis:'All analysis-ready raw sheets, executive summary, and data dictionary in one file.'};return <TouchableOpacity activeOpacity={.7} disabled={disabled} style={[styles.workbookOption,disabled&&!busy&&styles.workbookDisabled]} onPress={onPress}><View style={styles.workbookIcon}><Text style={styles.workbookIconText}>X</Text></View><View style={styles.flex}><Text style={styles.workbookTitle}>{businessReportLabels[kind]}</Text><Text style={styles.workbookDescription}>{descriptions[kind]}</Text><Text style={styles.workbookFormat}>{busy?'Building workbook…':'XLSX · Offline · Shareable'}</Text></View><Text style={styles.workbookArrow}>{busy?'…':'›'}</Text></TouchableOpacity>}
+function ReportMenu({title,summary,tone,open,onToggle,children}:{title:string;summary:string;tone:'cream'|'orange'|'navy';open:boolean;onToggle:()=>void;children:React.ReactNode}){return <View style={styles.reportMenu}><TouchableOpacity activeOpacity={.72} style={[styles.reportMenuHeader,tone==='cream'?styles.reportMenuCream:tone==='orange'?styles.reportMenuOrange:styles.reportMenuNavy]} onPress={onToggle}>{title==='Active Projects'?<DoubleDiagonalMark/>:null}<View style={styles.flex}><Text style={[styles.reportMenuTitle,tone!=='cream'&&styles.reportMenuTitleLight]}>{title}</Text><Text style={[styles.reportMenuSummary,tone!=='cream'&&styles.reportMenuSummaryLight]}>{summary}</Text></View><Text style={[styles.reportMenuMark,tone!=='cream'&&styles.reportMenuMarkLight]}>{open?'\u00D7':'+'}</Text></TouchableOpacity>{open?<View style={styles.reportMenuBody}>{children}</View>:null}</View>}
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) { return <View style={styles.sectionCard}><Text style={styles.cardTitle}>{title}</Text>{hint ? <Text style={styles.helper}>{hint}</Text> : null}{children}</View>; }
 function Field({ label, ...props }: { label: string; value: string; onChangeText: (value: string) => void; placeholder?: string; multiline?: boolean; keyboardType?: 'default' | 'decimal-pad' | 'number-pad' }) { return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput style={[styles.input, props.multiline && styles.multiline]} placeholderTextColor="#89939B" {...props} /></View>; }
 function PresenceField({ label, options, values, onChange }: { label: string; options: { id: string; label: string; detail?: string }[]; values: string[]; onChange: (values: string[]) => void }) {
@@ -192,8 +241,10 @@ const styles = StyleSheet.create({
   twoColumns: { flexDirection: 'row', gap: 10 }, flex: { flex: 1 }, presenceField: { gap: 8, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, chip: { borderWidth: 1, borderColor: colors.line, paddingHorizontal: 10, paddingVertical: 9, borderRadius: 18 }, chipSelected: { backgroundColor: '#FBE9E4', borderColor: colors.brand }, chipText: { color: colors.muted, fontWeight: '800', fontSize: 12 }, chipTextSelected: { color: colors.brandDark },
   materialRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, remove: { color: colors.danger, fontWeight: '800' }, secondary: { borderWidth: 1, borderColor: colors.ink, borderRadius: 11, padding: 12, alignItems: 'center' }, secondaryText: { color: colors.ink, fontWeight: '900' }, linkedLoad: { borderLeftWidth: 3, borderLeftColor: colors.brand, paddingLeft: 10, gap: 2 },
   save: { backgroundColor: colors.ink, borderRadius: 13, padding: 16, alignItems: 'center' }, saveText: { color: '#FFF', fontWeight: '900', fontSize: 16 }, error: { color: colors.danger, backgroundColor: '#FCE8E6', padding: 12, borderRadius: 10, fontWeight: '700' }, success: { color: colors.success, backgroundColor: '#E5F3EC', padding: 12, borderRadius: 10, fontWeight: '700' },
-  openProject: { backgroundColor: colors.ink, borderRadius: 11, padding: 13, alignItems: 'center' }, openProjectDisabled: { opacity: 0.35 }, openProjectText: { color: '#FFF', fontWeight: '900' },
+  projectSelector:{borderRadius:17,overflow:'hidden',borderWidth:1,borderColor:'#D9D0C3',backgroundColor:'#FFF8ED'},projectSelectorHeader:{backgroundColor:'#173F67',padding:17,flexDirection:'row',alignItems:'center',gap:14},projectSelectorCopy:{flex:1,minWidth:0,gap:3},projectSelectorEyebrow:{color:'#F2A184',fontSize:10,fontWeight:'900',letterSpacing:1.3},projectSelectorTitle:{color:'#FFF8ED',fontSize:21,fontWeight:'900'},projectSelectorHint:{color:'#D5E4EF',fontSize:11,lineHeight:16},projectSelectorBody:{padding:16,gap:12,backgroundColor:'#FFF8ED'},selectedProjectPreview:{backgroundColor:colors.surface,borderRadius:13,padding:14,borderLeftWidth:4,borderLeftColor:colors.brand,flexDirection:'row',alignItems:'flex-start',gap:10},selectedProjectCopy:{flex:1,minWidth:0,gap:2},selectedProjectName:{color:colors.ink,fontSize:16,fontWeight:'900'},selectedProjectMeta:{color:colors.muted,fontSize:12,lineHeight:17},selectedProjectStatus:{fontSize:9,fontWeight:'900',letterSpacing:.7,paddingHorizontal:8,paddingVertical:5,borderRadius:10,overflow:'hidden'},selectedProjectActive:{color:colors.success,backgroundColor:'#E5F3EC'},selectedProjectCompleted:{color:colors.warning,backgroundColor:'#FFF3D8'},projectSelectorEmpty:{borderWidth:1,borderStyle:'dashed',borderColor:colors.line,borderRadius:12,padding:13,gap:3},projectSelectorEmptyTitle:{color:colors.ink,fontWeight:'900'},openProject:{backgroundColor:'#173F67',borderRadius:12,paddingHorizontal:15,paddingVertical:14,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:9},openProjectDisabled:{opacity:.35},openProjectText:{color:'#FFF',fontWeight:'900',fontSize:15},openProjectArrow:{color:colors.brand,fontSize:25,fontWeight:'900',lineHeight:19},doubleMark:{width:43,height:31,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:4},diagonalMark:{width:11,height:28,borderRadius:2,transform:[{skewX:'-18deg'}]},diagonalOrange:{backgroundColor:colors.brand},diagonalNavy:{backgroundColor:'#173F67'},diagonalContrast:{borderWidth:1,borderColor:'#FFF8ED'},
   exportButton:{borderWidth:1,borderColor:colors.brand,borderRadius:10,padding:10,alignItems:'center'},exportButtonText:{color:colors.brandDark,fontWeight:'900'},photoActions:{flexDirection:'row',gap:8},photoGrid:{flexDirection:'row',flexWrap:'wrap',gap:10},photoItem:{width:'47%',gap:5},photo:{width:'100%',height:110,borderRadius:9,backgroundColor:'#EEE'},
+  businessExportHeading:{color:colors.brand,fontSize:10,fontWeight:'900',letterSpacing:1.1,marginTop:5},workbookOption:{backgroundColor:colors.surface,borderWidth:1,borderColor:'#D9D0C3',borderRadius:13,padding:13,flexDirection:'row',alignItems:'center',gap:11},workbookDisabled:{opacity:.42},workbookIcon:{width:36,height:36,borderRadius:10,backgroundColor:'#E5F3EC',alignItems:'center',justifyContent:'center',borderLeftWidth:3,borderLeftColor:colors.success},workbookIconText:{color:colors.success,fontSize:17,fontWeight:'900'},workbookTitle:{color:colors.ink,fontSize:14,fontWeight:'900'},workbookDescription:{color:colors.muted,fontSize:10,lineHeight:15,marginTop:2},workbookFormat:{color:colors.success,fontSize:9,fontWeight:'900',letterSpacing:.45,marginTop:5},workbookArrow:{color:colors.brand,fontSize:25,fontWeight:'900'},
   completionExport:{backgroundColor:colors.brand,borderRadius:14,padding:16,gap:5},completionExportTitle:{color:'#FFF',fontWeight:'900',fontSize:17},completionExportHint:{color:'#F7D9D1',fontSize:12,lineHeight:18},
   reportMenu:{borderRadius:15,overflow:'hidden'},reportMenuHeader:{padding:16,flexDirection:'row',alignItems:'center',gap:12},reportMenuCream:{backgroundColor:'#FFF8ED',borderWidth:1,borderColor:'#E8DED0'},reportMenuOrange:{backgroundColor:colors.brand},reportMenuNavy:{backgroundColor:'#173F67'},reportMenuTitle:{color:'#173F67',fontSize:19,fontWeight:'900'},reportMenuTitleLight:{color:colors.background},reportMenuSummary:{color:colors.muted,fontSize:11,marginTop:3},reportMenuSummaryLight:{color:'#E8E2D7'},reportMenuMark:{color:'#173F67',fontSize:28,fontWeight:'700',width:28,textAlign:'center'},reportMenuMarkLight:{color:colors.background},reportMenuBody:{backgroundColor:'#FFF8ED',padding:12,gap:10,borderTopWidth:3,borderTopColor:'#173F67'},
+  dateRow:{flexDirection:'row',gap:10},filterFooter:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10,paddingTop:4},filterScope:{color:colors.muted,fontSize:11,fontWeight:'700'},clearFilter:{color:colors.brandDark,fontSize:12,fontWeight:'900'},
 });

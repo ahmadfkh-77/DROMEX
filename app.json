@@ -11,18 +11,26 @@
       "bundleIdentifier": "com.dromex.management"
     },
     "android": {
-      "package": "com.dromex.management",
-      "minSdkVersion": 29
+      "package": "com.dromex.management"
     },
     "plugins": [
       "expo-sqlite",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 29
+          }
+        }
+      ],
       [
         "expo-image-picker",
         {
           "photosPermission": "Allow DROMEX to select company logos and record photos.",
           "cameraPermission": "Allow DROMEX to photograph project work and supplier tickets."
         }
-      ]
+      ],
+      "expo-build-properties"
     ]
   }
 }

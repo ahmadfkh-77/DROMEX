@@ -213,8 +213,8 @@ export function validateLoadDraft(draft: LoadDraft, options: LoadSetupOptions): 
     issues.push('Requested quantity must be a whole kilogram value.');
   }
   if (draft.unitPriceUsd.trim()) {
-    const price = Number(draft.unitPriceUsd.replace(',', '.'));
-    if (!Number.isFinite(price) || price < 0) issues.push('Unit price must be zero or a positive number.');
+    const priceText=draft.unitPriceUsd.trim().replace(',', '.');const price = Number(priceText);
+    if (!/^\d+(\.\d{1,2})?$/.test(priceText)||!Number.isFinite(price) || price < 0) issues.push('Unit price must be zero or more with no more than two decimals.');
   }
   if (!options.companySettings.companyName.trim()) issues.push('Save the required company name in Settings.');
   return issues;

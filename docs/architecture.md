@@ -43,6 +43,8 @@ entries with active/cancelled lifecycle, cancellation evidence, and indexes for
 load, quarry-purchase, and opening-balance histories.
 Schema version 10 adds project/date-indexed individual waste-dump records with
 optional field detail and permanent Active/Cancelled lifecycle evidence.
+Schema version 13 adds the single-tank fuel ledger and extends payment targets to
+priced fuel deliveries.
 
 SQLite runs with foreign keys enabled and WAL journaling. Catalog writes and
 their corresponding outbox entry execute in the same transaction, preventing a
@@ -52,7 +54,8 @@ locally saved business change from being omitted from later synchronization.
 
 - Firebase Authentication, Firestore, Storage, and outbox processing;
 - supplier/profile and project/unit/conversion lifecycle refinements;
-- fuel, Excel/business-report exports, and confirmed-record correction;
+- remaining business-report charts, progress/cancellation, localization,
+  individual daily-report Excel/photo export, and confirmed-record association correction;
 - Bluetooth and built-in Xprinter adapters.
 
 Printer code must remain behind an adapter because supported models are defined

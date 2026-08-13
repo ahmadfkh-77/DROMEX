@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import type { CatalogItem, CatalogUnitOption, Category, ItemDraft, UsageArea } from '../../domain/catalog';
+import {validateCategoryName,validateItemDraft,type CatalogItem, type CatalogUnitOption, type Category, type ItemDraft, type UsageArea } from '../../domain/catalog';
 import type { CatalogRepository } from './CatalogRepository';
 
 type CategoryRow = {
@@ -89,6 +89,7 @@ export class SqliteCatalogRepository implements CatalogRepository {
   }
 
   async createCategory(name: string): Promise<Category> {
+    const issues=validateCategoryName(name,await this.listCategories());if(issues.length)throw new Error(issues.map(value=>value.message).join('\n'));
     const now = new Date().toISOString();
     const category: Category = {
       id: makeId('cat'),
@@ -114,6 +115,7 @@ export class SqliteCatalogRepository implements CatalogRepository {
   }
 
   async createItem(draft: ItemDraft): Promise<CatalogItem> {
+    const issues=validateItemDraft(draft,await this.listItems());if(issues.length)throw new Error(issues.map(value=>value.message).join('\n'));
     const now = new Date().toISOString();
     const item: CatalogItem = {
       id: makeId('item'),
@@ -162,6 +164,7 @@ export class SqliteCatalogRepository implements CatalogRepository {
       'SELECT * FROM catalog_items WHERE id = ? AND is_active = 1', itemId,
     );
     if (!existing) throw new Error('Active item was not found.');
+    const issues=validateItemDraft(draft,(await this.listItems()).filter(value=>value.id!==itemId));if(issues.length)throw new Error(issues.map(value=>value.message).join('\n'));
     const now = new Date().toISOString();
     const item: CatalogItem = {
       id: itemId,

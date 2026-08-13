@@ -72,5 +72,5 @@ describe('catalog validation', () => {
       ),
     ).toEqual([]);
   });
+  it('rejects non-finite and sub-cent default prices',()=>{expect(validateItemDraft({categoryId:category.id,name:'Stone',usageAreas:['loads'],defaultReceiptPriceUsd:Number.NaN},[])).toContainEqual({field:'defaultReceiptPriceUsd',message:'Default price must be zero or more with no more than two decimals.'});expect(validateItemDraft({categoryId:category.id,name:'Stone',usageAreas:['loads'],defaultReceiptPriceUsd:.001},[])).toContainEqual({field:'defaultReceiptPriceUsd',message:'Default price must be zero or more with no more than two decimals.'});});
 });
-

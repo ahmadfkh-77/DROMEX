@@ -66,8 +66,8 @@ export function validateItemDraft(draft: ItemDraft, existing: CatalogItem[]): Va
   if (draft.usageAreas.length === 0) {
     issues.push({ field: 'usageAreas', message: 'Select at least one usage area.' });
   }
-  if (draft.defaultReceiptPriceUsd != null && draft.defaultReceiptPriceUsd < 0) {
-    issues.push({ field: 'defaultReceiptPriceUsd', message: 'Default price cannot be negative.' });
+  if (draft.defaultReceiptPriceUsd != null && (!Number.isFinite(draft.defaultReceiptPriceUsd)||draft.defaultReceiptPriceUsd < 0||Math.abs(Math.round(draft.defaultReceiptPriceUsd*100)-draft.defaultReceiptPriceUsd*100)>1e-8)) {
+    issues.push({ field: 'defaultReceiptPriceUsd', message: 'Default price must be zero or more with no more than two decimals.' });
   }
   if (
     normalizedCode &&

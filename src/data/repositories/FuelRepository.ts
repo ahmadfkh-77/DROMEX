@@ -1,0 +1,2 @@
+import type {FuelDeliveryDraft,FuelFillDraft,FuelGaugeDraft,FuelMovement,FuelOverview,FuelSetup} from '../../domain/fuel';
+export interface FuelRepository{getSetup():Promise<FuelSetup>;getOverview():Promise<FuelOverview>;recordDelivery(draft:FuelDeliveryDraft):Promise<FuelMovement>;recordFill(draft:FuelFillDraft):Promise<FuelMovement>;recordGauge(draft:FuelGaugeDraft):Promise<FuelMovement>;cancelMovement(id:string,reason:string):Promise<void>;}

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { LoadRepository } from '../../data/repositories/LoadRepository';
 import type { ProfileRepository } from '../../data/repositories/ProfileRepository';
 import { validateCompanySettings } from '../../domain/profiles';
 import { pickPersistentImage } from '../../services/media';
+import { AppButton, AppCard, AppField, AppPage, Feedback, PageHeader } from '../components/AppPrimitives';
 import { colors } from '../theme';
 
 export function SettingsScreen({ repository, demoRepository, onBack }: { repository: ProfileRepository; demoRepository: LoadRepository; onBack: () => void }) {
@@ -100,35 +101,37 @@ export function SettingsScreen({ repository, demoRepository, onBack }: { reposit
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}><Text style={styles.backLabel}>Back</Text></TouchableOpacity>
-        <View style={styles.headerCopy}><Text style={styles.eyebrow}>SETTINGS</Text><Text style={styles.title}>Company profile</Text></View>
-      </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {saved ? <Text style={styles.success}>Company profile saved. The own-company customer record is ready.</Text> : null}
+    <AppPage keyboard>
+      <PageHeader eyebrow="SETTINGS" title="Company profile" onBack={onBack} />
+      <AppCard tone="navy" title="Your business identity" hint="Keep the details used on future receipts, authorizations, reports, and tax calculations in one place.">
+        <View style={styles.contextRow}><Text style={styles.contextLabel}>DOCUMENT PROFILE</Text><Text style={styles.contextValue}>{companyName.trim() || 'Not configured'}</Text></View>
+      </AppCard>
+      {error ? <Feedback kind="error">{error}</Feedback> : null}
+      {saved ? <Feedback kind="success">Company profile saved. The own-company customer record is ready.</Feedback> : null}
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Business information</Text>
-        <Text style={styles.helper}>These details will appear on new receipts and delivery authorizations.</Text>
-        <Field label="Company name *" value={companyName} onChangeText={setCompanyName} placeholder="DROMEX" />
-        <Field label="Address" value={address} onChangeText={setAddress} multiline />
-        <Field label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-        <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-        <Field label="Tax / VAT registration number" value={taxVatNumber} onChangeText={setTaxVatNumber} />
-        <Field label="Receipt footer message" value={receiptFooter} onChangeText={setReceiptFooter} multiline placeholder="Thank you for your business" />
-        <View style={styles.logoPlaceholder}>
-          <Text style={styles.logoTitle}>Company logo</Text>
-          {logoUri ? <Image source={{ uri: logoUri }} style={styles.logoPreview} resizeMode="contain" /> : <Text style={styles.helper}>No logo selected.</Text>}
-          <View style={styles.logoActions}><TouchableOpacity style={styles.logoButton} onPress={() => void pickPersistentImage('company').then((uri) => { if (uri) setLogoUri(uri); }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not select logo.'))}><Text style={styles.logoButtonText}>{logoUri ? 'Replace logo' : 'Choose logo'}</Text></TouchableOpacity>{logoUri ? <TouchableOpacity onPress={() => setLogoUri(null)}><Text style={styles.removeLogo}>Remove</Text></TouchableOpacity> : null}</View>
+      <AppCard title="Company identity" hint="The company name and logo lead your newly generated business documents.">
+        <AppField label="Company name *" value={companyName} onChangeText={setCompanyName} placeholder="DROMEX" />
+        <View style={styles.logoPanel}>
+          <View style={styles.logoHeading}><View style={styles.logoCopy}><Text style={styles.logoTitle}>Company logo</Text><Text style={styles.helper}>Shown in document headers when selected.</Text></View><Text style={[styles.logoStatus, logoUri && styles.logoStatusReady]}>{logoUri ? 'READY' : 'OPTIONAL'}</Text></View>
+          {logoUri ? <Image source={{ uri: logoUri }} style={styles.logoPreview} resizeMode="contain" /> : <View style={styles.logoEmpty}><Text style={styles.logoMonogram}>D</Text><Text style={styles.logoEmptyText}>No logo selected</Text></View>}
+          <View style={styles.logoActions}><View style={styles.logoAction}><AppButton label={logoUri ? 'Replace Logo' : 'Choose Logo'} tone="secondary" onPress={() => void pickPersistentImage('company').then((uri) => { if (uri) setLogoUri(uri); }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not select logo.'))} /></View>{logoUri ? <View style={styles.logoAction}><AppButton label="Remove Logo" tone="danger" onPress={() => setLogoUri(null)} /></View> : null}</View>
         </View>
-      </View>
+      </AppCard>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Tax settings</Text>
-        <Text style={styles.helper}>This universal VAT rate will apply to future numeric-priced receipts and purchases.</Text>
-        <Field label="VAT percentage" value={vatRate} onChangeText={setVatRate} keyboardType="decimal-pad" placeholder="0" />
-      </View>
+      <AppCard title="Contact details" hint="These details appear beneath the company name on new documents.">
+        <AppField label="Address" value={address} onChangeText={setAddress} multiline />
+        <AppField label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+        <AppField label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+      </AppCard>
+
+      <AppCard title="Document details" hint="Optional information used on receipts and authorization output.">
+        <AppField label="Tax / VAT registration number" value={taxVatNumber} onChangeText={setTaxVatNumber} />
+        <AppField label="Receipt footer message" value={receiptFooter} onChangeText={setReceiptFooter} multiline placeholder="Thank you for your business" />
+      </AppCard>
+
+      <AppCard tone="cream" title="Tax settings" hint="The universal VAT rate applies to future numeric-priced receipts and purchases.">
+        <AppField label="VAT percentage" value={vatRate} onChangeText={setVatRate} keyboardType="decimal-pad" placeholder="0" />
+      </AppCard>
 
       <View style={styles.demoCard}>
         <View style={styles.demoHeading}><View style={styles.demoCopy}><Text style={styles.cardTitle}>Demo data</Text><Text style={styles.helper}>Optional testing tools for linked receipts, projects, DPRs, waste dumps, profiles, and payment history.</Text></View><Text style={styles.demoBadge}>TEST ONLY</Text></View>
@@ -139,53 +142,23 @@ export function SettingsScreen({ repository, demoRepository, onBack }: { reposit
         </View>
       </View>
 
-      <TouchableOpacity style={styles.saveButton} onPress={() => void save()} disabled={busy}>
-        <Text style={styles.saveButtonLabel}>{busy ? 'Saving...' : 'Save company settings'}</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
-}
-
-function Field({ label, ...props }: {
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  placeholder?: string;
-  keyboardType?: 'default' | 'phone-pad' | 'email-address' | 'decimal-pad';
-  autoCapitalize?: 'none' | 'sentences';
-  multiline?: boolean;
-}) {
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput style={[styles.input, props.multiline && styles.multiline]} placeholderTextColor="#89939B" {...props} />
-    </View>
+      <AppButton label="Save Company Settings" onPress={() => void save()} busy={busy} />
+    </AppPage>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 20, paddingBottom: 36, gap: 16 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 4 },
-  headerCopy: { flex: 1 },
-  backButton: { paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.surface },
-  backLabel: { color: colors.ink, fontWeight: '700' },
-  eyebrow: { color: colors.brand, fontWeight: '800', fontSize: 11, letterSpacing: 1.4 },
-  title: { color: colors.ink, fontSize: 28, fontWeight: '900' },
-  error: { color: colors.danger, backgroundColor: '#FCE8E6', borderRadius: 10, padding: 12, fontWeight: '600' },
-  success: { color: colors.success, backgroundColor: '#E5F3EC', borderRadius: 10, padding: 12, fontWeight: '700' },
-  card: { padding: 17, gap: 12, borderRadius: 16, backgroundColor: colors.surface },
+  contextRow: { marginTop: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#6F8FA9', paddingTop: 12, gap: 3 },
+  contextLabel: { color: '#F2A184', fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  contextValue: { color: colors.cream, fontSize: 18, fontWeight: '900' },
   cardTitle: { color: colors.ink, fontSize: 19, fontWeight: '800' },
   helper: { color: colors.muted, fontSize: 13, lineHeight: 19 },
-  field: { gap: 6 },
-  label: { color: colors.ink, fontSize: 13, fontWeight: '700' },
-  input: { borderWidth: 1, borderColor: colors.line, borderRadius: 11, paddingHorizontal: 13, paddingVertical: 11, color: colors.ink, fontSize: 15, backgroundColor: '#FCFBF8' },
-  multiline: { minHeight: 76, textAlignVertical: 'top' },
-  logoPlaceholder: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, borderRadius: 12, padding: 14, gap: 4 },
-  logoTitle: { color: colors.ink, fontWeight: '800' },
-  logoPreview: { width: '100%', height: 100, backgroundColor: '#FFF', borderRadius: 8 },
-  logoActions: { flexDirection: 'row', alignItems: 'center', gap: 14 }, logoButton: { backgroundColor: colors.ink, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9 }, logoButtonText: { color: '#FFF', fontWeight: '800' }, removeLogo: { color: colors.danger, fontWeight: '800' },
-  saveButton: { borderRadius: 12, backgroundColor: colors.brand, padding: 15, alignItems: 'center' },
-  saveButtonLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  logoPanel: { borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: '#FCFBF8', padding: 13, gap: 12 },
+  logoHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, logoCopy: { flex: 1, minWidth: 0 }, logoTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' },
+  logoStatus: { color: colors.muted, backgroundColor: '#EEEAE3', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, overflow: 'hidden', fontSize: 9, fontWeight: '900', letterSpacing: .7 }, logoStatusReady: { color: colors.success, backgroundColor: '#E5F3EC' },
+  logoPreview: { width: '100%', height: 110, backgroundColor: '#FFF', borderRadius: 10 },
+  logoEmpty: { minHeight: 100, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.surface }, logoMonogram: { width: 38, height: 38, borderRadius: 19, textAlign: 'center', textAlignVertical: 'center', color: '#FFF', backgroundColor: colors.navy, fontSize: 21, fontWeight: '900', overflow: 'hidden' }, logoEmptyText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+  logoActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, logoAction: { flexGrow: 1, minWidth: 135 },
   demoCard: { padding: 17, gap: 12, borderRadius: 16, backgroundColor: '#FFF3D8', borderWidth: 1, borderColor: '#D8A84E' },
   demoHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, demoCopy: { flex: 1, minWidth: 0 }, demoBadge: { color: colors.warning, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   demoMessage: { color: colors.ink, fontSize: 12, lineHeight: 18, fontWeight: '700' }, demoActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

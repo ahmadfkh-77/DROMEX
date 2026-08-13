@@ -32,4 +32,5 @@ describe('daily project reports', () => {
     expect(addPresence(['Ali'], 'Sara')).toEqual(['Ali', 'Sara']);
     expect(addPresence(['Ali'], ' ali ')).toEqual(['Ali']);
   });
+  it('rejects impossible work dates',()=>{const draft={...emptyDailyReport('project_1'),workDate:'2026-02-30',workDescription:'Paving'};expect(validateDailyReport(draft)).toContain('Work date must be a valid calendar date.');});
 });

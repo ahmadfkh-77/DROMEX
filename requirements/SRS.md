@@ -2,9 +2,9 @@
 
 ## 1. Document Control
 
-- Status: Initial draft
-- Version: 0.96
-- Last updated: 2026-08-09
+- Status: Living requirements baseline
+- Version: 0.97
+- Last updated: 2026-08-13
 - Interview status: High-impact version-one requirements are sufficient for implementation planning; lower-impact refinements and physically discovered printer details remain open
 
 ## 2. Purpose and Product Vision
@@ -150,18 +150,18 @@ The proposed product is an asphalt-plant management application intended to cent
 - Status: Draft
 
 ### FR-005
-- Statement: “The system shall maintain digital fuel records for in-scope plant operations.”
+- Statement: “The system shall maintain digital fuel records for the single version-one tank and fuel type.”
 - Rationale: Fuel is currently recorded only on paper.
-- Actors: Personnel who issue or record fuel; exact role to be identified.
-- Trigger: An in-scope fuel transaction or reading occurs.
-- Preconditions: The relevant asset, activity, or storage source can be identified as required.
-- Main behavior: Store the fuel record digitally.
-- Alternate and exception behavior: Corrections, missing readings, and discrepancies remain to be elicited.
-- Postconditions: The fuel record is retained and available for reporting.
+- Actors: Owner.
+- Trigger: A physical-gauge baseline or correction, fuel delivery, equipment fill, or cancellation occurs.
+- Preconditions: The applicable supplier, equipment, project, quantity, price, and reference data are available as required by the specific movement type.
+- Main behavior: Store the movement offline, update the baseline-governed fuel ledger, retain its confirmation/cancellation state, and expose it in history and reports.
+- Alternate and exception behavior: Physical gauge readings reset the current baseline without rewriting prior movements. Cancelled movements remain visible and reverse their ledger effect only within the segment governed by the applicable baseline. A positive equipment fill may exceed the calculated balance without warning or blocking.
+- Postconditions: The fuel record is retained, the current calculated balance is updated consistently, and the record is available for reporting.
 - Priority: Must
-- Acceptance criteria: Required fuel fields and reconciliation rules remain to be elicited.
-- Source: Interview turn 3
-- Status: Draft
+- Acceptance criteria: The owner can establish a gauge baseline, add a delivery, subtract an equipment fill, correct the physical balance, cancel a mistaken movement with a reason, and reconcile the resulting history and current balance under FR-026, FR-027, FR-063, FR-064, FR-071, and BR-037–BR-043.
+- Source: Interview turns 3, 32, 39–41, and 181–193
+- Status: Confirmed for version one
 
 ### FR-006
 - Statement: “The system shall maintain a record of asphalt supplied to each external individual or company customer.”
@@ -620,7 +620,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Trigger: A machine is filled with fuel.
 - Preconditions: A saved equipment profile can be selected or quickly created and the fuel amount is known.
 - Main behavior: Select or quickly create equipment; require a positive litre quantity; assign the confirmation date/time automatically; optionally record project, reference-only odometer reading, and notes; reduce fuel balance by the recorded amount; and add the transaction to that equipment's fuel-consumption history.
-- Alternate and exception behavior: Version one has no hour-meter field or automatic fuel-consumption-rate calculation. An optional odometer reading is retained only as reference and produces no fuel-economy calculation. A mistaken confirmed fill is cancelled with required reason and automatic time, remains visible, and restores its litres unless a later physical gauge baseline supersedes it. A fill exceeding calculated stock receives no warning or block; the manually entered litres are recorded and normally subtracted. Multiple fuel types remain to be defined.
+- Alternate and exception behavior: Version one has no hour-meter field or automatic fuel-consumption-rate calculation. An optional odometer reading is retained only as reference and produces no fuel-economy calculation. A mistaken confirmed fill is cancelled with required reason and automatic time, remains visible, and restores its litres unless a later physical gauge baseline supersedes it. A fill exceeding calculated stock receives no warning or block; the manually entered litres are recorded and normally subtracted. Version one supports exactly one tank and one fuel type; multiple tanks/types are deferred.
 - Postconditions: The equipment's fuel history contains the transaction and the fuel balance is updated; cancellation preserves the entry and applies the appropriate ledger reversal.
 - Priority: Must
 - Acceptance criteria: The owner can select or quickly create equipment; confirmation is blocked unless litres are positive; the saved fill shows equipment, litres, automatic confirmation time, and any optional supplied fields; it reduces fuel balance and appears in that equipment's consumption history. No hour-meter or derived fuel-consumption-rate field is displayed. A fill greater than calculated balance can be confirmed without an insufficient-stock warning.
@@ -731,13 +731,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: The owner creates a draft, reviews it, and selects Confirm.
 - Preconditions: Required receipt data is valid.
-- Main behavior: Save receipt data as a draft, present it for review, explicitly confirm it, then enable printing.
+- Main behavior: Save receipt data as a draft and present entry as four clearly identified stages: Customer and Destination, Load Information, Conversion and Price, then Final Review. Use distinct muted orange/cream, navy/blue, and warm-clay section treatments, followed by the document preview and explicit confirmation before printing is enabled. Staged entrance, conditional-field layout, and calculated-value response motion shall remain brief and shall not delay entry.
 - Alternate and exception behavior: Printer unavailable or print failure leaves the receipt saved and available on the current screen for another print attempt.
 - Postconditions: The confirmed receipt is non-deletable and printable; persistence does not depend on print success.
 - Priority: Must
-- Acceptance criteria: A draft cannot print; after review and explicit Confirm, the receipt can print and cannot be deleted; unavailable printer does not prevent confirmation.
-- Source: Interview turns 53 and 76–77
-- Status: Confirmed; validation/draft behavior pending
+- Acceptance criteria: A draft cannot print; after review and explicit Confirm, the receipt can print and cannot be deleted; unavailable printer does not prevent confirmation. The entry screen visibly distinguishes all four stages, preserves autosave and validation, and its animations complete without blocking field interaction or record access.
+- Source: Interview turns 53, 76–77, and 370
+- Status: Confirmed and implemented for entry/review/confirmation; printing integration remains pending
 
 ### FR-033
 - Statement: “The system shall allow a receipt to be printed repeatedly without a fixed copy limit, both while open and after reopening it from history.”
@@ -941,12 +941,12 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: The owner changes report filters.
 - Preconditions: The report supports the selected filter dimension.
-- Main behavior: Recalculate the report using records matching all selected criteria.
-- Alternate and exception behavior: Empty results and filter combinations not applicable to a report shall be handled clearly.
+- Main behavior: Recalculate the report by selecting parent business records that match all applicable criteria, then include the complete linked detail history required to reconcile those records. For a selected load, quarry purchase, fuel delivery, or opening balance, include every linked active or cancelled payment even when its payment-event date falls outside the parent-record date range.
+- Alternate and exception behavior: Empty results and filter combinations not applicable to a report shall be handled clearly. A linked detail belonging only to an excluded parent record is excluded.
 - Postconditions: The displayed report and subsequent exports use the active filter scope.
 - Priority: Must
-- Acceptance criteria: Records outside any selected criterion are excluded, and clearing filters restores the unfiltered report.
-- Source: Interview turn 66
+- Acceptance criteria: Parent records outside any selected criterion are excluded, and clearing filters restores the unfiltered report. A parent record inside an inclusive transaction-date range retains all its linked payment events, including payments entered later and cancelled payments; unrelated payments remain excluded.
+- Source: Interview turns 66 and 375
 - Status: Confirmed
 
 ### FR-041
@@ -1140,7 +1140,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Receipt final total equals its calculated subtotal plus VAT calculated from the universal tax-setting percentage. VAT applies to numeric prices; zero produces zero VAT; Unpriced has no VAT. A confirmed receipt permanently retains its applied rate. USD VAT and totals use the established nearest-cent rule. (Sources: Turns 158–159; status: Confirmed.)
 
 ### BR-003
-- Each completed load, whether for the owner's company or an outside customer, requires both a delivery authorization and a receipt/invoice bill. (Sources: Turns 7, 10â€“11, and 104; status: Confirmed.)
+- Each completed load, whether for the owner's company or an outside customer, requires both a delivery authorization and a receipt/invoice bill. (Sources: Turns 7, 10-11, and 104; status: Confirmed.)
 
 ### BR-004
 - Each item has its own variable default price per output unit. Only the owner may change it in version one. Editing a price within a receipt affects only that transaction; editing an item's price in the dedicated settings section changes its default for future receipts until changed again. A priced receipt total equals converted quantity multiplied by its selected price per output unit. (Sources: Turns 8–9, 46, 109, and 112–113; status: Confirmed.)
@@ -1290,7 +1290,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - The conceptual model shall include categories and items, with each item associated with a category and retaining its own saved default price per output unit. Names, identifiers, status, validation, currency, and other item-specific attributes remain to be defined. (Sources: Turns 21 and 113; status: Draft.)
 
 ### DR-012
-- A quarry purchase record shall reference one saved quarry/supplier profile and include item, required positive whole cubic-metre quantity manually copied from the supplier ticket/invoice, driver, vehicle plate number, truck-level identity, and automatic confirmation date/time. Supplier delivery-ticket/invoice number and up to 20 readable-quality compressed paper-document photos are optional. Optional pricing retains USD price per cubic metre, calculated subtotal, applied universal VAT-rate snapshot, VAT amount, final total, derived paid amount, remaining balance, and status, and relates to zero or more separate payment entries under the customer-order payment/cancellation rules. An unpriced purchase has no balance. Attachments remain available offline, synchronize, and restore with the record. The supplier profile requires name and may retain phone, email, address, Tax/VAT number, and notes. Other attributes remain to be elicited. (Sources: Turns 21, 26–29, 170–179, and 200; status: Partially confirmed.)
+- A quarry purchase record shall reference one saved quarry/supplier profile and may optionally reference one saved project; leaving project blank represents a general/non-project purchase. It shall include item, required positive whole cubic-metre quantity manually copied from the supplier ticket/invoice, driver, vehicle plate number, truck-level identity, and automatic confirmation date/time. Supplier delivery-ticket/invoice number and up to 20 readable-quality compressed paper-document photos are optional. Optional pricing retains USD price per cubic metre, calculated subtotal, applied universal VAT-rate snapshot, VAT amount, final total, derived paid amount, remaining balance, and status, and relates to zero or more separate payment entries under the customer-order payment/cancellation rules. An unpriced purchase has no balance. Attachments remain available offline, synchronize, and restore with the record. The supplier profile requires name and may retain phone, email, address, Tax/VAT number, and notes. (Sources: Turns 21, 26–29, 170–179, 200, and 374; status: Confirmed for version-one entry fields.)
 
 ### DR-013
 - A customer order shall retain its customer, exactly one truck load and item reference, quantity, unit, USD price state, derived total paid, remaining balance, and automatically derived status of Unpriced, No Payment Due, Unpaid, Partially Paid, Paid, or Overpaid, with every USD value displayed to two decimal places. Different items or loads use separate receipt/order history entries. An order relates to zero or more separate USD payment entries. (Sources: Turns 23–25, 114, 120, 128–129, and 166; status: Partially confirmed; other attributes pending.)
@@ -1430,7 +1430,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Freely configurable categories/items could result in inconsistent records. This is mitigated through required item fields and usage areas, unique optional codes, similar-name warnings, immutable historical snapshots, protected item lifecycle rules, and category deactivation/deletion safeguards that prevent orphaned active items. (Sources: Turns 21, 250–268, and 294; status: Mitigated.)
 
 ### RISK-006
-- The tracked fuel balance may overstate actual stock because plant consumption is not recorded. Manual physical-tank correction is the confirmed mitigation; the frequency and audit history remain open. (Sources: Turns 40–41; status: Mitigated in part.)
+- The tracked fuel balance may overstate actual stock because plant consumption is not recorded. Manual physical-tank correction is the confirmed mitigation and retains the previous balance, signed difference, required reason, automatic date/time, and optional notes. (Sources: Turns 40–41 and 189; status: Mitigated with an auditable correction record.)
 
 ### RISK-007
 - Cross-platform Bluetooth printing cannot be treated as universally compatible across all POS printers and sizes. Official support is limited to models successfully tested with the app. Release testing covers the built-in Xprinter terminal plus separate 58 mm and 80 mm printers from Android and iPhone; exact models and protocols remain open. (Sources: Turns 49 and 107–108; status: Mitigated in part.)
@@ -1621,10 +1621,10 @@ Status note: this section preserves the original question trace, but some indivi
 - OQ-026: Closed in Turn 15 — concrete is in scope for the first version.
 - OQ-027: Corrected in Turn 19 — staff select material manually and select a saved conversion option separately on the receipt.
 - OQ-028: Closed through Turn 123 — owner-configured conversions are independent of item/mix and all active options remain manually selectable.
-- OQ-029: Closed in Turn 104 â€” concrete uses the common two-document setup: delivery authorization and receipt/invoice bill.
+- OQ-029: Closed in Turn 104 - concrete uses the common two-document setup: delivery authorization and receipt/invoice bill.
 - OQ-030: Revised in Turn 46 — the owner controls conversion options in version one; staff support is deferred.
 - OQ-031: Closed in Turn 123 — name, input/output units, rate, displayed decimal places, and active state are defined; all active options remain manually selectable without item filtering.
-- OQ-032: Closed in Turn 101 â€” confirmed receipts permanently retain the conversion values used.
+- OQ-032: Closed in Turn 101 - confirmed receipts permanently retain the conversion values used.
 - OQ-033: The owner manages categories/items in version one; their exact semantics remain open.
 - OQ-034: Closed through Turn 235 — rejected deliveries remain unconfirmed drafts, delete to recoverable Trash, and affect no totals, balances, inventory, or reports.
 - OQ-035: Closed in Turn 177 — unit is cubic metres and the owner manually copies the quantity exactly from the supplier ticket/invoice.
@@ -1652,7 +1652,7 @@ Status note: this section preserves the original question trace, but some indivi
 - OQ-057: Can the current Xprinter receive Bluetooth jobs from external Android/iPhone devices?
 - OQ-058: Closed in Turn 54 — saved receipts can be reopened and reprinted repeatedly.
 - OQ-059: Closed in Turn 57 — changes synchronize automatically and appear on another owner device.
-- OQ-060: Closed in Turns 67â€“69 â€” failures remain pending and retry automatically; same-record conflicts use the newest edit.
+- OQ-060: Closed in Turns 67-69 - failures remain pending and retry automatically; same-record conflicts use the newest edit.
 - OQ-061: Closed in Turn 60 — email/password with secure email reset link.
 - OQ-062: What backup retention and point-in-time recovery are needed?
 - OQ-063: Closed in Turns 60–61 — email reset and persistent offline session.
@@ -1661,7 +1661,7 @@ Status note: this section preserves the original question trace, but some indivi
 - OQ-066: Closed in Turn 71 — retain only corrected values, without change history.
 - OQ-067: Closed in Turn 72 — all listed dependent quantities, totals, balances, summaries, and future prints recalculate.
 - OQ-068: Closed in Turn 92 — keep recorded payments unchanged, display the excess as an overpaid amount, and do not process refunds.
-- OQ-069: Closed in Turn 105 â€” only intentionally deleted business-record drafts enter trash; confirmed records are non-deletable and configuration options use deactivation.
+- OQ-069: Closed in Turn 105 - only intentionally deleted business-record drafts enter trash; confirmed records are non-deletable and configuration options use deactivation.
 - OQ-070: Closed in Turn 78 — drafts are editable/deletable; explicit confirmation makes the receipt saved, printable, PDF-capable, and non-deletable.
 - OQ-071: Which validation rules block confirmation, and can confirmation be undone?
 - OQ-072: Closed in Turn 94 — business-record drafts autosave, and intentionally deleted drafts move to recoverable trash.

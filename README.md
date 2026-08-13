@@ -67,8 +67,14 @@ The executable foundation and profile-management slice include:
   ticket, price, and notes, plus permanent reasoned cancellation blocked by
   active payments and excluded from financial selection; and
 - automated domain tests.
+- a complete single-tank Fuel Tracking slice with physical baselines, deliveries,
+  equipment fills, cancellation-aware history, supplier pricing/VAT, and finance integration.
+- the first Slice 8 business-report export increment: five offline XLSX report
+  groups plus a Complete Analysis Workbook with stable raw identifiers, numeric
+  fields, summaries, filterable/frozen headings, a Data Dictionary, and native sharing.
 
-Physical printer adapters and the remaining confirmed-load association
+Physical printer adapters, remaining business-report charts/progress/localization,
+individual daily-report Excel/photo export, and the remaining confirmed-load association
 corrections remain subsequent work. Quarry Purchases remain operationally
 separate from outgoing Load History while sharing the financial payment ledger.
 

@@ -3,6 +3,7 @@ import { calculateQuarryPurchase, emptyQuarryPurchaseDraft, validateQuarryPurcha
 
 const setup: QuarrySetup = {
   suppliers: [{ id:'s1',name:'Main Quarry',phone:null,email:null,address:null,taxVatNumber:null,notes:null,isActive:true }],
+  projects: [{id:'p1',customerId:'c1',customerName:'DROMEX',name:'Mountain Road',location:'Aley',status:'active',notes:null}],
   items: [{ id:'i1',name:'Aggregate',internalCode:null,categoryName:'Quarry' }],
   drivers: [{ id:'d1',name:'Ali',phone:null,licenseNumber:null,notes:null,isActive:true }],
   trucks: [{ id:'t1',plate:'123456',makeModel:null,capacityKg:null,ownerName:null,notes:null,isActive:true }],
@@ -23,4 +24,5 @@ describe('quarry purchases',()=>{
     expect(validateQuarryPurchase(valid,setup)).toEqual([]);
     expect(validateQuarryPurchase({...valid,quantityCubicMetres:'12.5'},setup)).toContain('Quantity must be a positive whole number of cubic metres.');
   });
+  it('rejects stale project references and excessive price decimals',()=>{const valid={...emptyQuarryPurchaseDraft,supplierId:'s1',itemId:'i1',quantityCubicMetres:'12',driverId:'d1',truckId:'t1'};expect(validateQuarryPurchase({...valid,projectId:'missing'},setup)).toContain('Select a valid project or clear the project field.');expect(validateQuarryPurchase({...valid,unitPriceUsd:'10.999'},setup)).toContain('Price per m³ must be zero or more with no more than two decimals.');});
 });

@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {ScrollView,StyleSheet,Text,TextInput,TouchableOpacity,View} from 'react-native';
+import Storage from 'expo-sqlite/kv-store';
 import type {QuickTextRepository} from '../../data/repositories/QuickTextRepository';
 import {emptyQuickTextDraft,type QuickTextDocument,type QuickTextDraft,type QuickTextSetup} from '../../domain/quickText';
 import {exportAndShareQuickText,printQuickText} from '../../services/documentExport';
@@ -8,12 +9,13 @@ import {colors} from '../theme';
 
 export function QuickTextScreen({repository,onBack}:{repository:QuickTextRepository;onBack:()=>void}){
   const[setup,setSetup]=useState<QuickTextSetup|null>(null);const[records,setRecords]=useState<QuickTextDocument[]>([]);const[draft,setDraft]=useState<QuickTextDraft>(emptyQuickTextDraft);const[selected,setSelected]=useState<QuickTextDocument|null>(null);const[history,setHistory]=useState(false);const[search,setSearch]=useState('');const[busy,setBusy]=useState(false);const[error,setError]=useState<string|null>(null);const[message,setMessage]=useState<string|null>(null);
-  const refresh=useCallback(async()=>{const[s,r]=await Promise.all([repository.getSetup(),repository.list()]);setSetup(s);setRecords(r);},[repository]);useEffect(()=>{void refresh().catch(c=>setError(c instanceof Error?c.message:'Could not load Quick Text.'));},[refresh]);
+  const refresh=useCallback(async()=>{const[s,r]=await Promise.all([repository.getSetup(),repository.list()]);setSetup(s);setRecords(r);},[repository]);useEffect(()=>{void refresh().catch(c=>setError(c instanceof Error?c.message:'Could not load Quick Text.'));void Storage.getItem('dromex.draft.quick-text.v1').then(value=>{if(!value)return;try{setDraft({...emptyQuickTextDraft,...JSON.parse(value) as Partial<QuickTextDraft>});}catch{}});},[refresh]);
+  useEffect(()=>{const timer=setTimeout(()=>void Storage.setItem('dromex.draft.quick-text.v1',JSON.stringify(draft)),450);return()=>clearTimeout(timer);},[draft]);
   const visible=useMemo(()=>{const q=search.trim().toLowerCase();return q?records.filter(r=>`${r.documentNumber} ${r.title} ${r.reference??''} ${r.customerName??''} ${r.projectName??''} ${r.message} ${r.preparedBy??''}`.toLowerCase().includes(q)):records;},[records,search]);
   function patch(next:Partial<QuickTextDraft>){setDraft(current=>({...current,...next}));}
   function chooseProject(id:string){const project=setup?.projects.find(v=>v.id===id);patch({projectId:id,customerId:project?.customerId??draft.customerId});}
   async function run(action:()=>Promise<void>){setBusy(true);setError(null);setMessage(null);try{await action();}catch(c){setError(c instanceof Error?c.message:'The action could not be completed.');}finally{setBusy(false);}}
-  function save(){void run(async()=>{const record=await repository.save(draft);setSelected(record);setDraft(emptyQuickTextDraft);await refresh();setMessage('Quick Text saved permanently. You can print or share it now.');});}
+  function save(){void run(async()=>{const record=await repository.save(draft);await Storage.removeItem('dromex.draft.quick-text.v1');setSelected(record);setDraft(emptyQuickTextDraft);await refresh();setMessage('Quick Text saved permanently. You can print or share it now.');});}
   function share(record:QuickTextDocument){void run(async()=>{await exportAndShareQuickText(record);});}
   function print(record:QuickTextDocument){void run(async()=>{await printQuickText(record);});}
   if(!setup)return <View style={styles.loading}><Text>Loading Quick Text...</Text></View>;

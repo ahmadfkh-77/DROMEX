@@ -1,0 +1,6 @@
+import * as FileSystem from'expo-file-system/legacy';
+import * as Sharing from'expo-sharing';
+import{businessReportLabels,type BusinessReportData,type BusinessReportKind}from'../domain/businessReports';
+import{encodeBusinessWorkbook}from'./businessWorkbook';
+
+export async function exportBusinessWorkbook(kind:BusinessReportKind,data:BusinessReportData){if(!FileSystem.documentDirectory)throw new Error('Document storage is unavailable.');const directory=`${FileSystem.documentDirectory}exports/`;await FileSystem.makeDirectoryAsync(directory,{intermediates:true});const stamp=data.generatedAt.slice(0,10);const target=`${directory}DROMEX-${kind==='analysis'?'Analysis-Workbook':kind}-${stamp}.xlsx`;const base64=encodeBusinessWorkbook(kind,data);await FileSystem.deleteAsync(target,{idempotent:true});await FileSystem.writeAsStringAsync(target,base64,{encoding:FileSystem.EncodingType.Base64});if(!(await Sharing.isAvailableAsync()))throw new Error(`Workbook saved at ${target}, but sharing is unavailable.`);await Sharing.shareAsync(target,{mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',UTI:'org.openxmlformats.spreadsheetml.sheet',dialogTitle:`Share ${businessReportLabels[kind]}`});return target;}

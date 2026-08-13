@@ -21,5 +21,6 @@ describe('completed project PDF',()=>{
     expect(html).toContain('9.0 h net');
     expect(html.indexOf('Operational Summary')).toBeLessThan(html.indexOf('Chronological Site Diary'));
     expect(html.indexOf('Chronological Site Diary')).toBeLessThan(html.indexOf('Delivered Loads'));
+    expect(html).toContain('@page{size:A4;margin:18mm 17mm 20mm}');
   });
 });

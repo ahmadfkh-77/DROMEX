@@ -57,4 +57,21 @@ describe('load confirmation validation', () => {
     expect(issues).toContain('Select a saved driver.');
     expect(issues).toContain('Select a saved truck.');
   });
+  it('rejects prices with more than two decimals or scientific notation',()=>{
+    expect(validateLoadDraft({...validDraft,unitPriceUsd:'10.999'},baseOptions)).toContain('Unit price must be zero or more with no more than two decimals.');
+    expect(validateLoadDraft({...validDraft,unitPriceUsd:'1e3'},baseOptions)).toContain('Unit price must be zero or more with no more than two decimals.');
+  });
+  it('rejects decimal, negative, and scientific-notation scale weights',()=>{
+    expect(validateLoadDraft({...validDraft,emptyWeightKg:'10000.5'},baseOptions)).toContain('Empty weight must be a whole kilogram value.');
+    expect(validateLoadDraft({...validDraft,fullWeightKg:'-20000'},baseOptions)).toContain('Full weight must be a whole kilogram value.');
+    expect(validateLoadDraft({...validDraft,fullWeightKg:'3e4'},baseOptions)).toContain('Full weight must be a whole kilogram value.');
+  });
+  it('rejects inactive or missing catalog selections',()=>{
+    expect(validateLoadDraft({...validDraft,itemId:'missing'},baseOptions)).toContain('Select a load-enabled item.');
+    expect(validateLoadDraft({...validDraft,conversionId:'missing'},baseOptions)).toContain('Select a conversion.');
+  });
+  it('rejects a project belonging to another customer',()=>{
+    const options={...baseOptions,projects:[{id:'project_1',name:'Other job',customerId:'someone_else',customerName:'Other',location:'Beirut',status:'active' as const,notes:null}]};
+    expect(validateLoadDraft({...validDraft,projectId:'project_1'},options)).toContain('The selected project belongs to another customer.');
+  });
 });

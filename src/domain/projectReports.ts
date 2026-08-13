@@ -89,6 +89,7 @@ export function addPresence(values: string[], next: string): string[] {
 export function localDateString(date = new Date()): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
+function validLocalDate(value:string):boolean{const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(value);if(!match)return false;return localDateString(new Date(Number(match[1]),Number(match[2])-1,Number(match[3])))===value;}
 
 function minutesFromTime(value: string): number {
   const parts = value.split(':');
@@ -106,7 +107,7 @@ export function emptyDailyReport(projectId: string): DailyProjectReportDraft {
 export function validateDailyReport(draft: DailyProjectReportDraft): string[] {
   const issues: string[] = [];
   if (!draft.projectId) issues.push('Select a project.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.workDate)) issues.push('Work date must use YYYY-MM-DD.');
+  if (!validLocalDate(draft.workDate)) issues.push('Work date must be a valid calendar date.');
   else if (draft.workDate > localDateString()) issues.push('Work date cannot be in the future.');
   if (!draft.workDescription.trim()) issues.push('Work description is required.');
   const hasAnyTime = Boolean(draft.workStartTime || draft.workEndTime || draft.breakMinutes);

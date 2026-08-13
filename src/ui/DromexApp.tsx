@@ -3,7 +3,9 @@ import { Animated, SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, 
 import { useSQLiteContext } from 'expo-sqlite';
 
 import { SqliteCatalogRepository } from '../data/repositories/SqliteCatalogRepository';
+import { SqliteBusinessReportRepository } from '../data/repositories/SqliteBusinessReportRepository';
 import { SqliteFinancialRepository } from '../data/repositories/SqliteFinancialRepository';
+import { SqliteFuelRepository } from '../data/repositories/SqliteFuelRepository';
 import { SqliteLoadRepository } from '../data/repositories/SqliteLoadRepository';
 import { SqliteProfileRepository } from '../data/repositories/SqliteProfileRepository';
 import { SqliteProjectReportRepository } from '../data/repositories/SqliteProjectReportRepository';
@@ -13,6 +15,7 @@ import { SqliteWasteRepository } from '../data/repositories/SqliteWasteRepositor
 import { CatalogScreen } from './screens/CatalogScreen';
 import { CustomersScreen } from './screens/CustomersScreen';
 import { FinancialsScreen } from './screens/FinancialsScreen';
+import { FuelTrackingScreen } from './screens/FuelTrackingScreen';
 import { PeopleEquipmentScreen } from './screens/PeopleEquipmentScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { LoadHistoryScreen } from './screens/LoadHistoryScreen';
@@ -27,16 +30,18 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { WasteDumpScreen } from './screens/WasteDumpScreen';
 import { colors } from './theme';
 
-type Screen = 'home' | 'makeReceipt' | 'loads' | 'loadCorrections' | 'receiptSetup' | 'directory' | 'customers' | 'catalog' | 'projects' | 'reports' | 'quarry' | 'waste' | 'quickText' | 'financials' | 'settings';
+type Screen = 'home' | 'makeReceipt' | 'loads' | 'loadCorrections' | 'receiptSetup' | 'directory' | 'customers' | 'catalog' | 'projects' | 'reports' | 'quarry' | 'waste' | 'fuel' | 'quickText' | 'financials' | 'settings';
 
 export function DromexApp() {
   const db = useSQLiteContext();
   const catalogRepository = useMemo(() => new SqliteCatalogRepository(db), [db]);
+  const businessReportRepository = useMemo(() => new SqliteBusinessReportRepository(db), [db]);
   const profileRepository = useMemo(() => new SqliteProfileRepository(db), [db]);
   const loadRepository = useMemo(() => new SqliteLoadRepository(db), [db]);
   const projectReportRepository = useMemo(() => new SqliteProjectReportRepository(db), [db]);
   const quarryRepository = useMemo(() => new SqliteQuarryRepository(db), [db]);
   const financialRepository = useMemo(() => new SqliteFinancialRepository(db), [db]);
+  const fuelRepository = useMemo(() => new SqliteFuelRepository(db), [db]);
   const wasteRepository = useMemo(() => new SqliteWasteRepository(db), [db]);
   const quickTextRepository = useMemo(() => new SqliteQuickTextRepository(db), [db]);
   const [screen, setScreen] = useState<Screen>('home');
@@ -56,6 +61,7 @@ export function DromexApp() {
         onOpenProjects={() => setScreen('projects')}
         onOpenFinancials={() => setScreen('financials')}
         onOpenWaste={() => setScreen('waste')}
+        onOpenFuel={() => setScreen('fuel')}
         onOpenQuickText={() => setScreen('quickText')}
         onOpenLoadCorrections={() => setScreen('loadCorrections')}
         onOpenSettings={() => setScreen('settings')}
@@ -76,7 +82,7 @@ export function DromexApp() {
   } else if (screen === 'catalog') {
     content = <CatalogScreen repository={catalogRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'reports') {
-    content = <ReportsScreen repository={projectReportRepository} onBack={() => setScreen('home')} />;
+    content = <ReportsScreen repository={projectReportRepository} businessReportRepository={businessReportRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'quarry') {
     content = <QuarryPurchasesScreen repository={quarryRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'projects') {
@@ -85,6 +91,8 @@ export function DromexApp() {
     content = <FinancialsScreen repository={financialRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'waste') {
     content = <WasteDumpScreen repository={wasteRepository} onBack={() => setScreen('home')} />;
+  } else if (screen === 'fuel') {
+    content = <FuelTrackingScreen repository={fuelRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'quickText') {
     content = <QuickTextScreen repository={quickTextRepository} onBack={() => setScreen('home')} />;
   } else {
