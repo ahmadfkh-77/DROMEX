@@ -1,0 +1,10 @@
+{"kind":"workbook","id":"wb/mjm2h3","sheets":7}
+{"kind":"sheet","id":"ws/8dl5l1","name":"نظرة عامة على التقرير","index":0,"range":"A1:B11","address":"A1:B11"}
+{"kind":"sheet","id":"ws/6bcmlu","name":"تفاصيل العمل","index":1,"range":"A1:B10","address":"A1:B10"}
+{"kind":"sheet","id":"ws/7hjcs2","name":"الحضور والمعدات","index":2,"range":"A1:B5","address":"A1:B5"}
+{"kind":"sheet","id":"ws/j4ymyn","name":"المواد","index":3,"range":"A1:F2","address":"A1:F2"}
+{"kind":"sheet","id":"ws/dn8f9j","name":"الأحمال المرتبطة","index":4,"range":"A1:A2","address":"A1:A2"}
+{"kind":"sheet","id":"ws/xtd0w3","name":"نقل النفايات","index":5,"range":"A1:A2","address":"A1:A2"}
+{"kind":"sheet","id":"ws/pe3m54","name":"الصور","index":6,"range":"A1:C2","address":"A1:C2"}
+{"kind":"drawing","sheet":"الصور","drawingType":"image","id":"/xl/media/image1.png","anchor":{"from":{"row":2,"col":0,"rowOffsetEmu":0,"colOffsetEmu":0,"rowOffsetPx":0,"colOffsetPx":0},"to":{"row":18,"col":4,"rowOffsetEmu":0,"colOffsetEmu":0,"rowOffsetPx":0,"colOffsetPx":0}}}
+{"kind":"notice","message":"Cell search matched 0 entries."}

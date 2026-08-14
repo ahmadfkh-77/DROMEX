@@ -717,13 +717,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: A user opens or configures the home dashboard.
 - Preconditions: Summary data and dashboard access are available.
-- Main behavior: Offer summaries with fixed default scopes: Today's Loads for today; Unpaid Orders for all currently Unpaid or Partially Paid orders; Fuel Balance as current calculated balance; Quarry Purchases as current-month totals; and Missing Daily Reports for today. Allow visible summaries to be chosen and make every widget open its corresponding detailed report with the widget's current filters applied, where other periods can be selected. Count a missing daily report only when an active project has at least one confirmed load for that date and no report for the same project/date; remove it when the report is created.
-- Alternate and exception behavior: Empty data, unavailable widgets, and default selection remain to be defined.
+- Main behavior: Keep Make Receipt prominent, then provide one shared Today, last 7 days, last 30 days, or custom inclusive date range across a horizontally swipeable Production Overview and Financial Overview, with Production first, labelled tab controls, and position indicators. Production includes period loads/net tonnes, active projects, current fuel balance with period fuel use, period quarry volume, unpriced receipts, missing active-project/day reports, and active-project activity. Financial includes period sales, active received customer payments, remaining customer receivables, supplier payables, attention count, and largest grouped balances. Allow each known summary to be shown or hidden and make applicable widgets open their corresponding detail with the selected date range carried forward. Count a missing daily report only when an active project has at least one confirmed load for a date in scope and no report for the same project/date; remove it when the report is created.
+- Alternate and exception behavior: Empty periods show zero totals and purposeful empty states. Current fuel balance always shows the latest active ledger balance; only fuel used follows the selected period. The owner can restore any hidden summary through Customize.
 - Postconditions: The dashboard displays the selected summaries.
 - Priority: Must
 - Acceptance criteria: Each known summary can be shown or hidden while Make Receipt remains prominent; selecting a visible widget opens the correct detailed report and reproduces the widget's active filter scope. A confirmed load for active Project A today with no report adds one missing-report warning; creating that report removes it; an active Project B with no load adds none.
-- Source: Interview turns 44–45, 236, and 241–242
-- Status: Confirmed
+- Source: Interview turns 44–45, 236, 241–243, and 381
+- Status: Confirmed; shared-period swipe design implemented in Slice 11
 
 ### FR-032
 - Statement: “The system shall support a Draft → Review → Confirm → Print receipt workflow independent of printer availability.”
@@ -1741,6 +1741,18 @@ Status note: this section preserves the original question trace, but some indivi
 - Priority: Must
 - Acceptance criteria: Saving `A` at either supported width produces a normal-sized `A` on a full minimum-length company document. The same record appears in searchable history and can be reopened, printed, and shared. Multiline and long messages preserve line breaks and expand without clipping.
 - Source: Turn 323
+- Status: Confirmed and implemented
+
+### FR-079
+- Statement: “The system shall support open-ended dashboard dates and an isolated Slice 11 large test dataset.”
+- Rationale: The owner must be able to inspect complete history without inventing boundary dates and repeatedly verify dashboard performance and reconciliation against representative volume.
+- Actors: Owner/tester.
+- Main behavior: In the dashboard Custom period, allow From and To to be cleared independently and provide a visible Clear dates action. Interpret both blank as All dates, blank From as all records through To, and blank To as all records from From onward. In Settings, provide a separately labelled test-only action that replaces prior reserved Slice 11 fixtures with 4,000 receipts across 180 days plus linked customers, suppliers, active/completed projects, daily reports, quarry purchases, fuel movements, equipment, and varied payment states.
+- Alternate and exception behavior: An empty boundary shall not silently become today's date. The paired removal action deletes only reserved `slice11_test_` records and shall not change real records or the separate Slice 8 fixture set.
+- Postconditions: Dashboard filtering supports bounded, open-ended, and all-time analysis; representative test volume can be prepared and safely removed.
+- Priority: Must
+- Acceptance criteria: Clearing both dates labels and calculates All dates; clearing only one applies the other as the sole inclusive boundary. Preparing the dataset creates 4,000 clearly labelled receipts with linked operational and financial detail. Removing it deletes those fixtures and leaves non-Slice-11 records unchanged. A 10,000-load automated dashboard calculation reconciles its counts and totals within the test performance ceiling.
+- Source: Interview turn 382
 - Status: Confirmed and implemented
 
 ## 20. Appendices

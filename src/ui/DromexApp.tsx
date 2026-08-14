@@ -12,6 +12,7 @@ import { SqliteProjectReportRepository } from '../data/repositories/SqliteProjec
 import { SqliteQuarryRepository } from '../data/repositories/SqliteQuarryRepository';
 import { SqliteQuickTextRepository } from '../data/repositories/SqliteQuickTextRepository';
 import { SqliteWasteRepository } from '../data/repositories/SqliteWasteRepository';
+import type { DashboardRange } from '../domain/dashboard';
 import { CatalogScreen } from './screens/CatalogScreen';
 import { CustomersScreen } from './screens/CustomersScreen';
 import { FinancialsScreen } from './screens/FinancialsScreen';
@@ -45,21 +46,24 @@ export function DromexApp() {
   const wasteRepository = useMemo(() => new SqliteWasteRepository(db), [db]);
   const quickTextRepository = useMemo(() => new SqliteQuickTextRepository(db), [db]);
   const [screen, setScreen] = useState<Screen>('home');
+  const [dashboardRange,setDashboardRange]=useState<DashboardRange|null>(null);
+  const openDashboardRoute=(next:Extract<Screen,'loads'|'reports'|'financials'>,range?:DashboardRange)=>{setDashboardRange(range??null);setScreen(next);};
 
   let content;
   if (screen === 'home') {
     content = (
       <HomeScreen
+        businessReportRepository={businessReportRepository}
         onMakeReceipt={() => setScreen('makeReceipt')}
-        onOpenLoads={() => setScreen('loads')}
+        onOpenLoads={(range) => openDashboardRoute('loads',range)}
         onOpenReceiptSetup={() => setScreen('receiptSetup')}
         onOpenDirectory={() => setScreen('directory')}
         onOpenCustomers={() => setScreen('customers')}
         onOpenCatalog={() => setScreen('catalog')}
-        onOpenReports={() => setScreen('reports')}
+        onOpenReports={(range) => openDashboardRoute('reports',range)}
         onOpenQuarry={() => setScreen('quarry')}
         onOpenProjects={() => setScreen('projects')}
-        onOpenFinancials={() => setScreen('financials')}
+        onOpenFinancials={(range) => openDashboardRoute('financials',range)}
         onOpenWaste={() => setScreen('waste')}
         onOpenFuel={() => setScreen('fuel')}
         onOpenQuickText={() => setScreen('quickText')}
@@ -70,7 +74,7 @@ export function DromexApp() {
   } else if (screen === 'makeReceipt') {
     content = <ReceiptEntrance><MakeReceiptScreen repository={loadRepository} onBack={() => setScreen('home')} onOpenSetup={() => setScreen('receiptSetup')} onOpenDirectory={() => setScreen('directory')} onOpenProjects={() => setScreen('projects')} /></ReceiptEntrance>;
   } else if (screen === 'loads') {
-    content = <LoadHistoryScreen repository={loadRepository} onBack={() => setScreen('home')} />;
+    content = <LoadHistoryScreen repository={loadRepository} initialFromDate={dashboardRange?.fromDate} initialToDate={dashboardRange?.toDate} onBack={() => setScreen('home')} />;
   } else if (screen === 'loadCorrections') {
     content = <LoadCorrectionsScreen repository={loadRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'receiptSetup') {
@@ -82,13 +86,13 @@ export function DromexApp() {
   } else if (screen === 'catalog') {
     content = <CatalogScreen repository={catalogRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'reports') {
-    content = <ReportsScreen repository={projectReportRepository} businessReportRepository={businessReportRepository} onBack={() => setScreen('home')} />;
+    content = <ReportsScreen repository={projectReportRepository} businessReportRepository={businessReportRepository} initialBusinessFilters={dashboardRange?{fromDate:dashboardRange.fromDate,toDate:dashboardRange.toDate}:undefined} onBack={() => setScreen('home')} />;
   } else if (screen === 'quarry') {
     content = <QuarryPurchasesScreen repository={quarryRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'projects') {
     content = <ProjectsScreen repository={loadRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'financials') {
-    content = <FinancialsScreen repository={financialRepository} onBack={() => setScreen('home')} />;
+    content = <FinancialsScreen repository={financialRepository} initialFromDate={dashboardRange?.fromDate} initialToDate={dashboardRange?.toDate} onBack={() => setScreen('home')} />;
   } else if (screen === 'waste') {
     content = <WasteDumpScreen repository={wasteRepository} onBack={() => setScreen('home')} />;
   } else if (screen === 'fuel') {
@@ -104,12 +108,12 @@ export function DromexApp() {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <View style={styles.shell}>{content}</View>
       <View style={styles.nav}>
-        <NavButton label="Home" active={screen === 'home'} onPress={() => setScreen('home')} />
-        <NavButton label="Loads" active={screen === 'loads'} onPress={() => setScreen('loads')} />
+        <NavButton label="Home" active={screen === 'home'} onPress={() => {setDashboardRange(null);setScreen('home');}} />
+        <NavButton label="Loads" active={screen === 'loads'} onPress={() => openDashboardRoute('loads')} />
         <NavButton
           label="Reports"
           active={screen === 'reports'}
-          onPress={() => setScreen('reports')}
+          onPress={() => openDashboardRoute('reports')}
         />
         <NavButton
           label="Settings"

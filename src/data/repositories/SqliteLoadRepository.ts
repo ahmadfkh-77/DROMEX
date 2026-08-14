@@ -28,6 +28,7 @@ import type { LoadRepository } from './LoadRepository';
 import {paymentStatus} from '../../domain/financials';
 import { SqliteProfileRepository } from './SqliteProfileRepository';
 import {removeLinkedDemoData,seedLinkedDemoData} from '../testing/linkedDemoData';
+import {removeSlice11LargeData,seedSlice11LargeData} from '../testing/slice11LargeData';
 
 type UnitRow = { id: string; name: string; symbol: string; is_active: number };
 type ConversionRow = {
@@ -295,6 +296,8 @@ export class SqliteLoadRepository implements LoadRepository {
     return (await seedLinkedDemoData(this.db)).loads;
   }
   async removeFilterTestLoads():Promise<number>{return(await removeLinkedDemoData(this.db)).loads;}
+  async seedSlice11LargeTestData():Promise<number>{return(await seedSlice11LargeData(this.db)).loads;}
+  async removeSlice11LargeTestData():Promise<number>{return removeSlice11LargeData(this.db);}
   async saveLoadSignature(loadId: string, signaturePaths: string[]): Promise<ConfirmedLoad> {
     const row = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', loadId);
     if (!row) throw new Error('Load was not found.');

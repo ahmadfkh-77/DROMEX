@@ -1,16 +1,19 @@
 import {Children,useEffect,useRef,useState,type ReactNode} from 'react';
 import {Animated,Image,LayoutAnimation,Pressable,ScrollView,StyleSheet,Text,View} from 'react-native';
 import Storage from 'expo-sqlite/kv-store';
+import type {BusinessReportRepository} from '../../data/repositories/BusinessReportRepository';
+import type {DashboardRange} from '../../domain/dashboard';
+import {DashboardOverview} from '../components/DashboardOverview';
 import {colors} from '../theme';
 
-type HomeProps={onMakeReceipt:()=>void;onOpenLoads:()=>void;onOpenReceiptSetup:()=>void;onOpenDirectory:()=>void;onOpenCustomers:()=>void;onOpenCatalog:()=>void;onOpenReports:()=>void;onOpenQuarry:()=>void;onOpenProjects:()=>void;onOpenFinancials:()=>void;onOpenWaste:()=>void;onOpenFuel:()=>void;onOpenQuickText:()=>void;onOpenLoadCorrections:()=>void;onOpenSettings:()=>void};
+type HomeProps={businessReportRepository:BusinessReportRepository;onMakeReceipt:()=>void;onOpenLoads:(range?:DashboardRange)=>void;onOpenReceiptSetup:()=>void;onOpenDirectory:()=>void;onOpenCustomers:()=>void;onOpenCatalog:()=>void;onOpenReports:(range?:DashboardRange)=>void;onOpenQuarry:()=>void;onOpenProjects:()=>void;onOpenFinancials:(range?:DashboardRange)=>void;onOpenWaste:()=>void;onOpenFuel:()=>void;onOpenQuickText:()=>void;onOpenLoadCorrections:()=>void;onOpenSettings:()=>void};
 type SectionKey='daily'|'records'|'finance'|'setup';
 type ExpandedSections=Record<SectionKey,boolean>;
 const storageKey='dromex.home.expanded-sections.v1';
 const defaults:ExpandedSections={daily:true,records:false,finance:false,setup:false};
 
 export function HomeScreen(props:HomeProps){
-  const[expanded,setExpanded]=useState<ExpandedSections>(defaults);const entrance=useState(()=>Array.from({length:6},()=>new Animated.Value(0)))[0];
+  const[expanded,setExpanded]=useState<ExpandedSections>(defaults);const entrance=useState(()=>Array.from({length:7},()=>new Animated.Value(0)))[0];
   useEffect(()=>{let active=true;void Storage.getItem(storageKey).then(value=>{if(!active||!value)return;try{const saved=JSON.parse(value) as Partial<ExpandedSections>;setExpanded({...defaults,...saved});}catch{}});Animated.stagger(65,entrance.map(value=>Animated.timing(value,{toValue:1,duration:260,useNativeDriver:true}))).start();return()=>{active=false;};},[entrance]);
   const toggle=(key:SectionKey)=>{LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setExpanded(current=>{const next={...current,[key]:!current[key]};void Storage.setItem(storageKey,JSON.stringify(next));return next;});};
   const motion=(index:number)=>{const value=entrance[index]!;return{opacity:value,transform:[{translateY:value.interpolate({inputRange:[0,1],outputRange:[14,0]})}]};};
@@ -18,16 +21,17 @@ export function HomeScreen(props:HomeProps){
   return <ScrollView contentContainerStyle={styles.content}>
     <Animated.View style={[styles.header,motion(0)]}><View style={styles.headerLine}><DromexWordmark/><View style={styles.statusBadge}><View style={styles.statusDot}/><View><Text style={styles.statusText}>Offline ready</Text><Text style={styles.statusHint}>Local records protected</Text></View></View></View><Text style={styles.eyebrow}>PLANT MANAGEMENT</Text><Text style={styles.date}>{date}</Text></Animated.View>
     <Animated.View style={motion(1)}><MotionAction primary onPress={props.onMakeReceipt}><Text style={styles.primaryEyebrow}>NEW OUTGOING LOAD</Text><Text style={styles.primaryActionLabel}>Make Receipt</Text><Text style={styles.primaryActionHint}>Enter the load once, calculate it, preview both documents, and confirm.</Text></MotionAction></Animated.View>
-    <Animated.View style={motion(2)}><ActionSection title="Daily Operations" hint="Use these while site or plant work is happening." expanded={expanded.daily} onToggle={()=>toggle('daily')}>
+    <Animated.View style={motion(2)}><DashboardOverview repository={props.businessReportRepository} onOpenLoads={props.onOpenLoads} onOpenReports={props.onOpenReports} onOpenFinancials={props.onOpenFinancials} onOpenFuel={props.onOpenFuel} onOpenQuarry={props.onOpenQuarry}/></Animated.View>
+    <Animated.View style={motion(3)}><ActionSection title="Daily Operations" hint="Use these while site or plant work is happening." expanded={expanded.daily} onToggle={()=>toggle('daily')}>
       <QuickAction number="01" title="Fuel Tracking" body="Record tank readings, deliveries, equipment fills, supplier cost, and current balance." onPress={props.onOpenFuel}/><QuickAction number="02" title="Waste Dump Tracking" body="Tap once per waste truck, then add material and destination details." onPress={props.onOpenWaste}/><QuickAction number="03" title="Quarry Purchases" body="Connect incoming material to suppliers, projects, items, transport, payments, and Excel." onPress={props.onOpenQuarry} connected/><QuickAction number="04" title="Daily project reports" body="Record work, people, equipment, loads, waste dumps, notes, and photos." onPress={props.onOpenReports}/><QuickAction number="05" title="Quick Text" body="Create full-size company-letterhead documents in 58 or 80 mm." onPress={props.onOpenQuickText}/>
     </ActionSection></Animated.View>
-    <Animated.View style={motion(3)}><ActionSection title="Records" hint="Find confirmed work and maintain reusable information." expanded={expanded.records} onToggle={()=>toggle('records')}>
+    <Animated.View style={motion(4)}><ActionSection title="Records" hint="Find confirmed work and maintain reusable information." expanded={expanded.records} onToggle={()=>toggle('records')}>
       <QuickAction number="01" title="Load History" body="Open confirmed loads, documents, signatures, payment status, and PDFs." onPress={props.onOpenLoads}/><QuickAction number="02" title="Customers" body="Search customers and review project-organized billing and balances." onPress={props.onOpenCustomers}/><QuickAction number="03" title="Projects" body="Create projects, manage Active or Completed status, and review details." onPress={props.onOpenProjects}/><QuickAction number="04" title="People & equipment" body="Manage workers, drivers, trucks, and machines used in dropdowns." onPress={props.onOpenDirectory}/>
     </ActionSection></Animated.View>
-    <Animated.View style={motion(4)}><ActionSection title="Reports & Finance" hint="Review results, money, exports, and corrections." expanded={expanded.finance} onToggle={()=>toggle('finance')}>
+    <Animated.View style={motion(5)}><ActionSection title="Reports & Finance" hint="Review results, money, exports, and corrections." expanded={expanded.finance} onToggle={()=>toggle('finance')}>
       <QuickAction number="01" title="Reports center" body="Choose a project, open daily history, and create detailed PDF reports." onPress={props.onOpenReports}/><QuickAction number="02" title="Payments & balances" body="Open the financial overview, customers, suppliers, activity, and urgent balances." onPress={props.onOpenFinancials}/><QuickAction number="03" title="Correct confirmed loads" body="Correct allowed values while preserving transaction identity and payments." onPress={props.onOpenLoadCorrections}/>
     </ActionSection></Animated.View>
-    <Animated.View style={motion(5)}><ActionSection title="Setup" hint="Configure choices used when creating future records." expanded={expanded.setup} onToggle={()=>toggle('setup')}>
+    <Animated.View style={motion(6)}><ActionSection title="Setup" hint="Configure choices used when creating future records." expanded={expanded.setup} onToggle={()=>toggle('setup')}>
       <QuickAction number="01" title="Item catalog" body="Create categories and items for loads, quarry purchases, and reports." onPress={props.onOpenCatalog}/><QuickAction number="02" title="Receipt setup" body="Manage measurement units, conversions, and receipt-related choices." onPress={props.onOpenReceiptSetup}/><QuickAction number="03" title="Company & VAT" body="Set company identity, logo, contact details, footer, and VAT rate." onPress={props.onOpenSettings}/>
     </ActionSection></Animated.View>
   </ScrollView>;

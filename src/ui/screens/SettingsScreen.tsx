@@ -22,6 +22,8 @@ export function SettingsScreen({ repository, demoRepository, onBack }: { reposit
   const [busy, setBusy] = useState(false);
   const [demoBusy, setDemoBusy] = useState(false);
   const [demoMessage, setDemoMessage] = useState<string | null>(null);
+  const [largeDataBusy, setLargeDataBusy] = useState(false);
+  const [largeDataMessage, setLargeDataMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -74,27 +76,58 @@ export function SettingsScreen({ repository, demoRepository, onBack }: { reposit
     setDemoMessage(null);
     try {
       const count = await demoRepository.seedFilterTestLoads();
-      setDemoMessage(`${count} linked demo receipts and their projects, DPRs, waste dumps, profiles, and payments are ready.`);
+      setDemoMessage(`${count} Slice 8 Tests receipts are ready, together with linked projects, DPRs, quarry purchases, fuel activity, waste dumps, profiles, and payment history.`);
     } catch (cause) {
-      setDemoMessage(cause instanceof Error ? cause.message : 'Could not load demo data.');
+      setDemoMessage(cause instanceof Error ? cause.message : 'Could not prepare Slice 8 Tests records.');
     } finally {
       setDemoBusy(false);
     }
   }
 
   function removeDemoData() {
-    Alert.alert('Remove all linked demo data?', 'This removes only the reserved demo receipts, customers, projects, DPRs, waste dumps, profiles, and payments. Real records are not affected.', [
-      { text: 'Keep demo data', style: 'cancel' },
-      { text: 'Remove demo data', style: 'destructive', onPress: async () => {
+    Alert.alert('Remove Slice 8 Tests records?', 'This removes only reserved Slice 8 Tests records, including receipts, customers, suppliers, projects, DPRs, quarry purchases, fuel activity, waste dumps, profiles, and payments. Real records are not affected.', [
+      { text: 'Keep test records', style: 'cancel' },
+      { text: 'Remove test records', style: 'destructive', onPress: async () => {
         setDemoBusy(true);
         setDemoMessage(null);
         try {
           const count = await demoRepository.removeFilterTestLoads();
-          setDemoMessage(`${count} demo receipts and all linked demo records were removed. Real records were not changed.`);
+          setDemoMessage(`${count} Slice 8 Tests receipts and all linked test records were removed. Real records were not changed.`);
         } catch (cause) {
-          setDemoMessage(cause instanceof Error ? cause.message : 'Could not remove demo data.');
+          setDemoMessage(cause instanceof Error ? cause.message : 'Could not remove Slice 8 Tests records.');
         } finally {
           setDemoBusy(false);
+        }
+      } },
+    ]);
+  }
+
+  async function loadLargeData() {
+    setLargeDataBusy(true);
+    setLargeDataMessage(null);
+    try {
+      const count = await demoRepository.seedSlice11LargeTestData();
+      setLargeDataMessage(`${count.toLocaleString()} Slice 11 Tests receipts are ready, with 12 projects and large linked report, quarry, fuel, and payment histories.`);
+    } catch (cause) {
+      setLargeDataMessage(cause instanceof Error ? cause.message : 'Could not prepare the Slice 11 large dataset.');
+    } finally {
+      setLargeDataBusy(false);
+    }
+  }
+
+  function removeLargeData() {
+    Alert.alert('Remove Slice 11 large dataset?', 'This removes only records with reserved Slice 11 Tests IDs. Real records and Slice 8 Tests records are not affected.', [
+      { text: 'Keep test records', style: 'cancel' },
+      { text: 'Remove large dataset', style: 'destructive', onPress: async () => {
+        setLargeDataBusy(true);
+        setLargeDataMessage(null);
+        try {
+          const count = await demoRepository.removeSlice11LargeTestData();
+          setLargeDataMessage(`${count.toLocaleString()} Slice 11 Tests receipts and all linked large-test records were removed. Real records were not changed.`);
+        } catch (cause) {
+          setLargeDataMessage(cause instanceof Error ? cause.message : 'Could not remove the Slice 11 large dataset.');
+        } finally {
+          setLargeDataBusy(false);
         }
       } },
     ]);
@@ -134,11 +167,21 @@ export function SettingsScreen({ repository, demoRepository, onBack }: { reposit
       </AppCard>
 
       <View style={styles.demoCard}>
-        <View style={styles.demoHeading}><View style={styles.demoCopy}><Text style={styles.cardTitle}>Demo data</Text><Text style={styles.helper}>Optional testing tools for linked receipts, projects, DPRs, waste dumps, profiles, and payment history.</Text></View><Text style={styles.demoBadge}>TEST ONLY</Text></View>
+        <View style={styles.demoHeading}><View style={styles.demoCopy}><Text style={styles.cardTitle}>Slice 8 Tests</Text><Text style={styles.helper}>Representative linked records for workbook filters and reconciliation: receipts, projects, DPRs, quarry purchases, fuel, waste, profiles, and payment states.</Text></View><Text style={styles.demoBadge}>TEST ONLY</Text></View>
         {demoMessage ? <Text style={styles.demoMessage}>{demoMessage}</Text> : null}
         <View style={styles.demoActions}>
-          <TouchableOpacity style={styles.demoLoad} disabled={demoBusy} onPress={() => void loadDemoData()}><Text style={styles.demoLoadText}>{demoBusy ? 'Working...' : 'Load linked demo data'}</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.demoRemove} disabled={demoBusy} onPress={removeDemoData}><Text style={styles.demoRemoveText}>Remove demo data</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.demoLoad} disabled={demoBusy} onPress={() => void loadDemoData()}><Text style={styles.demoLoadText}>{demoBusy ? 'Working...' : 'Prepare Slice 8 Tests records'}</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.demoRemove} disabled={demoBusy} onPress={removeDemoData}><Text style={styles.demoRemoveText}>Remove test records</Text></TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={[styles.demoCard, styles.largeDataCard]}>
+        <View style={styles.demoHeading}><View style={styles.demoCopy}><Text style={styles.cardTitle}>Slice 11 Large Dataset</Text><Text style={styles.helper}>Performance and reconciliation data: 4,000 receipts across 180 days, 12 projects, 1,000 DPRs, 800 quarry purchases, 901 fuel movements, and mixed payments.</Text></View><Text style={styles.demoBadge}>TEST ONLY</Text></View>
+        <Text style={styles.largeDataWarning}>Preparing this dataset can take a moment. Run it on a test copy, then remove it here when testing is complete.</Text>
+        {largeDataMessage ? <Text style={styles.demoMessage}>{largeDataMessage}</Text> : null}
+        <View style={styles.demoActions}>
+          <TouchableOpacity style={styles.demoLoad} disabled={largeDataBusy} onPress={() => void loadLargeData()}><Text style={styles.demoLoadText}>{largeDataBusy ? 'Preparing large dataset...' : 'Prepare Slice 11 large dataset'}</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.demoRemove} disabled={largeDataBusy} onPress={removeLargeData}><Text style={styles.demoRemoveText}>Remove large dataset</Text></TouchableOpacity>
         </View>
       </View>
 
@@ -160,6 +203,8 @@ const styles = StyleSheet.create({
   logoEmpty: { minHeight: 100, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.surface }, logoMonogram: { width: 38, height: 38, borderRadius: 19, textAlign: 'center', textAlignVertical: 'center', color: '#FFF', backgroundColor: colors.navy, fontSize: 21, fontWeight: '900', overflow: 'hidden' }, logoEmptyText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
   logoActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, logoAction: { flexGrow: 1, minWidth: 135 },
   demoCard: { padding: 17, gap: 12, borderRadius: 16, backgroundColor: '#FFF3D8', borderWidth: 1, borderColor: '#D8A84E' },
+  largeDataCard: { backgroundColor: '#EAF1F6', borderColor: '#8BA6BA' },
+  largeDataWarning: { color: colors.navy, fontSize: 11, lineHeight: 16, fontWeight: '800' },
   demoHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, demoCopy: { flex: 1, minWidth: 0 }, demoBadge: { color: colors.warning, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   demoMessage: { color: colors.ink, fontSize: 12, lineHeight: 18, fontWeight: '700' }, demoActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   demoLoad: { flexGrow: 1, minWidth: 150, backgroundColor: colors.ink, borderRadius: 10, padding: 12, alignItems: 'center' }, demoLoadText: { color: '#FFF', fontWeight: '900' },

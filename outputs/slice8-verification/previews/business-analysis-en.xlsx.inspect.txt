@@ -1,0 +1,20 @@
+{"kind":"workbook","id":"wb/6o4dyc","sheets":16}
+{"kind":"sheet","id":"ws/lmsqul","name":"Report Overview","index":0,"range":"A1:B6","address":"A1:B6"}
+{"kind":"sheet","id":"ws/194c7z","name":"Executive Summary","index":1,"range":"A1:B11","address":"A1:B11"}
+{"kind":"sheet","id":"ws/cwgkuk","name":"Financial Charts","index":2,"range":"A1:B5","address":"A1:B5"}
+{"kind":"drawing","sheet":"Financial Charts","drawingType":"chart","id":"ch/a9cbml4n","anchor":{"from":{"row":1,"col":3,"rowOffsetEmu":0,"colOffsetEmu":0,"rowOffsetPx":0,"colOffsetPx":0},"to":{"row":21,"col":11,"rowOffsetEmu":0,"colOffsetEmu":0,"rowOffsetPx":0,"colOffsetPx":0}}}
+{"kind":"sheet","id":"ws/oonw3u","name":"Operations Charts","index":3,"range":"A1:B5","address":"A1:B5"}
+{"kind":"drawing","sheet":"Operations Charts","drawingType":"chart","id":"ch/c7qx8fa5","anchor":{"from":{"row":1,"col":3,"rowOffsetEmu":0,"colOffsetEmu":0,"rowOffsetPx":0,"colOffsetPx":0},"to":{"row":21,"col":11,"rowOffsetEmu":0,"colOffsetEmu":0,"rowOffsetPx":0,"colOffsetPx":0}}}
+{"kind":"sheet","id":"ws/bjptsd","name":"Loads and Sales","index":4,"range":"A1:H4","address":"A1:H4"}
+{"kind":"sheet","id":"ws/i16up4","name":"Customer Summary","index":5,"range":"A1:E2","address":"A1:E2"}
+{"kind":"sheet","id":"ws/gdseze","name":"Payments","index":6,"range":"A1:F2","address":"A1:F2"}
+{"kind":"sheet","id":"ws/9q0xhx","name":"Opening Balances","index":7,"range":"A1:A2","address":"A1:A2"}
+{"kind":"sheet","id":"ws/zb5ftr","name":"Quarry Purchases","index":8,"range":"A1:D2","address":"A1:D2"}
+{"kind":"sheet","id":"ws/8ackvn","name":"Supplier Summary","index":9,"range":"A1:C2","address":"A1:C2"}
+{"kind":"sheet","id":"ws/fht4y3","name":"Fuel Movements","index":10,"range":"A1:F3","address":"A1:F3"}
+{"kind":"sheet","id":"ws/de2lty","name":"Equipment Totals","index":11,"range":"A1:C2","address":"A1:C2"}
+{"kind":"sheet","id":"ws/zackdy","name":"Project Summary","index":12,"range":"A1:C3","address":"A1:C3"}
+{"kind":"sheet","id":"ws/9s940w","name":"Daily Reports","index":13,"range":"A1:D2","address":"A1:D2"}
+{"kind":"sheet","id":"ws/92ckjb","name":"Materials Summary","index":14,"range":"A1:D2","address":"A1:D2"}
+{"kind":"sheet","id":"ws/g4whpd","name":"Data Dictionary","index":15,"range":"A1:B13","address":"A1:B13"}
+{"kind":"notice","message":"Cell search matched 0 entries."}
