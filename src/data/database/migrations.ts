@@ -1,6 +1,20 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 14;
+const DATABASE_VERSION = 16;
+
+export const RESERVED_TEST_DATA_DEACTIVATION_SQL = `
+  UPDATE projects SET status = 'completed'
+    WHERE id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%' OR id LIKE 'test_report_project_%';
+  UPDATE worker_profiles SET is_active = 0 WHERE id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%';
+  UPDATE machine_profiles SET is_active = 0 WHERE id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%';
+  UPDATE driver_profiles SET is_active = 0 WHERE id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%';
+  UPDATE truck_profiles SET is_active = 0 WHERE id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%';
+  UPDATE catalog_items SET is_active = 0 WHERE id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%' OR id LIKE 'test_filter_item_%';
+  UPDATE categories SET is_active = 0 WHERE id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%' OR id = 'test_filter_category';
+  UPDATE suppliers SET is_active = 0 WHERE id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%';
+  UPDATE customers SET is_active = 0
+    WHERE is_own_company = 0 AND (id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%' OR id IN ('test_filter_customer','test_report_customer'));
+`;
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
@@ -546,6 +560,25 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX idx_quarry_purchases_project ON quarry_purchases(project_id, confirmed_at DESC);
     `);
     currentVersion = 14;
+  }
+
+  if (currentVersion === 14) {
+    await db.execAsync(RESERVED_TEST_DATA_DEACTIVATION_SQL);
+    currentVersion = 15;
+  }
+
+  if (currentVersion === 15) {
+    await db.execAsync(`
+      ALTER TABLE projects ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0,1));
+      ALTER TABLE loads ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0,1));
+      UPDATE projects SET is_archived = 1
+        WHERE id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%' OR id LIKE 'test_report_project_%';
+      UPDATE loads SET is_archived = 1
+        WHERE id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%' OR id LIKE 'test_filter_load_%';
+      CREATE INDEX idx_projects_archived ON projects(is_archived, status, name);
+      CREATE INDEX idx_loads_archived_time ON loads(is_archived, confirmed_at DESC);
+    `);
+    currentVersion = 16;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

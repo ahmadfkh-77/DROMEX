@@ -8,7 +8,10 @@ import type {
   CustomerType,
 } from '../../domain/profiles';
 import { validateCompanySettings, validateCustomerDraft } from '../../domain/profiles';
-import type { ProfileRepository } from './ProfileRepository';
+import type { DemoArchiveStatus, ProfileRepository } from './ProfileRepository';
+
+const demoProjectWhere = "id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%' OR id LIKE 'test_report_project_%'";
+const demoLoadWhere = "id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%' OR id LIKE 'test_filter_load_%'";
 
 type CustomerRow = {
   id: string;
@@ -263,6 +266,24 @@ export class SqliteProfileRepository implements ProfileRepository {
     });
 
     return settings;
+  }
+
+  async getDemoArchiveStatus(): Promise<DemoArchiveStatus> {
+    const [projects, loads] = await Promise.all([
+      this.db.getFirstAsync<{ total: number; archived: number }>(`SELECT COUNT(*) total, COALESCE(SUM(is_archived),0) archived FROM projects WHERE ${demoProjectWhere}`),
+      this.db.getFirstAsync<{ total: number; archived: number }>(`SELECT COUNT(*) total, COALESCE(SUM(is_archived),0) archived FROM loads WHERE ${demoLoadWhere}`),
+    ]);
+    const projectCount = projects?.total ?? 0, loadCount = loads?.total ?? 0;
+    const archivedProjects = projects?.archived ?? 0, archivedLoads = loads?.archived ?? 0;
+    return { projects: projectCount, loads: loadCount, archivedProjects, archivedLoads, isArchived: projectCount + loadCount > 0 && archivedProjects === projectCount && archivedLoads === loadCount };
+  }
+
+  async setDemoRecordsArchived(archived: boolean): Promise<DemoArchiveStatus> {
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync(`UPDATE projects SET is_archived = ?, status = CASE WHEN ? = 1 THEN 'completed' ELSE status END, updated_at = ? WHERE ${demoProjectWhere}`, archived ? 1 : 0, archived ? 1 : 0, new Date().toISOString());
+      await this.db.runAsync(`UPDATE loads SET is_archived = ? WHERE ${demoLoadWhere}`, archived ? 1 : 0);
+    });
+    return this.getDemoArchiveStatus();
   }
 
   private async insertCustomer(customer: Customer): Promise<void> {

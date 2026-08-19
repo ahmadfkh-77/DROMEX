@@ -24,11 +24,9 @@ import {
   type WorkerProfile,
   validateLoadDraft,
 } from '../../domain/loads';
-import type { LoadRepository } from './LoadRepository';
+import type { DirectoryProfiles, LoadRepository } from './LoadRepository';
 import {paymentStatus} from '../../domain/financials';
 import { SqliteProfileRepository } from './SqliteProfileRepository';
-import {removeLinkedDemoData,seedLinkedDemoData} from '../testing/linkedDemoData';
-import {removeSlice11LargeData,seedSlice11LargeData} from '../testing/slice11LargeData';
 
 type UnitRow = { id: string; name: string; symbol: string; is_active: number };
 type ConversionRow = {
@@ -122,7 +120,7 @@ export class SqliteLoadRepository implements LoadRepository {
         JOIN measurement_units iu ON iu.id = c.input_unit_id JOIN measurement_units ou ON ou.id = c.output_unit_id
         WHERE c.is_active = 1 ORDER BY c.name COLLATE NOCASE`),
       this.db.getAllAsync<ProjectRow>(`SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id
-        WHERE p.status = 'active' ORDER BY p.name COLLATE NOCASE`),
+        WHERE p.status = 'active' AND p.is_archived = 0 ORDER BY p.name COLLATE NOCASE`),
       this.db.getAllAsync<ItemRow>(`SELECT i.id, i.name, i.internal_code, c.name category_name,
         i.default_receipt_price_usd_cents FROM catalog_items i JOIN categories c ON c.id = i.category_id
         WHERE i.is_active = 1 AND i.loads_enabled = 1 ORDER BY i.name COLLATE NOCASE`),
@@ -181,7 +179,7 @@ export class SqliteLoadRepository implements LoadRepository {
   }
 
   async listProjects(): Promise<Project[]> {
-    const rows = await this.db.getAllAsync<ProjectRow>(`SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id ORDER BY CASE p.status WHEN 'active' THEN 0 ELSE 1 END, p.name COLLATE NOCASE`);
+    const rows = await this.db.getAllAsync<ProjectRow>(`SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.is_archived = 0 ORDER BY CASE p.status WHEN 'active' THEN 0 ELSE 1 END, p.name COLLATE NOCASE`);
     return rows.map(projectFromRow);
   }
 
@@ -234,6 +232,26 @@ export class SqliteLoadRepository implements LoadRepository {
       await this.enqueue('machineProfile', machine.id, machine);
     }); return machine;
   }
+
+  async getDirectoryProfiles(): Promise<DirectoryProfiles> {
+    const [workerRows, driverRows, truckRows, machineRows] = await Promise.all([
+      this.db.getAllAsync<WorkerRow>('SELECT * FROM worker_profiles ORDER BY is_active DESC, name COLLATE NOCASE'),
+      this.db.getAllAsync<DriverRow>('SELECT * FROM driver_profiles ORDER BY is_active DESC, name COLLATE NOCASE'),
+      this.db.getAllAsync<TruckRow>('SELECT * FROM truck_profiles ORDER BY is_active DESC, plate COLLATE NOCASE'),
+      this.db.getAllAsync<MachineRow>('SELECT * FROM machine_profiles ORDER BY is_active DESC, name COLLATE NOCASE'),
+    ]);
+    return {
+      workers: workerRows.map((row) => ({ id: row.id, name: row.name, role: row.role, phone: row.phone, notes: row.notes, isActive: row.is_active === 1 })),
+      drivers: driverRows.map((row) => ({ id: row.id, name: row.name, phone: row.phone, licenseNumber: row.license_number, notes: row.notes, isActive: row.is_active === 1 })),
+      trucks: truckRows.map((row) => ({ id: row.id, plate: row.plate, makeModel: row.make_model, capacityKg: row.capacity_kg, ownerName: row.owner_name, notes: row.notes, isActive: row.is_active === 1 })),
+      machines: machineRows.map((row) => ({ id: row.id, name: row.name, machineType: row.machine_type, identifier: row.identifier, notes: row.notes, isActive: row.is_active === 1 })),
+    };
+  }
+
+  async setWorkerActive(id: string, isActive: boolean): Promise<void> { await this.setDirectoryProfileActive('worker_profiles', 'workerProfile', id, isActive); }
+  async setDriverActive(id: string, isActive: boolean): Promise<void> { await this.setDirectoryProfileActive('driver_profiles', 'driverProfile', id, isActive); }
+  async setTruckActive(id: string, isActive: boolean): Promise<void> { await this.setDirectoryProfileActive('truck_profiles', 'truckProfile', id, isActive); }
+  async setMachineActive(id: string, isActive: boolean): Promise<void> { await this.setDirectoryProfileActive('machine_profiles', 'machineProfile', id, isActive); }
 
   async getDraft(): Promise<LoadDraft | null> {
     const row = await this.db.getFirstAsync<{ payload_json: string }>('SELECT payload_json FROM load_drafts WHERE id = ?', 'current');
@@ -290,14 +308,8 @@ export class SqliteLoadRepository implements LoadRepository {
   }
 
   async listLoads(): Promise<ConfirmedLoad[]> {
-    const rows = await this.db.getAllAsync<LoadRow>('SELECT * FROM loads ORDER BY confirmed_at DESC'); return rows.map(loadFromRow);
+    const rows = await this.db.getAllAsync<LoadRow>('SELECT * FROM loads WHERE is_archived = 0 ORDER BY confirmed_at DESC'); return rows.map(loadFromRow);
   }
-  async seedFilterTestLoads():Promise<number>{
-    return (await seedLinkedDemoData(this.db)).loads;
-  }
-  async removeFilterTestLoads():Promise<number>{return(await removeLinkedDemoData(this.db)).loads;}
-  async seedSlice11LargeTestData():Promise<number>{return(await seedSlice11LargeData(this.db)).loads;}
-  async removeSlice11LargeTestData():Promise<number>{return removeSlice11LargeData(this.db);}
   async saveLoadSignature(loadId: string, signaturePaths: string[]): Promise<ConfirmedLoad> {
     const row = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', loadId);
     if (!row) throw new Error('Load was not found.');
@@ -319,5 +331,14 @@ export class SqliteLoadRepository implements LoadRepository {
   private async enqueue(entityType: string, entityId: string, payload: unknown): Promise<void> {
     await this.db.runAsync(`INSERT INTO sync_outbox (entity_type, entity_id, operation, payload_json, created_at)
       VALUES (?, ?, 'upsert', ?, ?)`, entityType, entityId, JSON.stringify(payload), new Date().toISOString());
+  }
+  private async setDirectoryProfileActive(table: 'worker_profiles'|'driver_profiles'|'truck_profiles'|'machine_profiles', entityType: string, id: string, isActive: boolean): Promise<void> {
+    const exists = await this.db.getFirstAsync<{ id: string }>(`SELECT id FROM ${table} WHERE id = ?`, id);
+    if (!exists) throw new Error('The saved profile was not found.');
+    const updatedAt = new Date().toISOString();
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync(`UPDATE ${table} SET is_active = ?, updated_at = ? WHERE id = ?`, isActive ? 1 : 0, updatedAt, id);
+      await this.enqueue(entityType, id, { id, isActive, updatedAt });
+    });
   }
 }

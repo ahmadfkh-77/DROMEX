@@ -100,7 +100,7 @@ export function DromexApp() {
   } else if (screen === 'quickText') {
     content = <QuickTextScreen repository={quickTextRepository} onBack={() => setScreen('home')} />;
   } else {
-    content = <SettingsScreen repository={profileRepository} demoRepository={loadRepository} onBack={() => setScreen('home')} />;
+    content = <SettingsScreen repository={profileRepository} onBack={() => setScreen('home')} />;
   }
 
   return (

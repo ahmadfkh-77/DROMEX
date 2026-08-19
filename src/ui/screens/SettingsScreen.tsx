@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
-import type { LoadRepository } from '../../data/repositories/LoadRepository';
-import type { ProfileRepository } from '../../data/repositories/ProfileRepository';
+import type { DemoArchiveStatus, ProfileRepository } from '../../data/repositories/ProfileRepository';
 import { validateCompanySettings } from '../../domain/profiles';
 import { pickPersistentImage } from '../../services/media';
 import { AppButton, AppCard, AppField, AppPage, Feedback, PageHeader } from '../components/AppPrimitives';
 import { colors } from '../theme';
 
-export function SettingsScreen({ repository, demoRepository, onBack }: { repository: ProfileRepository; demoRepository: LoadRepository; onBack: () => void }) {
+export function SettingsScreen({ repository, onBack }: { repository: ProfileRepository; onBack: () => void }) {
   const [companyName, setCompanyName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
@@ -20,10 +19,9 @@ export function SettingsScreen({ repository, demoRepository, onBack }: { reposit
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [demoStatus, setDemoStatus] = useState<DemoArchiveStatus | null>(null);
   const [demoBusy, setDemoBusy] = useState(false);
   const [demoMessage, setDemoMessage] = useState<string | null>(null);
-  const [largeDataBusy, setLargeDataBusy] = useState(false);
-  const [largeDataMessage, setLargeDataMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -38,6 +36,12 @@ export function SettingsScreen({ repository, demoRepository, onBack }: { reposit
       setVatRate(String(settings.vatRatePercent));
       setLogoUri(settings.logoUri);
     });
+    return () => { active = false; };
+  }, [repository]);
+
+  useEffect(() => {
+    let active = true;
+    void repository.getDemoArchiveStatus().then((status) => { if (active) setDemoStatus(status); }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : 'Could not inspect DEMO records.'); });
     return () => { active = false; };
   }, [repository]);
 
@@ -71,66 +75,19 @@ export function SettingsScreen({ repository, demoRepository, onBack }: { reposit
     }
   }
 
-  async function loadDemoData() {
-    setDemoBusy(true);
-    setDemoMessage(null);
+  async function toggleDemoRecords() {
+    if (!demoStatus || demoStatus.projects + demoStatus.loads === 0) return;
+    const archive = !demoStatus.isArchived;
+    setDemoBusy(true); setDemoMessage(null); setError(null);
     try {
-      const count = await demoRepository.seedFilterTestLoads();
-      setDemoMessage(`${count} Slice 8 Tests receipts are ready, together with linked projects, DPRs, quarry purchases, fuel activity, waste dumps, profiles, and payment history.`);
+      const next = await repository.setDemoRecordsArchived(archive);
+      setDemoStatus(next);
+      setDemoMessage(archive ? 'DEMO projects and loads are deactivated and hidden from normal app results.' : 'DEMO projects and loads are visible again. Projects keep their previous Completed status until reactivated from Projects.');
     } catch (cause) {
-      setDemoMessage(cause instanceof Error ? cause.message : 'Could not prepare Slice 8 Tests records.');
+      setError(cause instanceof Error ? cause.message : 'Could not update DEMO records.');
     } finally {
       setDemoBusy(false);
     }
-  }
-
-  function removeDemoData() {
-    Alert.alert('Remove Slice 8 Tests records?', 'This removes only reserved Slice 8 Tests records, including receipts, customers, suppliers, projects, DPRs, quarry purchases, fuel activity, waste dumps, profiles, and payments. Real records are not affected.', [
-      { text: 'Keep test records', style: 'cancel' },
-      { text: 'Remove test records', style: 'destructive', onPress: async () => {
-        setDemoBusy(true);
-        setDemoMessage(null);
-        try {
-          const count = await demoRepository.removeFilterTestLoads();
-          setDemoMessage(`${count} Slice 8 Tests receipts and all linked test records were removed. Real records were not changed.`);
-        } catch (cause) {
-          setDemoMessage(cause instanceof Error ? cause.message : 'Could not remove Slice 8 Tests records.');
-        } finally {
-          setDemoBusy(false);
-        }
-      } },
-    ]);
-  }
-
-  async function loadLargeData() {
-    setLargeDataBusy(true);
-    setLargeDataMessage(null);
-    try {
-      const count = await demoRepository.seedSlice11LargeTestData();
-      setLargeDataMessage(`${count.toLocaleString()} Slice 11 Tests receipts are ready, with 12 projects and large linked report, quarry, fuel, and payment histories.`);
-    } catch (cause) {
-      setLargeDataMessage(cause instanceof Error ? cause.message : 'Could not prepare the Slice 11 large dataset.');
-    } finally {
-      setLargeDataBusy(false);
-    }
-  }
-
-  function removeLargeData() {
-    Alert.alert('Remove Slice 11 large dataset?', 'This removes only records with reserved Slice 11 Tests IDs. Real records and Slice 8 Tests records are not affected.', [
-      { text: 'Keep test records', style: 'cancel' },
-      { text: 'Remove large dataset', style: 'destructive', onPress: async () => {
-        setLargeDataBusy(true);
-        setLargeDataMessage(null);
-        try {
-          const count = await demoRepository.removeSlice11LargeTestData();
-          setLargeDataMessage(`${count.toLocaleString()} Slice 11 Tests receipts and all linked large-test records were removed. Real records were not changed.`);
-        } catch (cause) {
-          setLargeDataMessage(cause instanceof Error ? cause.message : 'Could not remove the Slice 11 large dataset.');
-        } finally {
-          setLargeDataBusy(false);
-        }
-      } },
-    ]);
   }
 
   return (
@@ -166,24 +123,11 @@ export function SettingsScreen({ repository, demoRepository, onBack }: { reposit
         <AppField label="VAT percentage" value={vatRate} onChangeText={setVatRate} keyboardType="decimal-pad" placeholder="0" />
       </AppCard>
 
-      <View style={styles.demoCard}>
-        <View style={styles.demoHeading}><View style={styles.demoCopy}><Text style={styles.cardTitle}>Slice 8 Tests</Text><Text style={styles.helper}>Representative linked records for workbook filters and reconciliation: receipts, projects, DPRs, quarry purchases, fuel, waste, profiles, and payment states.</Text></View><Text style={styles.demoBadge}>TEST ONLY</Text></View>
-        {demoMessage ? <Text style={styles.demoMessage}>{demoMessage}</Text> : null}
-        <View style={styles.demoActions}>
-          <TouchableOpacity style={styles.demoLoad} disabled={demoBusy} onPress={() => void loadDemoData()}><Text style={styles.demoLoadText}>{demoBusy ? 'Working...' : 'Prepare Slice 8 Tests records'}</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.demoRemove} disabled={demoBusy} onPress={removeDemoData}><Text style={styles.demoRemoveText}>Remove test records</Text></TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={[styles.demoCard, styles.largeDataCard]}>
-        <View style={styles.demoHeading}><View style={styles.demoCopy}><Text style={styles.cardTitle}>Slice 11 Large Dataset</Text><Text style={styles.helper}>Performance and reconciliation data: 4,000 receipts across 180 days, 12 projects, 1,000 DPRs, 800 quarry purchases, 901 fuel movements, and mixed payments.</Text></View><Text style={styles.demoBadge}>TEST ONLY</Text></View>
-        <Text style={styles.largeDataWarning}>Preparing this dataset can take a moment. Run it on a test copy, then remove it here when testing is complete.</Text>
-        {largeDataMessage ? <Text style={styles.demoMessage}>{largeDataMessage}</Text> : null}
-        <View style={styles.demoActions}>
-          <TouchableOpacity style={styles.demoLoad} disabled={largeDataBusy} onPress={() => void loadLargeData()}><Text style={styles.demoLoadText}>{largeDataBusy ? 'Preparing large dataset...' : 'Prepare Slice 11 large dataset'}</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.demoRemove} disabled={largeDataBusy} onPress={removeLargeData}><Text style={styles.demoRemoveText}>Remove large dataset</Text></TouchableOpacity>
-        </View>
-      </View>
+      <AppCard title="DEMO record visibility" hint="Keep old walkthrough records without mixing them into normal projects, loads, dashboards, reports, or balances.">
+        <View style={styles.demoStatusRow}><View style={styles.logoCopy}><Text style={styles.demoCount}>{demoStatus ? `${demoStatus.projects} project${demoStatus.projects === 1 ? '' : 's'} · ${demoStatus.loads} load${demoStatus.loads === 1 ? '' : 's'}` : 'Checking DEMO records…'}</Text><Text style={styles.helper}>{demoStatus?.isArchived ? 'Currently deactivated and hidden' : demoStatus && demoStatus.projects + demoStatus.loads === 0 ? 'No DEMO projects or loads found' : 'Currently visible in app results'}</Text></View>{demoStatus && demoStatus.projects + demoStatus.loads > 0 ? <Text style={[styles.demoBadge, demoStatus.isArchived && styles.demoBadgeHidden]}>{demoStatus.isArchived ? 'INACTIVE' : 'VISIBLE'}</Text> : null}</View>
+        {demoMessage ? <Feedback kind="success">{demoMessage}</Feedback> : null}
+        <AppButton label={demoStatus?.isArchived ? 'Reactivate DEMO Projects & Loads' : 'Deactivate DEMO Projects & Loads'} tone={demoStatus?.isArchived ? 'navy' : 'danger'} disabled={!demoStatus || demoStatus.projects + demoStatus.loads === 0} busy={demoBusy} onPress={() => void toggleDemoRecords()} />
+      </AppCard>
 
       <AppButton label="Save Company Settings" onPress={() => void save()} busy={busy} />
     </AppPage>
@@ -194,7 +138,6 @@ const styles = StyleSheet.create({
   contextRow: { marginTop: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#6F8FA9', paddingTop: 12, gap: 3 },
   contextLabel: { color: '#F2A184', fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   contextValue: { color: colors.cream, fontSize: 18, fontWeight: '900' },
-  cardTitle: { color: colors.ink, fontSize: 19, fontWeight: '800' },
   helper: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   logoPanel: { borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: '#FCFBF8', padding: 13, gap: 12 },
   logoHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, logoCopy: { flex: 1, minWidth: 0 }, logoTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' },
@@ -202,11 +145,8 @@ const styles = StyleSheet.create({
   logoPreview: { width: '100%', height: 110, backgroundColor: '#FFF', borderRadius: 10 },
   logoEmpty: { minHeight: 100, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.surface }, logoMonogram: { width: 38, height: 38, borderRadius: 19, textAlign: 'center', textAlignVertical: 'center', color: '#FFF', backgroundColor: colors.navy, fontSize: 21, fontWeight: '900', overflow: 'hidden' }, logoEmptyText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
   logoActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, logoAction: { flexGrow: 1, minWidth: 135 },
-  demoCard: { padding: 17, gap: 12, borderRadius: 16, backgroundColor: '#FFF3D8', borderWidth: 1, borderColor: '#D8A84E' },
-  largeDataCard: { backgroundColor: '#EAF1F6', borderColor: '#8BA6BA' },
-  largeDataWarning: { color: colors.navy, fontSize: 11, lineHeight: 16, fontWeight: '800' },
-  demoHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, demoCopy: { flex: 1, minWidth: 0 }, demoBadge: { color: colors.warning, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  demoMessage: { color: colors.ink, fontSize: 12, lineHeight: 18, fontWeight: '700' }, demoActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  demoLoad: { flexGrow: 1, minWidth: 150, backgroundColor: colors.ink, borderRadius: 10, padding: 12, alignItems: 'center' }, demoLoadText: { color: '#FFF', fontWeight: '900' },
-  demoRemove: { flexGrow: 1, minWidth: 130, borderWidth: 1, borderColor: colors.danger, borderRadius: 10, padding: 12, alignItems: 'center' }, demoRemoveText: { color: colors.danger, fontWeight: '900' },
+  demoStatusRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  demoCount: { color: colors.ink, fontSize: 16, fontWeight: '900' },
+  demoBadge: { color: colors.brandDark, backgroundColor: '#FBE9E4', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, overflow: 'hidden', fontSize: 9, fontWeight: '900', letterSpacing: .7 },
+  demoBadgeHidden: { color: colors.muted, backgroundColor: '#EEEAE3' },
 });

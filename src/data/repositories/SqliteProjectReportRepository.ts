@@ -3,7 +3,6 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedProjectLoad, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption } from '../../domain/projectReports';
 import { validateDailyReport } from '../../domain/projectReports';
 import type { ProjectReportRepository } from './ProjectReportRepository';
-import {removeLinkedDemoData,seedLinkedDemoData} from '../testing/linkedDemoData';
 
 type ReportRow = {
   id: string; project_id: string; work_date: string; work_description: string; workers_json: string;
@@ -46,7 +45,7 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
 
   async getSetup(): Promise<ProjectReportSetup> {
     const [projects, items, units, company, drivers, trucks, workers, machines, priorReports] = await Promise.all([
-      this.db.getAllAsync<{ id: string; name: string; customer_name: string; location: string; status: 'active' | 'completed' }>(`SELECT p.id, p.name, c.name customer_name, p.location, p.status FROM projects p JOIN customers c ON c.id = p.customer_id ORDER BY p.status, p.name COLLATE NOCASE`),
+      this.db.getAllAsync<{ id: string; name: string; customer_name: string; location: string; status: 'active' | 'completed' }>(`SELECT p.id, p.name, c.name customer_name, p.location, p.status FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.is_archived=0 ORDER BY p.status, p.name COLLATE NOCASE`),
       this.db.getAllAsync<{ id: string; name: string; category_name: string }>(`SELECT i.id, i.name, c.name category_name FROM catalog_items i JOIN categories c ON c.id = i.category_id WHERE i.is_active = 1 AND i.daily_reports_enabled = 1 ORDER BY i.name COLLATE NOCASE`),
       this.db.getAllAsync<{ id: string; name: string; symbol: string }>('SELECT id, name, symbol FROM measurement_units WHERE is_active = 1 ORDER BY name COLLATE NOCASE'),
       this.db.getFirstAsync<{ company_name:string;logo_uri:string|null;address:string|null;phone:string|null;email:string|null;tax_vat_number:string|null }>("SELECT company_name,logo_uri,address,phone,email,tax_vat_number FROM company_settings WHERE id='company'"),
@@ -85,7 +84,7 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   }
 
   async listLinkedLoads(projectId: string, workDate: string): Promise<LinkedProjectLoad[]> {
-    const rows = await this.db.getAllAsync<{ id: string; transaction_number: string; item_name: string; converted_quantity: number; output_unit_symbol: string; driver_name: string; truck_plate: string }>(`SELECT id, transaction_number, item_name, converted_quantity, output_unit_symbol, driver_name, truck_plate FROM loads WHERE project_id = ? AND date(confirmed_at, 'localtime') = ? ORDER BY confirmed_at`, projectId, workDate);
+    const rows = await this.db.getAllAsync<{ id: string; transaction_number: string; item_name: string; converted_quantity: number; output_unit_symbol: string; driver_name: string; truck_plate: string }>(`SELECT id, transaction_number, item_name, converted_quantity, output_unit_symbol, driver_name, truck_plate FROM loads WHERE project_id = ? AND is_archived=0 AND date(confirmed_at, 'localtime') = ? ORDER BY confirmed_at`, projectId, workDate);
     return rows.map((row) => ({ id: row.id, transactionNumber: row.transaction_number, itemName: row.item_name, quantity: row.converted_quantity, unitSymbol: row.output_unit_symbol, driverName: row.driver_name, truckPlate: row.truck_plate }));
   }
 
@@ -95,7 +94,7 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   }
 
   async listProjectLoads(projectId: string): Promise<ProjectCompletionLoad[]> {
-    const rows = await this.db.getAllAsync<{ id:string;transaction_number:string;item_name:string;converted_quantity:number;output_unit_symbol:string;driver_name:string;truck_plate:string;work_date:string }>(`SELECT id,transaction_number,item_name,converted_quantity,output_unit_symbol,driver_name,truck_plate,date(confirmed_at, 'localtime') work_date FROM loads WHERE project_id=? ORDER BY confirmed_at`, projectId);
+    const rows = await this.db.getAllAsync<{ id:string;transaction_number:string;item_name:string;converted_quantity:number;output_unit_symbol:string;driver_name:string;truck_plate:string;work_date:string }>(`SELECT id,transaction_number,item_name,converted_quantity,output_unit_symbol,driver_name,truck_plate,date(confirmed_at, 'localtime') work_date FROM loads WHERE project_id=? AND is_archived=0 ORDER BY confirmed_at`, projectId);
     return rows.map((row) => ({ id:row.id, transactionNumber:row.transaction_number, itemName:row.item_name, quantity:row.converted_quantity, unitSymbol:row.output_unit_symbol, driverName:row.driver_name, truckPlate:row.truck_plate, workDate:row.work_date }));
   }
 
@@ -106,7 +105,7 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
 
   async saveReport(draft: DailyProjectReportDraft): Promise<DailyProjectReport> {
     const issues = validateDailyReport(draft); if (issues.length) throw new Error(issues.join('\n'));
-    const project = await this.db.getFirstAsync<{ id: string; status: string }>('SELECT id, status FROM projects WHERE id = ?', draft.projectId);
+    const project = await this.db.getFirstAsync<{ id: string; status: string }>('SELECT id, status FROM projects WHERE id = ? AND is_archived=0', draft.projectId);
     if (!project) throw new Error('Selected project no longer exists.');
     if (!draft.id && project.status !== 'active') throw new Error('Completed projects cannot receive a new daily report.');
     const existing = await this.getReportForDate(draft.projectId, draft.workDate);
@@ -124,9 +123,4 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
     if (!saved) throw new Error('Daily report was not saved.'); return fromRow(saved);
   }
 
-  async seedReportTestData():Promise<{projects:number;reports:number;wasteDumps:number}>{
-    const seeded=await seedLinkedDemoData(this.db);return{projects:seeded.projects,reports:seeded.reports,wasteDumps:seeded.wasteDumps};
-  }
-
-  async removeReportTestData():Promise<{projects:number;reports:number;wasteDumps:number}>{const removed=await removeLinkedDemoData(this.db);return{projects:removed.projects,reports:removed.reports,wasteDumps:removed.wasteDumps};}
 }

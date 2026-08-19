@@ -717,11 +717,11 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: A user opens or configures the home dashboard.
 - Preconditions: Summary data and dashboard access are available.
-- Main behavior: Keep Make Receipt prominent, then provide one shared Today, last 7 days, last 30 days, or custom inclusive date range across a horizontally swipeable Production Overview and Financial Overview, with Production first, labelled tab controls, and position indicators. Production includes period loads/net tonnes, active projects, current fuel balance with period fuel use, period quarry volume, unpriced receipts, missing active-project/day reports, and active-project activity. Financial includes period sales, active received customer payments, remaining customer receivables, supplier payables, attention count, and largest grouped balances. Allow each known summary to be shown or hidden and make applicable widgets open their corresponding detail with the selected date range carried forward. Count a missing daily report only when an active project has at least one confirmed load for a date in scope and no report for the same project/date; remove it when the report is created.
-- Alternate and exception behavior: Empty periods show zero totals and purposeful empty states. Current fuel balance always shows the latest active ledger balance; only fuel used follows the selected period. The owner can restore any hidden summary through Customize.
+- Main behavior: Keep Make Receipt prominent, then provide one shared Today, last 7 days, last 30 days, or custom inclusive date range across a horizontally swipeable Production Overview and Financial Overview, with Production first, labelled tab controls, and position indicators. Production includes period loads/net tonnes, active projects, current fuel balance with period fuel use, period quarry volume, unpriced receipts, missing active-project/day reports, and active-project activity. Financial includes period sales, active received customer payments, remaining customer receivables, supplier payables, attention count, and largest grouped balances. Allow each known summary to be shown or hidden, allow the complete Plant Overview to collapse into one compact restore row, remember that whole-overview choice across navigation and restart, and make applicable widgets open their corresponding detail with the selected date range carried forward. Count a missing daily report only when an active project has at least one confirmed load for a date in scope and no report for the same project/date; remove it when the report is created.
+- Alternate and exception behavior: Empty periods show zero totals and purposeful empty states. Current fuel balance always shows the latest active ledger balance; only fuel used follows the selected period. The owner can restore any hidden summary through Customize and can restore the hidden complete overview through its compact Show control.
 - Postconditions: The dashboard displays the selected summaries.
 - Priority: Must
-- Acceptance criteria: Each known summary can be shown or hidden while Make Receipt remains prominent; selecting a visible widget opens the correct detailed report and reproduces the widget's active filter scope. A confirmed load for active Project A today with no report adds one missing-report warning; creating that report removes it; an active Project B with no load adds none.
+- Acceptance criteria: Each known summary can be shown or hidden while Make Receipt remains prominent; Hide collapses the entire Plant Overview into one compact row, Show restores it, and the choice survives leaving Home and restarting the app without briefly expanding the hidden dashboard. Selecting a visible widget opens the correct detailed report and reproduces the widget's active filter scope. A confirmed load for active Project A today with no report adds one missing-report warning; creating that report removes it; an active Project B with no load adds none.
 - Source: Interview turns 44–45, 236, 241–243, and 381
 - Status: Confirmed; shared-period swipe design implemented in Slice 11
 
@@ -1744,15 +1744,51 @@ Status note: this section preserves the original question trace, but some indivi
 - Status: Confirmed and implemented
 
 ### FR-079
-- Statement: “The system shall support open-ended dashboard dates and an isolated Slice 11 large test dataset.”
-- Rationale: The owner must be able to inspect complete history without inventing boundary dates and repeatedly verify dashboard performance and reconciliation against representative volume.
-- Actors: Owner/tester.
-- Main behavior: In the dashboard Custom period, allow From and To to be cleared independently and provide a visible Clear dates action. Interpret both blank as All dates, blank From as all records through To, and blank To as all records from From onward. In Settings, provide a separately labelled test-only action that replaces prior reserved Slice 11 fixtures with 4,000 receipts across 180 days plus linked customers, suppliers, active/completed projects, daily reports, quarry purchases, fuel movements, equipment, and varied payment states.
-- Alternate and exception behavior: An empty boundary shall not silently become today's date. The paired removal action deletes only reserved `slice11_test_` records and shall not change real records or the separate Slice 8 fixture set.
-- Postconditions: Dashboard filtering supports bounded, open-ended, and all-time analysis; representative test volume can be prepared and safely removed.
+- Statement: “The system shall support open-ended dashboard dates.”
+- Rationale: The owner must be able to inspect complete history without inventing boundary dates.
+- Actors: Owner.
+- Main behavior: In the dashboard Custom period, allow From and To to be cleared independently and provide a visible Clear dates action. Interpret both blank as All dates, blank From as all records through To, and blank To as all records from From onward.
+- Alternate and exception behavior: An empty boundary shall not silently become today's date.
+- Postconditions: Dashboard filtering supports bounded, open-ended, and all-time analysis.
 - Priority: Must
-- Acceptance criteria: Clearing both dates labels and calculates All dates; clearing only one applies the other as the sole inclusive boundary. Preparing the dataset creates 4,000 clearly labelled receipts with linked operational and financial detail. Removing it deletes those fixtures and leaves non-Slice-11 records unchanged. A 10,000-load automated dashboard calculation reconciles its counts and totals within the test performance ceiling.
+- Acceptance criteria: Clearing both dates labels and calculates All dates; clearing only one applies the other as the sole inclusive boundary. A 10,000-load automated dashboard calculation reconciles its counts and totals within the test performance ceiling without inserting fixtures into the production application.
 - Source: Interview turn 382
+- Status: Confirmed and implemented; production test-data clauses superseded by FR-080 in Turn 383
+
+### FR-080
+- Statement: “The production application shall remove all generated test and demo records and shall not offer controls that can recreate them.”
+- Rationale: Walkthrough fixtures must not remain mixed with real operating data as the application moves toward normal use.
+- Actors: Owner; system migration.
+- Main behavior: Remove the Slice 8, Slice 11, Customer Finance, and legacy report/filter generator controls and repository APIs. During the version-15 database upgrade, delete records carrying the reserved `slice8_test_`, `slice11_test_`, `demo_linked_`, `test_filter_`, and `test_report_` identifiers, including dependent payments, operational records, projects, catalog entries, customers, suppliers, personnel, vehicles, and equipment.
+- Alternate and exception behavior: The cleanup shall not inspect visible names or notes and shall not remove ordinary records merely because a user entered words such as “test” or “demo”. Automated tests may continue to use isolated in-memory fixtures that cannot enter the application database.
+- Postconditions: Existing reserved fixtures are removed once; no production screen or repository can recreate them; genuine business records remain unchanged.
+- Priority: Must
+- Acceptance criteria: Upgrading a version-14 database executes the scoped cleanup and advances to version 15. Every known reserved generator prefix is covered, parent records are removed only after dependants, no whole-table delete exists, and Settings, Customers, Loads, Finance, and Project Reports expose no generator action.
+- Source: Interview turn 383
+- Status: Partially superseded by FR-081 in Interview turn 385; generator removal remains implemented, while physical fixture deletion is withdrawn
+
+### FR-081
+- Statement: “Reserved test/demo projects and profiles shall be removed from active use without deleting their linked history.”
+- Rationale: The owner wants these entries out of normal workflows but still recoverable through management screens, and physical deletion can violate historical foreign-key relationships.
+- Actors: Owner; system migration.
+- Main behavior: During the version-15 upgrade, mark reserved test/demo projects Completed and mark reserved customers, suppliers, categories, catalog items, workers, drivers, trucks, and machines Inactive. Preserve linked loads, reports, quarry purchases, fuel movements, payments, opening balances, Quick Text documents, and snapshot fields. Show inactive people/equipment in the Directory with Reactivate controls while excluding them from new-entry selectors.
+- Alternate and exception behavior: Never deactivate the own-company customer, never match by visible name or note, and do not treat Completed projects as selectable for new quarry purchases, waste dumps, Quick Text documents, loads, or fuel activity. Completed projects may remain available in project management and historical reporting so they can be reviewed or reactivated.
+- Postconditions: Reserved profiles no longer appear in normal operational choices; their history remains valid; the owner can reactivate supported profiles and projects from management screens.
+- Priority: Must
+- Acceptance criteria: A version-14 database with linked reserved fixtures upgrades to version 15 without a foreign-key error and without DELETE statements. Reserved projects become Completed, applicable profiles become Inactive, the own-company profile is protected, inactive directory profiles expose Reactivate, and all new-entry project/profile selectors return active entries only.
+- Source: Interview turn 385
+- Status: Confirmed and implemented
+
+### FR-082
+- Statement: “The owner shall be able to deactivate and reactivate existing DEMO projects and their loads from Settings.”
+- Rationale: Retained walkthrough history must not inflate or clutter normal operational, reporting, dashboard, and financial results.
+- Actors: Owner.
+- Main behavior: Add a DEMO Record Visibility card to Settings showing the exact number of reserved DEMO projects and loads and whether they are Visible or Inactive. Deactivate sets a reversible archive flag on only those reserved projects and loads. Reactivate clears the archive flag. Database version 16 adds the project/load archive fields and initially archives existing reserved fixtures.
+- Alternate and exception behavior: Archiving never deletes records, changes snapshots, or recreates demo data. Reactivating visibility does not automatically change a project's Completed lifecycle status; that is controlled separately in Projects. If no reserved DEMO project or load exists, show a calm empty status and disable the action.
+- Postconditions: Archived DEMO projects and loads are excluded from Home calculations, Load History, project lists and selectors, project-report load links, Excel/business report data, linked-load summaries, and load-based financial balances. Reactivation restores their visibility consistently.
+- Priority: Must
+- Acceptance criteria: Settings reports matching DEMO counts, Deactivate hides every matching project/load across the listed consumers after refresh, real records remain visible, Reactivate restores matching records, and the state survives restart. A version-15 database upgrades to version 16 with archive fields and no destructive deletion.
+- Source: Interview turn 386
 - Status: Confirmed and implemented
 
 ## 20. Appendices
