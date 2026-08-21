@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 16;
+export const DATABASE_VERSION = 19;
 
 export const RESERVED_TEST_DATA_DEACTIVATION_SQL = `
   UPDATE projects SET status = 'completed'
@@ -579,6 +579,103 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX idx_loads_archived_time ON loads(is_archived, confirmed_at DESC);
     `);
     currentVersion = 16;
+  }
+
+  if (currentVersion === 16) {
+    await db.execAsync(`
+      CREATE TABLE schedule_tasks (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        title TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'Normal'
+          CHECK (priority IN ('Low','Normal','High','Urgent')),
+        status TEXT NOT NULL DEFAULT 'Planned'
+          CHECK (status IN ('Planned','In Progress','Blocked','Completed')),
+        responsible_person TEXT,
+        location TEXT,
+        notes TEXT,
+        completed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK (end_date >= start_date)
+      );
+      CREATE INDEX idx_schedule_tasks_project_date
+        ON schedule_tasks(project_id, start_date, end_date);
+      CREATE INDEX idx_schedule_tasks_status_date
+        ON schedule_tasks(status, start_date, end_date);
+
+      CREATE TABLE waste_counter_presets (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        driver_profile_id TEXT NOT NULL REFERENCES driver_profiles(id),
+        truck_profile_id TEXT NOT NULL REFERENCES truck_profiles(id),
+        material_type TEXT,
+        dump_location TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(project_id, driver_profile_id, truck_profile_id)
+      );
+      CREATE INDEX idx_waste_counter_presets_project
+        ON waste_counter_presets(project_id, updated_at DESC);
+    `);
+    currentVersion = 17;
+  }
+
+  if (currentVersion === 17) {
+    await db.execAsync(`
+      CREATE TABLE project_issues (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        title TEXT NOT NULL,
+        description TEXT,
+        priority TEXT NOT NULL DEFAULT 'Normal' CHECK (priority IN ('Low','Normal','High','Urgent')),
+        status TEXT NOT NULL DEFAULT 'Open' CHECK (status IN ('Open','Resolved')),
+        due_date TEXT,
+        resolved_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_project_issues_project_status ON project_issues(project_id,status,priority,created_at DESC);
+      CREATE TABLE project_media (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        uri TEXT NOT NULL,
+        caption TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_project_media_project_time ON project_media(project_id,created_at DESC);
+    `);
+    currentVersion = 18;
+  }
+
+  if (currentVersion === 18) {
+    await db.execAsync(`
+      CREATE TABLE cloud_sync_state (
+        id TEXT PRIMARY KEY NOT NULL CHECK (id = 'cloud'),
+        owner_uid TEXT,
+        owner_email TEXT,
+        device_id TEXT NOT NULL,
+        last_sync_at TEXT,
+        last_pull_at TEXT NOT NULL DEFAULT '1970-01-01T00:00:00.000Z',
+        last_error TEXT,
+        phase TEXT NOT NULL DEFAULT 'idle' CHECK (phase IN ('idle','syncing','offline','error')),
+        initial_upload_complete INTEGER NOT NULL DEFAULT 0 CHECK (initial_upload_complete IN (0,1))
+      );
+      INSERT INTO cloud_sync_state (id,device_id)
+        VALUES ('cloud',lower(hex(randomblob(12))));
+      CREATE TABLE cloud_sync_records (
+        record_key TEXT PRIMARY KEY NOT NULL,
+        client_modified_at TEXT NOT NULL,
+        cloud_updated_at TEXT NOT NULL,
+        device_id TEXT NOT NULL
+      );
+      CREATE INDEX idx_cloud_sync_records_cloud_time
+        ON cloud_sync_records(cloud_updated_at);
+    `);
+    currentVersion = 19;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

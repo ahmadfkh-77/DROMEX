@@ -647,13 +647,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: The owner selects Complete Backup or Restore Complete Backup.
 - Preconditions: The owner is authenticated, supplies and confirms an owner-chosen backup password for export, and has sufficient device or storage-provider capacity available.
-- Main behavior: Export one package containing all records, settings, profiles, transaction documents, payments, logs, signatures, photos, attachments, and restoration metadata, encrypted with the separate owner-chosen backup password; allow it to be saved through the phone to a computer, USB/external storage, or cloud-storage provider. Opening or restoring requires that password. Validate a selected compatible package, show its backup date and record counts, require explicit confirmation, automatically export a safety backup of current data, and then replace the current dataset without merging.
+- Main behavior: Export one package containing all records, settings, profiles, transaction documents, payments, logs, signatures, photos, attachments, and restoration metadata, encrypted with the separate owner-chosen backup password; allow it to be saved through Android's folder picker to Google Drive/device/USB providers or through iOS Save to Files to iCloud Drive/On My iPhone/USB/other Files providers. Opening or restoring requires that password. Validate a selected compatible package through the platform document picker, show its backup date and record counts, require explicit confirmation, require a newly entered owner-chosen password of at least 12 characters for the automatic safety backup of current data, export that safety copy through the applicable platform destination, and then replace the current dataset without merging. Platform storage/account credentials remain outside DROMEX.
 - Alternate and exception behavior: A newer app version shall restore a valid backup created by an older version and automatically migrate its data. An older app version shall reject a backup created by a newer unsupported version before replacement and show a clear Update the app first instruction. Insufficient storage, interrupted export/import, invalid or corrupted file, incompatibility, and incorrect or forgotten backup password shall not partially change live data; if replacement succeeds but proves unwanted, the automatic safety export supports reversal. The package cannot be opened without its password.
 - Postconditions: A successful export creates an independently retained complete backup; a successful restore reconstructs its validated application state.
 - Priority: Must
 - Acceptance criteria: Export a representative full dataset and transfer it off-device. On restore, verify the preview date/counts, confirmation, and current-data safety export occur before replacement; verify all restored records, settings, documents, payments, logs, signatures, photos, attachments, and relationships match the backup with no duplicates or merge. Verify a newer version migrates a valid older backup, while an older version rejects an unsupported newer backup with Update the app first guidance. Invalid, incompatible, or interrupted restore leaves current data unchanged.
 - Source: Interview turns 210–213 and 275
-- Status: Confirmed package, password encryption, replacement safeguards, and version compatibility
+- Status: Implemented in code through Turn 403 with password-authenticated encryption, complete SQLite/preferences/media packaging, Android document-provider and iOS Apple Files export/selection, preview, compatibility and integrity validation, separately passworded pre-restore encrypted safety export, full replacement, and failure rollback; physical Google Drive Android and signed iPhone/iCloud Files round-trip acceptance remain pending
 
 ### FR-071
 - Statement: “The system shall allow the owner to establish and settle customer-receivable and supplier-payable opening balances at go-live.”
@@ -765,7 +765,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Priority: Must
 - Acceptance criteria: With network disabled, the owner can create and reopen a receipt, print over Bluetooth, create/edit a daily report, generate and save representative PDF/Excel reports, and retain changes after restarting the app.
 - Source: Interview turns 56 and 232
-- Status: Confirmed for core workflows; synchronization pending
+- Status: Confirmed and implemented for local workflows; automatic synchronization is implemented in code and pending production Firebase/two-device acceptance
 
 ### FR-035
 - Statement: “The system shall automatically synchronize locally retained offline changes when internet connectivity returns.”
@@ -779,7 +779,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Priority: Must
 - Acceptance criteria: Create records with settings, documents, payments, logs, signatures, photos, and attachments offline and verify they appear in the pending count. Attempt a destructive action and verify a pending-data warning. Restore connectivity and verify automatic retry, cleared pending state, updated last-sync time, and complete appearance on another signed-in device. Create conflicting edits on two devices, verify the newest edit is retained, then manually correct and synchronize the result. Recovery documentation explicitly states that never-synchronized data on a permanently lost device cannot be restored.
 - Source: Interview turns 57, 67, 214, and 284–288
-- Status: Confirmed, including production provider and component architecture
+- Status: Confirmed and implemented in code through the version-19 outbox worker, Firestore/Storage REST transport, retry/conflict handling, and Account & Cloud UI; production provisioning and two-device acceptance pending
 
 ### FR-036
 - Statement: “The system shall restore all synchronized owner data after the owner installs the app and signs in on a replacement device.”
@@ -793,7 +793,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Priority: Must
 - Acceptance criteria: Synchronize a known dataset from device A, install on device B, sign in, and verify that all synchronized records and settings are restored.
 - Source: Interview turn 58
-- Status: Confirmed behavior; recovery error handling pending
+- Status: Implemented for current synchronized Firestore rows and Cloud Storage media; replacement-device physical acceptance and the separate 30-day snapshot recovery slice remain pending
 
 ### FR-037
 - Statement: “The system shall authenticate the owner using an email address and password.”
@@ -807,7 +807,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Priority: Must
 - Acceptance criteria: Valid credentials grant access; invalid credentials do not; requesting password recovery sends a secure reset link to the owner account email.
 - Source: Interview turns 59–61
-- Status: Confirmed method and recovery channel; detailed security controls pending
+- Status: Implemented with encrypted native session storage, 12-character client enforcement, Firebase rate limiting, verified-email sync gating, and persistent offline access; production authentication configuration pending
 
 ### FR-038
 - Statement: “The system shall allow the owner to reset a forgotten password through a secure link sent to the registered email address.”
@@ -821,7 +821,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Priority: Must
 - Acceptance criteria: The registered email receives a usable reset link; an expired or used link cannot reset the password; after successful reset, previously signed-in devices require the new credentials once they receive the revocation.
 - Source: Interview turns 60 and 64
-- Status: Confirmed behavior; link lifetime and offline revocation timing pending
+- Status: Implemented through Firebase password-reset email with a local request cooldown; Firebase automatically revokes existing refresh tokens after password reset, while an offline device receives revocation only after reconnecting
 
 ### FR-039
 - Statement: “The system shall export reports in PDF and Excel formats.”
@@ -1345,7 +1345,7 @@ The proposed product is an asphalt-plant management application intended to cent
 ## 13. Non-Functional Requirements
 
 ### NFR-001 — Portability
-- The version-one user experience shall support both Android phones and iPhones. Implementation and acceptance shall test iPhone first using the newest generally available iPhone model and iOS release when formal acceptance testing begins; the exact model and OS build shall be pinned in the test record. Ordinary Android phones shall support Android 10 or later. The existing Xprinter terminal is separately tested and may require lowering the minimum Android version to its older release where technically feasible. Exact Android verification hardware and remaining screen-size baselines are implementation test dependencies. (Sources: Turns 47–48 and 281–282; status: Confirmed platform priorities and OS baseline; Xprinter exception pending physical verification.)
+- The target user experience supports both Android phones and iPhones, but the first operational rollout shall be Android-first and offline-only; iPhone activation follows later. Ordinary Android phones shall support Android 10 or later. The existing Xprinter terminal is separately tested and may require lowering the minimum Android version to its older release where technically feasible. When iPhone acceptance begins, use the newest generally available iPhone model and iOS release and pin the exact model/build in the test record. Exact Android verification hardware and remaining screen-size baselines are implementation test dependencies. (Sources: Turns 47–48, 281–282, and 399; status: Android offline rollout confirmed; iPhone rollout and Xprinter exception pending physical verification.)
 
 ### NFR-002 — Availability and Offline Operation
 - Core workflows shall remain available without internet and offline changes shall synchronize automatically after connectivity returns. Verification: execute FR-034 offline on Android and iPhone, restore connectivity, and verify FR-035 cross-device visibility. (Sources: Turns 56–57; status: Partially confirmed; recovery/conflict details pending.)
@@ -1531,7 +1531,7 @@ The proposed product is an asphalt-plant management application intended to cent
 | CON-004 | 45–46 | Limit version one to the owner as sole user | Defined |
 | DEC-038 | 46 | Defer staff accounts until after version one | Defined |
 | IR-001 | 47 | Print receipts through a Bluetooth POS printer | Device/protocol details pending |
-| NFR-001 | 47–48 | Support both Android and iPhone | Minimum versions/devices pending |
+| NFR-001 | 47–48, 399 | Support both Android and iPhone | Android-first offline rollout; iPhone activation deferred |
 | CON-005 | 47 | Use a phone-first Bluetooth-printing environment | Compatibility details pending |
 | IR-002 | 49 | Adapt receipt layout to supported paper widths | Width list pending |
 | RISK-007 | 49 | Bound Android/iPhone POS-printer compatibility | Model/protocol pending |
@@ -1539,15 +1539,15 @@ The proposed product is an asphalt-plant management application intended to cent
 | FR-032 | 53 | Save receipts independently of printing | Defined |
 | FR-033 | 53–54 | Allow unlimited current and historical receipt printing | Defined |
 | DEC-045 | 54 | Reopen and reprint saved receipts from history | Defined |
-| FR-034 | 56 | Operate core workflows without internet | Synchronization pending |
-| NFR-002 | 56–57 | Verify offline operation and automatic synchronization | Conflict handling pending |
-| FR-035 | 57 | Automatically synchronize offline changes across owner devices | Conflict/retry pending |
-| FR-036 | 58 | Restore synchronized data on a replacement phone | Error handling pending |
-| NFR-003 | 58 | Verify owner data recovery after device replacement | Retention/RTO/RPO pending |
-| FR-037 | 59 | Authenticate the owner by email/password | Recovery/security rules pending |
-| NFR-004 | 59 | Protect synchronized owner data with authentication | Measurable controls pending |
-| FR-038 | 60 | Recover account through secure email reset | Link lifetime/error UX pending |
-| DEC-052 | 61 | Keep the signed-in app usable offline without repeated password prompts | Device-loss mitigation pending |
+| FR-034 | 56 | Operate core workflows without internet | Local workflows and sync queue implemented; production acceptance pending |
+| NFR-002 | 56–57 | Verify offline operation and automatic synchronization | Retry/conflict code tested; physical two-device acceptance pending |
+| FR-035 | 57 | Automatically synchronize offline changes across owner devices | Implemented in code; production Firebase/two-device acceptance pending |
+| FR-036 | 58 | Restore synchronized data on a replacement phone | Current cloud restore implemented; physical acceptance and snapshot recovery pending |
+| NFR-003 | 58 | Verify owner data recovery after device replacement | Current restore implemented; retention/RTO/RPO and physical acceptance pending |
+| FR-037 | 59 | Authenticate the owner by email/password | Implemented; production Firebase authentication configuration pending |
+| NFR-004 | 59 | Protect synchronized owner data with authentication | Secure token storage and owner-scoped rules implemented; production deployment pending |
+| FR-038 | 60 | Recover account through secure email reset | Implemented through Firebase reset flow; production email configuration pending |
+| DEC-052 | 61 | Keep the signed-in app usable offline without repeated password prompts | Implemented with native encrypted session storage |
 | RISK-008 | 61 | Protect data on a lost signed-in phone | Mitigation pending |
 | DEC-053 | 62 | Exclude app-specific biometric/PIN locking | Defined |
 | DEC-054 | 63 | Exclude remote lost-device sign-out | Superseded in Turn 64 |
@@ -1789,6 +1789,99 @@ Status note: this section preserves the original question trace, but some indivi
 - Priority: Must
 - Acceptance criteria: Settings reports matching DEMO counts, Deactivate hides every matching project/load across the listed consumers after refresh, real records remain visible, Reactivate restores matching records, and the state survives restart. A version-15 database upgrades to version 16 with archive fields and no destructive deletion.
 - Source: Interview turn 386
+- Status: Confirmed and implemented
+
+### FR-083
+- Statement: “The owner shall be able to plan and track upcoming work in a project-linked schedule.”
+- Rationale: Construction work requires a visible daily and short look-ahead plan, not only records created after work occurs.
+- Actors: Owner/manager/foreman.
+- Main behavior: Provide Project Schedule from Home with Today, Week, 3 Weeks, and All views, an adjustable anchor date, and optional project filtering. Each project name in Projects opens its Project Command Center; its Planning and Today label exposes Project Schedule, whose All-dates view contains only that project's tasks and locks new tasks to that project. A scheduled task requires an active project, title, valid start/end dates, and priority; it may include a responsible person, work location, and notes. Show Planned, In Progress, Blocked, and Completed totals and allow task editing and status progression.
+- Alternate and exception behavior: The end date cannot precede the start date. Moving the start beyond the existing end automatically moves the end to the same date. Tasks spanning any part of the selected inclusive date window are shown. Existing tasks remain visible after their project is completed, but the project schedule becomes read-only until that project is reactivated.
+- Postconditions: The schedule retains an auditable project-linked work plan that can be reviewed by day, week, three-week look-ahead, or across all dates.
+- Priority: Must
+- Acceptance criteria: The owner can add a task to an active project, see it in every overlapping date view, edit its details, mark it In Progress, Blocked, Completed, or Planned again, and filter it by project. Pressing that project's name and then its Project Schedule child opens the same task under a project-locked All view, and adding work there needs no second project selection. A completed project's schedule remains visible without edit/progress controls. Invalid or reversed dates are rejected.
+- Source: Interview turns 391, 394, 395, and 397
+- Status: Confirmed and implemented
+
+### DR-027
+- Schedule tasks shall retain stable ID, project ID, title, ISO start/end work dates, Low/Normal/High/Urgent priority, Planned/In Progress/Blocked/Completed status, optional responsible person/location/notes, optional completion time, and created/updated times. (Source: Interview turns 391 and 394; status: Confirmed and implemented.)
+
+### FR-084
+- Statement: “Waste Dump Tracking shall count repeated trips without requiring the same driver and truck details to be re-entered each time.”
+- Rationale: Repetitive data entry during continuous dumping is exhausting and can lead to missed trips, while separate drivers still need separate accountability.
+- Actors: Owner/operator.
+- Main behavior: For a selected active project, allow persistent dump counters to be created from one saved active driver and one saved active truck, with optional default material, dump location, and notes. Show each driver/truck combination as a separate card with its own active count for the current plant-local work date. Pressing +1 creates one standard, separately timestamped waste-dump record containing project, driver, truck, and default-detail snapshots.
+- Alternate and exception behavior: The same project/driver/truck combination cannot be configured twice. A different driver or truck creates a separate counter. Cancel Last Tap marks the most recent matching active dump Cancelled with its audit time and reason; it does not delete it. Removing the counter configuration does not delete any dump history. The existing one-off dump workflow remains available for exceptional trips.
+- Postconditions: Repeated trips are recorded with one tap, daily counter totals reconcile to active underlying waste-dump records, and daily/completed-project reporting continues to use those individual records.
+- Priority: Must
+- Acceptance criteria: After creating two counters for different driver/truck combinations, pressing the first counter three times and the second twice shows counts of three and two and creates five individual records. Cancelling the first counter’s last tap changes its count to two while retaining the cancelled record. Counts reset visually on the next work date while counter configurations remain.
+- Source: Interview turns 392–394
+- Status: Confirmed and implemented
+
+### DR-028
+- Waste counter presets shall retain stable ID, project ID, driver-profile ID, truck-profile ID, optional default material/location/notes, and created/updated times, with one unique project/driver/truck combination. Counter totals are derived from active waste-dump records for the plant-local work date rather than stored as an independent mutable number. (Source: Interview turns 392–394; status: Confirmed and implemented.)
+
+### FR-085
+- Statement: “The application shall provide project-centered, globally reachable navigation without losing the existing colored expandable design.”
+- Rationale: Returning to Home for every action and scanning long feature lists slows field work, while the owner wants to retain the established visual identity.
+- Actors: Owner/operator.
+- Main behavior: Provide Home, Projects, central Create, Records, and More navigation. The orange Create control opens the frequent entry actions. Records and More organize related destinations beneath colored parent labels that expand into numbered child actions using the same interaction and motion pattern as Home.
+- Alternate and exception behavior: Home retains Make Receipt, Needs Attention, Plant Overview, and its existing colored operational groups. Existing workflows and Back behavior remain available. Navigation does not alter confirmed records or require connectivity.
+- Postconditions: Any frequent entry or record group is reachable without first returning to Home, and related functions remain visually grouped.
+- Priority: Must
+- Acceptance criteria: From any primary tab, Create opens every confirmed frequent entry; pressing Records or More displays colored parent labels; pressing a parent reveals only its related child labels; and all five navigation labels remain clear at supported mobile widths.
+- Source: Interview turn 397
+- Status: Confirmed and implemented
+
+### FR-086
+- Statement: “The application shall retain an active-project context and provide one command center for each project.”
+- Rationale: Most construction activity belongs to one job, and repeated project selection creates fatigue and association mistakes.
+- Actors: Owner/manager/foreman.
+- Main behavior: Selecting an active project retains it locally and shows a compact context bar with Open, Change, and Clear controls. Applicable Receipt, Daily Report, Schedule, Waste, Quarry, Equipment Fill, and Quick Text workflows begin with that project selected. A project name opens its Command Center with project/customer/location/status, operational metrics, and expandable Planning and Today, Field Operations, Issues, Photos, Activity, and Records and Documents sections. Activity combines the project's loads, reports, waste, fuel, quarry, schedules, issues, and photos chronologically.
+- Alternate and exception behavior: Cross-project screens remain available when context is clear. A completed project can be opened and reviewed but cannot accept schedule changes, new issues, or new direct photos until reactivated. Clearing context never changes records already saved.
+- Postconditions: Project-owned workflows open from one consistent page and applicable new forms need no repeated project selection.
+- Priority: Must
+- Acceptance criteria: Selecting an active project survives navigation and app restart; opening applicable Create actions preselects it; Change and Clear work without modifying records; project metrics reconcile to stored records; and a completed project is visibly read-only.
+- Source: Interview turn 397
+- Status: Confirmed and implemented
+
+### FR-087
+- Statement: “The application shall provide offline Global Search, Needs Attention, and Draft Center tools.”
+- Rationale: The owner must find records and unfinished or exceptional work without knowing which original screen contains it.
+- Actors: Owner.
+- Main behavior: Search across transaction/customer/project/driver/truck/item/supplier/report/Quick Text/payment/waste/schedule/issue identities and text, group results by type, and open the applicable record or section. Needs Attention shall count and route missing reports, blocked schedules, open project issues, unpriced loads, outstanding balances, incomplete waste records, pending synchronization, and saved drafts. Draft Center shall detect meaningful autosaved Receipt, Daily Report, Quarry, Fuel, and Quick Text drafts, permit Continue, and move them to recoverable Trash with Restore.
+- Alternate and exception behavior: Search requires at least two characters and remains local/offline. Empty default forms are not presented as meaningful drafts. Moving a draft to Trash does not affect a confirmed record; Trash retains a bounded set of the latest recoverable entries.
+- Postconditions: Cross-workflow discovery and unfinished-work recovery are available from Home and More.
+- Priority: Must
+- Acceptance criteria: Searching a transaction, plate, project, or issue returns the correct grouped result; attention totals reflect database state; each supported draft can be continued; and a trashed draft can be restored.
+- Source: Interview turn 397
+- Status: Confirmed and implemented
+
+### FR-088
+- Statement: “The owner shall be able to retain issues and direct site photos under a project.”
+- Rationale: Construction blockers and visual evidence require project ownership and a simple follow-up lifecycle.
+- Actors: Owner/manager/foreman.
+- Main behavior: Within an active Project Command Center, create issues with required title, optional description/due date, and Low/Normal/High/Urgent priority; resolve and reopen them without deletion. Capture or choose persistent site photos with optional captions. Show both in their project sections and combined activity timeline.
+- Alternate and exception behavior: Completed projects show retained issues/photos read-only until reactivated. Cancelling camera/library selection creates no record. Resolution retains issue history and timestamps.
+- Postconditions: Project issues and photos remain locally available and enter the synchronization outbox.
+- Priority: Must
+- Acceptance criteria: An issue can be created, resolved, reopened, and found by global search; a photo can be captured or selected and appears under the correct project and in Activity; upgrading version 17 creates both tables and advances to version 18 without altering prior records.
+- Source: Interview turn 397
+- Status: Confirmed and implemented
+
+### DR-029
+- Project issues shall retain stable ID, project ID, title, optional description, Low/Normal/High/Urgent priority, Open/Resolved status, optional due and resolution dates, and created/updated times. Project media shall retain stable ID, project ID, persistent local URI, optional caption, and creation time. (Source: Interview turn 397; status: Confirmed and implemented.)
+
+### FR-089
+- Statement: “Make Receipt shall show real progress, local validation, and a thumb-reachable primary action while preserving its colored four-stage design.”
+- Rationale: Long-form scrolling and a static first-step indicator obscure completion and make correction tiring.
+- Actors: Owner/operator.
+- Main behavior: Derive completion of Destination, Load, and Price stages from current data; show completed stages in green, current stage in orange, and future stages in the established navy treatment. Display validation below its applicable section and keep a persistent footer with current step, next requirement, and Preview Documents action.
+- Alternate and exception behavior: Autosave continues; optional price does not create a false required-field error; final confirmation remains a separate explicit warning and irreversible action.
+- Postconditions: The owner can understand progress and reach Preview without returning to the bottom of the long form.
+- Priority: Must
+- Acceptance criteria: Stage state changes as required fields become complete, returned validation appears in the related colored section, and Preview Documents remains visible during entry without hiding the final fields.
+- Source: Interview turn 397
 - Status: Confirmed and implemented
 
 ## 20. Appendices

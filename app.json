@@ -8,13 +8,20 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.dromex.management"
+      "bundleIdentifier": "com.dromex.management",
+      "usesIcloudStorage": true
     },
     "android": {
       "package": "com.dromex.management"
     },
     "plugins": [
       "expo-sqlite",
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
       [
         "expo-build-properties",
         {
@@ -30,7 +37,8 @@
           "cameraPermission": "Allow DROMEX to photograph project work and supplier tickets."
         }
       ],
-      "expo-build-properties"
+      "expo-build-properties",
+      "expo-secure-store"
     ]
   }
 }

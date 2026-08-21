@@ -17,7 +17,12 @@ describe('reserved test data deactivation migration', () => {
     expect(statements.some((sql) => sql.includes('ALTER TABLE loads ADD COLUMN is_archived'))).toBe(true);
     expect(statements.some((sql) => sql.includes("UPDATE projects SET is_archived = 1"))).toBe(true);
     expect(statements.some((sql) => sql.includes("UPDATE loads SET is_archived = 1"))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 16');
+    expect(statements.some((sql) => sql.includes('CREATE TABLE schedule_tasks'))).toBe(true);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE waste_counter_presets'))).toBe(true);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE project_issues'))).toBe(true);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE project_media'))).toBe(true);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE cloud_sync_state'))).toBe(true);
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 19');
   });
 
   it('targets every reserved generator prefix without broad table deletes', () => {
@@ -29,5 +34,39 @@ describe('reserved test data deactivation migration', () => {
     expect(RESERVED_TEST_DATA_DEACTIVATION_SQL).toContain("UPDATE projects SET status = 'completed'");
     expect(RESERVED_TEST_DATA_DEACTIVATION_SQL).toContain('UPDATE customers SET is_active = 0');
     expect(RESERVED_TEST_DATA_DEACTIVATION_SQL).toContain('WHERE is_own_company = 0');
+  });
+
+  it('adds only the schedule and waste-counter schema when upgrading version 16', async () => {
+    const statements: string[] = [];
+    const db = {
+      execAsync: async (sql: string) => { statements.push(sql); },
+      getFirstAsync: async () => ({ user_version: 16 }),
+    };
+
+    await migrateDatabase(db as never);
+
+    expect(statements.some((sql) => sql.includes('ALTER TABLE projects ADD COLUMN is_archived'))).toBe(false);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE schedule_tasks'))).toBe(true);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE waste_counter_presets'))).toBe(true);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE project_issues'))).toBe(true);
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 19');
+  });
+
+  it('adds project issues and media when upgrading version 17', async () => {
+    const statements: string[] = [];
+    const db = {execAsync: async (sql: string) => { statements.push(sql); },getFirstAsync: async () => ({ user_version: 17 })};
+    await migrateDatabase(db as never);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE project_issues'))).toBe(true);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE project_media'))).toBe(true);
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 19');
+  });
+
+  it('adds account and cloud synchronization state when upgrading version 18', async () => {
+    const statements: string[] = [];
+    const db = {execAsync: async (sql: string) => { statements.push(sql); },getFirstAsync: async () => ({ user_version: 18 })};
+    await migrateDatabase(db as never);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE cloud_sync_state'))).toBe(true);
+    expect(statements.some((sql) => sql.includes('CREATE TABLE cloud_sync_records'))).toBe(true);
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 19');
   });
 });

@@ -20,7 +20,7 @@ import {exportBusinessWorkbook} from '../../services/businessWorkbookExport';
 import Storage from 'expo-sqlite/kv-store';
 import { colors } from '../theme';
 
-export function ReportsScreen({ repository,businessReportRepository,onBack,initialBusinessFilters }: { repository: ProjectReportRepository;businessReportRepository:BusinessReportRepository;onBack: () => void;initialBusinessFilters?:Partial<BusinessReportFilters> }) {
+export function ReportsScreen({ repository,businessReportRepository,onBack,initialBusinessFilters,initialProjectId,initialReportId,startNewReport=false }: { repository: ProjectReportRepository;businessReportRepository:BusinessReportRepository;onBack: () => void;initialBusinessFilters?:Partial<BusinessReportFilters>;initialProjectId?:string|null;initialReportId?:string|null;startNewReport?:boolean }) {
   const [setup, setSetup] = useState<ProjectReportSetup | null>(null);
   const [project, setProject] = useState<ReportProject | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -33,14 +33,17 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,initi
   const [exporting,setExporting]=useState<BusinessReportKind|null>(null);
   const [exportProgress,setExportProgress]=useState<WorkbookProgress|null>(null);
   const exportController=useRef<AbortController|null>(null);
+  const initializedProject=useRef<string|null>(null);
+  const initializedReport=useRef<string|null>(null);
   const [workbookLocale,setWorkbookLocale]=useState<WorkbookLocale>('en');
   const [dailyExportingId,setDailyExportingId]=useState<string|null>(null);
   const [businessFilters,setBusinessFilters]=useState<BusinessReportFilters>(()=>({...emptyBusinessReportFilters,...initialBusinessFilters}));
   const [businessFilterOptions,setBusinessFilterOptions]=useState<{customers:{id:string;label:string}[];suppliers:{id:string;label:string}[];items:{id:string;label:string}[]}>({customers:[],suppliers:[],items:[]});
-  const [menuOpen,setMenuOpen]=useState<Set<string>>(()=>new Set(initialBusinessFilters?['generation']:[]));
+  const [menuOpen,setMenuOpen]=useState<Set<string>>(()=>new Set());
   const toggleMenu=(key:string)=>{setMenuOpen(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});};
   const refreshSetup = useCallback(async () => setSetup(await repository.getSetup()), [repository]);
   useEffect(() => { void refreshSetup(); }, [refreshSetup]);
+  useEffect(()=>{if(!setup||!initialProjectId||initializedProject.current===initialProjectId)return;const selected=setup.projects.find(value=>value.id===initialProjectId);if(!selected)return;initializedProject.current=initialProjectId;setSelectedProjectId(selected.id);setProject(selected);if(startNewReport&&selected.status==='active')void openNewReport(selected);},[initialProjectId,setup,startNewReport]);
   useEffect(() => {
     void businessReportRepository.getReportData().then(data => {
       const itemNames=new Set<string>();
@@ -53,6 +56,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,initi
     }).catch(()=>setBusinessFilterOptions({customers:[],suppliers:[],items:[]}));
   },[businessReportRepository]);
   useEffect(() => { if (project) void repository.listReports(project.id).then(setReports); }, [project, repository]);
+  useEffect(()=>{if(!initialReportId||initializedReport.current===initialReportId)return;const report=reports.find(value=>value.id===initialReportId);if(report){initializedReport.current=initialReportId;editReport(report);}},[initialReportId,reports]);
   useEffect(() => {
     if (draft?.projectId && draft.workDate) void repository.listLinkedLoads(draft.projectId, draft.workDate).then(setLinkedLoads);
     else setLinkedLoads([]);

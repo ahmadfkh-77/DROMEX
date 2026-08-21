@@ -1556,3 +1556,71 @@ Is this accurate?
 ## Turn 386
 **INTERVIEWEE:** Requested a Settings option to deactivate DEMO projects and their loads.
 **INTERVIEWER:** Added database version 16 with reversible archive fields on projects and loads and initially archived known reserved fixtures. Added a designed DEMO Record Visibility card in Settings with exact project/load counts, Visible/Inactive status, and Deactivate/Reactivate action. Archived DEMO loads and projects are retained but excluded from Home/dashboard calculations, Load History, project management and selectors, report data and Excel workbooks, linked project loads, waste load summaries, and load-based financial balances. Reactivation restores visibility without automatically changing a project's separate Completed lifecycle status. Tests and TypeScript validation pass.
+
+## Turn 387
+**INTERVIEWEE:** Asked which implementation slices remain.
+**INTERVIEWER:** Summarized the remaining sequenced work and identified the next high-value construction workflows and later printing/cloud boundaries.
+
+## Turn 388
+**INTERVIEWEE:** Asked what else could be added to the interface for a construction application.
+**INTERVIEWER:** Proposed practical construction-focused additions including planning, field activity, attention states, and faster repetitive-entry workflows while preserving the existing project-linked information structure.
+
+## Turn 389
+**INTERVIEWEE:** Requested a detailed description of the current interface, including style, layout, effects, and animation, before deciding what to add.
+**INTERVIEWER:** Reconstructed the implemented mobile interface: warm-cream pages, navy hierarchy, orange primary actions, rounded cards, collapsible operational groups, structured forms, restrained functional motion, responsive feedback, and project-linked navigation.
+
+## Turn 390
+**INTERVIEWEE:** Asked how the design and workflow could be improved.
+**INTERVIEWER:** Recommended clearer work-first navigation, stronger Today/attention hierarchy, fewer repeated fields, context-preserving transitions, and construction-specific planning and rapid-entry actions.
+
+## Turn 391
+**INTERVIEWEE:** Requested a schedule for planning and a short explanation of why the proposal is better.
+**INTERVIEWER:** Proposed a project-linked Today, Week, and 3-Week look-ahead schedule because it makes the next work, responsibility, and blockers visible without the complexity of a full planning suite.
+
+## Turn 392
+**INTERVIEWEE:** Requested improved Waste Dump Tracking because repeatedly entering the same driver's details for every trip is exhausting, and proposed a counter.
+**INTERVIEWER:** Defined a persistent counter that reuses the selected project, driver, truck, and optional defaults while each +1 still creates an individual timestamped waste-dump record.
+
+## Turn 393
+**INTERVIEWEE:** Clarified that if another driver performs dumping, the count must increase according to who dumps.
+**INTERVIEWER:** Defined independent counters per project/driver/truck combination so each driver's active daily total remains separate and auditable.
+
+## Turn 394
+**INTERVIEWEE:** Authorized building the discussed improvements.
+**INTERVIEWER:** Implemented Project Schedule and multi-driver/truck Waste Dump counters, connected both to Home and the existing offline/audit workflows, added database version 17, and expanded automated validation.
+
+## Turn 395
+**INTERVIEWEE:** Clarified that every schedule must belong under its project and requested seeing a project's schedules by pressing the project name.
+**INTERVIEWER:** Made every project name in Projects open an All-dates project schedule containing only that project's tasks. New work created from this route is locked to the project, Back returns to Projects, and the Home Schedule remains the cross-project planning view. Completed projects retain a read-only schedule until reactivated.
+
+## Turn 396
+**INTERVIEWEE:** Reintroduced the earlier full project-centered design and workflow proposal and asked what had happened concerning it.
+**INTERVIEWER:** Clarified that the broader redesign had remained a roadmap because the prior build was scoped to the latest concrete Schedule and Waste Counter requests. Identified implemented, partial, and unimplemented proposal items explicitly.
+
+## Turn 397
+**INTERVIEWEE:** Authorized implementing the broader proposal but required the existing colored design to remain, with everything clear and organized like Home: pressing a parent label reveals related child labels for Loads, Reports, Projects, and other groups.
+**INTERVIEWER:** Implemented the Home/Projects/Create/Records/More shell with a central orange Create sheet, colored expandable Records and More hubs, persistent active-project context, and Project Command Centers whose colored parent labels reveal planning, operations, issues, photos, activity, and documents. Added project metrics and combined timelines, project issues and direct site photos with database version 18, offline global search, Needs Attention, a consolidated recoverable Draft Center, project-context preselection across applicable entry screens, and real Make Receipt progress/inline validation/sticky Preview. Preserved the existing warm-cream/navy/orange visual language and restrained motion. Added real SQLite integration and meaningful-draft coverage; TypeScript, 102 automated tests, and a fresh Android production export pass.
+
+## Turn 398
+**INTERVIEWEE:** Requested implementation of Account and Cloud Synchronization.
+**INTERVIEWER:** Implemented the local-first Firebase account/synchronization slice with encrypted native session storage, email/password sign-in and reset, verified-email gating, automatic foreground retry, pending/error/last-sync visibility, guarded sign-out, full first-device SQLite bootstrap, canonical Firestore record synchronization, owner-scoped Cloud Storage media transfer, dependency-ordered cross-device restoration, newest-edit conflict handling, and new-device registration. Added the colored Account & Cloud UI under More → Setup and on Home, database version 19, owner-only Firestore/Storage rules, a trusted new-device notification function, environment template, and deployment/two-device acceptance guide. Live certification remains pending the business-owned Firebase project values and external console provisioning.
+
+## Turn 399
+**INTERVIEWEE:** Chose to keep the first rollout offline, defer online synchronization, and run the application on Android first.
+**INTERVIEWER:** Confirmed that this matches the implemented local-first boundary. With no Firebase `.env` values, DROMEX opens directly into local SQLite workflows and does not show the account gate. Firebase code remains available for later activation without redesigning the app. Recorded Android offline mode as the current rollout, with cloud provisioning and iPhone activation deferred.
+
+## Turn 400
+**INTERVIEWEE:** Selected Google Drive backup for the first Android development and asked how restoration works.
+**INTERVIEWER:** Confirmed a visible encrypted complete-backup file selected through Android's system document picker. On restore, DROMEX requests the separate backup password, validates compatibility and integrity before changing data, previews the backup date and record counts, creates a safety backup of current local data, requests explicit full-replacement confirmation, restores records and attachments without merging, and rolls back safely if any step fails.
+
+## Turn 401
+**INTERVIEWEE:** Authorized implementation of the confirmed Google Drive backup and restore workflow.
+**INTERVIEWER:** Implemented a colored Backup & Restore screen under Setup; password-authenticated AES-256-GCM complete packages containing the serialized SQLite database, DROMEX preferences, and referenced media; visible Android document-provider folder export and file selection; retained local copies; password, corruption, version, database-integrity, and relationship validation; record-count/date preview; explicit full-replacement warning; mandatory encrypted pre-restore safety export; attachment reconstruction; supported older-schema migration; and rollback if replacement fails. Added automated encryption, wrong-password, tamper, encoding, password-policy, and archive-preview coverage. Physical Google Drive round-trip acceptance on the target Android phone remains pending.
+
+## Turn 402
+**INTERVIEWEE:** Asked whether the application is ready and requested a large linked demo dataset plus testing steps.
+**INTERVIEWER:** Classified the application as ready for structured Android offline demonstration and acceptance testing but not final production release because physical printing, long-history performance, full-day/restart, 30-day pilot, Arabic RTL, Google Drive round-trip, and deferred cloud checks remain. Preserved the confirmed prohibition on production demo generators by implementing a repeatable development-only generator and external encrypted restore file containing 4,000 loads across 180 days with linked projects, customers, suppliers, items, people/equipment, daily reports, quarry, fuel, waste counters, schedules, issues, payments, opening balances, documents, signatures, drafts, and representative attachments. Added a safety-first Android walkthrough and automated relational/package validation. During preparation, corrected the backup manifest's final payment-table counter and required a newly entered private password for the pre-restore safety copy so restoring a public demo backup cannot weaken protection of current real data.
+
+## Turn 403
+**INTERVIEWEE:** Requested Apple Files backup because the current test device is iOS, wanted to choose the Files destination, and requested that no first expandable label be open automatically when entering a page.
+**INTERVIEWER:** Implemented iOS backup export through the native share sheet and Save to Files, allowing iCloud Drive, On My iPhone, USB, or another Files provider; retained cross-platform document selection and the same encrypted preview/restore engine; configured iCloud document capability; and made the separately passworded pre-restore safety copy pass through Apple Files before replacement. Updated platform-specific labels and instructions without adding Apple sign-in to DROMEX. Changed Home, Records, More, Reports, Load History groups/filters, and customer/supplier finance disclosures to start closed on every page entry; explicit deep links may still open only their requested project panel. Physical signed-iPhone/iCloud acceptance remains pending.

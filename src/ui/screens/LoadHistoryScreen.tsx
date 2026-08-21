@@ -11,20 +11,20 @@ import { SignaturePad } from '../components/SignaturePad';
 import { colors } from '../theme';
 import { confirmedDocument } from './MakeReceiptScreen';
 
-export function LoadHistoryScreen({ repository, onBack,initialFromDate='',initialToDate='' }: { repository: LoadRepository; onBack: () => void;initialFromDate?:string;initialToDate?:string }) {
+export function LoadHistoryScreen({ repository, onBack,initialFromDate='',initialToDate='',initialProjectName='',initialLoadId }: { repository: LoadRepository; onBack: () => void;initialFromDate?:string;initialToDate?:string;initialProjectName?:string;initialLoadId?:string|null }) {
   const [loads, setLoads] = useState<ConfirmedLoad[]>([]); const [selected, setSelected] = useState<ConfirmedLoad | null>(null);
   const refresh = useCallback(async () => setLoads(await repository.listLoads()), [repository]);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);useEffect(()=>{if(initialLoadId&&loads.length){const match=loads.find(load=>load.id===initialLoadId);if(match)setSelected(match);}},[initialLoadId,loads]);
   if (selected) return <SelectedLoad record={selected} repository={repository} onBack={() => setSelected(null)} onUpdate={(updated) => { setSelected(updated); setLoads((current) => current.map((load) => load.id === updated.id ? updated : load)); }} />;
-  return <LoadHistoryBrowser loads={loads} onSelect={setSelected} onBack={onBack} initialFromDate={initialFromDate} initialToDate={initialToDate}/>;
+  return <LoadHistoryBrowser loads={loads} onSelect={setSelected} onBack={onBack} initialFromDate={initialFromDate} initialToDate={initialToDate} initialProjectName={initialProjectName}/>;
 }
 
 const localDate=(value:string)=>{const date=new Date(value);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
 const unique=(values:string[])=>[...new Set(values)].sort((a,b)=>a.localeCompare(b));
 
-function LoadHistoryBrowser({loads,onSelect,onBack,initialFromDate,initialToDate}:{loads:ConfirmedLoad[];onSelect:(load:ConfirmedLoad)=>void;onBack:()=>void;initialFromDate:string;initialToDate:string}){
-  const[groupMode,setGroupMode]=useState<'project'|'customer'>('project');const[projectFilter,setProjectFilter]=useState('');const[customerFilter,setCustomerFilter]=useState('');const[driverFilter,setDriverFilter]=useState('');const[materialFilter,setMaterialFilter]=useState('');const[fromDate,setFromDate]=useState(initialFromDate);const[toDate,setToDate]=useState(initialToDate);const[search,setSearch]=useState('');
-  const[expandedGroups,setExpandedGroups]=useState<Set<string>>(()=>new Set());const[filtersOpen,setFiltersOpen]=useState(Boolean(initialFromDate||initialToDate));const entrance=useState(()=>new Animated.Value(0))[0];
+function LoadHistoryBrowser({loads,onSelect,onBack,initialFromDate,initialToDate,initialProjectName}:{loads:ConfirmedLoad[];onSelect:(load:ConfirmedLoad)=>void;onBack:()=>void;initialFromDate:string;initialToDate:string;initialProjectName:string}){
+  const[groupMode,setGroupMode]=useState<'project'|'customer'>('project');const[projectFilter,setProjectFilter]=useState(initialProjectName);const[customerFilter,setCustomerFilter]=useState('');const[driverFilter,setDriverFilter]=useState('');const[materialFilter,setMaterialFilter]=useState('');const[fromDate,setFromDate]=useState(initialFromDate);const[toDate,setToDate]=useState(initialToDate);const[search,setSearch]=useState('');
+  const[expandedGroups,setExpandedGroups]=useState<Set<string>>(()=>new Set());const[filtersOpen,setFiltersOpen]=useState(false);const entrance=useState(()=>new Animated.Value(0))[0];
   const projectOptions=useMemo(()=>unique(loads.map(load=>load.projectName??'No project')).map(value=>({id:value,label:value})),[loads]);
   const customerOptions=useMemo(()=>unique(loads.map(load=>load.customerName)).map(value=>({id:value,label:value})),[loads]);
   const driverOptions=useMemo(()=>unique(loads.map(load=>load.driverName)).map(value=>({id:value,label:value})),[loads]);

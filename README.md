@@ -71,11 +71,24 @@ The executable foundation and profile-management slice include:
   equipment fills, cancellation-aware history, supplier pricing/VAT, and finance integration.
 - the first Slice 8 business-report export increment: five offline XLSX report
   groups plus a Complete Analysis Workbook with stable raw identifiers, numeric
-  fields, summaries, filterable/frozen headings, a Data Dictionary, and native sharing.
+  fields, summaries, filterable/frozen headings, a Data Dictionary, native charts,
+  progress/cancellation, English/Arabic output, daily-report photo workbooks, and native sharing;
+- the project-linked Schedule, multi-driver Waste Dump counters, project-centered
+  navigation/Command Centers, global search, attention, and consolidated drafts; and
+- the Account & Cloud client/infrastructure slice: SecureStore owner sessions,
+  Firebase email verification/reset, durable Firestore/Storage synchronization,
+  automatic retry, cross-device reconstruction, owner-only rules, and new-device notification scaffolding.
+- Android and iOS complete Backup & Restore: a visible password-encrypted
+  `.dromexbackup` package containing SQLite data, DROMEX preferences, and
+  referenced media. Android uses its system folder picker for Google Drive,
+  Downloads, or USB; iOS uses Save to Files for iCloud Drive, On My iPhone,
+  USB, or another Files provider. Restore validates and previews the package
+  and saves a separately passworded safety copy before fully replacing data.
 
-Physical printer adapters, remaining business-report charts/progress/localization,
-individual daily-report Excel/photo export, and the remaining confirmed-load association
-corrections remain subsequent work. Quarry Purchases remain operationally
+Production Firebase provisioning/two-device acceptance, 30-day server recovery,
+physical Google Drive restore acceptance on Android, physical printer adapters,
+complete application Arabic UI, and the
+remaining confirmed-load association corrections remain subsequent work. Quarry Purchases remain operationally
 separate from outgoing Load History while sharing the financial payment ledger.
 
 ## Run locally
@@ -100,7 +113,13 @@ npm run typecheck
 npm test
 npm run android
 npm run ios
+npm run demo:backup
 ```
+
+The large linked Android acceptance dataset is delivered as an external encrypted
+restore file rather than a production-app generator. See
+[`docs/android-demo-testing.md`](docs/android-demo-testing.md) for the safety-first
+restore process and complete walkthrough.
 
 ## Architecture
 
@@ -112,8 +131,9 @@ npm run ios
 - `requirements`: authoritative elicited requirements and decisions.
 
 Every local write in the implemented repository is committed together with a
-`sync_outbox` entry. Firebase synchronization will consume this outbox in a
-later slice while SQLite remains the immediate source of truth on the phone.
+`sync_outbox` entry. The first Android rollout remains offline-only; Firebase
+synchronization is disabled until its environment values are supplied. SQLite
+remains the immediate source of truth on the phone.
 
 See [docs/architecture.md](docs/architecture.md) for implementation boundaries
 and the planned sequence.

@@ -12,14 +12,15 @@ import { capturePersistentImage, pickPersistentImage } from '../../services/medi
 const localDate=(value:string)=>{const date=new Date(value);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
 const quarryDraftKey='dromex.draft.quarry.v1';
 
-export function QuarryPurchasesScreen({ repository, onBack }: { repository: QuarryRepository; onBack: () => void }) {
+export function QuarryPurchasesScreen({ repository, onBack,initialProjectId,startEntry=false,initialPurchaseId }: { repository: QuarryRepository; onBack: () => void;initialProjectId?:string|null;startEntry?:boolean;initialPurchaseId?:string|null }) {
   const [setup,setSetup]=useState<QuarrySetup|null>(null); const [purchases,setPurchases]=useState<QuarryPurchase[]>([]); const [draft,setDraft]=useState<QuarryPurchaseDraft>({...emptyQuarryPurchaseDraft});
   const [showEntry,setShowEntry]=useState(false); const [showSupplier,setShowSupplier]=useState(false); const [supplierName,setSupplierName]=useState(''); const [supplierPhone,setSupplierPhone]=useState(''); const [supplierTax,setSupplierTax]=useState(''); const [supplierNotes,setSupplierNotes]=useState('');
   const [error,setError]=useState<string|null>(null); const [message,setMessage]=useState<string|null>(null); const [busy,setBusy]=useState(false);
   const [selected,setSelected]=useState<QuarryPurchase|null>(null);const[correction,setCorrection]=useState<QuarryCorrectionDraft|null>(null);const[cancelReason,setCancelReason]=useState('');
   const[fromDate,setFromDate]=useState('');const[toDate,setToDate]=useState('');
   const refresh=useCallback(async()=>{ const [nextSetup,nextPurchases]=await Promise.all([repository.getSetup(),repository.listPurchases()]); setSetup(nextSetup); setPurchases(nextPurchases); },[repository]);
-  useEffect(()=>{void refresh();void Storage.getItem(quarryDraftKey).then(value=>{if(!value)return;try{setDraft({...emptyQuarryPurchaseDraft,...JSON.parse(value) as Partial<QuarryPurchaseDraft>});}catch{}});},[refresh]);
+  useEffect(()=>{void refresh();void Storage.getItem(quarryDraftKey).then(value=>{try{const restored=value?{...emptyQuarryPurchaseDraft,...JSON.parse(value) as Partial<QuarryPurchaseDraft>}:{...emptyQuarryPurchaseDraft};setDraft(initialProjectId&&!restored.projectId?{...restored,projectId:initialProjectId}:restored);if(startEntry)setShowEntry(true);}catch{setDraft({...emptyQuarryPurchaseDraft,projectId:initialProjectId??''});}});},[initialProjectId,refresh,startEntry]);
+  useEffect(()=>{if(initialPurchaseId&&purchases.length){const match=purchases.find(value=>value.id===initialPurchaseId);if(match)openPurchase(match);}},[initialPurchaseId,purchases]);
   useEffect(()=>{const timer=setTimeout(()=>void Storage.setItem(quarryDraftKey,JSON.stringify(draft)),450);return()=>clearTimeout(timer);},[draft]);const calculation=useMemo(()=>setup?calculateQuarryPurchase(draft,setup.vatRatePercent):null,[draft,setup]);
   const filteredPurchases=useMemo(()=>purchases.filter((purchase)=>{const date=localDate(purchase.confirmedAt);return(!fromDate||date>=fromDate)&&(!toDate||date<=toDate);}),[fromDate,purchases,toDate]);
   const update=<K extends keyof QuarryPurchaseDraft>(key:K,value:QuarryPurchaseDraft[K])=>setDraft((current)=>({...current,[key]:value}));

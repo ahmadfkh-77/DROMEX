@@ -5,6 +5,7 @@ node_modules/
 dist/
 dist-ios/
 coverage/
+firebase/functions/lib/
 *.log
 .env
 .env.*

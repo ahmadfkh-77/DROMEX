@@ -259,10 +259,10 @@ export class SqliteLoadRepository implements LoadRepository {
     try { return { ...emptyLoadDraft, ...(JSON.parse(row.payload_json) as Partial<LoadDraft>) }; } catch { return null; }
   }
   async saveDraft(draft: LoadDraft): Promise<void> {
-    await this.db.runAsync(`INSERT INTO load_drafts (id, payload_json, updated_at) VALUES ('current', ?, ?)
-      ON CONFLICT(id) DO UPDATE SET payload_json = excluded.payload_json, updated_at = excluded.updated_at`, JSON.stringify(draft), new Date().toISOString());
+    const now=new Date().toISOString();await this.db.withTransactionAsync(async()=>{await this.db.runAsync(`INSERT INTO load_drafts (id, payload_json, updated_at) VALUES ('current', ?, ?)
+      ON CONFLICT(id) DO UPDATE SET payload_json = excluded.payload_json, updated_at = excluded.updated_at`, JSON.stringify(draft), now);await this.db.runAsync("DELETE FROM sync_outbox WHERE entity_type='loadDraft' AND entity_id='current'");await this.db.runAsync("INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES ('loadDraft','current','upsert',?,?)",JSON.stringify(draft),now);});
   }
-  async clearDraft(): Promise<void> { await this.db.runAsync('DELETE FROM load_drafts WHERE id = ?', 'current'); }
+  async clearDraft(): Promise<void> { const now=new Date().toISOString();await this.db.withTransactionAsync(async()=>{await this.db.runAsync('DELETE FROM load_drafts WHERE id = ?', 'current');await this.db.runAsync("DELETE FROM sync_outbox WHERE entity_type='loadDraft' AND entity_id='current'");await this.db.runAsync("INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES ('loadDraft','current','delete','{}',?)",now);}); }
 
   async confirmLoad(draft: LoadDraft): Promise<ConfirmedLoad> {
     const options = await this.getSetupOptions(); const issues = validateLoadDraft(draft, options);
@@ -301,6 +301,8 @@ export class SqliteLoadRepository implements LoadRepository {
         options.companySettings.phone, options.companySettings.email, options.companySettings.taxVatNumber, options.companySettings.receiptFooter, options.companySettings.logoUri);
       await this.db.runAsync('UPDATE device_state SET next_load_sequence = next_load_sequence + 1 WHERE id = ?', 'local');
       await this.db.runAsync('DELETE FROM load_drafts WHERE id = ?', 'current');
+      await this.db.runAsync("DELETE FROM sync_outbox WHERE entity_type='loadDraft' AND entity_id='current'");
+      await this.db.runAsync("INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES ('loadDraft','current','delete','{}',?)",confirmedAt);
       await this.enqueue('load', id, { id, transactionNumber, confirmedAt });
     });
     const row = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', id);

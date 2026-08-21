@@ -11,7 +11,7 @@ path used by the UI.
 
 ```text
 UI -> repository interface -> SQLite adapter -> SQLite
-                           -> sync outbox -> future Firebase worker
+                           -> sync outbox -> Firebase REST worker
 ```
 
 Domain validation has no Expo, React Native, SQLite, Firebase, or printer
@@ -44,7 +44,9 @@ load, quarry-purchase, and opening-balance histories.
 Schema version 10 adds project/date-indexed individual waste-dump records with
 optional field detail and permanent Active/Cancelled lifecycle evidence.
 Schema version 13 adds the single-tank fuel ledger and extends payment targets to
-priced fuel deliveries.
+priced fuel deliveries. Schema versions 17 and 18 add project scheduling, waste
+counter presets, issues, and direct project media. Schema version 19 adds the
+owner/device cloud state and per-record synchronization cursor registry.
 
 SQLite runs with foreign keys enabled and WAL journaling. Catalog writes and
 their corresponding outbox entry execute in the same transaction, preventing a
@@ -52,7 +54,10 @@ locally saved business change from being omitted from later synchronization.
 
 ## Boundaries not yet implemented
 
-- Firebase Authentication, Firestore, Storage, and outbox processing;
+- production Firebase project provisioning, two-device acceptance, and the
+  separate 30-day server point-in-time recovery layer;
+- physical Android acceptance of the implemented encrypted complete-backup
+  round trip through a signed-in Google Drive document provider;
 - supplier/profile and project/unit/conversion lifecycle refinements;
 - remaining business-report charts, progress/cancellation, localization,
   individual daily-report Excel/photo export, and confirmed-record association correction;
@@ -60,6 +65,46 @@ locally saved business change from being omitted from later synchronization.
 
 Printer code must remain behind an adapter because supported models are defined
 by physical acceptance testing rather than assumed generic compatibility.
+
+## Account and cloud synchronization path
+
+Firebase public client identifiers are supplied through Expo environment
+variables; no service-account credential is embedded in the application. The
+owner signs in through Firebase Authentication REST endpoints, and the refresh
+token is retained in SecureStore. Synchronization is blocked until Firebase
+reports that the owner email is verified.
+
+The worker reads the durable SQLite outbox, resolves each event to its canonical
+local table row, uploads owner-scoped Firestore documents, and transfers local
+photos/logos to Cloud Storage. Remote rows are downloaded and applied in foreign-
+key dependency order. Failures remain queued with an error and retry while the
+app is active. Conflicts compare client modification timestamps and retain the
+newest edit. A first device uploads the complete supported local dataset when the
+owner's cloud record set is empty; later devices download the cloud set instead.
+See `docs/firebase-setup.md` for rules, notification function, configuration,
+and physical acceptance.
+
+## Complete backup and restore
+
+`SqliteBackupRepository` creates a versioned ZIP payload containing a serialized
+SQLite database, all `dromex.*` preferences, a manifest with record counts, and
+every referenced app attachment. The payload is encrypted with AES-256-GCM;
+PBKDF2-HMAC-SHA256 derives its key from a separate owner password using a random
+salt, and authenticated metadata detects password errors or tampering.
+
+The Android Storage Access Framework provides the visible Android destination,
+so Google Drive works without Firebase or a Google Drive API credential. On iOS,
+the native share sheet hands the local encrypted file to Save to Files, where the
+owner chooses iCloud Drive, On My iPhone, USB storage, or another Files provider;
+the iOS document picker selects an existing package for restore. A local app-owned
+copy is also retained. Restore decrypts and
+validates the archive in a staged database, rejects unsupported newer schemas,
+migrates supported older schemas, checks SQLite integrity and foreign keys, and
+shows the manifest counts before mutation. After confirmation it requires a
+destination for an encrypted current-state safety backup, materializes restored
+attachments into app storage, replaces the live database and preferences, and
+rolls back to the captured current state if replacement fails. The safety copy
+uses a newly entered password instead of reusing the source package password.
 
 ## Implemented load vertical path
 

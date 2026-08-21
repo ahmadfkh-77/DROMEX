@@ -102,6 +102,23 @@ export const emptyLoadDraft: LoadDraft = {
   conversionId: '', unitPriceUsd: '', notes: '',
 };
 
+export function isMeaningfulLoadDraft(draft: LoadDraft): boolean {
+  return Boolean(
+    draft.destinationAddress.trim()
+    || draft.itemId
+    || draft.driverId
+    || draft.truckId
+    || draft.driverName.trim()
+    || draft.truckPlate.trim()
+    || draft.requestedQuantityKg.trim()
+    || draft.emptyWeightKg.trim()
+    || draft.fullWeightKg.trim()
+    || draft.conversionId
+    || draft.unitPriceUsd.trim()
+    || draft.notes.trim()
+  );
+}
+
 export type LoadCalculation = {
   netWeightKg: number | null;
   convertedQuantity: number | null;
