@@ -1624,3 +1624,55 @@ Is this accurate?
 ## Turn 403
 **INTERVIEWEE:** Requested Apple Files backup because the current test device is iOS, wanted to choose the Files destination, and requested that no first expandable label be open automatically when entering a page.
 **INTERVIEWER:** Implemented iOS backup export through the native share sheet and Save to Files, allowing iCloud Drive, On My iPhone, USB, or another Files provider; retained cross-platform document selection and the same encrypted preview/restore engine; configured iCloud document capability; and made the separately passworded pre-restore safety copy pass through Apple Files before replacement. Updated platform-specific labels and instructions without adding Apple sign-in to DROMEX. Changed Home, Records, More, Reports, Load History groups/filters, and customer/supplier finance disclosures to start closed on every page entry; explicit deep links may still open only their requested project panel. Physical signed-iPhone/iCloud acceptance remains pending.
+
+## Turn 404
+**INTERVIEWEE:** Clarified that the most important Asphalt Pavement Calculator workflow is using kg/m² to determine the asphalt quantity needed.
+**INTERVIEWER:** Confirmed kg/m² as the primary per-layer planning input. The calculator will multiply net paved area in m² by the target kg/m² to show required kilograms and tonnes, then show any waste/contingency allowance separately. Thickness and density are optional verification inputs, not an automatic structural-design recommendation. Asked whether kg/m² values should always be entered manually or may be selected from saved mix/layer defaults and overridden for a job.
+
+## Turn 405
+**INTERVIEWEE:** Requested that the presented kg/m² values be placed in a dropdown for selection.
+**INTERVIEWER:** Implemented the Asphalt Pavement Calculator with dropdown values 60, 70, 80, 90, 100, 110, 120, 140, 160, 180, 200, and 240 kg/m² plus Custom. Each choice previews compacted thickness using editable density defaulted to 2.40 t/m³. Added length × width or direct net-area entry, separate theoretical/allowance/planned kg and tonnes, project-linked named calculation persistence and editing, project Command Center and Records navigation, global search/activity/metrics integration, complete-backup counts, future cloud-sync schema mapping, database version 20, and automated formula/repository/migration coverage.
+
+## Turn 406
+**INTERVIEWEE:** Authorized all remaining pavement calculation rules and asked whether the camera could automatically identify the road edges and measure its width.
+**INTERVIEWER:** Added closed colored tools for tapered/shape geometry and deductions, full granular/asphalt layer stacks, compacted/loose m³, reverse coverage/thickness, truck counts, prime/tack quantities, milling, crossfall/grade/sloped width, actual-versus-planned progress/variance, combined project totals, and PDF/Excel exports. Kept thicknesses and coat rates as explicit project inputs rather than design recommendations. Confirmed that camera measurement is feasible as an assisted AR workflow, not reliable from an unscaled ordinary photo alone: the operator confirms edge points, supported LiDAR/ARCore Depth hardware provides scaled positions, the app shows confidence/review, and manual values remain authoritative. Requested exact device models and acceptable tape/survey comparison error before native camera implementation.
+
+## Turn 407
+**INTERVIEWEE:** Requested that pavement-calculator results use a different color, such as red, so they are easy to identify.
+**INTERVIEWER:** Applied a dedicated high-contrast red result style with white values and dark-red borders to the main net area and kg/m² results, every advanced calculator output, saved result chips, and combined project totals. Kept form inputs and colored expandable navigation unchanged so red consistently means calculated output on this screen.
+
+## Turn 408
+**INTERVIEWEE:** Requested that all expandable label `+` indicators change to `×` when open.
+**INTERVIEWER:** Replaced the rotated-plus behavior in both the shared colored expandable labels and Home labels with explicit state marks: `+` when closed and `×` when open. Preserved the opening/closing content motion and animated accent line. Existing report and filter disclosures already used the explicit `+`/`×` convention.
+
+## Turn 409
+**INTERVIEWEE:** Found the red result color annoying, requested a better color, and asked to see the kg/m² thickness before compaction.
+**INTERVIEWER:** Replaced pavement-result red with a dedicated deep teal so results remain visually distinct while red returns to errors and danger. Added an optional loose-to-compacted thickness factor selector containing 1.15, 1.20, 1.25, 1.30, and Custom; displays before-compaction loose thickness beside finished compacted thickness; persists both with each project calculation; includes them in saved rows and PDF/Excel exports; and added the same loose-thickness input to asphalt layers in the advanced stack. DROMEX deliberately selects no default because a universal factor would be unsafe; the mix, paver setup, trial strip, project specification, or measured field calibration controls. Asked which calibrated factor the owner's crew normally uses.
+
+## Turn 410
+**INTERVIEWEE:** Requested that Asphalt Calculator sections 1 and 2 fold using `+` and `×`.
+**INTERVIEWER:** Converted `1 · Paved area` and `2 · Spread rate and thickness` to the shared animated colored expandable-label pattern. Both start closed on calculator entry, retain their entered values when folded, show `+` closed and `×` open, and leave the calculated-result cards visible for quick field review.
+
+## Turn 411
+**INTERVIEWEE:** Requested adding wall construction.
+**INTERVIEWER:** Proposed a project-linked Wall Calculator under Construction Calculators. Identified the highest-value scope distinction before defining formulas: masonry block/brick walls require wall/opening area, unit count, mortar, plaster/render, lintels, waste, and cost quantities, while reinforced-concrete walls require concrete volume, formwork area, and an engineer-defined reinforcement schedule. Asked whether the calculator shall cover masonry, reinforced concrete, or both as separate modes.
+
+## Turn 412
+**INTERVIEWEE:** Clarified that the wall types are reinforced concrete, rocks stacked with concrete, and concrete plus rocks.
+**INTERVIEWER:** Interpreted these as three distinct project-linked calculator modes: reinforced-concrete wall; mortared stacked-rock/rubble masonry, where stones are individually laid and joints/core are filled; and mass/cyclopean concrete, where large stones are embedded within a concrete matrix. Proposed common length, height, top/bottom thickness, deductions, waste, density, and cost inputs; mode-specific concrete/reinforcement/formwork, stone/mortar, or embedded-rock/concrete splits; and optional footing/coping/drainage quantities after wall purpose is known. Kept all dimensions, reinforcement, material proportions, and stability decisions as approved drawing/engineer inputs rather than DROMEX design recommendations. Asked whether these are retaining walls, free-standing/boundary walls, or both.
+
+## Turn 413
+**INTERVIEWEE:** Clarified that the wall feature must track how much concrete was used, how many reinforcing bars were used by size, and how much filling concrete was used.
+**INTERVIEWER:** Confirmed that the feature is both a calculator and an actual Wall Materials Log. Proposed separately dated, project/wall-section-linked entries for structural concrete, filling/joint concrete or mortar, cyclopean matrix concrete, footing/coping concrete, stone, and reinforcement. Reinforcement is grouped by diameter and retains quantity, length, optional grade/shape/mark, total metres, and calculated weight; the wall summary compares planned, actual, and remaining/variance values without mixing structural and filling concrete. Asked whether concrete use is entered manually in m³, linked from confirmed DROMEX loads, or both without double-counting; also retained the open question about the crew's normal steel-entry method.
+
+## Turn 414
+**INTERVIEWEE:** Requested tracking cement bags, sand, gravel, and similar wall-construction materials.
+**INTERVIEWER:** Extended the Wall Materials Log scope to on-site concrete and mortar ingredients: cement bag count with configurable bag weight; sand and gravel/coarse aggregate in m³ or tonnes; water in litres; optional admixture in litres or kilograms; optional saved mix name and batch count; and association with structural concrete, filling concrete, cyclopean matrix, stone-wall mortar, footing, or coping. These actual ingredient entries contribute to project/wall planned-versus-actual totals. Asked whether this is consumption history only or a full inventory ledger with receipts, issues, balance, corrections, and low-stock warnings, because the latter expands the earlier fuel-only inventory boundary.
+
+## Turn 415
+**INTERVIEWEE:** Chose to record only the materials consumed by each wall for now.
+**INTERVIEWER:** Confirmed that cement bags, sand, gravel/aggregate, water, admixture, concrete, stone, and reinforcement remain wall-level consumption history and totals only. They do not create raw-material deliveries, issues, warehouse balances, or low-stock warnings, preserving the existing fuel-only inventory boundary. Proposed separate Ready-mix and Site-mixed concrete entry modes so the owner can enter finished m³ for delivered concrete or ingredient quantities for site mixing without irrelevant fields or double-counting, and asked whether finished m³ should remain optional in Site-mixed entries.
+
+## Turn 416
+**INTERVIEWEE:** Authorized starting implementation of the confirmed wall workflow.
+**INTERVIEWER:** Implemented project-linked Wall Construction under Records → Operational Records and each Project Command Center. Added reinforced-concrete, stacked-rock/rubble-masonry, and concrete-with-embedded-rock systems; retaining, boundary/free-standing, and other purposes; rectangular/tapered volume, deductions, and allowance; saved wall editing; teal planned and actual summaries; manual Ready-mix, Site-mixed, Rebar, and Stone consumption entries; separate structural/filling/cyclopean/mortar/footing/coping purposes; configurable cement-bag weight; sand/gravel m³ or tonnes; water/admixture; rebar diameter/count/length/grade with calculated metres and kilograms and separate diameter summaries; stone m³/tonnes; and dated wall history. Added database version 22, durable outbox/cloud schema, complete-backup counts, project metrics/activity, global search, migration/domain/repository tests, and preserved the no-inventory boundary. TypeScript and 126 automated tests pass; physical mobile acceptance and controlled correction of mistaken consumption entries remain pending.

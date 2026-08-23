@@ -10,12 +10,14 @@ import {SqliteCloudRepository} from '../data/repositories/SqliteCloudRepository'
 import {SqliteFinancialRepository} from '../data/repositories/SqliteFinancialRepository';
 import {SqliteFuelRepository} from '../data/repositories/SqliteFuelRepository';
 import {SqliteLoadRepository} from '../data/repositories/SqliteLoadRepository';
+import {SqlitePavementRepository} from '../data/repositories/SqlitePavementRepository';
 import {SqliteProfileRepository} from '../data/repositories/SqliteProfileRepository';
 import {SqliteProjectReportRepository} from '../data/repositories/SqliteProjectReportRepository';
 import {SqliteQuarryRepository} from '../data/repositories/SqliteQuarryRepository';
 import {SqliteQuickTextRepository} from '../data/repositories/SqliteQuickTextRepository';
 import {SqliteScheduleRepository} from '../data/repositories/SqliteScheduleRepository';
 import {SqliteWasteRepository} from '../data/repositories/SqliteWasteRepository';
+import {SqliteWallRepository} from '../data/repositories/SqliteWallRepository';
 import {SqliteWorkspaceRepository} from '../data/repositories/SqliteWorkspaceRepository';
 import type {DashboardRange} from '../domain/dashboard';
 import type {CloudAccountSnapshot} from '../domain/cloud';
@@ -36,6 +38,7 @@ import {LoadCorrectionsScreen} from './screens/LoadCorrectionsScreen';
 import {LoadHistoryScreen} from './screens/LoadHistoryScreen';
 import {MakeReceiptScreen} from './screens/MakeReceiptScreen';
 import {PeopleEquipmentScreen} from './screens/PeopleEquipmentScreen';
+import {PavementCalculatorScreen} from './screens/PavementCalculatorScreen';
 import {ProjectCommandCenterScreen} from './screens/ProjectCommandCenterScreen';
 import {ProjectsScreen} from './screens/ProjectsScreen';
 import {QuarryPurchasesScreen} from './screens/QuarryPurchasesScreen';
@@ -45,10 +48,11 @@ import {ReportsScreen} from './screens/ReportsScreen';
 import {ScheduleScreen} from './screens/ScheduleScreen';
 import {SettingsScreen} from './screens/SettingsScreen';
 import {WasteDumpScreen} from './screens/WasteDumpScreen';
+import {WallConstructionScreen} from './screens/WallConstructionScreen';
 import {WorkspaceHubScreen} from './screens/WorkspaceHubScreen';
 import {colors} from './theme';
 
-type Screen='home'|'projects'|'recordsHub'|'moreHub'|'projectCommand'|'search'|'drafts'|'attention'|'backup'|'cloud'|'makeReceipt'|'loads'|'loadCorrections'|'receiptSetup'|'directory'|'customers'|'catalog'|'schedule'|'reports'|'quarry'|'waste'|'fuel'|'quickText'|'financials'|'settings';
+type Screen='home'|'projects'|'recordsHub'|'moreHub'|'projectCommand'|'search'|'drafts'|'attention'|'backup'|'cloud'|'makeReceipt'|'loads'|'loadCorrections'|'receiptSetup'|'directory'|'customers'|'catalog'|'schedule'|'pavement'|'walls'|'reports'|'quarry'|'waste'|'fuel'|'quickText'|'financials'|'settings';
 type EntryIntent=CreateAction|null;
 const activeProjectKey='dromex.active-project.v1';
 
@@ -60,6 +64,7 @@ export function DromexApp(){
   const businessReportRepository=useMemo(()=>new SqliteBusinessReportRepository(db),[db]);
   const profileRepository=useMemo(()=>new SqliteProfileRepository(db),[db]);
   const loadRepository=useMemo(()=>new SqliteLoadRepository(db),[db]);
+  const pavementRepository=useMemo(()=>new SqlitePavementRepository(db),[db]);
   const projectReportRepository=useMemo(()=>new SqliteProjectReportRepository(db),[db]);
   const quarryRepository=useMemo(()=>new SqliteQuarryRepository(db),[db]);
   const financialRepository=useMemo(()=>new SqliteFinancialRepository(db),[db]);
@@ -68,6 +73,7 @@ export function DromexApp(){
   const quickTextRepository=useMemo(()=>new SqliteQuickTextRepository(db),[db]);
   const scheduleRepository=useMemo(()=>new SqliteScheduleRepository(db),[db]);
   const workspaceRepository=useMemo(()=>new SqliteWorkspaceRepository(db),[db]);
+  const wallRepository=useMemo(()=>new SqliteWallRepository(db),[db]);
   const[screen,setScreen]=useState<Screen>('home');
   const[history,setHistory]=useState<Screen[]>([]);
   const[activeProject,setActiveProject]=useState<Project|null>(null);
@@ -77,6 +83,8 @@ export function DromexApp(){
   const[projectPanel,setProjectPanel]=useState<'issues'|'photos'|null>(null);
   const[searchTarget,setSearchTarget]=useState<GlobalSearchResult|null>(null);
   const[scheduleProjectId,setScheduleProjectId]=useState<string|null>(null);
+  const[pavementProjectId,setPavementProjectId]=useState<string|null>(null);
+  const[wallProjectId,setWallProjectId]=useState<string|null>(null);
   const[dashboardRange,setDashboardRange]=useState<DashboardRange|null>(null);
   const[cloudSnapshot,setCloudSnapshot]=useState<CloudAccountSnapshot|null>(null);
 
@@ -90,19 +98,19 @@ export function DromexApp(){
   const openProject=(project:Project,panel:'issues'|'photos'|null=null)=>{setCommandProject(project);if(project.status==='active')chooseActiveProject(project);setProjectPanel(panel);navigate('projectCommand');};
   const projectForId=async(projectId:string|null)=>{if(!projectId)return null;const projects=await loadRepository.listProjects();return projects.find(value=>value.id===projectId)??null;};
   const openCreateAction=(action:CreateAction)=>{setCreateOpen(false);setEntryIntent(action);setSearchTarget(null);if(action==='receipt')navigate('makeReceipt');else if(action==='dailyReport')navigate('reports');else if(action==='waste')navigate('waste');else if(action==='quarry')navigate('quarry');else if(action==='fuelDelivery'||action==='equipmentFill')navigate('fuel');else if(action==='quickText')navigate('quickText');else if(action==='schedule'){setScheduleProjectId(activeProject?.id??null);navigate('schedule');}else if(activeProject){setCommandProject(activeProject);setProjectPanel(action==='issue'?'issues':'photos');navigate('projectCommand');}else navigate('projects');};
-  const openSearchResult=(result:GlobalSearchResult)=>{setSearchTarget(result);void (async()=>{if(result.route==='projects'&&result.projectId){const project=await projectForId(result.projectId);if(project){openProject(project,result.kind==='Project Issue'?'issues':null);return;}}if(result.route==='schedule')setScheduleProjectId(result.projectId);navigate(result.route as Screen);})();};
+  const openSearchResult=(result:GlobalSearchResult)=>{setSearchTarget(result);void (async()=>{if(result.route==='projects'&&result.projectId){const project=await projectForId(result.projectId);if(project){openProject(project,result.kind==='Project Issue'?'issues':null);return;}}if(result.route==='schedule')setScheduleProjectId(result.projectId);if(result.route==='walls')setWallProjectId(result.projectId);navigate(result.route as Screen);})();};
   const openAttentionRoute=(route:GlobalSearchRoute|'drafts')=>{if(route==='drafts')navigate('drafts');else navigate(route as Screen);};
   const continueDraft=(route:DraftRoute,projectId:string|null)=>{void (async()=>{const project=await projectForId(projectId);if(project?.status==='active')chooseActiveProject(project);setEntryIntent(route==='dailyReport'?'dailyReport':route==='quarry'?'quarry':route==='fuel'?'equipmentFill':route==='quickText'?'quickText':'receipt');navigate(route==='receipt'?'makeReceipt':route==='dailyReport'?'reports':route==='quarry'?'quarry':route==='fuel'?'fuel':'quickText');})();};
 
   let content:ReactNode;
   if(screen==='home')content=<HomeScreen businessReportRepository={businessReportRepository} workspaceRepository={workspaceRepository} cloudSnapshot={cloudSnapshot} onMakeReceipt={()=>navigate('makeReceipt')} onSearch={()=>navigate('search')} onOpenAttention={()=>navigate('attention')} onOpenDrafts={()=>navigate('drafts')} onOpenBackup={()=>navigate('backup')} onOpenCloud={()=>navigate('cloud')} onOpenLoads={range=>openDashboardRoute('loads',range)} onOpenReceiptSetup={()=>navigate('receiptSetup')} onOpenDirectory={()=>navigate('directory')} onOpenCustomers={()=>navigate('customers')} onOpenCatalog={()=>navigate('catalog')} onOpenReports={range=>openDashboardRoute('reports',range)} onOpenQuarry={()=>navigate('quarry')} onOpenProjects={()=>navigate('projects')} onOpenSchedule={()=>{setScheduleProjectId(null);navigate('schedule');}} onOpenFinancials={range=>openDashboardRoute('financials',range)} onOpenWaste={()=>navigate('waste')} onOpenFuel={()=>navigate('fuel')} onOpenQuickText={()=>navigate('quickText')} onOpenLoadCorrections={()=>navigate('loadCorrections')} onOpenSettings={()=>navigate('settings')}/>;
-  else if(screen==='recordsHub'||screen==='moreHub')content=<WorkspaceHubScreen kind={screen==='recordsHub'?'records':'more'} routes={{onSearch:()=>navigate('search'),onDrafts:()=>navigate('drafts'),onLoads:()=>navigate('loads'),onCustomers:()=>navigate('customers'),onProjects:()=>navigate('projects'),onDirectory:()=>navigate('directory'),onCatalog:()=>navigate('catalog'),onSchedule:()=>{setScheduleProjectId(null);navigate('schedule');},onWaste:()=>navigate('waste'),onQuarry:()=>navigate('quarry'),onFuel:()=>navigate('fuel'),onQuickText:()=>navigate('quickText'),onFinancials:()=>navigate('financials'),onCorrections:()=>navigate('loadCorrections'),onReports:()=>navigate('reports'),onReceiptSetup:()=>navigate('receiptSetup'),onSettings:()=>navigate('settings'),onBackup:()=>navigate('backup'),onCloud:()=>navigate('cloud'),onAttention:()=>navigate('attention')}}/>;
+  else if(screen==='recordsHub'||screen==='moreHub')content=<WorkspaceHubScreen kind={screen==='recordsHub'?'records':'more'} routes={{onSearch:()=>navigate('search'),onDrafts:()=>navigate('drafts'),onLoads:()=>navigate('loads'),onCustomers:()=>navigate('customers'),onProjects:()=>navigate('projects'),onDirectory:()=>navigate('directory'),onCatalog:()=>navigate('catalog'),onSchedule:()=>{setScheduleProjectId(null);navigate('schedule');},onPavement:()=>{setPavementProjectId(null);navigate('pavement');},onWalls:()=>{setWallProjectId(null);navigate('walls');},onWaste:()=>navigate('waste'),onQuarry:()=>navigate('quarry'),onFuel:()=>navigate('fuel'),onQuickText:()=>navigate('quickText'),onFinancials:()=>navigate('financials'),onCorrections:()=>navigate('loadCorrections'),onReports:()=>navigate('reports'),onReceiptSetup:()=>navigate('receiptSetup'),onSettings:()=>navigate('settings'),onBackup:()=>navigate('backup'),onCloud:()=>navigate('cloud'),onAttention:()=>navigate('attention')}}/>;
   else if(screen==='search')content=<GlobalSearchScreen repository={workspaceRepository} onBack={()=>goBack('home')} onOpen={openSearchResult}/>;
   else if(screen==='drafts')content=<DraftCenterScreen repository={loadRepository} onBack={()=>goBack('moreHub')} onContinue={continueDraft}/>;
   else if(screen==='attention')content=<AttentionScreen repository={workspaceRepository} onBack={()=>goBack('home')} onOpen={openAttentionRoute}/>;
   else if(screen==='backup')content=<BackupRestoreScreen repository={backupRepository} onBack={()=>goBack('moreHub')} onRestored={()=>{setActiveProject(null);setCommandProject(null);setHistory([]);setScreen('home');}}/>;
   else if(screen==='cloud')content=<AccountCloudScreen repository={cloudRepository} onBack={()=>goBack('moreHub')} onChanged={setCloudSnapshot}/>;
-  else if(screen==='projectCommand'&&commandProject){const project=commandProject;content=<ProjectCommandCenterScreen project={project} repository={workspaceRepository} initialPanel={projectPanel} onBack={()=>goBack('projects')} routes={{onSchedule:()=>{setScheduleProjectId(project.id);navigate('schedule');},onDailyReport:()=>{setEntryIntent('dailyReport');navigate('reports');},onReceipt:()=>{setEntryIntent('receipt');navigate('makeReceipt');},onWaste:()=>navigate('waste'),onFuel:()=>{setEntryIntent('equipmentFill');navigate('fuel');},onQuarry:()=>{setEntryIntent('quarry');navigate('quarry');},onQuickText:()=>{setEntryIntent('quickText');navigate('quickText');},onLoads:()=>{setSearchTarget({id:'',kind:'Project',title:project.name,subtitle:'',date:null,route:'loads',projectId:project.id});navigate('loads');},onReports:()=>navigate('reports'),onManageProject:()=>navigate('projects')}}/>;}
+  else if(screen==='projectCommand'&&commandProject){const project=commandProject;content=<ProjectCommandCenterScreen project={project} repository={workspaceRepository} initialPanel={projectPanel} onBack={()=>goBack('projects')} routes={{onSchedule:()=>{setScheduleProjectId(project.id);navigate('schedule');},onPavement:()=>{setPavementProjectId(project.id);navigate('pavement');},onWalls:()=>{setWallProjectId(project.id);navigate('walls');},onDailyReport:()=>{setEntryIntent('dailyReport');navigate('reports');},onReceipt:()=>{setEntryIntent('receipt');navigate('makeReceipt');},onWaste:()=>navigate('waste'),onFuel:()=>{setEntryIntent('equipmentFill');navigate('fuel');},onQuarry:()=>{setEntryIntent('quarry');navigate('quarry');},onQuickText:()=>{setEntryIntent('quickText');navigate('quickText');},onLoads:()=>{setSearchTarget({id:'',kind:'Project',title:project.name,subtitle:'',date:null,route:'loads',projectId:project.id});navigate('loads');},onReports:()=>navigate('reports'),onManageProject:()=>navigate('projects')}}/>;}
   else if(screen==='makeReceipt')content=<ReceiptEntrance><MakeReceiptScreen repository={loadRepository} initialProjectId={activeProject?.id} onBack={()=>goBack('home')} onOpenSetup={()=>navigate('receiptSetup')} onOpenDirectory={()=>navigate('directory')} onOpenProjects={()=>navigate('projects')}/></ReceiptEntrance>;
   else if(screen==='loads'){const projectName=searchTarget?.projectId?(commandProject?.id===searchTarget.projectId?commandProject.name:activeProject?.id===searchTarget.projectId?activeProject.name:''):'';content=<LoadHistoryScreen repository={loadRepository} initialFromDate={dashboardRange?.fromDate} initialToDate={dashboardRange?.toDate} initialProjectName={projectName} initialLoadId={searchTarget?.route==='loads'?searchTarget.id:null} onBack={()=>goBack('recordsHub')}/>;}
   else if(screen==='loadCorrections')content=<LoadCorrectionsScreen repository={loadRepository} onBack={()=>goBack('recordsHub')}/>;
@@ -114,6 +122,8 @@ export function DromexApp(){
   else if(screen==='quarry')content=<QuarryPurchasesScreen repository={quarryRepository} initialProjectId={activeProject?.id} startEntry={entryIntent==='quarry'} initialPurchaseId={searchTarget?.kind==='Quarry Purchase'?searchTarget.id:null} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='projects')content=<ProjectsScreen repository={loadRepository} onBack={()=>goBack('home')} onOpenProject={project=>openProject(project,entryIntent==='issue'?'issues':entryIntent==='photo'?'photos':null)} onProjectStatusChange={(project,status)=>{if(activeProject?.id===project.id&&status==='completed')chooseActiveProject(null);if(commandProject?.id===project.id)setCommandProject({...commandProject,status});}}/>;
   else if(screen==='schedule')content=<ScheduleScreen repository={scheduleRepository} initialProjectId={scheduleProjectId??(searchTarget?.route==='schedule'?searchTarget.projectId:null)} onBack={()=>{setScheduleProjectId(null);goBack('recordsHub');}}/>;
+  else if(screen==='pavement')content=<PavementCalculatorScreen repository={pavementRepository} initialProjectId={pavementProjectId} onBack={()=>{setPavementProjectId(null);goBack('recordsHub');}}/>;
+  else if(screen==='walls')content=<WallConstructionScreen repository={wallRepository} initialProjectId={wallProjectId} onBack={()=>{setWallProjectId(null);goBack('recordsHub');}}/>;
   else if(screen==='financials')content=<FinancialsScreen repository={financialRepository} initialFromDate={dashboardRange?.fromDate} initialToDate={dashboardRange?.toDate} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='waste')content=<WasteDumpScreen repository={wasteRepository} initialProjectId={searchTarget?.route==='waste'?searchTarget.projectId:activeProject?.id} initialDumpId={searchTarget?.route==='waste'?searchTarget.id:null} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='fuel')content=<FuelTrackingScreen repository={fuelRepository} initialProjectId={activeProject?.id} initialTab={entryIntent==='fuelDelivery'?'delivery':entryIntent==='equipmentFill'?'fill':undefined} onBack={()=>goBack('recordsHub')}/>;
@@ -121,7 +131,7 @@ export function DromexApp(){
   else if(screen==='settings')content=<SettingsScreen repository={profileRepository} onBack={()=>goBack('moreHub')}/>;
   else content=<ProjectsScreen repository={loadRepository} onBack={()=>goRoot('home')} onOpenProject={openProject}/>;
 
-  const recordsActive=(['recordsHub','loads','loadCorrections','customers','directory','schedule','quarry','waste','fuel','quickText','financials'] as Screen[]).includes(screen);
+  const recordsActive=(['recordsHub','loads','loadCorrections','customers','directory','schedule','pavement','walls','quarry','waste','fuel','quickText','financials'] as Screen[]).includes(screen);
   const moreActive=(['moreHub','reports','catalog','receiptSetup','settings','search','drafts','attention','backup','cloud'] as Screen[]).includes(screen);
   if(cloudSnapshot?.configured&&!cloudSnapshot.signedIn)return <SafeAreaView style={styles.safeArea}><StatusBar barStyle="dark-content" backgroundColor={colors.background}/><CloudAutoSync repository={cloudRepository} onSnapshot={setCloudSnapshot}/><AccountCloudScreen repository={cloudRepository} onChanged={setCloudSnapshot}/></SafeAreaView>;
   return <SafeAreaView style={styles.safeArea}><StatusBar barStyle="dark-content" backgroundColor={colors.background}/><CloudAutoSync repository={cloudRepository} onSnapshot={setCloudSnapshot}/>{activeProject?<ProjectContextBar project={activeProject} onOpen={()=>{setCommandProject(activeProject);setProjectPanel(null);navigate('projectCommand');}} onChange={()=>goRoot('projects')} onClear={()=>chooseActiveProject(null)}/>:null}<View style={styles.shell}>{content}</View><View style={styles.nav}><NavButton mark="⌂" label="Home" active={screen==='home'} onPress={()=>goRoot('home')}/><NavButton mark="P" label="Projects" active={screen==='projects'||screen==='projectCommand'} onPress={()=>goRoot('projects')}/><CreateNavButton onPress={()=>setCreateOpen(true)}/><NavButton mark="R" label="Records" active={recordsActive} onPress={()=>goRoot('recordsHub')}/><NavButton mark="•••" label="More" active={moreActive} onPress={()=>goRoot('moreHub')}/></View><CreateActionSheet visible={createOpen} activeProject={activeProject} onClose={()=>setCreateOpen(false)} onChooseProject={()=>{setCreateOpen(false);goRoot('projects');}} onSelect={openCreateAction}/></SafeAreaView>;

@@ -23,7 +23,7 @@ const jsonSpecs=[
   {table:'quarry_purchases',column:'photos_json'},
 ] as const;
 const allowedLocator=new Set([...singleSpecs,...jsonSpecs].map(value=>`${value.table}.${value.column}`));
-const countTables=['loads','projects','customers','daily_project_reports','quarry_purchases','waste_dumps','fuel_movements','payment_entries','schedule_tasks','project_issues','project_media','quick_text_documents','suppliers','driver_profiles','truck_profiles','worker_profiles','machine_profiles','catalog_items'];
+const countTables=['loads','projects','customers','daily_project_reports','quarry_purchases','waste_dumps','fuel_movements','payment_entries','schedule_tasks','pavement_calculations','walls','wall_consumptions','project_issues','project_media','quick_text_documents','suppliers','driver_profiles','truck_profiles','worker_profiles','machine_profiles','catalog_items'];
 
 export async function createBackupArchive(db:SQLiteDatabase,preferences:Array<[string,string]>,backupId:string,createdAt:string):Promise<{bytes:Uint8Array;manifest:BackupManifest}>{
   await db.execAsync('PRAGMA wal_checkpoint(FULL)');

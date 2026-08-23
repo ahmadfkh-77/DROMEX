@@ -3,8 +3,8 @@
 ## 1. Document Control
 
 - Status: Living requirements baseline
-- Version: 0.97
-- Last updated: 2026-08-13
+- Version: 0.99
+- Last updated: 2026-08-22
 - Interview status: High-impact version-one requirements are sufficient for implementation planning; lower-impact refinements and physically discovered printer details remain open
 
 ## 2. Purpose and Product Vision
@@ -1883,6 +1883,66 @@ Status note: this section preserves the original question trace, but some indivi
 - Acceptance criteria: Stage state changes as required fields become complete, returned validation appears in the related colored section, and Preview Documents remains visible during entry without hiding the final fields.
 - Source: Interview turn 397
 - Status: Confirmed and implemented
+
+### FR-090
+- Statement: “The application shall calculate asphalt pavement quantity primarily from paved area and a target spread rate in kg/m².”
+- Rationale: The owner's primary field-planning method is kg/m² and must produce the asphalt quantity needed directly.
+- Actors: Owner/manager/foreman.
+- Main behavior: Under a selected project, calculate the net paved area in m² from length × average width or a directly entered overriding net area. For each separately named asphalt layer/section, select 60, 70, 80, 90, 100, 110, 120, 140, 160, 180, 200, or 240 kg/m² from a dropdown, or choose Custom and enter another positive rate. Calculate theoretical kilograms as `net area (m²) × target kg/m²`, theoretical tonnes as `theoretical kilograms ÷ 1,000`, allowance kilograms as `theoretical kilograms × allowance % ÷ 100`, and planned kilograms/tonnes as theoretical plus allowance. Calculate finished compacted thickness as `kg/m² ÷ compacted density (t/m³)`. When the owner selects or enters a calibrated project/paver loose-to-compacted factor, calculate before-compaction loose thickness as `finished compacted thickness × factor`. Show every result clearly without combining distinct layers, and save/edit the calculation and both thickness values under its project.
+- Alternate and exception behavior: Permit zero allowance and an omitted loose-thickness factor. Reject non-positive area or kg/m², negative allowance, and an entered loose factor outside 1.00–2.00. DROMEX shall not assume a universal loose factor; presets are planning choices and the project mix, paver setup, trial strip, approved specification, or field calibration controls. Optional thickness and compacted-density inputs may show an equivalent spread-rate cross-check using `thickness (mm) × density (t/m³) = kg/m²`; disagreement is informational and does not silently replace the owner's entered target. The first calculator does not recommend pavement structure or engineering layer thickness.
+- Postconditions: The owner can retain a project-linked pavement quantity calculation whose theoretical and allowed quantities remain distinguishable.
+- Priority: Must
+- Acceptance criteria: For 3,500 m² at 120 kg/m², the calculator shows 420,000 kg and 420.000 t theoretical. With 5% allowance it separately shows 21,000 kg allowance and 441,000 kg / 441.000 t planned. At 2.4 t/m³, 90 kg/m² shows 37.5 mm finished compacted; selecting a project factor of 1.20 shows 45.0 mm before compaction. Without a factor, the loose result requests a factor rather than inventing one. Each layer retains and reports its own rate and quantities.
+- Source: Interview turn 404
+- Status: Confirmed and implemented in code through Turn 405; physical mobile UI acceptance pending
+
+### FR-091
+- Statement: “The Pavement Calculator shall provide the remaining project quantity, geometry, material, field-control, comparison, and export rules as organized optional tools.”
+- Rationale: A construction quantity workflow needs more than one asphalt layer calculation, but each specialized tool should remain easy to find without making the main kg/m² workflow overwhelming.
+- Actors: Owner/manager/foreman.
+- Main behavior: Present closed-by-default colored labels for variable-width trapezoidal sections, triangle/circle additions and deductions; subbase, base, asphalt-base, binder, and wearing layers; compacted volume, mass cross-check, and granular loose-volume factors; reverse coverage, equivalent kg/m², average compacted thickness, and whole truck counts; prime applied-emulsion and tack residual/applied-emulsion quantities; milling area/volume/estimated mass; crossfall edge difference, longitudinal rise/fall, and sloped surface width; actual delivery progress and quantity variance. Summarize saved project calculations and export them to PDF and Excel.
+- Alternate and exception behavior: Zero or missing optional inputs produce no engineering recommendation. Thicknesses, densities, loose factors, coat rates, residue percentage, milling assumptions, payloads, slopes, and actual quantities remain explicit editable inputs. The project engineer, approved drawings/specification, and tested mix/material values control construction.
+- Postconditions: The owner can calculate and share the major pavement quantities while retaining each confirmed kg/m² layer/section under its project.
+- Priority: Must
+- Acceptance criteria: A 100 m section tapering from 6 m to 8 m calculates 700 m² before additions/deductions; 3,500 m² × 200 mm calculates 700 compacted m³ and a 1.20 loose factor calculates 840 loose m³; 420 t at 120 kg/m² covers 3,500 m²; 3,500 m² at 0.30 residual L/m² calculates 1,050 residual litres; 50 mm milling over 3,500 m² calculates 175 m³; 3.5 m at 2.5% crossfall calculates 87.5 mm; 441 t at 20 t payload requires 23 whole trucks; and saved project rows export to readable PDF and Excel files.
+- Source: Interview turn 406
+- Status: Confirmed and implemented in code; physical mobile UI and generated-file acceptance pending
+
+### FR-092
+- Statement: “Future camera road measurement shall be an assisted, reviewed input with a manual fallback.”
+- Rationale: Phone AR can estimate scaled points, but automatic visual edge detection can mistake road boundaries and an ordinary unscaled photo cannot reliably supply absolute metres.
+- Actors: Owner/foreman.
+- Main behavior: On supported devices, use AR depth/plane raycasts while the operator marks or confirms left and right road edges. Display measured width, device-support state, and measurement confidence; allow retaking or manual correction; require explicit acceptance before copying the width into a calculation.
+- Alternate and exception behavior: iOS scene depth requires supported LiDAR hardware; Android Depth requires a supported ARCore device and enabled Depth. Unsupported, low-confidence, obstructed, or poorly tracked scenes use manual measurement. Camera output never silently replaces saved geometry.
+- Postconditions: Accepted camera measurements remain distinguishable from manually entered values and can be compared against physical reference measurements during acceptance.
+- Priority: Should
+- Acceptance criteria: Pending exact device models and an owner-approved maximum error against tape/survey measurements.
+- Source: Interview turn 406
+- Status: Feasibility and safe workflow defined; native implementation pending OQ-149
+
+### FR-093
+- Statement: “The application shall track planned and actual concrete, filling concrete, stone, and reinforcing-steel use for each project wall and wall section.”
+- Rationale: The owner needs to know what was actually consumed in wall construction, including reinforcement sizes, rather than retaining only a geometric estimate.
+- Actors: Owner/manager/foreman.
+- Main behavior: Create a project-linked wall with a selected reinforced-concrete, mortared stacked-rock/rubble-masonry, or mass/cyclopean-concrete system. Retain separately dated material-use entries under the wall. Concrete entries identify structural concrete, filling/joint concrete or mortar, cyclopean matrix concrete, footing, or coping and record m³ plus optional mix/ticket/load reference. When concrete or mortar is mixed on site, retain its actual cement-bag count and configurable kilograms per bag, sand and gravel/coarse-aggregate quantity in m³ or tonnes, water in litres, and optional admixture in litres or kilograms; keep these ingredients associated with the applicable concrete/mortar purpose and optional saved mix name or batch count. Reinforcement entries record bar diameter in mm, quantity, length per bar or total length, optional grade/shape/mark, and calculated total length and weight using the selected approved unit-weight reference. Stone entries record m³ or tonnes and the applicable density/conversion. Summarize planned, actual, and remaining/variance quantities by material and reinforcement diameter without combining filling concrete with reinforced structural concrete.
+- Alternate and exception behavior: Wall ingredients are consumption records only and do not create deliveries, issues, warehouse balances, low-stock warnings, or other raw-material inventory behavior. Allow manual entries and, if confirmed concrete loads are linkable, reuse them without duplicating their quantity. Corrections retain an audit trail. Missing optional price or supplier data does not block quantity tracking. Wall dimensions, reinforcement arrangement, material proportions, and structural adequacy remain approved drawing/engineer inputs; DROMEX performs quantity and usage arithmetic only.
+- Postconditions: Opening a project wall shows cumulative actual concrete by purpose, stone use, and reinforcement totals by diameter, together with planned-versus-actual variance.
+- Priority: Must
+- Acceptance criteria: Cement, sand, gravel/aggregate, water, admixture, concrete, stone, and steel entries appear only in the applicable wall's consumption history and totals and do not change any stock balance. Ready-mix records require finished m³ and purpose; Site-mixed records accept one or more ingredient quantities and optional finished m³; rebar records require diameter, number of bars, and length per bar and show total metres and calculated kilograms separately by diameter; stone records require a quantity and m³ or tonnes. Reinforced-concrete, stacked-rock/rubble-masonry, and cyclopean-concrete walls can be saved under active projects as retaining, boundary/free-standing, or other walls.
+- Source: Interview turn 413
+- Status: Confirmed and implemented in code through Turn 416; physical mobile acceptance and controlled consumption-entry correction remain pending
+
+### UI-017
+- All Pavement Calculator outputs shall use a high-contrast red card or result band with white result text and a darker red boundary. (Source: Interview turn 407; status: Superseded by UI-019 in Turn 409 because the owner found red visually annoying.)
+
+### UI-018
+- Expandable parent labels shall display a literal `+` while closed and a literal `×` while open. The content reveal and accent-line animations remain, but the mark itself shall not depend on rotating `+`. The same state marks apply to specialized filter, report, Load History group, and Finance group disclosures. (Source: Interview turn 408; status: Confirmed and implemented application-wide.)
+
+### UI-019
+- Pavement Calculator results shall use a dedicated high-contrast deep-teal treatment with white values, pale-teal labels, and a darker teal border. Red remains reserved for errors, danger, and destructive warnings. The result treatment applies to net area, the main kg/m² and thickness outputs, advanced outputs, saved-record chips, and combined project totals. (Source: Interview turn 409; status: Confirmed and implemented in code; physical contrast acceptance pending.)
+
+### UI-020
+- The Pavement Calculator's `1 · Paved area` and `2 · Spread rate and thickness` input sections shall use the shared colored expandable-label interaction, start closed whenever the calculator opens, display `+` while closed and `×` while open, and preserve entered values when folded. The main calculated-result cards remain visible outside the folded sections. (Source: Interview turn 410; status: Confirmed and implemented in code.)
 
 ## 20. Appendices
 

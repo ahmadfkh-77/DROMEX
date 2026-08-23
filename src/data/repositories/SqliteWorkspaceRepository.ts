@@ -20,13 +20,15 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository{
     const row=await this.db.getFirstAsync<{id:string;customer_id:string;customer_name:string;name:string;location:string;status:Project['status'];notes:string|null}>(`SELECT p.id,p.customer_id,c.name customer_name,p.name,p.location,p.status,p.notes FROM projects p JOIN customers c ON c.id=p.customer_id WHERE p.id=? AND p.is_archived=0`,projectId);
     if(!row)throw new Error('Project was not found.');
     const project:Project={id:row.id,customerId:row.customer_id,customerName:row.customer_name,name:row.name,location:row.location,status:row.status,notes:row.notes};
-    const[loads,reports,waste,fuel,quarry,scheduled,openIssues,issues,photos,activities]=await Promise.all([
+    const[loads,reports,waste,fuel,quarry,scheduled,pavement,walls,openIssues,issues,photos,activities]=await Promise.all([
       this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count,COALESCE(SUM(net_weight_kg),0) value FROM loads WHERE project_id=? AND is_archived=0`,projectId),
       this.db.getFirstAsync<CountRow>('SELECT COUNT(*) count FROM daily_project_reports WHERE project_id=?',projectId),
       this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM waste_dumps WHERE project_id=? AND status='Active'`,projectId),
       this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count,COALESCE(SUM(litres),0) value FROM fuel_movements WHERE project_id=? AND movement_type='fill' AND status='Active'`,projectId),
       this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM quarry_purchases WHERE project_id=? AND status='Active'`,projectId),
       this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM schedule_tasks WHERE project_id=? AND status<>'Completed'`,projectId),
+      this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM pavement_calculations WHERE project_id=?`,projectId),
+      this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM walls WHERE project_id=?`,projectId),
       this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM project_issues WHERE project_id=? AND status='Open'`,projectId),
       this.db.getAllAsync<IssueRow>(`SELECT * FROM project_issues WHERE project_id=? ORDER BY CASE status WHEN 'Open' THEN 0 ELSE 1 END,CASE priority WHEN 'Urgent' THEN 0 WHEN 'High' THEN 1 WHEN 'Normal' THEN 2 ELSE 3 END,created_at DESC`,projectId),
       this.db.getAllAsync<PhotoRow>('SELECT * FROM project_media WHERE project_id=? ORDER BY created_at DESC',projectId),
@@ -37,11 +39,13 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository{
         UNION ALL SELECT id,'Fuel',confirmed_at,CASE movement_type WHEN 'fill' THEN 'Equipment fill' ELSE 'Fuel movement' END,printf('%.2f L',litres) FROM fuel_movements WHERE project_id=? AND status='Active'
         UNION ALL SELECT id,'Quarry',confirmed_at,purchase_number,item_name||' · '||quantity_cubic_metres||' m3' FROM quarry_purchases WHERE project_id=? AND status='Active'
         UNION ALL SELECT id,'Schedule',start_date||'T00:00:00',title,status||' · '||priority FROM schedule_tasks WHERE project_id=?
+        UNION ALL SELECT id,'Pavement',updated_at,name,printf('%.0f kg/m² · %.3f t planned',spread_rate_kg_m2,planned_kg/1000.0) FROM pavement_calculations WHERE project_id=?
+        UNION ALL SELECT id,'Wall',updated_at,name,printf('%.2f m³ planned',planned_volume_m3) FROM walls WHERE project_id=?
         UNION ALL SELECT id,'Issue',created_at,title,status||' · '||priority FROM project_issues WHERE project_id=?
         UNION ALL SELECT id,'Photo',created_at,COALESCE(caption,'Site photo'),'Project photo' FROM project_media WHERE project_id=?
-      ) ORDER BY occurred_at DESC LIMIT 30`,projectId,projectId,projectId,projectId,projectId,projectId,projectId,projectId),
+      ) ORDER BY occurred_at DESC LIMIT 30`,projectId,projectId,projectId,projectId,projectId,projectId,projectId,projectId,projectId,projectId),
     ]);
-    return{project,metrics:{loads:loads?.count??0,netTonnes:Number(loads?.value??0)/1000,dailyReports:reports?.count??0,wasteDumps:waste?.count??0,fuelLitres:Number(fuel?.value??0),quarryPurchases:quarry?.count??0,scheduled:scheduled?.count??0,openIssues:openIssues?.count??0},activities:activities.map(value=>({id:value.id,type:value.type,occurredAt:value.occurred_at,title:value.title,detail:value.detail})),issues:issues.map(issue),photos:photos.map(photo)};
+    return{project,metrics:{loads:loads?.count??0,netTonnes:Number(loads?.value??0)/1000,dailyReports:reports?.count??0,wasteDumps:waste?.count??0,fuelLitres:Number(fuel?.value??0),quarryPurchases:quarry?.count??0,scheduled:scheduled?.count??0,pavementCalculations:pavement?.count??0,walls:walls?.count??0,openIssues:openIssues?.count??0},activities:activities.map(value=>({id:value.id,type:value.type,occurredAt:value.occurred_at,title:value.title,detail:value.detail})),issues:issues.map(issue),photos:photos.map(photo)};
   }
 
   async createIssue(projectId:string,draft:WorkspaceIssueDraft):Promise<WorkspaceIssue>{
@@ -67,9 +71,11 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository{
       UNION ALL SELECT id,'Quick Text',document_number||' · '||title,COALESCE(project_name,customer_name,'')||' · '||substr(message,1,100),created_at,'quickText',project_id FROM quick_text_documents WHERE document_number LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR message LIKE ? ESCAPE '\\' OR COALESCE(reference,'') LIKE ? ESCAPE '\\'
       UNION ALL SELECT w.id,'Waste Dump',COALESCE(w.material_type,'Waste dump'),p.name||' · '||COALESCE(w.driver_name,'')||' · '||COALESCE(w.truck_plate,''),w.dumped_at,'waste',w.project_id FROM waste_dumps w JOIN projects p ON p.id=w.project_id WHERE COALESCE(w.material_type,'') LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\' OR COALESCE(w.driver_name,'') LIKE ? ESCAPE '\\' OR COALESCE(w.truck_plate,'') LIKE ? ESCAPE '\\'
       UNION ALL SELECT schedule_tasks.id,'Schedule',schedule_tasks.title,projects.name||' · '||schedule_tasks.status||' · '||schedule_tasks.priority,schedule_tasks.start_date,'schedule',schedule_tasks.project_id FROM schedule_tasks JOIN projects ON projects.id=schedule_tasks.project_id WHERE schedule_tasks.title LIKE ? ESCAPE '\\' OR projects.name LIKE ? ESCAPE '\\'
+      UNION ALL SELECT x.id,'Pavement Calculation',x.name,p.name||' · '||printf('%.0f kg/m² · %.3f t',x.spread_rate_kg_m2,x.planned_kg/1000.0),x.updated_at,'pavement',x.project_id FROM pavement_calculations x JOIN projects p ON p.id=x.project_id WHERE x.name LIKE ? ESCAPE '\\' OR COALESCE(x.notes,'') LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\'
+      UNION ALL SELECT w.id,'Wall',w.name,p.name||' · '||printf('%.2f m³ planned',w.planned_volume_m3),w.updated_at,'walls',w.project_id FROM walls w JOIN projects p ON p.id=w.project_id WHERE w.name LIKE ? ESCAPE '\\' OR COALESCE(w.notes,'') LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\'
       UNION ALL SELECT id,'Payment','Payment · $'||printf('%.2f',amount_usd_cents/100.0),target_type||' · '||payment_date,payment_date,'financials',NULL FROM payment_entries WHERE payment_date LIKE ? ESCAPE '\\' OR target_type LIKE ? ESCAPE '\\'
       UNION ALL SELECT i.id,'Project Issue',i.title,p.name||' · '||i.status||' · '||i.priority,i.created_at,'projects',i.project_id FROM project_issues i JOIN projects p ON p.id=i.project_id WHERE i.title LIKE ? ESCAPE '\\' OR COALESCE(i.description,'') LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\'
-    ) ORDER BY date DESC,title COLLATE NOCASE LIMIT 80`,...Array(43).fill(like));
+    ) ORDER BY date DESC,title COLLATE NOCASE LIMIT 80`,...Array(49).fill(like));
     return rows.map(row=>({id:row.id,kind:row.kind,title:row.title,subtitle:row.subtitle??'',date:row.date,route:row.route,projectId:row.project_id}));
   }
 

@@ -22,7 +22,8 @@ describe('reserved test data deactivation migration', () => {
     expect(statements.some((sql) => sql.includes('CREATE TABLE project_issues'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE project_media'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE cloud_sync_state'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 19');
+    expect(statements.some((sql) => sql.includes('CREATE TABLE pavement_calculations'))).toBe(true);
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 22');
   });
 
   it('targets every reserved generator prefix without broad table deletes', () => {
@@ -49,7 +50,7 @@ describe('reserved test data deactivation migration', () => {
     expect(statements.some((sql) => sql.includes('CREATE TABLE schedule_tasks'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE waste_counter_presets'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE project_issues'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 19');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 22');
   });
 
   it('adds project issues and media when upgrading version 17', async () => {
@@ -58,7 +59,7 @@ describe('reserved test data deactivation migration', () => {
     await migrateDatabase(db as never);
     expect(statements.some((sql) => sql.includes('CREATE TABLE project_issues'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE project_media'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 19');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 22');
   });
 
   it('adds account and cloud synchronization state when upgrading version 18', async () => {
@@ -67,6 +68,33 @@ describe('reserved test data deactivation migration', () => {
     await migrateDatabase(db as never);
     expect(statements.some((sql) => sql.includes('CREATE TABLE cloud_sync_state'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE cloud_sync_records'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 19');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 22');
+  });
+
+  it('adds project-linked pavement calculations when upgrading version 19',async()=>{
+    const statements:string[]=[];
+    const db={execAsync:async(sql:string)=>{statements.push(sql);},getFirstAsync:async()=>({user_version:19})};
+    await migrateDatabase(db as never);
+    expect(statements.some(sql=>sql.includes('CREATE TABLE pavement_calculations'))).toBe(true);
+    expect(statements.some(sql=>sql.includes('spread_rate_kg_m2 REAL NOT NULL'))).toBe(true);
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 22');
+  });
+
+  it('adds loose and compacted pavement thickness fields when upgrading version 20',async()=>{
+    const statements:string[]=[];
+    const db={execAsync:async(sql:string)=>{statements.push(sql);},getFirstAsync:async()=>({user_version:20})};
+    await migrateDatabase(db as never);
+    expect(statements.some(sql=>sql.includes('loose_thickness_factor'))).toBe(true);
+    expect(statements.some(sql=>sql.includes('loose_thickness_mm'))).toBe(true);
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 22');
+  });
+
+  it('adds project walls and material consumption when upgrading version 21',async()=>{
+    const statements:string[]=[];
+    const db={execAsync:async(sql:string)=>{statements.push(sql);},getFirstAsync:async()=>({user_version:21})};
+    await migrateDatabase(db as never);
+    expect(statements.some(sql=>sql.includes('CREATE TABLE walls'))).toBe(true);
+    expect(statements.some(sql=>sql.includes('CREATE TABLE wall_consumptions'))).toBe(true);
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 22');
   });
 });

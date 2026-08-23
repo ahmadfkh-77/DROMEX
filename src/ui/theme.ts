@@ -13,6 +13,9 @@ export const colors = {
   success: '#287A55',
   warning: '#9A6512',
   danger: '#B3261E',
+  result: '#087F8C',
+  resultDark: '#04545D',
+  resultSoft: '#DDF7F5',
 } as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 } as const;

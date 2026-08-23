@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 19;
+export const DATABASE_VERSION = 22;
 
 export const RESERVED_TEST_DATA_DEACTIVATION_SQL = `
   UPDATE projects SET status = 'completed'
@@ -676,6 +676,93 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
         ON cloud_sync_records(cloud_updated_at);
     `);
     currentVersion = 19;
+  }
+
+  if (currentVersion === 19) {
+    await db.execAsync(`
+      CREATE TABLE pavement_calculations (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        name TEXT NOT NULL,
+        length_m REAL,
+        width_m REAL,
+        area_m2 REAL NOT NULL CHECK (area_m2 > 0),
+        spread_rate_kg_m2 REAL NOT NULL CHECK (spread_rate_kg_m2 > 0),
+        density_t_m3 REAL NOT NULL CHECK (density_t_m3 > 0),
+        allowance_percent REAL NOT NULL DEFAULT 0 CHECK (allowance_percent >= 0),
+        theoretical_kg REAL NOT NULL CHECK (theoretical_kg > 0),
+        allowance_kg REAL NOT NULL CHECK (allowance_kg >= 0),
+        planned_kg REAL NOT NULL CHECK (planned_kg > 0),
+        thickness_mm REAL NOT NULL CHECK (thickness_mm > 0),
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_pavement_calculations_project_time
+        ON pavement_calculations(project_id, updated_at DESC);
+    `);
+    currentVersion = 20;
+  }
+
+  if (currentVersion === 20) {
+    await db.execAsync(`
+      ALTER TABLE pavement_calculations ADD COLUMN loose_thickness_factor REAL;
+      ALTER TABLE pavement_calculations ADD COLUMN loose_thickness_mm REAL;
+    `);
+    currentVersion = 21;
+  }
+
+  if (currentVersion === 21) {
+    await db.execAsync(`
+      CREATE TABLE walls (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        name TEXT NOT NULL,
+        system TEXT NOT NULL CHECK (system IN ('reinforced_concrete','rubble_masonry','cyclopean_concrete')),
+        purpose TEXT NOT NULL CHECK (purpose IN ('retaining','boundary','other')),
+        length_m REAL NOT NULL CHECK (length_m > 0),
+        height_m REAL NOT NULL CHECK (height_m > 0),
+        bottom_thickness_m REAL NOT NULL CHECK (bottom_thickness_m > 0),
+        top_thickness_m REAL NOT NULL CHECK (top_thickness_m > 0),
+        deduction_m3 REAL NOT NULL DEFAULT 0 CHECK (deduction_m3 >= 0),
+        allowance_percent REAL NOT NULL DEFAULT 0 CHECK (allowance_percent >= 0),
+        net_volume_m3 REAL NOT NULL CHECK (net_volume_m3 > 0),
+        planned_volume_m3 REAL NOT NULL CHECK (planned_volume_m3 > 0),
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_walls_project_time ON walls(project_id,updated_at DESC);
+      CREATE TABLE wall_consumptions (
+        id TEXT PRIMARY KEY NOT NULL,
+        wall_id TEXT NOT NULL REFERENCES walls(id),
+        used_on TEXT NOT NULL,
+        material_type TEXT NOT NULL CHECK (material_type IN ('ready_mix','site_mix','rebar','stone')),
+        concrete_purpose TEXT CHECK (concrete_purpose IN ('structural','filling','cyclopean_matrix','mortar','footing','coping')),
+        finished_volume_m3 REAL,
+        cement_bags REAL,
+        cement_bag_kg REAL,
+        sand_quantity REAL,
+        sand_unit TEXT CHECK (sand_unit IN ('m3','tonnes')),
+        gravel_quantity REAL,
+        gravel_unit TEXT CHECK (gravel_unit IN ('m3','tonnes')),
+        water_litres REAL,
+        admixture_quantity REAL,
+        admixture_unit TEXT CHECK (admixture_unit IN ('litres','kg')),
+        stone_quantity REAL,
+        stone_unit TEXT CHECK (stone_unit IN ('m3','tonnes')),
+        rebar_diameter_mm REAL,
+        rebar_count REAL,
+        rebar_length_each_m REAL,
+        total_rebar_length_m REAL,
+        total_rebar_kg REAL,
+        rebar_grade TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_wall_consumptions_wall_date ON wall_consumptions(wall_id,used_on DESC,created_at DESC);
+    `);
+    currentVersion = 22;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

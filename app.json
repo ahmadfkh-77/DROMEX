@@ -3,6 +3,7 @@
     "name": "DROMEX",
     "slug": "dromex",
     "version": "0.1.0",
+    "icon": "./assets/dromex-icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -12,7 +13,15 @@
       "usesIcloudStorage": true
     },
     "android": {
-      "package": "com.dromex.management"
+      "package": "com.dromex.management",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/dromex-icon.png",
+        "backgroundColor": "#082D63"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-sqlite",
@@ -37,8 +46,12 @@
           "cameraPermission": "Allow DROMEX to photograph project work and supplier tickets."
         }
       ],
-      "expo-build-properties",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "5a17f5d3-2891-4157-b480-bdd265dcfb11"
+      }
+    }
   }
 }
