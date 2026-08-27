@@ -1728,3 +1728,7 @@ Is this accurate?
 ## Turn 431
 **INTERVIEWEE:** Requested packaging the update for USB-cable transfer to the Android phone and authorized committing and pushing the project.
 **INTERVIEWER:** Prepared the accumulated update as DROMEX 0.4.1 / Android version code 6 for an internal-distribution APK. The higher version code supports in-place installation over the earlier DROMEX package while retaining its local application data. Full validation, Git commit/push, remote build, artifact download, and cable-installation handoff form the release workflow.
+
+## Turn 432
+**INTERVIEWEE:** Confirmed that all instructed update tests were successful and requested committing and pushing everything.
+**INTERVIEWER:** Recorded Android acceptance for the tested DROMEX 0.4.1/build 6 workflows: in-place update/data retention, direct-unit receipts and documents, category organization, quarry supplier/project history and independent truck counters, Project Activity and project-period dates, project/general fuel views, and corrected Bluetooth printing. The signed cable-transfer APK is included in the final acceptance commit as explicitly requested; separately untested device/protocol, performance, cloud, and iPhone scope remains open.
