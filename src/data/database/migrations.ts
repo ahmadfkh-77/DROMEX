@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 22;
+export const DATABASE_VERSION = 23;
 
 export const RESERVED_TEST_DATA_DEACTIVATION_SQL = `
   UPDATE projects SET status = 'completed'
@@ -763,6 +763,22 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX idx_wall_consumptions_wall_date ON wall_consumptions(wall_id,used_on DESC,created_at DESC);
     `);
     currentVersion = 22;
+  }
+
+  if (currentVersion === 22) {
+    const seededAt=new Date().toISOString();
+    await db.execAsync(`
+      ALTER TABLE loads ADD COLUMN quantity_method TEXT NOT NULL DEFAULT 'weighbridge'
+        CHECK (quantity_method IN ('weighbridge','direct'));
+      ALTER TABLE loads ADD COLUMN direct_quantity REAL;
+      ALTER TABLE loads ADD COLUMN direct_unit_id TEXT REFERENCES measurement_units(id);
+      ALTER TABLE loads ADD COLUMN direct_unit_name TEXT;
+      ALTER TABLE loads ADD COLUMN direct_unit_symbol TEXT;
+      INSERT OR IGNORE INTO measurement_units (id,name,symbol,created_at,updated_at) VALUES ('unit_piece','Piece','pc','${seededAt}','${seededAt}');
+      INSERT OR IGNORE INTO measurement_units (id,name,symbol,created_at,updated_at) VALUES ('unit_metre','Metre','m','${seededAt}','${seededAt}');
+      INSERT OR IGNORE INTO measurement_units (id,name,symbol,created_at,updated_at) VALUES ('unit_bundle','Bundle','bundle','${seededAt}','${seededAt}');
+    `);
+    currentVersion = 23;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

@@ -15,7 +15,7 @@ const DEFAULT_OUTPUT=resolve('demo','DROMEX-Large-Linked-Demo.dromexbackup');
 const ONE_PIXEL_PNG=Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2WQAAAAASUVORK5CYII=','base64'));
 
 type Scalar=string|number|bigint|null;
-export type DemoGenerationOptions={output?:string;password?:string;loadCount?:number;now?:Date};
+export type DemoGenerationOptions={output?:string;password?:string;loadCount?:number;now?:Date;encryptionIterations?:number};
 export type DemoGenerationResult={output:string;password:string;encryptedBytes:number;counts:Record<string,number>;createdAt:string};
 
 export async function generateDemoBackup(options:DemoGenerationOptions={}):Promise<DemoGenerationResult>{
@@ -31,7 +31,11 @@ export async function generateDemoBackup(options:DemoGenerationOptions={}):Promi
     if(!Object.values(integrity).includes('ok'))throw new Error('Generated demo database failed integrity_check.');
     const broken=db.prepare('PRAGMA foreign_key_check').all();
     if(broken.length)throw new Error(`Generated demo database contains ${broken.length} broken relationships.`);
-    db.exec('PRAGMA wal_checkpoint(FULL)');
+    // Android previews restored backups through Expo SQLite's in-memory
+    // deserializer. A database whose header still requests WAL mode tries to
+    // open a companion WAL file and fails with "unable to open database file".
+    // Package the standalone demo database in rollback-journal mode instead.
+    db.exec('PRAGMA wal_checkpoint(FULL); PRAGMA journal_mode = DELETE;');
   }finally{db.close();}
 
   try{
@@ -44,9 +48,9 @@ export async function generateDemoBackup(options:DemoGenerationOptions={}):Promi
     ];
     const mediaPath='media/00001.png';
     const media=buildMediaLocators();
-    const manifest={format:ARCHIVE_FORMAT,formatVersion:ARCHIVE_VERSION,backupId,createdAt,appVersion:'0.1.0',databaseVersion:DATABASE_VERSION,recordCounts:counts,preferenceCount:preferences.length,media};
+    const manifest={format:ARCHIVE_FORMAT,formatVersion:ARCHIVE_VERSION,backupId,createdAt,appVersion:'0.3.1',databaseVersion:DATABASE_VERSION,recordCounts:counts,preferenceCount:preferences.length,media};
     const archive=zipSync({'manifest.json':strToU8(JSON.stringify(manifest)),'database.sqlite':databaseBytes,'preferences.json':strToU8(JSON.stringify(preferences)),[mediaPath]:ONE_PIXEL_PNG},{level:6});
-    const encrypted=await encryptBackupBytes(archive,password,{randomBytes:size=>Uint8Array.from(randomBytes(size))});
+    const encrypted=await encryptBackupBytes(archive,password,{randomBytes:size=>Uint8Array.from(randomBytes(size)),...(options.encryptionIterations===undefined?{}:{iterations:options.encryptionIterations})});
     mkdirSync(dirname(output),{recursive:true});
     const partial=`${output}.partial`;writeFileSync(partial,encrypted);rmSync(output,{force:true});writeFileSync(output,readFileSync(partial));rmSync(partial,{force:true});
     return{output,password,encryptedBytes:encrypted.length,counts,createdAt};
@@ -64,9 +68,9 @@ function seedDatabase(db:DatabaseSync,now:Date,loadCount:number){
     const customerNames=['Cedar Developments','Beirut Civil Works','Mountain Road Contractors','Levant Concrete Group','Coastal Infrastructure','Bekaa Earthworks','Northline Builders','Phoenicia Estates','Atlas Contracting','Harbor Engineering','Green Valley Homes','Capital Site Services','Stonebridge Lebanon','Metro Foundations','Summit Developments','Blue Coast Projects','Urban Frame SAL','Oakline Construction','Eastern Works','Riverside Holdings','Grand Build Co','Terra Projects','Horizon Contracting','Landmark Civil'];
     customerNames.forEach((name,index)=>insert(db,'customers',{id:id('customer',index),customer_type:'company',name:`DEMO · ${name}`,phone:`+961 70 ${String(110000+index).padStart(6,'0')}`,email:`demo.customer${index+1}@example.test`,address:`Demo address ${index+1}, Lebanon`,tax_vat_number:`DEMO-C-${String(index+1).padStart(3,'0')}`,notes:index%5===0?'Priority demo account':null,is_own_company:0,is_active:index===23?0:1,merged_into_id:null,created_at:timestamp,updated_at:timestamp}));
 
-    const categoryRows=[['aggregate','Aggregates'],['concrete','Concrete Products'],['fill','Fill & Earth']];
+    const categoryRows=[['aggregate','Aggregates'],['concrete','Concrete Products'],['fill','Fill & Earth'],['pipes','Pipes & Drainage']];
     categoryRows.forEach(([suffix,name],index)=>insert(db,'categories',{id:`demo_backup_category_${suffix}`,name:`DEMO · ${name}`,is_active:1,created_at:timestamp,updated_at:timestamp}));
-    const itemRows=[['crusher','Crusher Run','aggregate',1850],['sand','Washed Sand','aggregate',1450],['gravel','Gravel 20mm','aggregate',1625],['base','Road Base','aggregate',1750],['concrete','Ready Mix Concrete','concrete',7200],['blocks','Concrete Blocks','concrete',950],['soil','Selected Fill','fill',1200],['rock','Quarry Rock','fill',1350]] as const;
+    const itemRows=[['crusher','Crusher Run','aggregate',1850],['sand','Washed Sand','aggregate',1450],['gravel','Gravel 20mm','aggregate',1625],['base','Road Base','aggregate',1750],['concrete','Ready Mix Concrete','concrete',7200],['blocks','Concrete Blocks','concrete',950],['soil','Selected Fill','fill',1200],['rock','Quarry Rock','fill',1350],['pipe300','HDPE Pipe 300 mm','pipes',4200],['pipe600','Concrete Pipe 600 mm','pipes',9800],['culvert','Box Culvert Unit','pipes',14500],['drain','Drainage Channel','pipes',3600]] as const;
     itemRows.forEach(([suffix,name,category,price],index)=>insert(db,'catalog_items',{id:`demo_backup_item_${suffix}`,category_id:`demo_backup_category_${category}`,name:`DEMO · ${name}`,internal_code:`DEMO-${String(index+1).padStart(3,'0')}`,description:'Representative linked test material',default_unit_id:'unit_ton',default_receipt_price_usd_cents:price,loads_enabled:1,quarry_enabled:1,daily_reports_enabled:1,is_active:1,created_at:timestamp,updated_at:timestamp}));
 
     for(let index=0;index<12;index++)insert(db,'driver_profiles',{id:id('driver',index),name:`DEMO · Driver ${String(index+1).padStart(2,'0')}`,phone:`+961 71 ${String(220000+index).padStart(6,'0')}`,license_number:`DEMO-LIC-${index+1}`,notes:index%4===0?'Night-shift qualified':null,is_active:1,created_at:timestamp,updated_at:timestamp});
@@ -83,6 +87,8 @@ function seedDatabase(db:DatabaseSync,now:Date,loadCount:number){
     seedQuarry(db,now);
     seedWaste(db,now);
     seedScheduleAndIssues(db,now);
+    seedPavement(db,now);
+    seedWalls(db,now);
     seedFuel(db,now);
     seedOpeningBalances(db,now);
     seedDocumentsAndMedia(db,now);
@@ -92,14 +98,16 @@ function seedDatabase(db:DatabaseSync,now:Date,loadCount:number){
 }
 
 function seedLoads(db:DatabaseSync,now:Date,count:number){
-  const items=['crusher','sand','gravel','base','concrete','blocks','soil','rock'];
+  const items=['crusher','sand','gravel','base','concrete','blocks','soil','rock','pipe300','pipe600','culvert','drain'];
   for(let index=0;index<count;index++){
     const projectIndex=index%12,projectId=id('project',projectIndex),customerId=id('customer',projectIndex),item=items[index%items.length]!,driver=index%12,confirmedAt=atDay(now,index%180,6+(index%12),index%60);
-    const empty=10500+(index%25)*80,net=9000+(index%40)*220,full=empty+net,billed=net/1000;
+    const direct=['blocks','pipe300','pipe600','culvert','drain'].includes(item),empty=direct?0:10500+(index%25)*80,net=direct?1:9000+(index%40)*220,full=direct?1:empty+net;
+    const directUnit=index%3===0?{id:'unit_bundle',name:'Bundle',symbol:'bundle'}:index%3===1?{id:'unit_metre',name:'Metre',symbol:'m'}:{id:'unit_piece',name:'Piece',symbol:'pc'};
+    const billed=direct?12+(index%45):net/1000;
     const unpriced=index%17===0,free=index%29===0,unitPrice=unpriced?null:free?0:1200+(index%7)*175,subtotal=unitPrice===null?null:Math.round(billed*unitPrice),vat=subtotal===null?null:Math.round(subtotal*.11),total=subtotal===null?null:subtotal+(vat??0);
     let status='Unpriced';if(total===0)status='No Payment Due';else if(total!==null)status=index%4===0?'Paid':index%4===1?'Partially Paid':'Unpaid';
     const loadId=id('load',index);
-    insert(db,'loads',{id:loadId,transaction_number:`LOAD-DEMO-${String(index+1).padStart(5,'0')}`,confirmed_at:confirmedAt,customer_id:customerId,customer_name:`DEMO · ${['Cedar Developments','Beirut Civil Works','Mountain Road Contractors','Levant Concrete Group','Coastal Infrastructure','Bekaa Earthworks','Northline Builders','Phoenicia Estates','Atlas Contracting','Harbor Engineering','Green Valley Homes','Capital Site Services'][projectIndex]}`,project_id:projectId,project_name:`DEMO · ${['Airport Service Road','Cedar Heights Residences','Beirut Logistics Yard','Bekaa Drainage Upgrade','Coastal Retaining Wall','North Highway Section','Municipal Water Reservoir','Industrial Park Phase II','Mountain School Campus','Old Port Rehabilitation','Central Warehouse','Valley Bridge Works'][projectIndex]}`,project_location:`Demo Site ${projectIndex+1}`,destination_address:null,item_id:`demo_backup_item_${item}`,item_name:`DEMO · ${itemLabel(item)}`,item_code:`DEMO-${String((index%8)+1).padStart(3,'0')}`,category_name:item==='concrete'||item==='blocks'?'DEMO · Concrete Products':item==='soil'||item==='rock'?'DEMO · Fill & Earth':'DEMO · Aggregates',driver_name:`DEMO · Driver ${String(driver+1).padStart(2,'0')}`,truck_plate:`DEMO-${String(driver+1).padStart(3,'0')}`,requested_quantity_kg:index%3===0?net+1000:null,empty_weight_kg:empty,full_weight_kg:full,net_weight_kg:net,conversion_id:'conversion_kg_ton',conversion_name:'Kilograms to metric tons',conversion_rule:'1000 kg = 1 t',output_unit_symbol:'t',converted_quantity:billed,billed_quantity:billed,unit_price_usd_cents:unitPrice,subtotal_usd_cents:subtotal,vat_rate_basis_points:unitPrice===null?null:1100,vat_amount_usd_cents:vat,final_total_usd_cents:total,payment_status:status,signature_status:index%5===0?'Signed':'Unsigned',notes:index%31===0?'DEMO corrected site instruction noted':null,company_name:'DROMEX Demo Construction',company_address:'Demo Industrial Zone, Lebanon',company_phone:'+961 1 555 010',company_email:'demo@dromex.local',company_tax_vat_number:'DEMO-VAT-001',company_receipt_footer:'DEMO DATA — NOT A REAL FINANCIAL DOCUMENT',driver_profile_id:id('driver',driver),truck_profile_id:id('truck',driver),signature_json:index%5===0?JSON.stringify(['M 35 85 C 70 20, 120 130, 165 55','M 130 90 C 180 25, 230 120, 285 50']):null,company_logo_uri:null,is_archived:0});
+    insert(db,'loads',{id:loadId,transaction_number:`LOAD-DEMO-${String(index+1).padStart(5,'0')}`,confirmed_at:confirmedAt,customer_id:customerId,customer_name:`DEMO · ${['Cedar Developments','Beirut Civil Works','Mountain Road Contractors','Levant Concrete Group','Coastal Infrastructure','Bekaa Earthworks','Northline Builders','Phoenicia Estates','Atlas Contracting','Harbor Engineering','Green Valley Homes','Capital Site Services'][projectIndex]}`,project_id:projectId,project_name:`DEMO · ${['Airport Service Road','Cedar Heights Residences','Beirut Logistics Yard','Bekaa Drainage Upgrade','Coastal Retaining Wall','North Highway Section','Municipal Water Reservoir','Industrial Park Phase II','Mountain School Campus','Old Port Rehabilitation','Central Warehouse','Valley Bridge Works'][projectIndex]}`,project_location:`Demo Site ${projectIndex+1}`,destination_address:null,item_id:`demo_backup_item_${item}`,item_name:`DEMO · ${itemLabel(item)}`,item_code:`DEMO-${String((index%12)+1).padStart(3,'0')}`,category_name:item==='concrete'||item==='blocks'?'DEMO · Concrete Products':item==='soil'||item==='rock'?'DEMO · Fill & Earth':item.startsWith('pipe')||item==='culvert'||item==='drain'?'DEMO · Pipes & Drainage':'DEMO · Aggregates',driver_name:`DEMO · Driver ${String(driver+1).padStart(2,'0')}`,truck_plate:`DEMO-${String(driver+1).padStart(3,'0')}`,requested_quantity_kg:!direct&&index%3===0?net+1000:null,empty_weight_kg:empty,full_weight_kg:full,net_weight_kg:net,conversion_id:'conversion_kg_ton',conversion_name:direct?'Direct quantity':'Kilograms to metric tons',conversion_rule:direct?'Entered directly':'1000 kg = 1 t',output_unit_symbol:direct?directUnit.symbol:'t',converted_quantity:billed,billed_quantity:billed,unit_price_usd_cents:unitPrice,subtotal_usd_cents:subtotal,vat_rate_basis_points:unitPrice===null?null:1100,vat_amount_usd_cents:vat,final_total_usd_cents:total,payment_status:status,signature_status:index%5===0?'Signed':'Unsigned',notes:index%31===0?'DEMO corrected site instruction noted':null,company_name:'DROMEX Demo Construction',company_address:'Demo Industrial Zone, Lebanon',company_phone:'+961 1 555 010',company_email:'demo@dromex.local',company_tax_vat_number:'DEMO-VAT-001',company_receipt_footer:'DEMO DATA — NOT A REAL FINANCIAL DOCUMENT',driver_profile_id:id('driver',driver),truck_profile_id:id('truck',driver),signature_json:index%5===0?JSON.stringify(['M 35 85 C 70 20, 120 130, 165 55','M 130 90 C 180 25, 230 120, 285 50']):null,company_logo_uri:null,is_archived:0,quantity_method:direct?'direct':'weighbridge',direct_quantity:direct?billed:null,direct_unit_id:direct?directUnit.id:null,direct_unit_name:direct?directUnit.name:null,direct_unit_symbol:direct?directUnit.symbol:null});
     if(total&&status==='Paid')insertPayment(db,`load_${index}_paid`,'load',loadId,total,confirmedAt,null);
     if(total&&status==='Partially Paid')insertPayment(db,`load_${index}_partial`,'load',loadId,Math.floor(total/2),confirmedAt,null);
     if(total&&index%53===0)insertPayment(db,`load_${index}_cancelled`,'load',loadId,Math.max(1,Math.floor(total/4)),confirmedAt,'Duplicate demo payment');
@@ -134,6 +142,32 @@ function seedScheduleAndIssues(db:DatabaseSync,now:Date){
   for(let index=0;index<60;index++){const resolved=index%3===0,created=atDay(now,index%45,9,0);insert(db,'project_issues',{id:id('issue',index),project_id:id('project',index%9),title:`DEMO · ${pick(['Access coordination','Drawing clarification','Material approval','Safety barrier','Survey discrepancy'],index)}`,description:'Representative project issue for workflow testing.',priority:pick(['Low','Normal','High','Urgent'] as const,index),status:resolved?'Resolved':'Open',due_date:isoDate(daysAgo(now,-(index%20))),resolved_at:resolved?now.toISOString():null,created_at:created,updated_at:created});}
 }
 
+function seedPavement(db:DatabaseSync,now:Date){
+  const rates=[60,70,80,90,100,110,120,150],densities=[2.3,2.35,2.4,2.45],looseFactors=[1.18,1.2,1.22,1.25];
+  for(let index=0;index<96;index++){
+    const project=index%9,length=80+(index%12)*35,width=3.25+(index%4)*.75,area=length*width,rate=rates[index%rates.length]!,density=densities[index%densities.length]!,allowance=[0,3,5,7.5][index%4]!,factor=looseFactors[index%looseFactors.length]!;
+    const theoretical=area*rate,allowanceKg=theoretical*allowance/100,planned=theoretical+allowanceKg,thickness=rate/density,loose=thickness*factor,created=atDay(now,index%120,11,index%60);
+    insert(db,'pavement_calculations',{id:id('pavement',index),project_id:id('project',project),name:`DEMO · ${pick(['Wearing course','Binder course','Asphalt base','Parking area','Access ramp','Shoulder strip'],index)} ${index+1}`,length_m:length,width_m:width,area_m2:area,spread_rate_kg_m2:rate,density_t_m3:density,allowance_percent:allowance,theoretical_kg:theoretical,allowance_kg:allowanceKg,planned_kg:planned,thickness_mm:thickness,notes:index%10===0?'Verify against approved mix design and trial strip.':null,created_at:created,updated_at:created,loose_thickness_factor:factor,loose_thickness_mm:loose});
+  }
+}
+
+function seedWalls(db:DatabaseSync,now:Date){
+  const systems=['reinforced_concrete','rubble_masonry','cyclopean_concrete'] as const,purposes=['retaining','boundary','other'] as const;
+  for(let index=0;index<45;index++){
+    const project=index%9,length=12+(index%10)*4,height=1.5+(index%5)*.6,bottom=.45+(index%4)*.15,top=.25+(index%3)*.1,deduction=index%6===0?1.2:0,allowance=[3,5,7.5][index%3]!,net=length*height*(bottom+top)/2-deduction,planned=net*(1+allowance/100),created=atDay(now,index%100,9,index%60),wallId=id('wall',index);
+    insert(db,'walls',{id:wallId,project_id:id('project',project),name:`DEMO · ${pick(['North retaining wall','Boundary wall','Ramp wing wall','Drainage headwall','Terrace wall'],index)} ${index+1}`,system:systems[index%systems.length]!,purpose:purposes[index%purposes.length]!,length_m:length,height_m:height,bottom_thickness_m:bottom,top_thickness_m:top,deduction_m3:deduction,allowance_percent:allowance,net_volume_m3:net,planned_volume_m3:planned,notes:index%8===0?'Representative wall with multiple consumption types.':null,created_at:created,updated_at:created});
+    seedWallUse(db,wallId,index,now,'ready_mix');
+    seedWallUse(db,wallId,index,now,'site_mix');
+    seedWallUse(db,wallId,index,now,'rebar');
+    seedWallUse(db,wallId,index,now,'stone');
+  }
+}
+
+function seedWallUse(db:DatabaseSync,wallId:string,index:number,now:Date,type:'ready_mix'|'site_mix'|'rebar'|'stone'){
+  const usedOn=isoDate(daysAgo(now,(index*2+(['ready_mix','site_mix','rebar','stone'].indexOf(type)))%100)),created=atDay(now,index%100,13,['ready_mix','site_mix','rebar','stone'].indexOf(type)*10),diameter=[10,12,16,20][index%4]!,count=18+(index%15),lengthEach=6+(index%3)*3,totalLength=count*lengthEach,totalKg=totalLength*diameter*diameter/162;
+  insert(db,'wall_consumptions',{id:`${wallId}_${type}`,wall_id:wallId,used_on:usedOn,material_type:type,concrete_purpose:type==='ready_mix'?'structural':type==='site_mix'?'mortar':null,finished_volume_m3:type==='ready_mix'?8+(index%6):type==='site_mix'?3+(index%4):null,cement_bags:type==='site_mix'?35+(index%20):null,cement_bag_kg:type==='site_mix'?50:null,sand_quantity:type==='site_mix'?4+(index%3):null,sand_unit:type==='site_mix'?'m3':null,gravel_quantity:type==='site_mix'?6+(index%4):null,gravel_unit:type==='site_mix'?'m3':null,water_litres:type==='site_mix'?900+(index%6)*80:null,admixture_quantity:type==='site_mix'?8+(index%5):null,admixture_unit:type==='site_mix'?'litres':null,stone_quantity:type==='stone'?12+(index%8):null,stone_unit:type==='stone'?'m3':null,rebar_diameter_mm:type==='rebar'?diameter:null,rebar_count:type==='rebar'?count:null,rebar_length_each_m:type==='rebar'?lengthEach:null,total_rebar_length_m:type==='rebar'?totalLength:null,total_rebar_kg:type==='rebar'?totalKg:null,rebar_grade:type==='rebar'?'B500B':null,notes:`DEMO ${type.replace('_',' ')} consumption entry`,created_at:created});
+}
+
 function seedFuel(db:DatabaseSync,now:Date){
   let balance=4200;insert(db,'fuel_movements',{id:'demo_backup_fuel_gauge_0',movement_type:'gauge',confirmed_at:atDay(now,179,6,0),litres:balance,previous_balance_litres:null,difference_litres:null,supplier_id:null,supplier_name:null,equipment_id:null,equipment_name:null,project_id:null,project_name:null,ticket_number:null,odometer_reading:null,reason:'Opening physical gauge',notes:'DEMO tank baseline',price_per_litre_usd_cents:null,subtotal_usd_cents:null,vat_rate_basis_points:null,vat_amount_usd_cents:null,final_total_usd_cents:null,payment_status:'No Payment Due',status:'Active',cancellation_reason:null,cancelled_at:null,created_at:atDay(now,179,6,0)});
   for(let index=0;index<90;index++){const delivery=index%3===0,litres=delivery?1200:120+(index%5)*30,previous=balance;balance=delivery?balance+litres:Math.max(0,balance-litres);const confirmed=atDay(now,178-index*2,delivery?8:15,index%60),subtotal=delivery?litres*105:null,vat=subtotal===null?null:Math.round(subtotal*.11),total=subtotal===null?null:subtotal+(vat??0),movementId=id('fuel',index);insert(db,'fuel_movements',{id:movementId,movement_type:delivery?'delivery':'fill',confirmed_at:confirmed,litres,previous_balance_litres:previous,difference_litres:delivery?litres:-litres,supplier_id:delivery?id('supplier',1):null,supplier_name:delivery?'DEMO · Cedar Fuel':null,equipment_id:delivery?null:id('machine',index%8),equipment_name:delivery?null:`DEMO · ${pick(['Excavator','Wheel Loader','Bulldozer','Roller','Generator','Crane','Backhoe','Water Tanker'],index)}`,project_id:delivery?null:id('project',index%9),project_name:delivery?null:`DEMO project ${index%9+1}`,ticket_number:delivery?`FUEL-${1000+index}`:null,odometer_reading:delivery?null:String(1000+index*12),reason:null,notes:null,price_per_litre_usd_cents:delivery?105:null,subtotal_usd_cents:subtotal,vat_rate_basis_points:delivery?1100:null,vat_amount_usd_cents:vat,final_total_usd_cents:total,payment_status:delivery?(index%2?'Unpaid':'Paid'):'No Payment Due',status:'Active',cancellation_reason:null,cancelled_at:null,created_at:confirmed});if(delivery&&index%2===0&&total)insertPayment(db,`fuel_${index}_paid`,'fuelDelivery',movementId,total,confirmed,null);}
@@ -155,7 +189,7 @@ function id(kind:string,index:number){return`demo_backup_${kind}_${String(index+
 function daysAgo(now:Date,days:number){return new Date(now.getTime()-days*86400000);}
 function isoDate(value:Date){return value.toISOString().slice(0,10);}
 function atDay(now:Date,days:number,hour:number,minute:number){const value=daysAgo(now,days);value.setUTCHours(hour,minute,0,0);return value.toISOString();}
-function itemLabel(value:string){return({crusher:'Crusher Run',sand:'Washed Sand',gravel:'Gravel 20mm',base:'Road Base',concrete:'Ready Mix Concrete',blocks:'Concrete Blocks',soil:'Selected Fill',rock:'Quarry Rock'} as Record<string,string>)[value]??value;}
+function itemLabel(value:string){return({crusher:'Crusher Run',sand:'Washed Sand',gravel:'Gravel 20mm',base:'Road Base',concrete:'Ready Mix Concrete',blocks:'Concrete Blocks',soil:'Selected Fill',rock:'Quarry Rock',pipe300:'HDPE Pipe 300 mm',pipe600:'Concrete Pipe 600 mm',culvert:'Box Culvert Unit',drain:'Drainage Channel'} as Record<string,string>)[value]??value;}
 function pick<T>(values:readonly T[],index:number):T{return values[index%values.length]!;}
 
 function collectCounts(databasePath:string){const tables=['loads','projects','customers','daily_project_reports','quarry_purchases','waste_dumps','fuel_movements','payment_entries','schedule_tasks','pavement_calculations','walls','wall_consumptions','project_issues','project_media','quick_text_documents','suppliers','driver_profiles','truck_profiles','worker_profiles','machine_profiles','catalog_items'];const db=new DatabaseSync(databasePath,{readOnly:true});try{const counts:Record<string,number>={};for(const table of tables)counts[table]=Number((db.prepare(`SELECT COUNT(*) count FROM ${table}`).get() as{count:number|bigint}).count);return counts;}finally{db.close();}}

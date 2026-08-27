@@ -12,14 +12,27 @@ const id=(prefix:string)=>`${prefix}_${Date.now().toString(36)}_${Math.random().
 const clean=(value:string)=>value.trim().replace(/\s+/g,' ')||null;
 const issue=(row:IssueRow):WorkspaceIssue=>({id:row.id,projectId:row.project_id,title:row.title,description:row.description,priority:row.priority,status:row.status,dueDate:row.due_date,resolvedAt:row.resolved_at,createdAt:row.created_at,updatedAt:row.updated_at});
 const photo=(row:PhotoRow):WorkspacePhoto=>({id:row.id,projectId:row.project_id,uri:row.uri,caption:row.caption,createdAt:row.created_at});
+const activity=(row:ActivityRow):WorkspaceActivity=>({id:row.id,type:row.type,occurredAt:row.occurred_at,title:row.title,detail:row.detail});
+const activityUnionSql=`
+  SELECT id,'Load' type,confirmed_at occurred_at,transaction_number title,item_name||' · '||printf('%.3f',billed_quantity)||' '||output_unit_symbol detail FROM loads WHERE project_id=? AND is_archived=0
+  UNION ALL SELECT id,'Daily Report',work_date||'T12:00:00',work_description,'Daily project report' FROM daily_project_reports WHERE project_id=?
+  UNION ALL SELECT id,'Waste Dump',dumped_at,COALESCE(material_type,'Waste dump'),COALESCE(driver_name,'')||CASE WHEN truck_plate IS NULL THEN '' ELSE ' · '||truck_plate END FROM waste_dumps WHERE project_id=? AND status='Active'
+  UNION ALL SELECT id,'Fuel',confirmed_at,COALESCE(equipment_name,'Equipment fill'),printf('%.2f L',litres)||CASE WHEN odometer_reading IS NULL THEN '' ELSE ' · Odometer '||odometer_reading END FROM fuel_movements WHERE project_id=? AND movement_type='fill' AND status='Active'
+  UNION ALL SELECT id,'Quarry',confirmed_at,purchase_number,item_name||' · '||quantity_cubic_metres||' m3' FROM quarry_purchases WHERE project_id=? AND status='Active'
+  UNION ALL SELECT id,'Schedule',start_date||'T00:00:00',title,status||' · '||priority FROM schedule_tasks WHERE project_id=?
+  UNION ALL SELECT id,'Pavement',updated_at,name,printf('%.0f kg/m² · %.3f t planned',spread_rate_kg_m2,planned_kg/1000.0) FROM pavement_calculations WHERE project_id=?
+  UNION ALL SELECT id,'Wall',updated_at,name,printf('%.2f m³ planned',planned_volume_m3) FROM walls WHERE project_id=?
+  UNION ALL SELECT id,'Issue',created_at,title,status||' · '||priority FROM project_issues WHERE project_id=?
+  UNION ALL SELECT id,'Photo',created_at,COALESCE(caption,'Site photo'),'Project photo' FROM project_media WHERE project_id=?`;
+const activityProjectParams=(projectId:string)=>Array(10).fill(projectId);
 
 export class SqliteWorkspaceRepository implements WorkspaceRepository{
   constructor(private readonly db:SQLiteDatabase){}
 
   async getProjectWorkspace(projectId:string):Promise<ProjectWorkspaceSnapshot>{
-    const row=await this.db.getFirstAsync<{id:string;customer_id:string;customer_name:string;name:string;location:string;status:Project['status'];notes:string|null}>(`SELECT p.id,p.customer_id,c.name customer_name,p.name,p.location,p.status,p.notes FROM projects p JOIN customers c ON c.id=p.customer_id WHERE p.id=? AND p.is_archived=0`,projectId);
+    const row=await this.db.getFirstAsync<{id:string;customer_id:string;customer_name:string;name:string;location:string;status:Project['status'];notes:string|null;start_date:string|null;end_date:string|null;created_at:string;updated_at:string}>(`SELECT p.id,p.customer_id,c.name customer_name,p.name,p.location,p.status,p.notes,p.start_date,p.end_date,p.created_at,p.updated_at FROM projects p JOIN customers c ON c.id=p.customer_id WHERE p.id=? AND p.is_archived=0`,projectId);
     if(!row)throw new Error('Project was not found.');
-    const project:Project={id:row.id,customerId:row.customer_id,customerName:row.customer_name,name:row.name,location:row.location,status:row.status,notes:row.notes};
+    const project:Project={id:row.id,customerId:row.customer_id,customerName:row.customer_name,name:row.name,location:row.location,status:row.status,notes:row.notes,startDate:row.start_date??row.created_at.slice(0,10),endDate:row.end_date??(row.status==='completed'?row.updated_at.slice(0,10):null)};
     const[loads,reports,waste,fuel,quarry,scheduled,pavement,walls,openIssues,issues,photos,activities]=await Promise.all([
       this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count,COALESCE(SUM(net_weight_kg),0) value FROM loads WHERE project_id=? AND is_archived=0`,projectId),
       this.db.getFirstAsync<CountRow>('SELECT COUNT(*) count FROM daily_project_reports WHERE project_id=?',projectId),
@@ -32,20 +45,17 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository{
       this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM project_issues WHERE project_id=? AND status='Open'`,projectId),
       this.db.getAllAsync<IssueRow>(`SELECT * FROM project_issues WHERE project_id=? ORDER BY CASE status WHEN 'Open' THEN 0 ELSE 1 END,CASE priority WHEN 'Urgent' THEN 0 WHEN 'High' THEN 1 WHEN 'Normal' THEN 2 ELSE 3 END,created_at DESC`,projectId),
       this.db.getAllAsync<PhotoRow>('SELECT * FROM project_media WHERE project_id=? ORDER BY created_at DESC',projectId),
-      this.db.getAllAsync<ActivityRow>(`SELECT * FROM (
-        SELECT id,'Load' type,confirmed_at occurred_at,transaction_number title,item_name||' · '||printf('%.3f',billed_quantity)||' '||output_unit_symbol detail FROM loads WHERE project_id=? AND is_archived=0
-        UNION ALL SELECT id,'Daily Report',work_date||'T12:00:00',work_description,'Daily project report' FROM daily_project_reports WHERE project_id=?
-        UNION ALL SELECT id,'Waste Dump',dumped_at,COALESCE(material_type,'Waste dump'),COALESCE(driver_name,'')||CASE WHEN truck_plate IS NULL THEN '' ELSE ' · '||truck_plate END FROM waste_dumps WHERE project_id=? AND status='Active'
-        UNION ALL SELECT id,'Fuel',confirmed_at,CASE movement_type WHEN 'fill' THEN 'Equipment fill' ELSE 'Fuel movement' END,printf('%.2f L',litres) FROM fuel_movements WHERE project_id=? AND status='Active'
-        UNION ALL SELECT id,'Quarry',confirmed_at,purchase_number,item_name||' · '||quantity_cubic_metres||' m3' FROM quarry_purchases WHERE project_id=? AND status='Active'
-        UNION ALL SELECT id,'Schedule',start_date||'T00:00:00',title,status||' · '||priority FROM schedule_tasks WHERE project_id=?
-        UNION ALL SELECT id,'Pavement',updated_at,name,printf('%.0f kg/m² · %.3f t planned',spread_rate_kg_m2,planned_kg/1000.0) FROM pavement_calculations WHERE project_id=?
-        UNION ALL SELECT id,'Wall',updated_at,name,printf('%.2f m³ planned',planned_volume_m3) FROM walls WHERE project_id=?
-        UNION ALL SELECT id,'Issue',created_at,title,status||' · '||priority FROM project_issues WHERE project_id=?
-        UNION ALL SELECT id,'Photo',created_at,COALESCE(caption,'Site photo'),'Project photo' FROM project_media WHERE project_id=?
-      ) ORDER BY occurred_at DESC LIMIT 30`,projectId,projectId,projectId,projectId,projectId,projectId,projectId,projectId,projectId,projectId),
+      this.db.getAllAsync<ActivityRow>(`SELECT id,type,occurred_at,title,detail FROM (SELECT activity.*,ROW_NUMBER() OVER (PARTITION BY type ORDER BY occurred_at DESC) activity_rank FROM (${activityUnionSql}) activity) WHERE activity_rank<=50 ORDER BY occurred_at DESC`,...activityProjectParams(projectId)),
     ]);
-    return{project,metrics:{loads:loads?.count??0,netTonnes:Number(loads?.value??0)/1000,dailyReports:reports?.count??0,wasteDumps:waste?.count??0,fuelLitres:Number(fuel?.value??0),quarryPurchases:quarry?.count??0,scheduled:scheduled?.count??0,pavementCalculations:pavement?.count??0,walls:walls?.count??0,openIssues:openIssues?.count??0},activities:activities.map(value=>({id:value.id,type:value.type,occurredAt:value.occurred_at,title:value.title,detail:value.detail})),issues:issues.map(issue),photos:photos.map(photo)};
+    return{project,metrics:{loads:loads?.count??0,netTonnes:Number(loads?.value??0)/1000,dailyReports:reports?.count??0,wasteDumps:waste?.count??0,fuelLitres:Number(fuel?.value??0),quarryPurchases:quarry?.count??0,scheduled:scheduled?.count??0,pavementCalculations:pavement?.count??0,walls:walls?.count??0,openIssues:openIssues?.count??0},activities:activities.map(activity),issues:issues.map(issue),photos:photos.map(photo)};
+  }
+
+  async listProjectActivities(projectId:string,fromDate='',toDate=''):Promise<WorkspaceActivity[]>{
+    if(fromDate&&toDate&&fromDate>toDate)throw new Error('From date cannot be after To date.');
+    const project=await this.db.getFirstAsync<{start_date:string|null;end_date:string|null;created_at:string;updated_at:string;status:Project['status']}>(`SELECT start_date,end_date,created_at,updated_at,status FROM projects WHERE id=? AND is_archived=0`,projectId);if(!project)throw new Error('Project was not found.');const projectStart=project.start_date??project.created_at.slice(0,10),projectEnd=project.status==='completed'?(project.end_date??project.updated_at.slice(0,10)):this.today();if(fromDate&&fromDate<projectStart)throw new Error(`From date cannot be before the project start date (${projectStart}).`);if(toDate&&toDate<projectStart)throw new Error(`To date cannot be before the project start date (${projectStart}).`);if(fromDate&&fromDate>projectEnd)throw new Error(`From date cannot be after the project ${project.status==='completed'?'finish date':'current date'} (${projectEnd}).`);if(toDate&&toDate>projectEnd)throw new Error(`To date cannot be after the project ${project.status==='completed'?'finish date':'current date'} (${projectEnd}).`);
+    const conditions:string[]=[];const params:string[]=[...activityProjectParams(projectId)];if(fromDate){conditions.push('substr(occurred_at,1,10)>=?');params.push(fromDate);}if(toDate){conditions.push('substr(occurred_at,1,10)<=?');params.push(toDate);}const where=conditions.length?`WHERE ${conditions.join(' AND ')}`:'';
+    const rows=await this.db.getAllAsync<ActivityRow>(`SELECT id,type,occurred_at,title,detail FROM (${activityUnionSql}) ${where} ORDER BY occurred_at DESC LIMIT 500`,...params);
+    return rows.map(activity);
   }
 
   async createIssue(projectId:string,draft:WorkspaceIssueDraft):Promise<WorkspaceIssue>{

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  LayoutAnimation,
   ScrollView,
   StyleSheet,
   Text,
@@ -50,6 +51,7 @@ export function CatalogScreen({
   const [selectedUsage, setSelectedUsage] = useState<UsageArea[]>(['loads']);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [openCategories,setOpenCategories]=useState<Set<string>>(()=>new Set());
 
   const refresh = useCallback(async () => {
     const [nextCategories, nextItems, nextUnits] = await Promise.all([
@@ -67,10 +69,7 @@ export function CatalogScreen({
     void refresh();
   }, [refresh]);
 
-  const categoryNames = useMemo(
-    () => new Map(categories.map((category) => [category.id, category.name])),
-    [categories],
-  );
+  const categoryGroups=useMemo(()=>categories.map(category=>({category,items:items.filter(item=>item.categoryId===category.id)})).filter(group=>group.items.length>0),[categories,items]);
 
   async function addCategory() {
     const issues = validateCategoryName(categoryName, categories);
@@ -161,6 +160,8 @@ export function CatalogScreen({
     );
   }
 
+  function toggleCategory(id:string){LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setOpenCategories(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next;});}
+
   return (
     <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
@@ -241,19 +242,7 @@ export function CatalogScreen({
         <Text style={styles.cardTitle}>Active items</Text>
         <Text style={styles.count}>{items.length}</Text>
       </View>
-      {items.map((item) => (
-        <View key={item.id} style={[styles.itemRow, editingItemId === item.id && styles.itemRowEditing]}>
-          <View style={styles.itemCopy}>
-            <Text style={styles.itemName}>{item.name}</Text>
-            <Text style={styles.itemMeta}>
-              {categoryNames.get(item.categoryId) ?? 'Unknown category'}
-              {item.internalCode ? ` · ${item.internalCode}` : ''}
-            </Text>
-          </View>
-          <Text style={styles.usageText}>{item.usageAreas.map((area) => usageLabels[area]).join(' · ')}</Text>
-          <TouchableOpacity style={styles.editButton} onPress={() => editItem(item)}><Text style={styles.editButtonText}>Edit item</Text></TouchableOpacity>
-        </View>
-      ))}
+      {categoryGroups.map(({category,items:categoryItems})=>{const isOpen=openCategories.has(category.id);return <View key={category.id} style={styles.categoryGroup}><TouchableOpacity activeOpacity={.72} style={styles.categoryHeader} onPress={()=>toggleCategory(category.id)}><View style={styles.categoryCopy}><Text style={styles.categoryEyebrow}>CATEGORY</Text><Text style={styles.categoryTitle}>{category.name}</Text></View><View style={styles.categoryRight}><Text style={styles.categoryCount}>{categoryItems.length}</Text><Text style={styles.categoryMark}>{isOpen?'×':'+'}</Text></View></TouchableOpacity>{isOpen?<View style={styles.categoryItems}>{categoryItems.map(item=><View key={item.id} style={[styles.itemRow,editingItemId===item.id&&styles.itemRowEditing]}><View style={styles.itemCopy}><Text style={styles.itemName}>{item.name}</Text>{item.internalCode?<Text style={styles.itemMeta}>Code · {item.internalCode}</Text>:null}</View><Text style={styles.usageText}>{item.usageAreas.map(area=>usageLabels[area]).join(' · ')}</Text><TouchableOpacity style={styles.editButton} onPress={()=>editItem(item)}><Text style={styles.editButtonText}>Edit item</Text></TouchableOpacity></View>)}</View>:null}</View>})}
       {items.length === 0 ? <Text style={styles.empty}>No items yet.</Text> : null}
     </ScrollView>
   );
@@ -295,7 +284,8 @@ const styles = StyleSheet.create({
   primaryButtonLabel: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
   listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 },
   count: { minWidth: 28, textAlign: 'center', color: colors.brandDark, backgroundColor: '#FBE9E4', padding: 5, borderRadius: 14, fontWeight: '800' },
-  itemRow: { padding: 15, borderRadius: 14, backgroundColor: colors.surface, gap: 8 },
+  categoryGroup:{borderRadius:16,overflow:'hidden',borderWidth:1,borderColor:'#B8CBD8',backgroundColor:'#EDF4F7'},categoryHeader:{minHeight:74,paddingHorizontal:16,paddingVertical:13,backgroundColor:colors.navy,borderLeftWidth:5,borderLeftColor:colors.brand,flexDirection:'row',alignItems:'center',gap:12},categoryCopy:{flex:1,minWidth:0},categoryEyebrow:{color:'#F2A184',fontSize:8,fontWeight:'900',letterSpacing:1.1},categoryTitle:{color:'#FFF',fontSize:18,fontWeight:'900',marginTop:3},categoryRight:{flexDirection:'row',alignItems:'center',gap:10},categoryCount:{minWidth:30,textAlign:'center',color:colors.navy,backgroundColor:'#F3B09A',paddingHorizontal:8,paddingVertical:5,borderRadius:15,fontWeight:'900'},categoryMark:{color:'#FFF',fontSize:25,fontWeight:'500',width:22,textAlign:'center'},categoryItems:{padding:10,gap:9},
+  itemRow: { padding: 15, borderRadius: 12, backgroundColor: colors.surface, gap: 8, borderWidth:1,borderColor:'#D7E2E8' },
   itemRowEditing: { borderWidth: 1, borderColor: colors.brand },
   itemCopy: { gap: 3 },
   itemName: { color: colors.ink, fontSize: 16, fontWeight: '800' },

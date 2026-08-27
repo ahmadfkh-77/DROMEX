@@ -30,6 +30,8 @@ export type Project = {
   location: string;
   status: 'active' | 'completed';
   notes: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
 };
 
 export type LoadItemOption = {
@@ -38,6 +40,7 @@ export type LoadItemOption = {
   internalCode: string | null;
   categoryName: string;
   defaultPriceUsd: number | null;
+  defaultUnitId: string | null;
 };
 
 export type DriverProfile = { id: string; name: string; phone: string | null; licenseNumber: string | null; notes: string | null; isActive: boolean };
@@ -48,7 +51,8 @@ export type DriverDraft = { name: string; phone?: string; licenseNumber?: string
 export type TruckDraft = { plate: string; makeModel?: string; capacityKg?: number | null; ownerName?: string; notes?: string };
 export type WorkerDraft = { name: string; role?: string; phone?: string; notes?: string };
 export type MachineDraft = { name: string; machineType?: string; identifier?: string; notes?: string };
-export type LoadCorrectionDraft = { requestedQuantityKg: string; emptyWeightKg: string; fullWeightKg: string; unitPriceUsd: string; destinationAddress: string; notes: string };
+export type QuantityMethod = 'weighbridge' | 'direct';
+export type LoadCorrectionDraft = { requestedQuantityKg: string; emptyWeightKg: string; fullWeightKg: string; directQuantity: string; unitPriceUsd: string; destinationAddress: string; notes: string };
 
 export type LoadSetupOptions = {
   customers: Customer[];
@@ -88,18 +92,21 @@ export type LoadDraft = {
   truckId: string;
   driverName: string;
   truckPlate: string;
+  quantityMethod: QuantityMethod;
   requestedQuantityKg: string;
   emptyWeightKg: string;
   fullWeightKg: string;
   conversionId: string;
+  directQuantity: string;
+  directUnitId: string;
   unitPriceUsd: string;
   notes: string;
 };
 
 export const emptyLoadDraft: LoadDraft = {
   customerId: '', projectId: '', destinationAddress: '', itemId: '', driverId: '', truckId: '', driverName: '',
-  truckPlate: '', requestedQuantityKg: '', emptyWeightKg: '', fullWeightKg: '',
-  conversionId: '', unitPriceUsd: '', notes: '',
+  truckPlate: '', quantityMethod: 'weighbridge', requestedQuantityKg: '', emptyWeightKg: '', fullWeightKg: '',
+  conversionId: '', directQuantity: '', directUnitId: '', unitPriceUsd: '', notes: '',
 };
 
 export function isMeaningfulLoadDraft(draft: LoadDraft): boolean {
@@ -110,10 +117,13 @@ export function isMeaningfulLoadDraft(draft: LoadDraft): boolean {
     || draft.truckId
     || draft.driverName.trim()
     || draft.truckPlate.trim()
+    || draft.quantityMethod !== 'weighbridge'
     || draft.requestedQuantityKg.trim()
     || draft.emptyWeightKg.trim()
     || draft.fullWeightKg.trim()
     || draft.conversionId
+    || draft.directQuantity.trim()
+    || draft.directUnitId
     || draft.unitPriceUsd.trim()
     || draft.notes.trim()
   );
@@ -129,7 +139,8 @@ export type LoadCalculation = {
 };
 
 export type ConfirmedLoad = Omit<LoadCalculation, 'netWeightKg' | 'convertedQuantity' | 'billedQuantity'> & {
-  netWeightKg: number;
+  quantityMethod: QuantityMethod;
+  netWeightKg: number | null;
   convertedQuantity: number;
   billedQuantity: number;
   id: string;
@@ -145,10 +156,13 @@ export type ConfirmedLoad = Omit<LoadCalculation, 'netWeightKg' | 'convertedQuan
   driverName: string;
   truckPlate: string;
   requestedQuantityKg: number | null;
-  emptyWeightKg: number;
-  fullWeightKg: number;
-  conversionName: string;
-  conversionRule: string;
+  emptyWeightKg: number | null;
+  fullWeightKg: number | null;
+  conversionName: string | null;
+  conversionRule: string | null;
+  directQuantity: number | null;
+  directUnitName: string | null;
+  directUnitSymbol: string | null;
   outputUnitSymbol: string;
   unitPriceUsd: number | null;
   vatRatePercent: number | null;
@@ -170,11 +184,23 @@ function wholeNumber(value: string): number | null {
   return Number(value);
 }
 
+function positiveDecimal(value: string): number | null {
+  const text = value.trim().replace(',', '.');
+  if (!/^\d+(\.\d{1,6})?$/.test(text)) return null;
+  const number = Number(text);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
 export function calculateLoad(
   draft: LoadDraft,
   conversion: ConversionOption | undefined,
   vatRatePercent: number,
 ): LoadCalculation {
+  if (draft.quantityMethod === 'direct') {
+    const quantity = positiveDecimal(draft.directQuantity);
+    if (quantity == null) return { netWeightKg: null, convertedQuantity: null, billedQuantity: null, subtotalUsd: null, vatAmountUsd: null, finalTotalUsd: null };
+    return calculateValue(null, quantity, quantity, draft.unitPriceUsd, vatRatePercent);
+  }
   const empty = wholeNumber(draft.emptyWeightKg);
   const full = wholeNumber(draft.fullWeightKg);
   const netWeightKg = empty != null && full != null && full > empty ? full - empty : null;
@@ -184,10 +210,12 @@ export function calculateLoad(
   const convertedQuantity = (netWeightKg / conversion.inputQuantity) * conversion.outputQuantity;
   const factor = 10 ** conversion.decimalPlaces;
   const billedQuantity = Math.round((convertedQuantity + Number.EPSILON) * factor) / factor;
-  if (!draft.unitPriceUsd.trim()) {
-    return { netWeightKg, convertedQuantity, billedQuantity, subtotalUsd: null, vatAmountUsd: null, finalTotalUsd: null };
-  }
-  const price = Number(draft.unitPriceUsd.replace(',', '.'));
+  return calculateValue(netWeightKg, convertedQuantity, billedQuantity, draft.unitPriceUsd, vatRatePercent);
+}
+
+function calculateValue(netWeightKg: number | null, convertedQuantity: number, billedQuantity: number, priceText: string, vatRatePercent: number): LoadCalculation {
+  if (!priceText.trim()) return { netWeightKg, convertedQuantity, billedQuantity, subtotalUsd: null, vatAmountUsd: null, finalTotalUsd: null };
+  const price = Number(priceText.replace(',', '.'));
   if (!Number.isFinite(price) || price < 0) {
     return { netWeightKg, convertedQuantity, billedQuantity, subtotalUsd: null, vatAmountUsd: null, finalTotalUsd: null };
   }
@@ -214,19 +242,24 @@ export function validateLoadDraft(draft: LoadDraft, options: LoadSetupOptions): 
   if (!truck) issues.push('Select a saved truck.');
   if (!draft.driverName.trim()) issues.push('Driver name is required.');
   if (!draft.truckPlate.trim()) issues.push('Truck plate is required.');
-  const empty = wholeNumber(draft.emptyWeightKg);
-  const full = wholeNumber(draft.fullWeightKg);
-  if (empty == null) issues.push('Empty weight must be a whole kilogram value.');
-  if (full == null) issues.push('Full weight must be a whole kilogram value.');
-  if (empty != null && full != null && full <= empty) issues.push('Full weight must be greater than empty weight.');
-  if (!options.conversions.some((value) => value.id === draft.conversionId)) issues.push('Select a conversion.');
+  if (draft.quantityMethod === 'direct') {
+    if (positiveDecimal(draft.directQuantity) == null) issues.push('Direct quantity must be greater than zero with no more than six decimals.');
+    if (!options.units.some((value) => value.id === draft.directUnitId)) issues.push('Select the direct quantity unit.');
+  } else {
+    const empty = wholeNumber(draft.emptyWeightKg);
+    const full = wholeNumber(draft.fullWeightKg);
+    if (empty == null) issues.push('Empty weight must be a whole kilogram value.');
+    if (full == null) issues.push('Full weight must be a whole kilogram value.');
+    if (empty != null && full != null && full <= empty) issues.push('Full weight must be greater than empty weight.');
+    if (!options.conversions.some((value) => value.id === draft.conversionId)) issues.push('Select a conversion.');
+  }
   const project = options.projects.find((value) => value.id === draft.projectId);
   if (customer?.isOwnCompany && !project) issues.push('An own-company load requires a project.');
   if (customer && !customer.isOwnCompany && !project && !draft.destinationAddress.trim()) {
     issues.push('Select a project or enter a destination address.');
   }
   if (project && project.customerId !== customer?.id) issues.push('The selected project belongs to another customer.');
-  if (draft.requestedQuantityKg.trim() && wholeNumber(draft.requestedQuantityKg) == null) {
+  if (draft.quantityMethod === 'weighbridge' && draft.requestedQuantityKg.trim() && wholeNumber(draft.requestedQuantityKg) == null) {
     issues.push('Requested quantity must be a whole kilogram value.');
   }
   if (draft.unitPriceUsd.trim()) {

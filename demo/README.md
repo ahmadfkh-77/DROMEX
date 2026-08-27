@@ -8,6 +8,8 @@ npm run demo:backup
 
 Output: `demo/DROMEX-Large-Linked-Demo.dromexbackup`
 
+Current versioned acceptance file: `demo/DROMEX-Large-Linked-Demo-v3.dromexbackup`
+
 Demo password: `DROMEX-DEMO-2026`
 
 This is deliberately not a production-app data generator. On Android, select it
@@ -19,4 +21,7 @@ The standard dataset contains 4,000 linked loads across 180 days, 24 customers,
 12 projects, suppliers, catalog items, people and equipment, more than 1,000
 daily reports, quarry purchases, waste trips and counters, schedule tasks,
 issues, fuel movements, opening balances, payment histories, Quick Text
-documents, signatures, drafts, and representative attachments.
+documents, signatures, drafts, and representative attachments. The v3 file
+also includes categorized pipe/drainage items, direct-quantity pipe and block
+receipts, 96 pavement calculations, and 45 walls with 180 linked Ready-mix,
+Site-mixed, rebar, and stone consumption records.

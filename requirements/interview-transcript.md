@@ -1105,14 +1105,6 @@ Is this accurate?
 **INTERVIEWER:** For duplicate items, I recommend that an optional internal code must be unique; a matching or very similar item name shows a warning and the existing item; the owner may still save the similar name when it intentionally represents a different item. Should duplicate handling work this way?
 **INTERVIEWEE:** okay
 
-## Turn 169
-**INTERVIEWER:** Should payment cancellation be final, meaning a cancelled payment cannot be reactivated and you must create a new payment entry if cancellation was a mistake? I recommend this because it keeps the cancellation reason and financial history clear.
-**INTERVIEWEE:** okay
-
-## Turn 156
-**INTERVIEWER:** On the Load History list, should each entry show transaction number and date, customer and project when applicable, item and quantity, truck plate, Signed or Unsigned, and payment status, with selection opening all remaining details and both documents?
-**INTERVIEWEE:** true
-
 ## Turn 269
 **INTERVIEWER:** Please check the existing Xprinter's rear label, Settings/About screen, or manual and provide—or attach a clear photo showing—the exact model number and any printing interface/protocol listed, such as Bluetooth, ESC/POS, SDK name, or Bluetooth profile. Is the model actually `XP-POS-I100`, or does the label show something different?
 **INTERVIEWEE:** i dont have such info
@@ -1676,3 +1668,63 @@ Is this accurate?
 ## Turn 416
 **INTERVIEWEE:** Authorized starting implementation of the confirmed wall workflow.
 **INTERVIEWER:** Implemented project-linked Wall Construction under Records → Operational Records and each Project Command Center. Added reinforced-concrete, stacked-rock/rubble-masonry, and concrete-with-embedded-rock systems; retaining, boundary/free-standing, and other purposes; rectangular/tapered volume, deductions, and allowance; saved wall editing; teal planned and actual summaries; manual Ready-mix, Site-mixed, Rebar, and Stone consumption entries; separate structural/filling/cyclopean/mortar/footing/coping purposes; configurable cement-bag weight; sand/gravel m³ or tonnes; water/admixture; rebar diameter/count/length/grade with calculated metres and kilograms and separate diameter summaries; stone m³/tonnes; and dated wall history. Added database version 22, durable outbox/cloud schema, complete-backup counts, project metrics/activity, global search, migration/domain/repository tests, and preserved the no-inventory boundary. TypeScript and 126 automated tests pass; physical mobile acceptance and controlled correction of mistaken consumption entries remain pending.
+
+## Turn 417
+**INTERVIEWEE:** Reported that making a receipt for pipes did not work because empty/full weights were irrelevant and confirmed that the receipt needs direct unit quantity.
+**INTERVIEWER:** Added a Quantity Method choice to Make Receipt. Weighbridge retains the established weight/conversion workflow. Direct quantity hides requested, empty, full, net, and conversion fields; requires a positive quantity and configured unit; calculates the optional unit price, VAT, and total directly; snapshots the method and unit; and keeps the same saved driver/truck, customer/project, history, correction, payment, receipt, and delivery-authorization workflow. Seeded Piece, Metre, and Bundle units, added database version 23, suppressed all scale fields from direct-quantity documents, and added domain, migration, SQLite confirmation, and PDF tests. Physical Android acceptance remains pending.
+
+## Turn 418
+**INTERVIEWEE:** Requested that Active Items in Item Catalog organize every item beneath its category name.
+**INTERVIEWER:** Replaced the flat Active Items list with category-first colored disclosure groups ordered by category name. Every category shows its active-item count, starts closed when the page opens, uses `+` closed and `×` open, and reveals only its own item cards, usage areas, internal codes, and Edit actions without changing catalog records or transaction selection behavior.
+
+## Turn 419
+**INTERVIEWEE:** Requested a more organized Quarry Purchase History filtered beneath suppliers, with each supplier opening to show the linked projects that used its material.
+**INTERVIEWER:** Replaced the flat purchase list with a closed-by-default Supplier → Linked Project → Purchase hierarchy. Supplier labels are alphabetic and display linked-project count, matching purchase count, and active m³. Opening one shows only its projects in alphabetic order, with general purchases retained last under `No project linked`; each project shows its matching purchase count and active m³ and opens to the existing purchase cards. The existing date filter now rebuilds the hierarchy and totals, and all labels use `+`/`×` with restrained layout animation.
+
+## Turn 420
+**INTERVIEWEE:** Requested Category → Item organization inside Make Receipt's Load-enabled item selector and clarified that the receipt itself must show the selected item, not the category.
+**INTERVIEWER:** Added a searchable category-first modal to the receipt item field. It starts with closed alphabetic category labels and counts, opens a category to alphabetic load-enabled items, and exposes matching groups/options while searching. Confirmed that category is navigation context only: the field's main selected value, permanent load item snapshot, Receipt, and Delivery Authorization continue to show the selected item name; category never replaces the Item value.
+
+## Turn 421
+**INTERVIEWEE:** Requested Bluetooth pairing for printing.
+**INTERVIEWER:** Implemented an Android-first Bluetooth Classic ESC/POS printing slice. More → Setup now contains Bluetooth Printer with Samsung system pairing, in-app device discovery/pairing, paired-device refresh, remembered printer selection, 58/80 mm choice, and a DROMEX test slip. Confirmed Receipts can print immediately after confirmation; Receipt and Delivery Authorization can print from Load History; saved Quick Text can print; and stored driver-signature paths are converted to an ESC/POS raster image on the authorization. Added Android 12+ and legacy discovery permissions, offline reconnect/write behavior, clear Expo Go/native-module guidance, app version 0.3.0 (Android code 3), and automated ESC/POS layout/signature tests. Physical compatibility with the owner's exact printer remains pending and determines official support; COPY/reprint logging, the unidentified built-in Xprinter path, and iPhone MFi/BLE printing remain open parts of the broader printing baseline.
+
+## Turn 422
+**INTERVIEWEE:** Confirmed Bluetooth printing succeeds physically but reported that all printed writing is left-aligned with no spacing like the Receipt preview and requested correction.
+**INTERVIEWER:** Reworked the ESC/POS document formatter for 58 mm and 80 mm output. Company identity and document titles remain centered; every business field now uses a fixed left label column and separately right-aligned value column; long values wrap inside the value column with blank label continuations; printer line spacing is increased; transaction, quantity/value, totals, signature, and footer groups have explicit vertical gaps and divider rules; and final totals remain emphasized. Applied the same column discipline to Quick Text metadata, updated app version to 0.3.1 / Android build 4, and added automated column-width, right-alignment, wrapping, and existing signature/field tests. Physical corrected-layout acceptance remains pending on the successful printer.
+
+## Turn 423
+**INTERVIEWEE:** Requested a large linked dataset to test all application functions and identify what still needs updating.
+**INTERVIEWER:** Upgraded the external encrypted acceptance-backup generator and created a new versioned v3 package without overwriting v2. The package contains 4,000 linked loads, including direct-quantity pipe/block receipts; a category-organized Pipes & Drainage catalog; 12 projects, 24 business customers plus the own-company record, suppliers, personnel/equipment, 1,017 reports, 600 quarry purchases, 800 waste dumps, fuel, payments, schedules, issues, photos, Quick Text, 96 pavement calculations, and 45 walls with 180 linked material-consumption entries covering Ready-mix, Site-mixed ingredients, rebar sizes/weights, and stone. The generator performs SQLite integrity and foreign-key checks, and its decrypt/restore-package test passes. Physical Android restore and the structured walkthrough remain pending.
+
+## Turn 424
+**INTERVIEWEE:** Authorized starting the new update.
+**INTERVIEWER:** Implemented the previously confirmed quarry daily trip-counter workflow as app 0.4.0 / Android build 5. Today's active purchases are grouped by project, supplier, item, driver, and truck. Each colored truck card shows trips, cumulative m³, and latest quantity; `+1 Trip` opens that quantity for confirmation or a one-trip change and creates a separately numbered/timestamped normal purchase. Project, supplier, item, driver, truck, price, VAT, and notes are copied; ticket/photos are intentionally blank. Cancelled trips do not count, other trucks remain separate, and prior-day counters require a new first purchase.
+
+## Turn 425
+**INTERVIEWEE:** Reported that the Commit and Push option was no longer visible.
+**INTERVIEWER:** Verified that the workspace remains on `main`, tracks `origin/main`, retains all modified/untracked files, and has the configured GitHub fetch/push remote. No commit or push was performed while the update remained under implementation and validation; the missing UI control did not remove repository changes.
+
+## Turn 426
+**INTERVIEWEE:** Requested correcting the Project Command Center Activity logic so loads, waste dumps, quarry purchases, and every other record family appear under their own organized labels.
+**INTERVIEWER:** Replaced the mixed project timeline with a closed `Activity by Record Type` parent containing separate closed Loads, Daily Reports, Quarry Purchases, Waste Dumps, Fuel Activity, Scheduled Work, Pavement Calculations, Walls, Project Issues, and Site Photos labels. Only matching labels appear, each shows its own count and newest-first cards, and opening one never mixes another record type. Corrected the retrieval logic from one global latest-30 limit to the latest 50 records independently per type, preventing a busy load history from hiding recent quarry, waste, or other project activity.
+
+## Turn 427
+**INTERVIEWEE:** Approved the hybrid activity design and requested a date filter for viewing all project activity together between selected dates.
+**INTERVIEWER:** Added a closed All Activity Timeline before Activity by Record Type. It opens with the latest 20 mixed records and identifies each record's type. From and To date fields work independently or together; Apply performs an inclusive database query across loads, reports, quarry purchases, waste dumps, fuel, schedule, pavement, walls, issues, and photos and returns up to the latest 500 matching records. Clear removes both dates and restores the recent 20-record overview; invalid reversed ranges are rejected. The separate per-type labels remain unchanged below it.
+
+## Turn 428
+**INTERVIEWEE:** Required Project Activity date filters to show the project start and completed finish dates and prevent selecting a date before the start or after the finish.
+**INTERVIEWER:** Added an effective operating period to Project Command Center. New projects start on their local creation day; completion records the local finish day; reactivation clears it; and legacy null dates fall back to created/updated dates. Both mobile date pickers and repository queries reject dates before the project start or after the completed finish/current day, while the filter displays the available period.
+
+## Turn 429
+**INTERVIEWEE:** Reported that Project Command Center → Field Operations → Equipment Fuel opened the general equipment-fill area and did not show fuel used for that project or identify which equipment received it.
+**INTERVIEWER:** Changed that route to carry the exact Command Center project into a locked project-fuel view. It filters to active equipment fills for that project only, shows project litres/fill/equipment totals, and groups newest-first fills beneath closed equipment labels using `+`/`×`. Individual fills expose date/time, odometer, notes, and litres. New fills keep the project visible and non-changeable. General Fuel Tracking remains cross-project, and Project Activity fuel rows now name the equipment.
+
+## Turn 430
+**INTERVIEWEE:** Requested a filter in general Fuel Tracking as well.
+**INTERVIEWER:** Added a closed `Filter fuel history` label above the complete movement history. The owner can combine project, equipment, Deliveries/Equipment Fills/Gauge Readings, Active/Cancelled status, and inclusive From/To dates. The label shows the live matching count, Clear restores the complete ledger, completed/historical project and equipment snapshots remain selectable, and the filter does not alter stock balances or records.
+
+## Turn 431
+**INTERVIEWEE:** Requested packaging the update for USB-cable transfer to the Android phone and authorized committing and pushing the project.
+**INTERVIEWER:** Prepared the accumulated update as DROMEX 0.4.1 / Android version code 6 for an internal-distribution APK. The higher version code supports in-place installation over the earlier DROMEX package while retaining its local application data. Full validation, Git commit/push, remote build, artifact download, and cable-installation handoff form the release workflow.

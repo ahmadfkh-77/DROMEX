@@ -3,8 +3,8 @@
 ## 1. Document Control
 
 - Status: Living requirements baseline
-- Version: 0.99
-- Last updated: 2026-08-22
+- Version: 1.00
+- Last updated: 2026-08-27
 - Interview status: High-impact version-one requirements are sufficient for implementation planning; lower-impact refinements and physically discovered printer details remain open
 
 ## 2. Purpose and Product Vision
@@ -155,13 +155,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: A physical-gauge baseline or correction, fuel delivery, equipment fill, or cancellation occurs.
 - Preconditions: The applicable supplier, equipment, project, quantity, price, and reference data are available as required by the specific movement type.
-- Main behavior: Store the movement offline, update the baseline-governed fuel ledger, retain its confirmation/cancellation state, and expose it in history and reports.
+- Main behavior: Store the movement offline, update the baseline-governed fuel ledger, retain its confirmation/cancellation state, and expose it in history and reports. General Fuel History provides a closed-by-default filter combining saved project, equipment, movement type, Active/Cancelled status, and optional inclusive From/To dates, with a matching-record count and Clear action. When Equipment Fuel is opened from a Project Command Center, show only that project's active equipment fills, totals, and closed-by-default equipment groups; each group opens to its individual fills. Keep the originating project selected and non-changeable for new fills from this path.
 - Alternate and exception behavior: Physical gauge readings reset the current baseline without rewriting prior movements. Cancelled movements remain visible and reverse their ledger effect only within the segment governed by the applicable baseline. A positive equipment fill may exceed the calculated balance without warning or blocking.
 - Postconditions: The fuel record is retained, the current calculated balance is updated consistently, and the record is available for reporting.
 - Priority: Must
-- Acceptance criteria: The owner can establish a gauge baseline, add a delivery, subtract an equipment fill, correct the physical balance, cancel a mistaken movement with a reason, and reconcile the resulting history and current balance under FR-026, FR-027, FR-063, FR-064, FR-071, and BR-037–BR-043.
-- Source: Interview turns 3, 32, 39–41, and 181–193
-- Status: Confirmed for version one
+- Acceptance criteria: The owner can establish a gauge baseline, add a delivery, subtract an equipment fill, correct the physical balance, cancel a mistaken movement with a reason, and reconcile the resulting history and current balance under FR-026, FR-027, FR-063, FR-064, FR-071, and BR-037–BR-043. General History can isolate one project and equipment, one movement type/status, and an inclusive period without changing records, and Clear restores all movements. From a Project Command Center, Equipment Fuel shows no other project's fills, identifies the equipment, totals litres and fills, groups usage by equipment, and saves a new fill only to the locked project.
+- Source: Interview turns 3, 32, 39–41, 181–193, and 429–430
+- Status: Confirmed for version one and project-filtered Command Center usage implemented; physical mobile acceptance pending
 
 ### FR-006
 - Statement: “The system shall maintain a record of asphalt supplied to each external individual or company customer.”
@@ -192,18 +192,18 @@ The proposed product is an asphalt-plant management application intended to cent
 - Status: Draft
 
 ### FR-008
-- Statement: “The system shall record the empty and loaded weighbridge measurements for each truck load, whether for an owner project or an outside customer.”
+- Statement: “For a receipt using the Weighbridge quantity method, the system shall record the empty and loaded weighbridge measurements for the truck load.”
 - Rationale: The truck is weighed before and after loading to establish the supplied amount.
 - Actors: Weighbridge personnel or another authorized recordkeeper.
 - Trigger: A customer truck is weighed before loading or after loading.
 - Preconditions: The truck collection can be identified.
 - Main behavior: Accept manual entry of empty and full weights as whole kilograms and store both measurements as part of the load record.
-- Alternate and exception behavior: Missing measurements, reweighing, corrections, weighbridge failure, and multiple loads remain to be elicited.
+- Alternate and exception behavior: A receipt using Direct quantity does not request, display, or document empty/full/net weights and instead follows FR-094. Missing measurements, reweighing, corrections, weighbridge failure, and multiple weighed loads remain to be elicited.
 - Postconditions: The collection record contains the available pre-load and post-load weights.
 - Priority: Must
 - Acceptance criteria: An authorized user can manually enter and later retrieve whole-kilogram empty and full weights for a completed truck load; decimal-kilogram entries are rejected.
 - Source: Interview turns 6, 10–11, and 13
-- Status: Confirmed at workflow level
+- Status: Confirmed for the Weighbridge method; Direct quantity exception confirmed in Turn 417
 
 ### FR-009
 - Statement: “The system shall record the desired asphalt weight for each applicable truck load.”
@@ -223,15 +223,29 @@ The proposed product is an asphalt-plant management application intended to cent
 - Statement: “The system shall generate one delivery authorization for every completed truck load and item, whether for an owner project or an outside customer.”
 - Rationale: The delivery authorization is one of two required documents after loading.
 - Actors: Authorized plant personnel; recipient and issuer roles remain to be identified.
-- Trigger: The truck has completed final weighing and the load record is ready for authorization.
-- Preconditions: A saved customer, item, driver name, truck plate, valid empty and full whole-kilogram weights, selected conversion, and applicable project/destination context are available. Signature is optional.
-- Main behavior: Generate a delivery authorization containing the snapshotted company header with configured contact details beneath the company name, document title, automatic shared transaction number and original date/time, customer and applicable project or destination, item, driver name, plate number, optional requested quantity when entered, empty weight, full weight, net weight, calculated converted quantity with its output unit, destination address, and optional driver signature. Omit the requested-quantity label and value when blank. Use colon-separated `Label: Value` fields. Render a compact primarily single-column 58 mm template and a more spacious aligned 80 mm template with identical applicable information. Show no selected conversion name, conversion rate/formula, unit price, subtotal, VAT, payment, or total values.
+- Trigger: The load has a valid weighed or direct quantity and is ready for authorization.
+- Preconditions: A saved customer, item, driver, truck, applicable project/destination context, and either valid Weighbridge inputs/conversion or valid Direct quantity/unit are available. Signature is optional.
+- Main behavior: Generate a delivery authorization containing the snapshotted company header with configured contact details beneath the company name, document title, automatic shared transaction number and original date/time, customer and applicable project or destination, item, driver name, plate number, destination address, applicable quantity details, and optional driver signature. Weighbridge authorizations contain optional requested quantity, empty/full/net kg, and converted quantity/output unit. Direct-quantity authorizations contain one `Quantity` with the entered value and snapshotted unit and contain no weight or conversion fields. Omit the requested-quantity label and value when blank. Use colon-separated `Label: Value` fields. Render a compact primarily single-column 58 mm template and a more spacious aligned 80 mm template with identical applicable information. Show no selected conversion name, conversion rate/formula, unit price, subtotal, VAT, payment, or total values.
 - Alternate and exception behavior: Missing data, corrections, reprints, cancellations, and voiding remain to be elicited.
 - Postconditions: The authorization is associated with exactly one truck load, one item, and its corresponding receipt and is available in the required output form.
 - Priority: Must
-- Acceptance criteria: Confirmation is blocked without a saved customer, item, driver name, plate, valid weights, selected conversion, and applicable destination context. An own-company load requires a saved project; an outside-customer load requires a saved project or destination address. Requested quantity, price, signature, and notes may be blank. A generated authorization displays all applicable operational fields with values from the correct load, shows the converted result and output unit without its conversion name/rate/formula, omits a blank requested quantity, identifies the driver as signer, shows the same automatic transaction number as its corresponding receipt, contains no monetary values, and can be sent to the customer as PDF.
+- Acceptance criteria: Confirmation is blocked without a saved customer, item, saved driver/truck, applicable destination context, and the selected method's quantity inputs. Weighbridge requires valid weights and conversion; Direct quantity requires a positive quantity and active unit and never requires or displays weights/conversion. An own-company load requires a saved project; an outside-customer load requires a saved project or destination address. Requested quantity, price, signature, and notes may be blank. The authorization uses the same automatic transaction number as its receipt, contains no monetary values, and can be sent as PDF.
 - Source: Interview turns 7, 10–11, 256–258, and 274
 - Status: Confirmed field split and confirmation requirements
+
+### FR-094
+- Statement: “The system shall allow an outgoing receipt quantity to be entered directly in a configured measurement unit without empty or full weights.”
+- Rationale: Pipes and other count-, length-, or bundle-based goods are not established by a weighbridge.
+- Actors: Owner.
+- Trigger: The owner selects Direct quantity while making a receipt.
+- Preconditions: An active load-enabled item and measurement unit exist.
+- Main behavior: Hide requested/empty/full/net weight and conversion inputs; require a positive direct quantity with no more than six decimal places and an active unit; calculate subtotal/VAT/total from the direct quantity and optional price per selected unit; snapshot method, quantity, unit name, and symbol on confirmation; keep the normal customer, project/destination, saved driver/truck, payment, correction, history, receipt, and delivery-authorization associations.
+- Alternate and exception behavior: Switching back to Weighbridge restores that method's inputs without using direct quantity in its calculation. Direct receipts can be Unpriced or intentionally zero-priced under existing rules. Historical output is unaffected by later unit edits/deactivation.
+- Postconditions: The confirmed transaction is retrievable and printable without fabricated user-facing weight data.
+- Priority: Must
+- Acceptance criteria: Entering `50` with unit `pc` and price `$4.25` bills 50 pieces and calculates `$212.50` before VAT; both documents show `50 pc`; no empty, full, net, requested, or converted-weight fields appear; the record remains in the normal load/customer/project/payment history.
+- Source: Interview turn 417
+- Status: Confirmed and implemented in code; physical mobile acceptance pending
 
 ### FR-011
 - Statement: “The system shall generate one receipt for every completed truck load and item, whether for an owner project or an outside customer.”
@@ -493,13 +507,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: A required item does not yet exist.
 - Preconditions: The target category exists and the user has permission.
-- Main behavior: Maintain one shared Item Catalog. Require item name, category, and at least one enabled usage area of Loads, Quarry Purchases, and/or Daily Reports. Optionally retain internal code, description/notes, default unit, and default receipt price when Loads is enabled. New items start Active. Give every active item an Edit action covering all these fields. Filter each workflow to active items enabled for it, while allowing one item record to serve multiple areas. Provide Quick Add Item within all three workflows; saving immediately selects the new item. Receipt conversion remains separately selected and is not stored as an item default.
+- Main behavior: Maintain one shared Item Catalog. Require item name, category, and at least one enabled usage area of Loads, Quarry Purchases, and/or Daily Reports. Optionally retain internal code, description/notes, default unit, and default receipt price when Loads is enabled. New items start Active. In the Active Items area, group every item beneath its category name in category-name order; show each category's active-item count; start every category closed on page entry; and use `+` closed / `×` open to reveal its item cards and Edit actions. In Make Receipt, organize the Load-enabled item selector the same way: open a searchable modal containing closed category labels and counts, then open a category to choose one of its alphabetic load-enabled items; searching a category or item reveals only matching groups/options. After selection, the receipt field and both issued documents identify the selected item; category remains supporting picker organization/snapshot context and never replaces the Item value. Give every active item an Edit action covering all its fields. Filter each workflow to active items enabled for it, while allowing one item record to serve multiple areas. Provide Quick Add Item within all three workflows; saving immediately selects the new item. Receipt conversion remains separately selected and is not stored as an item default.
 - Alternate and exception behavior: At confirmation, snapshot the selected item's name, optional internal code, category, and unit. Later catalog edits or category movement affect only future entries and never alter confirmed documents or reports. An item referenced by any record cannot be deleted and may only be deactivated; a never-used item may move to restorable Trash. Deactivation hides it from new selections while retaining history and allowing reactivation. Reject a duplicate nonblank internal code. Warn without blocking when the name matches or closely resembles an existing item, show the possible match, and allow an intentionally distinct item to be saved.
 - Postconditions: The item is available for applicable records and reports.
 - Priority: Must
-- Acceptance criteria: The owner can create an item under a category, enable it for one or more usage areas, and later select the same active item in every enabled workflow but not in disabled usage areas. From each enabled transaction workflow, Quick Add saves the item to the catalog and returns with it selected.
-- Source: Interview turns 21, 28, 46, 250–252, and 266
-- Status: Confirmed
+- Acceptance criteria: The owner can create an item under a category, enable it for one or more usage areas, and later select the same active item in every enabled workflow but not in disabled usage areas. Active Items initially displays closed category labels and counts; opening one category displays only its items, usage areas, and Edit actions. Make Receipt initially displays closed category labels in its load-item modal; opening one shows only its load-enabled items; selecting `PVC Pipe` under `Pipes` leaves `PVC Pipe` as the selected and printed Item rather than `Pipes`. From each enabled transaction workflow, Quick Add saves the item to the catalog and returns with it selected.
+- Source: Interview turns 21, 28, 46, 250–252, 266, 418, and 420
+- Status: Confirmed; grouped Active Items and receipt item picker implemented through Turn 420
 
 ### FR-070
 - Statement: “The system shall display live Receipt and Delivery Authorization blueprints while the owner enters or edits load data.”
@@ -521,13 +535,13 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Authorized purchasing or receiving staff; exact roles remain to be confirmed.
 - Trigger: A truck delivers a purchased item from a quarry.
 - Preconditions: A saved quarry/supplier profile and item can be selected or a new supplier can be created quickly; the supplier ticket/invoice provides the delivered quantity.
-- Main behavior: Select a saved quarry/supplier or create one quickly, manually copy the positive whole cubic-metre quantity from the supplier ticket/invoice without requiring empty/full weighbridge entries, and record item, driver, plate number, automatic confirmation date/time, optional supplier ticket/invoice number, up to 20 optional ticket/invoice photos, and payment information without processing the payment. Automatically compress photos at readable quality. Optionally accept USD price per cubic metre, calculate purchase subtotal as quantity multiplied by that unit price, apply universal VAT, and calculate final purchase total. Make the delivery and attachments available offline and in synchronized supplier history.
-- Alternate and exception behavior: Price is optional; a quantity-only delivery may be confirmed without financial tracking or VAT. A confirmed priced purchase retains its applied VAT rate and supports separate partial payments, balances, statuses, and final payment cancellation under the customer-order rules. A rejected delivery remains an unconfirmed draft and may be deleted to recoverable Trash. A mistaken or duplicate confirmed purchase may be permanently marked Cancelled after a warning, required reason, and automatic cancellation time, but only when it has no active linked payments; ordinary field mistakes use direct correction. Rejected and cancelled purchases affect no active quantities, balances, inventory, or report totals.
+- Main behavior: Select a saved quarry/supplier or create one quickly, manually copy the positive whole cubic-metre quantity from the supplier ticket/invoice without requiring empty/full weighbridge entries, and record item, driver, plate number, automatic confirmation date/time, optional supplier ticket/invoice number, up to 20 optional ticket/invoice photos, and payment information without processing the payment. Automatically compress photos at readable quality. Optionally accept USD price per cubic metre, calculate purchase subtotal as quantity multiplied by that unit price, apply universal VAT, and calculate final purchase total. For the current local work date, group active deliveries into separate counters by project, supplier, item, saved driver, and saved truck. Each counter shows trip count, cumulative m³, and the latest trip quantity. Pressing `+1 Trip` opens a confirmation panel prefilled with that latest quantity; the owner may change it for this trip only. Confirmation creates a new independently numbered and timestamped normal quarry purchase using the counter's project, supplier, item, driver, truck, price, VAT, and notes while leaving supplier ticket/photos empty for the new trip. Make every delivery and attachment available offline and in synchronized supplier history. Organize Purchase History as closed-by-default Supplier → Linked Project → Purchase disclosures ordered by supplier then project name, with `No project linked` last. Supplier and project labels show filtered purchase counts and active cubic-metre totals; supplier labels also show their linked-project count. Date filtering rebuilds the hierarchy and totals from matching purchases.
+- Alternate and exception behavior: Price is optional; a quantity-only delivery may be confirmed without financial tracking or VAT. A confirmed priced purchase retains its applied VAT rate and supports separate partial payments, balances, statuses, and final payment cancellation under the customer-order rules. A counter increment rejects zero, negative, decimal, cancelled-source, and prior-day reuse; a new work date requires confirming its first purchase. A changed increment quantity does not change the next saved configuration globally—it becomes the latest quantity for that counter because it is the most recent real trip. A rejected delivery remains an unconfirmed draft and may be deleted to recoverable Trash. A mistaken or duplicate confirmed purchase may be permanently marked Cancelled after a warning, required reason, and automatic cancellation time, but only when it has no active linked payments; ordinary field mistakes use direct correction. Rejected and cancelled purchases affect no active quantities, balances, inventory, counter totals, or report totals.
 - Postconditions: The delivery is available in quarry purchase and payment history; no inventory balance is changed.
 - Priority: Must
-- Acceptance criteria: The owner can confirm a quantity-only quarry delivery with a positive whole number of cubic metres and without price, VAT, supplier reference, photos, or payment balance; zero, negative, and decimal quantities are rejected. A priced purchase supports multiple order-linked payments, derived balance/status, and final payment cancellation. Confirmation records date/time; up to 20 readable-quality compressed attachments work offline/sync; the record appears in supplier history and never alters inventory.
-- Source: Interview turns 21–22 and 26–30
-- Status: Confirmed identity, quantity, pricing, payment, rejection, and cancellation behavior through Turn 295
+- Acceptance criteria: The owner can confirm a quantity-only quarry delivery with a positive whole number of cubic metres and without price, VAT, supplier reference, photos, or payment balance; zero, negative, and decimal quantities are rejected. Confirming the first 20 m³ delivery today creates a one-trip counter; confirming `+1 Trip` at the unchanged value creates a second separately numbered 20 m³ purchase and shows 2 trips / 40 m³; changing the next panel to 18 creates only that trip at 18 m³ and shows 3 trips / 58 m³. Another driver/truck has a separate counter, cancelled purchases are excluded, and tomorrow requires a new first purchase. A priced purchase supports multiple order-linked payments, derived balance/status, and final payment cancellation. Confirmation records date/time; up to 20 readable-quality compressed attachments work offline/sync; the record appears in supplier history and never alters inventory. Purchase History initially shows closed supplier labels; opening one reveals only projects used with that supplier plus `No project linked` when applicable; opening a project reveals its matching purchase cards.
+- Source: Interview turns 21–22, 26–30, 419, and 424
+- Status: Confirmed and implemented through Turn 424; physical Android counter acceptance pending
 
 ### FR-021
 - Statement: “The system shall display a customer profile summary containing total quantity taken and total price.”
@@ -737,7 +751,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Priority: Must
 - Acceptance criteria: A draft cannot print; after review and explicit Confirm, the receipt can print and cannot be deleted; unavailable printer does not prevent confirmation. The entry screen visibly distinguishes all four stages, preserves autosave and validation, and its animations complete without blocking field interaction or record access.
 - Source: Interview turns 53, 76–77, and 370
-- Status: Confirmed and implemented for entry/review/confirmation; printing integration remains pending
+- Status: Confirmed; Android Bluetooth Classic ESC/POS pairing, selection, test printing, confirmed Receipt printing, history printing, Delivery Authorization signature raster printing, and Quick Text printing are implemented in code. Physical printer acceptance and the COPY/reprint-log portion of FR-033 remain pending.
 
 ### FR-033
 - Statement: “The system shall allow a receipt to be printed repeatedly without a fixed copy limit, both while open and after reopening it from history.”
@@ -1122,7 +1136,7 @@ The proposed product is an asphalt-plant management application intended to cent
 ## 10. Business Rules
 
 ### BR-001
-- An outside-customer truck is weighed empty before loading and weighed again after loading. (Source: Turn 6; status: Confirmed.)
+- An outside-customer receipt using Weighbridge is weighed empty before loading and again after loading. Direct-quantity goods do not use weighbridge fields. (Sources: Turns 6 and 417; status: Confirmed as refined.)
 
 ### BR-002
 - The requested quantity is retained only as an informational comparison value. Actual net quantity from the weighbridge controls the receipt and billing. No variance threshold or warning applies. (Sources: Turns 6 and 131–134; status: Confirmed.)
@@ -1155,7 +1169,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - The price field may be empty or intentionally $0.00 on any receipt, whether for the owner's company or an outside customer. Blank means Unpriced, has no payment balance, and is excluded from financial totals. Intentional $0.00 is included as a zero-value order with no payment due. (Sources: Turns 12 and 124–125; status: Confirmed.)
 
 ### BR-008
-- Net kilograms equal full kilograms minus empty kilograms. (Source: Turn 13; status: Confirmed.)
+- For Weighbridge receipts, net kilograms equal full kilograms minus empty kilograms. Direct-quantity receipts have no user-facing weight values. (Sources: Turns 13 and 417; status: Confirmed as refined.)
 
 ### BR-009
 - Asphalt conversion shall use 1,000 kg = 1 ton and display three decimal places, preserving each entered whole kilogram exactly. Other conversions shall use the selected configured rate and output unit; their applicability, precision, and rounding remain to be confirmed. (Sources: Turns 13–14 and 118; status: Partially confirmed.)
@@ -1314,7 +1328,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Each reprint event shall retain the transaction/document identity, reprint date/time, and device identity. It shall not retain a duplicate snapshot of the document contents or a copy sequence number. (Source: Turn 140; status: Confirmed.)
 
 ### DR-020
-- Each project shall retain a required name, associated customer/company, location or destination address, and Active or Completed status. Start date, end date, and notes are optional. A project referenced by any load or daily report cannot be deleted. Completed projects are unavailable for new load and daily-report selection but retain history/exports and may be reactivated. A never-used project may be moved to recoverable Trash. (Sources: Turns 148 and 305; status: Confirmed.)
+- Each project shall retain a required name, associated customer/company, location or destination address, Active or Completed status, and effective operating period. New projects start on their local creation date. Completing a project records the local completion date; reactivating clears that finish date. Legacy null dates resolve to created/updated dates for review. A project referenced by any load or daily report cannot be deleted. Completed projects are unavailable for new load and daily-report selection but retain history/exports and may be reactivated. A never-used project may be moved to recoverable Trash. (Sources: Turns 148, 305, and 428; status: Confirmed and implemented.)
 
 ### DR-021
 - Tax settings shall retain one universal VAT percentage. Each confirmed numeric-priced receipt or quarry purchase shall retain its own applied VAT-rate snapshot, calculated VAT amount, subtotal, and final total. (Sources: Turns 158–159 and 174; status: Confirmed.)
@@ -1332,9 +1346,11 @@ The proposed product is an asphalt-plant management application intended to cent
 
 ### IR-001
 - The application shall print both transaction documents through the existing unidentified Xprinter Android POS terminal's built-in 58 mm printer and from Android and iPhone to compatible separate portable Bluetooth printers using 58 mm and 80 mm layouts. The existing terminal permits installation of the version-one Android application through the Play Store or an APK, enabling direct built-in-printer testing. A printer model is officially supported only after successful physical testing with the app; compatibility with untested Bluetooth models is not guaranteed. Version-one acceptance requires successful printing of both documents through the existing terminal and through separate 58 mm and 80 mm Bluetooth printers from both phone platforms. The owner has no exact Xprinter model, protocol, SDK, or printable-width information and does not yet own the separate portable test printers. Exact technical discovery plus selection, procurement, and physical Android/iPhone testing of compatible 58 mm and 80 mm portable models are release dependencies. (Sources: Turns 47–52, 107–108, and 269–271; status: Confirmed scope, installability, test matrix, and procurement dependency; exact models pending.)
+- The Android-first implementation shall request the applicable Bluetooth runtime permissions, allow Samsung system pairing or in-app Classic-device discovery/pairing, list already paired devices, remember one selected printer and its 58/80 mm width locally, provide a DROMEX test print, reconnect when printing, and send ESC/POS data offline. It shall expose direct print actions after confirmation, in Load History, and for saved Quick Text. A Delivery Authorization shall rasterize the stored driver signature into the ESC/POS output. If the native module is absent, including Expo Go, the app shall explain that a new installed APK is required rather than losing or changing the confirmed record. (Source: Turn 421; status: Implemented in code for Android; physical ESC/POS compatibility pending.)
 
 ### IR-002
 - Receipt formatting shall adapt to a user-selected 58 mm or 80 mm POS paper layout rather than assuming one fixed width. Other widths are deferred and may be added later. (Sources: Turns 49–51 and 106; status: Confirmed.)
+- Direct ESC/POS output shall visually follow the approved Receipt/Delivery Authorization preview hierarchy within thermal-printer limits: company identity and document title centered; field labels in a stable left column; field values right-aligned in a separate column; long values wrapped within the value column with the label shown only on the first line; increased readable line spacing; blank vertical separation between identity, transaction, quantity/value, totals, signature, and footer groups; and divider rules before major groups and the final total. Both 58 mm and 80 mm layouts retain their own character widths. (Source: Turn 422; status: Confirmed and implemented in code.)
 
 ### IR-003
 - Printer unavailability or failure shall not change a confirmed transaction or prevent its persistence. The application shall show Retry and Reconnect printer. Attempts remain the original print until the app reports one successful output; only successful later prints are marked COPY and create reprint-log entries. (Sources: Turns 53–54 and 204; status: Confirmed.)
@@ -1837,13 +1853,13 @@ Status note: this section preserves the original question trace, but some indivi
 - Statement: “The application shall retain an active-project context and provide one command center for each project.”
 - Rationale: Most construction activity belongs to one job, and repeated project selection creates fatigue and association mistakes.
 - Actors: Owner/manager/foreman.
-- Main behavior: Selecting an active project retains it locally and shows a compact context bar with Open, Change, and Clear controls. Applicable Receipt, Daily Report, Schedule, Waste, Quarry, Equipment Fill, and Quick Text workflows begin with that project selected. A project name opens its Command Center with project/customer/location/status, operational metrics, and expandable Planning and Today, Field Operations, Issues, Photos, Activity, and Records and Documents sections. Activity combines the project's loads, reports, waste, fuel, quarry, schedules, issues, and photos chronologically.
+- Main behavior: Selecting an active project retains it locally and shows a compact context bar with Open, Change, and Clear controls. Applicable Receipt, Daily Report, Schedule, Waste, Quarry, Equipment Fill, and Quick Text workflows begin with that project selected. A project name opens its Command Center with project/customer/location/status/operating period, operational metrics, and expandable Planning and Today, Field Operations, Issues, Photos, All Activity Timeline, Activity by Record Type, and Records and Documents sections. All Activity Timeline starts closed and initially shows the latest 20 project records across all supported types in one newest-first timeline. Optional From and To dates may be used independently or together; date pickers and repository validation prevent a date before the effective project start or after its completed finish date/current date. Applying valid dates queries all matching project activity and shows up to the latest 500 results, while Clear restores the recent overview. Activity by Record Type is organized beneath separate closed-by-default Loads, Daily Reports, Quarry Purchases, Waste Dumps, Fuel Activity, Scheduled Work, Pavement Calculations, Walls, Project Issues, and Site Photos labels. Only types with matching project records appear; each opened type is newest-first and shows up to its latest 50 records so one high-volume type cannot hide another. Fuel activity identifies the filled equipment.
 - Alternate and exception behavior: Cross-project screens remain available when context is clear. A completed project can be opened and reviewed but cannot accept schedule changes, new issues, or new direct photos until reactivated. Clearing context never changes records already saved.
 - Postconditions: Project-owned workflows open from one consistent page and applicable new forms need no repeated project selection.
 - Priority: Must
-- Acceptance criteria: Selecting an active project survives navigation and app restart; opening applicable Create actions preselects it; Change and Clear work without modifying records; project metrics reconcile to stored records; and a completed project is visibly read-only.
-- Source: Interview turn 397
-- Status: Confirmed and implemented
+- Acceptance criteria: Selecting an active project survives navigation and app restart; opening applicable Create actions preselects it; Change and Clear work without modifying records; project metrics reconcile to stored records; and a completed project is visibly read-only. Both Activity parents and all child type labels begin closed. Opening All Activity Timeline shows the latest 20 mixed records; applying a From-only, To-only, or inclusive From/To range shows only records whose project-activity date falls in that period, rejects From after To, rejects dates before project start, and rejects dates after a completed finish/current date; Clear returns to the latest 20. Opening Loads shows only project loads, opening Waste Dumps shows only project waste dumps, opening Quarry Purchases shows only project quarry purchases, and every other available label behaves the same. Fuel rows name the filled equipment. More than 50 loads do not prevent a recent quarry, waste, fuel, schedule, pavement, wall, issue, or photo record from receiving its own label.
+- Source: Interview turns 397 and 426–429
+- Status: Confirmed and implemented through Turn 429; physical mobile organization/date-filter/fuel acceptance pending
 
 ### FR-087
 - Statement: “The application shall provide offline Global Search, Needs Attention, and Draft Center tools.”
@@ -1861,12 +1877,12 @@ Status note: this section preserves the original question trace, but some indivi
 - Statement: “The owner shall be able to retain issues and direct site photos under a project.”
 - Rationale: Construction blockers and visual evidence require project ownership and a simple follow-up lifecycle.
 - Actors: Owner/manager/foreman.
-- Main behavior: Within an active Project Command Center, create issues with required title, optional description/due date, and Low/Normal/High/Urgent priority; resolve and reopen them without deletion. Capture or choose persistent site photos with optional captions. Show both in their project sections and combined activity timeline.
+- Main behavior: Within an active Project Command Center, create issues with required title, optional description/due date, and Low/Normal/High/Urgent priority; resolve and reopen them without deletion. Capture or choose persistent site photos with optional captions. Show both in their project sections and their separate Project Issues and Site Photos labels under Activity by Record Type.
 - Alternate and exception behavior: Completed projects show retained issues/photos read-only until reactivated. Cancelling camera/library selection creates no record. Resolution retains issue history and timestamps.
 - Postconditions: Project issues and photos remain locally available and enter the synchronization outbox.
 - Priority: Must
-- Acceptance criteria: An issue can be created, resolved, reopened, and found by global search; a photo can be captured or selected and appears under the correct project and in Activity; upgrading version 17 creates both tables and advances to version 18 without altering prior records.
-- Source: Interview turn 397
+- Acceptance criteria: An issue can be created, resolved, reopened, and found by global search; a photo can be captured or selected and appears under the correct project and its matching Activity label; upgrading version 17 creates both tables and advances to version 18 without altering prior records.
+- Source: Interview turns 397 and 426
 - Status: Confirmed and implemented
 
 ### DR-029
@@ -1931,6 +1947,18 @@ Status note: this section preserves the original question trace, but some indivi
 - Acceptance criteria: Cement, sand, gravel/aggregate, water, admixture, concrete, stone, and steel entries appear only in the applicable wall's consumption history and totals and do not change any stock balance. Ready-mix records require finished m³ and purpose; Site-mixed records accept one or more ingredient quantities and optional finished m³; rebar records require diameter, number of bars, and length per bar and show total metres and calculated kilograms separately by diameter; stone records require a quantity and m³ or tonnes. Reinforced-concrete, stacked-rock/rubble-masonry, and cyclopean-concrete walls can be saved under active projects as retaining, boundary/free-standing, or other walls.
 - Source: Interview turn 413
 - Status: Confirmed and implemented in code through Turn 416; physical mobile acceptance and controlled consumption-entry correction remain pending
+
+### FR-094
+- Statement: “A versioned external acceptance backup shall contain representative linked records for the application's major implemented workflows.”
+- Rationale: High record volume tests scrolling and reporting, but recently added workflows also require representative data to reveal grouping, calculation, relationship, export, and detail-screen problems.
+- Actors: Owner/tester and developer.
+- Main behavior: Generate an encrypted complete-backup file containing 4,000 linked outgoing loads across weighbridge and direct-quantity methods; categorized items including pipes/drainage; customers, projects, suppliers, personnel, equipment, daily reports, quarry purchases, waste trips/counters, fuel, payments, schedules, issues, photos, Quick Text, pavement calculations, walls, and wall consumption. Preserve project/customer/supplier/item/driver/truck/wall relationships and include differing statuses, payment states, quantities, units, dates, signatures, and representative media.
+- Alternate and exception behavior: The acceptance dataset remains an external deliberately selected backup and never becomes an in-app production data generator. Restore fully replaces current phone data only after the established separately passworded safety-copy flow. Each revised dataset uses a new versioned filename and does not overwrite the preceding acceptance backup.
+- Postconditions: The owner can restore one package and exercise the major screens with realistic linked history, then restore the safety copy to return to prior phone data.
+- Priority: Must
+- Acceptance criteria: The v3 package decrypts through the normal backup reader, reports database version 23, passes SQLite integrity and foreign-key checks, contains 4,000 loads, 96 pavement calculations, 45 walls, 180 wall-consumption entries, and direct-quantity pipe/block receipts, and restores on the target Android phone without losing the pre-restore safety copy.
+- Source: Interview turn 423
+- Status: Implemented and automatically validated; physical Android restore and walkthrough pending
 
 ### UI-017
 - All Pavement Calculator outputs shall use a high-contrast red card or result band with white result text and a darker red boundary. (Source: Interview turn 407; status: Superseded by UI-019 in Turn 409 because the owner found red visually annoying.)

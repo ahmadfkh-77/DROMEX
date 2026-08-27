@@ -6,6 +6,7 @@ import { formatUsd } from '../../domain/loads';
 import { colors } from '../theme';
 
 export type DocumentViewData = {
+  quantityMethod: 'weighbridge' | 'direct';
   companyName: string; companyAddress: string | null; companyPhone: string | null;
   companyEmail: string | null; companyTaxVatNumber: string | null; companyReceiptFooter: string | null;
   transactionNumber: string; dateTime: string; customerName: string; projectName: string | null;
@@ -56,11 +57,7 @@ export function LoadDocuments({ data, isDraft }: { data: DocumentViewData; isDra
             {data.destinationAddress ? <Line label="Destination" value={data.destinationAddress} /> : null}
             <Line label="Driver" value={missing(data.driverName)} />
             <Line label="Truck plate" value={missing(data.truckPlate)} />
-            {data.requestedQuantityKg != null ? <Line label="Requested quantity" value={`${data.requestedQuantityKg} kg`} /> : null}
-            <Line label="Empty weight" value={data.emptyWeightKg == null ? '—' : `${data.emptyWeightKg} kg`} />
-            <Line label="Full weight" value={data.fullWeightKg == null ? '—' : `${data.fullWeightKg} kg`} />
-            <Line label="Net weight" value={data.netWeightKg == null ? '—' : `${data.netWeightKg} kg`} strong />
-            <Line label="Converted quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} />
+            {data.quantityMethod==='weighbridge'?<>{data.requestedQuantityKg != null ? <Line label="Requested quantity" value={`${data.requestedQuantityKg} kg`} /> : null}<Line label="Empty weight" value={data.emptyWeightKg == null ? '—' : `${data.emptyWeightKg} kg`} /><Line label="Full weight" value={data.fullWeightKg == null ? '—' : `${data.fullWeightKg} kg`} /><Line label="Net weight" value={data.netWeightKg == null ? '—' : `${data.netWeightKg} kg`} strong /><Line label="Converted quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} /></>:<Line label="Quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} strong />}
             {data.signaturePaths.length ? <View style={styles.signature}><Svg width="100%" height={80} viewBox="0 0 320 140">{data.signaturePaths.map((path,index)=><Path key={`${index}-${path.length}`} d={path} fill="none" stroke="#111" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"/>)}</Svg><Text style={styles.signatureLabel}>Driver signature: {data.driverName}</Text></View> : <Line label="Driver signature" value="Unsigned" />}
           </>
         )}

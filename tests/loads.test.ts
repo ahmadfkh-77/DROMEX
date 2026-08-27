@@ -10,8 +10,8 @@ const conversion: ConversionOption = {
 };
 const baseOptions: LoadSetupOptions = {
   customers: [{ id: 'outside', type: 'company', name: 'Outside Customer', phone: null, email: null, address: null, taxVatNumber: null, notes: null, isOwnCompany: false, isActive: true, mergedIntoId: null, createdAt: '', updatedAt: '' }],
-  items: [{ id: 'asphalt', name: 'Asphalt', internalCode: null, categoryName: 'Produced', defaultPriceUsd: 90 }],
-  projects: [], units: [], conversions: [conversion],
+  items: [{ id: 'asphalt', name: 'Asphalt', internalCode: null, categoryName: 'Produced', defaultPriceUsd: 90, defaultUnitId: 'unit_ton' }],
+  projects: [], units: [{id:'unit_piece',name:'Piece',symbol:'pc',isActive:true}], conversions: [conversion],
   drivers: [{ id: 'driver_1', name: 'Ali', phone: null, licenseNumber: null, notes: null, isActive: true }],
   trucks: [{ id: 'truck_1', plate: 'B123', makeModel: null, capacityKg: null, ownerName: null, notes: null, isActive: true }],
   workers: [], machines: [],
@@ -32,6 +32,13 @@ describe('load calculations', () => {
   it('distinguishes a blank price from an intentional zero price', () => {
     expect(calculateLoad({ ...validDraft, unitPriceUsd: '' }, conversion, 11).finalTotalUsd).toBeNull();
     expect(calculateLoad({ ...validDraft, unitPriceUsd: '0' }, conversion, 11).finalTotalUsd).toBe(0);
+  });
+
+  it('calculates a direct pipe quantity without scale weights or conversion', () => {
+    const direct={...validDraft,quantityMethod:'direct' as const,directQuantity:'50',directUnitId:'unit_piece',emptyWeightKg:'',fullWeightKg:'',conversionId:'',unitPriceUsd:'4.25'};
+    const result=calculateLoad(direct,undefined,11);
+    expect(result).toMatchObject({netWeightKg:null,billedQuantity:50,subtotalUsd:212.5,vatAmountUsd:23.38,finalTotalUsd:235.88});
+    expect(validateLoadDraft(direct,baseOptions)).toEqual([]);
   });
 });
 
@@ -69,6 +76,14 @@ describe('load confirmation validation', () => {
   it('rejects inactive or missing catalog selections',()=>{
     expect(validateLoadDraft({...validDraft,itemId:'missing'},baseOptions)).toContain('Select a load-enabled item.');
     expect(validateLoadDraft({...validDraft,conversionId:'missing'},baseOptions)).toContain('Select a conversion.');
+  });
+  it('requires a positive direct quantity and saved unit but not weights or conversion',()=>{
+    const direct={...validDraft,quantityMethod:'direct' as const,directQuantity:'0',directUnitId:'missing',emptyWeightKg:'',fullWeightKg:'',conversionId:''};
+    const issues=validateLoadDraft(direct,baseOptions);
+    expect(issues).toContain('Direct quantity must be greater than zero with no more than six decimals.');
+    expect(issues).toContain('Select the direct quantity unit.');
+    expect(issues).not.toContain('Select a conversion.');
+    expect(issues.some(issue=>issue.includes('weight'))).toBe(false);
   });
   it('rejects a project belonging to another customer',()=>{
     const options={...baseOptions,projects:[{id:'project_1',name:'Other job',customerId:'someone_else',customerName:'Other',location:'Beirut',status:'active' as const,notes:null}]};

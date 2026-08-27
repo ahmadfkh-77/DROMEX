@@ -17,6 +17,14 @@ describe('load PDF documents',()=>{
     const html=buildLoadDocumentHtml(load,'authorization','80');
     expect(html).toContain('Net weight:'); expect(html).toContain('20555 kg'); expect(html).toContain('<svg'); expect(html).toContain('Driver signature: Ali'); expect(html).not.toContain('Final total:');
   });
+  it('prints direct pipe quantity and omits every scale field',()=>{
+    const html=buildLoadDocumentHtml({...load,quantityMethod:'direct',itemName:'PVC Pipe',billedQuantity:50,outputUnitSymbol:'pc',emptyWeightKg:null,fullWeightKg:null,netWeightKg:null},'authorization','58');
+    expect(html).toContain('50.000 pc');
+    expect(html).not.toContain('Empty weight:');
+    expect(html).not.toContain('Full weight:');
+    expect(html).not.toContain('Net weight:');
+    expect(html).not.toContain('Converted quantity:');
+  });
 });
 
 describe('Quick Text PDF documents',()=>{

@@ -8,6 +8,9 @@ export type QuarryPurchaseDraft = { supplierId: string; projectId: string; itemI
 export type QuarryCorrectionDraft = Pick<QuarryPurchaseDraft,'quantityCubicMetres'|'driverId'|'truckId'|'supplierTicketNumber'|'unitPriceUsd'|'notes'>;
 export type QuarryCalculation = { subtotalUsd: number | null; vatAmountUsd: number | null; finalTotalUsd: number | null };
 export type QuarryPurchase = { id: string; purchaseNumber: string; confirmedAt: string; supplierId:string; supplierName: string; projectId:string|null;projectName:string|null; itemId:string; itemName: string; itemCode: string | null; categoryName: string; quantityCubicMetres: number; driverId:string; driverName: string; truckId:string; truckPlate: string; supplierTicketNumber: string | null; unitPriceUsd: number | null; subtotalUsd: number | null; vatRatePercent: number | null; vatAmountUsd: number | null; finalTotalUsd: number | null; paymentStatus: 'Unpriced' | 'No Payment Due' | 'Unpaid' | 'Partially Paid' | 'Paid' | 'Overpaid'; notes: string | null; photos: string[];status:'Active'|'Cancelled';cancellationReason:string|null;cancelledAt:string|null };
+export type QuarryProjectGroup={id:string|null;name:string;purchases:QuarryPurchase[]};
+export type QuarrySupplierGroup={id:string;name:string;purchases:QuarryPurchase[];projectGroups:QuarryProjectGroup[]};
+export type QuarryDailyCounter={key:string;sourcePurchaseId:string;supplierName:string;projectName:string|null;itemName:string;driverName:string;truckPlate:string;tripCount:number;totalQuantityCubicMetres:number;defaultQuantityCubicMetres:number;lastConfirmedAt:string};
 
 export const emptyQuarryPurchaseDraft: QuarryPurchaseDraft = { supplierId: '', projectId:'', itemId: '', quantityCubicMetres: '', driverId: '', truckId: '', supplierTicketNumber: '', unitPriceUsd: '', notes: '', photos: [] };
 
@@ -30,3 +33,31 @@ export function validateQuarryPurchase(draft: QuarryPurchaseDraft, setup: Quarry
   if (draft.unitPriceUsd.trim()) { const priceText=draft.unitPriceUsd.trim().replace(',','.');const price = Number(priceText); if (!/^\d+(\.\d{1,2})?$/.test(priceText)||!Number.isFinite(price) || price < 0) issues.push('Price per m³ must be zero or more with no more than two decimals.'); }
   return issues;
 }
+
+export function groupQuarryPurchases(purchases:QuarryPurchase[]):QuarrySupplierGroup[]{
+  const suppliers=new Map<string,{id:string;name:string;purchases:QuarryPurchase[];projects:Map<string,QuarryProjectGroup>}>();
+  for(const purchase of purchases){
+    let supplier=suppliers.get(purchase.supplierId);
+    if(!supplier){supplier={id:purchase.supplierId,name:purchase.supplierName,purchases:[],projects:new Map()};suppliers.set(purchase.supplierId,supplier);}
+    supplier.purchases.push(purchase);
+    const projectKey=purchase.projectId??'__unlinked__';let project=supplier.projects.get(projectKey);
+    if(!project){project={id:purchase.projectId,name:purchase.projectName??'No project linked',purchases:[]};supplier.projects.set(projectKey,project);}
+    project.purchases.push(purchase);
+  }
+  return [...suppliers.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(supplier=>({id:supplier.id,name:supplier.name,purchases:supplier.purchases,projectGroups:[...supplier.projects.values()].sort((a,b)=>a.id===null?1:b.id===null?-1:a.name.localeCompare(b.name))}));
+}
+
+export function quarryDailyCounters(purchases:QuarryPurchase[],workDate:string):QuarryDailyCounter[]{
+  const counters=new Map<string,QuarryDailyCounter>();
+  for(const purchase of purchases){
+    if(purchase.status!=='Active'||localDate(purchase.confirmedAt)!==workDate)continue;
+    const key=[purchase.projectId??'',purchase.supplierId,purchase.itemId,purchase.driverId,purchase.truckId].join('|');
+    const current=counters.get(key);
+    if(!current){counters.set(key,{key,sourcePurchaseId:purchase.id,supplierName:purchase.supplierName,projectName:purchase.projectName,itemName:purchase.itemName,driverName:purchase.driverName,truckPlate:purchase.truckPlate,tripCount:1,totalQuantityCubicMetres:purchase.quantityCubicMetres,defaultQuantityCubicMetres:purchase.quantityCubicMetres,lastConfirmedAt:purchase.confirmedAt});continue;}
+    current.tripCount+=1;current.totalQuantityCubicMetres+=purchase.quantityCubicMetres;
+    if(purchase.confirmedAt>current.lastConfirmedAt){current.sourcePurchaseId=purchase.id;current.defaultQuantityCubicMetres=purchase.quantityCubicMetres;current.lastConfirmedAt=purchase.confirmedAt;}
+  }
+  return [...counters.values()].sort((a,b)=>b.lastConfirmedAt.localeCompare(a.lastConfirmedAt));
+}
+
+function localDate(value:string){const date=new Date(value);return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}

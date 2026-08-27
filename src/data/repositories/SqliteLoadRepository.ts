@@ -37,11 +37,11 @@ type ConversionRow = {
 };
 type ProjectRow = {
   id: string; customer_id: string; customer_name: string; name: string; location: string;
-  status: 'active' | 'completed'; notes: string | null;
+  status: 'active' | 'completed'; notes: string | null;start_date:string|null;end_date:string|null;created_at:string;updated_at:string;
 };
 type ItemRow = {
   id: string; name: string; internal_code: string | null; category_name: string;
-  default_receipt_price_usd_cents: number | null;
+  default_receipt_price_usd_cents: number | null; default_unit_id: string | null;
 };
 type DriverRow = { id: string; name: string; phone: string | null; license_number: string | null; notes: string | null; is_active: number };
 type TruckRow = { id: string; plate: string; make_model: string | null; capacity_kg: number | null; owner_name: string | null; notes: string | null; is_active: number };
@@ -62,12 +62,15 @@ type LoadRow = {
   company_tax_vat_number: string | null; company_receipt_footer: string | null;
   signature_json: string | null; company_logo_uri: string | null;
   conversion_id: string;
+  quantity_method: 'weighbridge' | 'direct'; direct_quantity: number | null;
+  direct_unit_id: string | null; direct_unit_name: string | null; direct_unit_symbol: string | null;
 };
 
 function makeId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 function clean(value: string): string | null { const next = value.trim().replace(/\s+/g, ' '); return next || null; }
+function localToday(){const value=new Date();return`${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;}
 function unitFromRow(row: UnitRow): MeasurementUnit {
   return { id: row.id, name: row.name, symbol: row.symbol, isActive: row.is_active === 1 };
 }
@@ -81,17 +84,23 @@ function conversionFromRow(row: ConversionRow): ConversionOption {
   };
 }
 function projectFromRow(row: ProjectRow): Project {
-  return { id: row.id, customerId: row.customer_id, customerName: row.customer_name, name: row.name, location: row.location, status: row.status, notes: row.notes };
+  return { id: row.id, customerId: row.customer_id, customerName: row.customer_name, name: row.name, location: row.location, status: row.status, notes: row.notes,startDate:row.start_date??row.created_at.slice(0,10),endDate:row.end_date??(row.status==='completed'?row.updated_at.slice(0,10):null) };
 }
 function loadFromRow(row: LoadRow): ConfirmedLoad {
+  const quantityMethod = row.quantity_method ?? 'weighbridge';
   return {
+    quantityMethod,
     id: row.id, transactionNumber: row.transaction_number, confirmedAt: row.confirmed_at,
     customerName: row.customer_name, projectName: row.project_name, projectLocation: row.project_location,
     destinationAddress: row.destination_address, itemName: row.item_name, itemCode: row.item_code,
     categoryName: row.category_name, driverName: row.driver_name, truckPlate: row.truck_plate,
-    requestedQuantityKg: row.requested_quantity_kg, emptyWeightKg: row.empty_weight_kg,
-    fullWeightKg: row.full_weight_kg, netWeightKg: row.net_weight_kg,
-    conversionName: row.conversion_name, conversionRule: row.conversion_rule,
+    requestedQuantityKg: quantityMethod === 'weighbridge' ? row.requested_quantity_kg : null,
+    emptyWeightKg: quantityMethod === 'weighbridge' ? row.empty_weight_kg : null,
+    fullWeightKg: quantityMethod === 'weighbridge' ? row.full_weight_kg : null,
+    netWeightKg: quantityMethod === 'weighbridge' ? row.net_weight_kg : null,
+    conversionName: quantityMethod === 'weighbridge' ? row.conversion_name : null,
+    conversionRule: quantityMethod === 'weighbridge' ? row.conversion_rule : null,
+    directQuantity: row.direct_quantity, directUnitName: row.direct_unit_name, directUnitSymbol: row.direct_unit_symbol,
     outputUnitSymbol: row.output_unit_symbol, convertedQuantity: row.converted_quantity,
     billedQuantity: row.billed_quantity, unitPriceUsd: row.unit_price_usd_cents == null ? null : row.unit_price_usd_cents / 100,
     subtotalUsd: row.subtotal_usd_cents == null ? null : row.subtotal_usd_cents / 100,
@@ -121,7 +130,7 @@ export class SqliteLoadRepository implements LoadRepository {
         WHERE c.is_active = 1 ORDER BY c.name COLLATE NOCASE`),
       this.db.getAllAsync<ProjectRow>(`SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id
         WHERE p.status = 'active' AND p.is_archived = 0 ORDER BY p.name COLLATE NOCASE`),
-      this.db.getAllAsync<ItemRow>(`SELECT i.id, i.name, i.internal_code, c.name category_name,
+      this.db.getAllAsync<ItemRow>(`SELECT i.id, i.name, i.internal_code, i.default_unit_id, c.name category_name,
         i.default_receipt_price_usd_cents FROM catalog_items i JOIN categories c ON c.id = i.category_id
         WHERE i.is_active = 1 AND i.loads_enabled = 1 ORDER BY i.name COLLATE NOCASE`),
       this.db.getAllAsync<DriverRow>('SELECT * FROM driver_profiles WHERE is_active = 1 ORDER BY name COLLATE NOCASE'),
@@ -132,6 +141,7 @@ export class SqliteLoadRepository implements LoadRepository {
     const items: LoadItemOption[] = itemRows.map((row) => ({
       id: row.id, name: row.name, internalCode: row.internal_code, categoryName: row.category_name,
       defaultPriceUsd: row.default_receipt_price_usd_cents == null ? null : row.default_receipt_price_usd_cents / 100,
+      defaultUnitId: row.default_unit_id,
     }));
     const drivers: DriverProfile[] = driverRows.map((row) => ({ id: row.id, name: row.name, phone: row.phone, licenseNumber: row.license_number, notes: row.notes, isActive: row.is_active === 1 }));
     const trucks: TruckProfile[] = truckRows.map((row) => ({ id: row.id, plate: row.plate, makeModel: row.make_model, capacityKg: row.capacity_kg, ownerName: row.owner_name, notes: row.notes, isActive: row.is_active === 1 }));
@@ -171,11 +181,11 @@ export class SqliteLoadRepository implements LoadRepository {
     if (!customer) throw new Error('Select an active customer.');
     const now = new Date().toISOString(); const id = makeId('project');
     await this.db.withTransactionAsync(async () => {
-      await this.db.runAsync(`INSERT INTO projects (id, customer_id, name, location, notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`, id, draft.customerId, draft.name.trim(), draft.location.trim(), clean(draft.notes ?? ''), now, now);
+      await this.db.runAsync(`INSERT INTO projects (id, customer_id, name, location, notes, start_date, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, id, draft.customerId, draft.name.trim(), draft.location.trim(), clean(draft.notes ?? ''), localToday(),now, now);
       await this.enqueue('project', id, { id, ...draft, status: 'active' });
     });
-    return { id, customerId: customer.id, customerName: customer.name, name: draft.name.trim(), location: draft.location.trim(), status: 'active', notes: clean(draft.notes ?? '') };
+    return { id, customerId: customer.id, customerName: customer.name, name: draft.name.trim(), location: draft.location.trim(), status: 'active', notes: clean(draft.notes ?? ''),startDate:localToday(),endDate:null };
   }
 
   async listProjects(): Promise<Project[]> {
@@ -189,8 +199,8 @@ export class SqliteLoadRepository implements LoadRepository {
     if (!project) throw new Error('Project was not found.');
     const now = new Date().toISOString();
     await this.db.withTransactionAsync(async () => {
-      await this.db.runAsync('UPDATE projects SET status = ?, updated_at = ? WHERE id = ?', status, now, projectId);
-      await this.enqueue('project', projectId, { ...projectFromRow(project), status, updatedAt: now });
+      await this.db.runAsync('UPDATE projects SET status = ?, start_date=COALESCE(start_date,substr(created_at,1,10)), end_date=?, updated_at = ? WHERE id = ?', status,status==='completed'?localToday():null,now, projectId);
+      await this.enqueue('project', projectId, { ...projectFromRow(project), status,endDate:status==='completed'?localToday():null, updatedAt: now });
     });
   }
 
@@ -270,9 +280,12 @@ export class SqliteLoadRepository implements LoadRepository {
     const customer = options.customers.find((value) => value.id === draft.customerId)!;
     const project = options.projects.find((value) => value.id === draft.projectId);
     const item = options.items.find((value) => value.id === draft.itemId)!;
-    const conversion = options.conversions.find((value) => value.id === draft.conversionId)!;
+    const conversion = options.conversions.find((value) => value.id === draft.conversionId);
+    const directUnit = options.units.find((value) => value.id === draft.directUnitId);
     const calculation = calculateLoad(draft, conversion, options.companySettings.vatRatePercent);
-    if (calculation.netWeightKg == null || calculation.convertedQuantity == null || calculation.billedQuantity == null) throw new Error('Load calculations are incomplete.');
+    if (calculation.convertedQuantity == null || calculation.billedQuantity == null || (draft.quantityMethod === 'weighbridge' && calculation.netWeightKg == null)) throw new Error('Load calculations are incomplete.');
+    if (draft.quantityMethod === 'direct' && !directUnit) throw new Error('The direct quantity unit is unavailable.');
+    if (draft.quantityMethod === 'weighbridge' && !conversion) throw new Error('The selected conversion is unavailable.');
     const confirmedAt = new Date().toISOString(); const id = makeId('load');
     let transactionNumber = '';
     await this.db.withTransactionAsync(async () => {
@@ -282,23 +295,32 @@ export class SqliteLoadRepository implements LoadRepository {
       transactionNumber = `${localDate}-${state.device_code}-${String(state.next_load_sequence).padStart(5, '0')}`;
       const price = draft.unitPriceUsd.trim() ? Number(draft.unitPriceUsd.replace(',', '.')) : null;
       const paymentStatus: ConfirmedLoad['paymentStatus'] = price == null ? 'Unpriced' : price === 0 ? 'No Payment Due' : 'Unpaid';
+      const isDirect = draft.quantityMethod === 'direct';
+      const retainedRow = conversion ? null : await this.db.getFirstAsync<ConversionRow>(`SELECT c.*, iu.name input_unit_name, iu.symbol input_unit_symbol,
+        ou.name output_unit_name, ou.symbol output_unit_symbol FROM conversion_options c
+        JOIN measurement_units iu ON iu.id=c.input_unit_id JOIN measurement_units ou ON ou.id=c.output_unit_id WHERE c.id=?`, 'conversion_kg_ton');
+      const retainedConversion:ConversionOption|undefined=conversion??(retainedRow?conversionFromRow(retainedRow):undefined);
+      if (!retainedConversion) throw new Error('The built-in receipt compatibility conversion is unavailable.');
       await this.db.runAsync(`INSERT INTO loads (id, transaction_number, confirmed_at, customer_id, customer_name,
         project_id, project_name, project_location, destination_address, item_id, item_name, item_code, category_name,
         driver_name, truck_plate, driver_profile_id, truck_profile_id, requested_quantity_kg, empty_weight_kg, full_weight_kg, net_weight_kg, conversion_id,
         conversion_name, conversion_rule, output_unit_symbol, converted_quantity, billed_quantity, unit_price_usd_cents,
         subtotal_usd_cents, vat_rate_basis_points, vat_amount_usd_cents, final_total_usd_cents, payment_status, notes,
-        company_name, company_address, company_phone, company_email, company_tax_vat_number, company_receipt_footer, company_logo_uri)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        company_name, company_address, company_phone, company_email, company_tax_vat_number, company_receipt_footer, company_logo_uri,
+        quantity_method, direct_quantity, direct_unit_id, direct_unit_name, direct_unit_symbol)
+        VALUES (${Array.from({length:46},()=>'?').join(', ')})`,
         id, transactionNumber, confirmedAt, customer.id, customer.name, project?.id ?? null, project?.name ?? null,
         project?.location ?? null, clean(draft.destinationAddress), item.id, item.name, item.internalCode, item.categoryName,
-        draft.driverName.trim(), draft.truckPlate.trim().toUpperCase(), draft.driverId, draft.truckId, draft.requestedQuantityKg.trim() ? Number(draft.requestedQuantityKg) : null,
-        Number(draft.emptyWeightKg), Number(draft.fullWeightKg), calculation.netWeightKg, conversion.id, conversion.name,
-        `${conversion.inputQuantity} ${conversion.inputUnitSymbol} = ${conversion.outputQuantity} ${conversion.outputUnitSymbol}`,
-        conversion.outputUnitSymbol, calculation.convertedQuantity, calculation.billedQuantity, price == null ? null : Math.round(price * 100),
+        draft.driverName.trim(), draft.truckPlate.trim().toUpperCase(), draft.driverId, draft.truckId, !isDirect && draft.requestedQuantityKg.trim() ? Number(draft.requestedQuantityKg) : null,
+        isDirect ? 0 : Number(draft.emptyWeightKg), isDirect ? 1 : Number(draft.fullWeightKg), isDirect ? 1 : calculation.netWeightKg,
+        retainedConversion.id, isDirect ? 'Direct quantity' : retainedConversion.name,
+        isDirect ? 'Entered directly' : `${retainedConversion.inputQuantity} ${retainedConversion.inputUnitSymbol} = ${retainedConversion.outputQuantity} ${retainedConversion.outputUnitSymbol}`,
+        isDirect ? directUnit!.symbol : retainedConversion.outputUnitSymbol, calculation.convertedQuantity, calculation.billedQuantity, price == null ? null : Math.round(price * 100),
         calculation.subtotalUsd == null ? null : Math.round(calculation.subtotalUsd * 100), price == null ? null : Math.round(options.companySettings.vatRatePercent * 100),
         calculation.vatAmountUsd == null ? null : Math.round(calculation.vatAmountUsd * 100), calculation.finalTotalUsd == null ? null : Math.round(calculation.finalTotalUsd * 100),
         paymentStatus, clean(draft.notes), options.companySettings.companyName, options.companySettings.address,
-        options.companySettings.phone, options.companySettings.email, options.companySettings.taxVatNumber, options.companySettings.receiptFooter, options.companySettings.logoUri);
+        options.companySettings.phone, options.companySettings.email, options.companySettings.taxVatNumber, options.companySettings.receiptFooter, options.companySettings.logoUri,
+        draft.quantityMethod, isDirect ? calculation.billedQuantity : null, isDirect ? directUnit!.id : null, isDirect ? directUnit!.name : null, isDirect ? directUnit!.symbol : null);
       await this.db.runAsync('UPDATE device_state SET next_load_sequence = next_load_sequence + 1 WHERE id = ?', 'local');
       await this.db.runAsync('DELETE FROM load_drafts WHERE id = ?', 'current');
       await this.db.runAsync("DELETE FROM sync_outbox WHERE entity_type='loadDraft' AND entity_id='current'");
@@ -325,10 +347,22 @@ export class SqliteLoadRepository implements LoadRepository {
   }
   async correctLoad(loadId:string,draft:LoadCorrectionDraft):Promise<ConfirmedLoad>{
     const row=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!row)throw new Error('Load was not found.');
-    const whole=(value:string,optional=false)=>optional&&!value.trim()?null:/^\d+$/.test(value.trim())?Number(value):NaN;const empty=whole(draft.emptyWeightKg);const full=whole(draft.fullWeightKg);const requested=whole(draft.requestedQuantityKg,true);if(!Number.isInteger(empty)||!Number.isInteger(full))throw new Error('Empty and full weights must be whole kilogram values.');if((full as number)<=(empty as number))throw new Error('Full weight must be greater than empty weight.');if(requested!=null&&!Number.isInteger(requested))throw new Error('Requested quantity must be a whole kilogram value.');
+    const isDirect=(row.quantity_method??'weighbridge')==='direct';
+    const whole=(value:string,optional=false)=>optional&&!value.trim()?null:/^\d+$/.test(value.trim())?Number(value):NaN;
+    const directText=draft.directQuantity.trim().replace(',','.');
+    const direct=/^\d+(\.\d{1,6})?$/.test(directText)?Number(directText):NaN;
+    const empty=isDirect?row.empty_weight_kg:whole(draft.emptyWeightKg);
+    const full=isDirect?row.full_weight_kg:whole(draft.fullWeightKg);
+    const requested=isDirect?null:whole(draft.requestedQuantityKg,true);
+    if(isDirect&&(!Number.isFinite(direct)||direct<=0))throw new Error('Direct quantity must be greater than zero with no more than six decimals.');
+    if(!isDirect&&(!Number.isInteger(empty)||!Number.isInteger(full)))throw new Error('Empty and full weights must be whole kilogram values.');
+    if(!isDirect&&(full as number)<=(empty as number))throw new Error('Full weight must be greater than empty weight.');
+    if(!isDirect&&requested!=null&&!Number.isInteger(requested))throw new Error('Requested quantity must be a whole kilogram value.');
     const priceText=draft.unitPriceUsd.trim().replace(',','.');if(priceText&&!/^\d+(\.\d{1,2})?$/.test(priceText))throw new Error('Unit price must be zero or more with no more than two decimals.');const price=priceText?Number(priceText):null;
-    const conversion=await this.db.getFirstAsync<{input_quantity:number;output_quantity:number;decimal_places:number}>('SELECT input_quantity,output_quantity,decimal_places FROM conversion_options WHERE id=?',row.conversion_id);if(!conversion)throw new Error('The retained conversion is unavailable.');const net=(full as number)-(empty as number);const converted=net/conversion.input_quantity*conversion.output_quantity;const factor=10**conversion.decimal_places;const billed=Math.round((converted+Number.EPSILON)*factor)/factor;const subtotal=price==null?null:Math.round(billed*price*100);const vat=price==null?null:Math.round((subtotal??0)*(row.vat_rate_basis_points??0)/10000);const total=subtotal==null?null:subtotal+(vat??0);const paid=await this.db.getFirstAsync<{cents:number}>("SELECT COALESCE(SUM(amount_usd_cents),0) cents FROM payment_entries WHERE load_id=? AND status='Active'",loadId);if(total==null&&(paid?.cents??0)>0)throw new Error('A load with active payments cannot be corrected to Unpriced.');const status=total==null?'Unpriced':paymentStatus(total,paid?.cents??0);const now=new Date().toISOString();
-    await this.db.withTransactionAsync(async()=>{await this.db.runAsync('UPDATE loads SET requested_quantity_kg=?,empty_weight_kg=?,full_weight_kg=?,net_weight_kg=?,converted_quantity=?,billed_quantity=?,unit_price_usd_cents=?,subtotal_usd_cents=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,destination_address=?,notes=? WHERE id=?',requested,empty,full,net,converted,billed,price==null?null:Math.round(price*100),subtotal,vat,total,status,clean(draft.destinationAddress),clean(draft.notes),loadId);await this.enqueue('load',loadId,{id:loadId,correction:{...draft,netWeightKg:net,billedQuantity:billed,finalTotalUsd:total==null?null:total/100,paymentStatus:status},updatedAt:now});});const updated=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!updated)throw new Error('Corrected load was not found.');return loadFromRow(updated);
+    let net:number;let converted:number;let billed:number;
+    if(isDirect){net=1;converted=direct;billed=direct;}else{const conversion=await this.db.getFirstAsync<{input_quantity:number;output_quantity:number;decimal_places:number}>('SELECT input_quantity,output_quantity,decimal_places FROM conversion_options WHERE id=?',row.conversion_id);if(!conversion)throw new Error('The retained conversion is unavailable.');net=(full as number)-(empty as number);converted=net/conversion.input_quantity*conversion.output_quantity;const factor=10**conversion.decimal_places;billed=Math.round((converted+Number.EPSILON)*factor)/factor;}
+    const subtotal=price==null?null:Math.round(billed*price*100);const vat=price==null?null:Math.round((subtotal??0)*(row.vat_rate_basis_points??0)/10000);const total=subtotal==null?null:subtotal+(vat??0);const paid=await this.db.getFirstAsync<{cents:number}>("SELECT COALESCE(SUM(amount_usd_cents),0) cents FROM payment_entries WHERE load_id=? AND status='Active'",loadId);if(total==null&&(paid?.cents??0)>0)throw new Error('A load with active payments cannot be corrected to Unpriced.');const status=total==null?'Unpriced':paymentStatus(total,paid?.cents??0);const now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{await this.db.runAsync('UPDATE loads SET requested_quantity_kg=?,empty_weight_kg=?,full_weight_kg=?,net_weight_kg=?,direct_quantity=?,converted_quantity=?,billed_quantity=?,unit_price_usd_cents=?,subtotal_usd_cents=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,destination_address=?,notes=? WHERE id=?',requested,empty,full,net,isDirect?billed:null,converted,billed,price==null?null:Math.round(price*100),subtotal,vat,total,status,clean(draft.destinationAddress),clean(draft.notes),loadId);await this.enqueue('load',loadId,{id:loadId,correction:{...draft,netWeightKg:isDirect?null:net,billedQuantity:billed,finalTotalUsd:total==null?null:total/100,paymentStatus:status},updatedAt:now});});const updated=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!updated)throw new Error('Corrected load was not found.');return loadFromRow(updated);
   }
   private async enqueue(entityType: string, entityId: string, payload: unknown): Promise<void> {
     await this.db.runAsync(`INSERT INTO sync_outbox (entity_type, entity_id, operation, payload_json, created_at)
