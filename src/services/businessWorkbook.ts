@@ -45,7 +45,7 @@ export type WorkbookBuildOptions = {
 const ARABIC_REPORT_LABELS: Record<BusinessReportKind, string> = {
   loads: 'الأحمال والمبيعات',
   customers: 'أرصدة العملاء والمدفوعات',
-  quarry: 'مشتريات الكسارة وأرصدة الموردين',
+  quarry: 'أحمال الموردين وأرصدة الموردين',
   fuel: 'حركات الوقود والرصيد الحالي',
   projects: 'المشاريع وتقارير العمل اليومية',
   analysis: 'مصنف التحليل الكامل',
@@ -56,7 +56,7 @@ const ARABIC_LABELS: Record<string, string> = {
   'Payment Details': 'تفاصيل المدفوعات', 'Customer Summary': 'ملخص العملاء', 'Opening Balances': 'الأرصدة الافتتاحية',
   'Supplier Summary': 'ملخص الموردين', 'Purchase Details': 'تفاصيل المشتريات', 'Balance Summary': 'ملخص الرصيد',
   'Movement Details': 'تفاصيل الحركات', 'Equipment Totals': 'إجماليات المعدات', 'Project Summary': 'ملخص المشاريع',
-  'Project Loads': 'أحمال المشاريع', 'Quarry Purchases': 'مشتريات الكسارة', 'Fuel Movements': 'حركات الوقود',
+  'Project Loads': 'أحمال المشاريع', 'Supplier Loads': 'أحمال الموردين', 'Fuel Movements': 'حركات الوقود',
   'Daily Report Index': 'فهرس التقارير اليومية', 'Materials Summary': 'ملخص المواد', 'Executive Summary': 'الملخص التنفيذي',
   Payments: 'المدفوعات', 'Daily Reports': 'التقارير اليومية', 'Data Dictionary': 'قاموس البيانات', Charts: 'الرسوم البيانية',
   'Financial Charts': 'الرسوم المالية', 'Operations Charts': 'الرسوم التشغيلية', Photos: 'الصور',
@@ -65,7 +65,7 @@ const ARABIC_LABELS: Record<string, string> = {
   'Daily Project Report': 'تقرير المشروع اليومي', 'Report ID': 'معرف التقرير', Section: 'القسم', Entries: 'المدخلات',
   'Generated on': 'تاريخ الإنشاء', 'Export contents': 'محتوى التصدير', Filter: 'عامل التصفية', Scope: 'النطاق', Value: 'القيمة',
   Metric: 'المؤشر', 'Generated at': 'وقت الإنشاء', 'Confirmed loads': 'الأحمال المؤكدة', 'Load sales USD': 'مبيعات الأحمال بالدولار',
-  'Customer receivable USD': 'ذمم العملاء بالدولار', 'Quarry purchases': 'مشتريات الكسارة', 'Supplier payable USD': 'ذمم الموردين بالدولار',
+  'Customer receivable USD': 'ذمم العملاء بالدولار', 'Supplier loads': 'أحمال الموردين', 'Supplier payable USD': 'ذمم الموردين بالدولار',
   'Current fuel litres': 'رصيد الوقود بالليتر', Projects: 'المشاريع', 'Daily reports': 'التقارير اليومية',
   Item: 'المادة', Customer: 'العميل', Supplier: 'المورد', Project: 'المشروع', Equipment: 'المعدة', Category: 'الفئة',
   'Sales USD': 'المبيعات بالدولار', 'Purchase USD': 'المشتريات بالدولار', 'Billed USD': 'المفوتر بالدولار',
@@ -97,7 +97,7 @@ const ARABIC_LABELS: Record<string, string> = {
   'As-of Date': 'التاريخ المرجعي', Reference: 'المرجع', 'Own Company': 'الشركة المالكة', 'Latest Payment': 'آخر دفعة',
   Reason: 'السبب', 'Previous Balance Litres': 'الرصيد السابق بالليتر', 'Difference Litres': 'الفرق بالليتر', Odometer: 'عداد المسافة',
   'Load sales by item (USD)': 'مبيعات الأحمال حسب المادة (دولار)', 'Customer balances (USD)': 'أرصدة العملاء (دولار)',
-  'Quarry purchase value by supplier (USD)': 'قيمة مشتريات الكسارة حسب المورد (دولار)',
+  'Supplier load value by supplier (USD)': 'قيمة أحمال الموردين حسب المورد (دولار)',
   'Delivered versus equipment-filled fuel (L)': 'الوقود المورد مقابل المعبأ للمعدات (ليتر)',
   'Daily reports by project': 'التقارير اليومية حسب المشروع', 'Financial overview (USD)': 'نظرة مالية عامة (دولار)',
   'Operational record counts': 'أعداد السجلات التشغيلية',
@@ -112,7 +112,7 @@ const ARABIC_VALUES: Record<string, string> = {
   Overpaid: 'مدفوع بزيادة', Unpriced: 'غير مسعّر', 'No Payment Due': 'لا دفعة مستحقة', delivery: 'توريد', fill: 'تعبئة', gauge: 'قراءة خزان',
   Workers: 'العمال', Drivers: 'السائقون', 'Truck Plates': 'لوحات الشاحنات', Machines: 'الآليات', used: 'مستخدمة', transported: 'منقولة',
   'Customer receivable': 'ذمم العملاء', 'Supplier payable': 'ذمم الموردين', 'Load sales': 'مبيعات الأحمال',
-  'Quarry purchases': 'مشتريات الكسارة', Loads: 'الأحمال', 'Fuel movements': 'حركات الوقود', 'Daily reports': 'التقارير اليومية',
+  'Supplier loads': 'أحمال الموردين', Loads: 'الأحمال', 'Fuel movements': 'حركات الوقود', 'Daily reports': 'التقارير اليومية',
   Delivered: 'الوقود المورد', 'Equipment fills': 'تعبئة المعدات',
 };
 
@@ -127,7 +127,7 @@ const money = (rows: WorkbookRow[], key: string) => rows.reduce((sum, row) => su
 const summary = (data: BusinessReportData): WorkbookRow[] => [
   { Metric: 'Generated at', Value: data.generatedAt }, { Metric: 'Company', Value: data.companyName },
   { Metric: 'Confirmed loads', Value: data.loads.length }, { Metric: 'Load sales USD', Value: money(data.loads, 'Final Total USD') },
-  { Metric: 'Customer receivable USD', Value: money(data.customers, 'Remaining USD') }, { Metric: 'Quarry purchases', Value: data.quarryPurchases.length },
+  { Metric: 'Customer receivable USD', Value: money(data.customers, 'Remaining USD') }, { Metric: 'Supplier loads', Value: data.quarryPurchases.length },
   { Metric: 'Supplier payable USD', Value: money(data.suppliers, 'Remaining USD') }, { Metric: 'Current fuel litres', Value: data.fuelMovements.at(-1)?.['Balance After Litres'] ?? 0 },
   { Metric: 'Projects', Value: data.projects.length }, { Metric: 'Daily reports', Value: data.dailyReports.length },
 ];
@@ -137,7 +137,7 @@ const dictionary: WorkbookRow[] = [
   { Sheet: 'Customer Summary', Purpose: 'One row per customer with billed, paid, remaining, and overpaid totals.' },
   { Sheet: 'Payments', Purpose: 'One row per payment event, including retained cancelled events.' },
   { Sheet: 'Opening Balances', Purpose: 'Carried-forward receivable and payable records from paper history.' },
-  { Sheet: 'Quarry Purchases', Purpose: 'One row per incoming quarry purchase, including cancelled record status.' },
+  { Sheet: 'Supplier Loads', Purpose: 'One row per external supplier load, including cancelled record status.' },
   { Sheet: 'Supplier Summary', Purpose: 'One row per supplier across quarry and priced fuel delivery balances.' },
   { Sheet: 'Fuel Movements', Purpose: 'Chronological single-tank gauge, delivery, and equipment-fill ledger.' },
   { Sheet: 'Equipment Totals', Purpose: 'Active equipment-fill litres grouped by saved equipment.' },
@@ -175,16 +175,16 @@ function englishSheetsForBusinessReport(kind: BusinessReportKind, data: Business
   ] };
   if (kind === 'loads') return [overview, { name: 'Summary', rows: summary(data).slice(0, 5) }, chartSheet('Charts', groupedRows(data.loads, 'Item', ['Final Total USD'], ['Sales USD']), 'Load sales by item (USD)', 'Item', ['Sales USD']), { name: 'Loads and Sales', rows: data.loads }, { name: 'Payment Details', rows: payments(['load']) }];
   if (kind === 'customers') return [overview, chartSheet('Charts', data.customers.length ? data.customers.slice().sort((a, b) => Number(b['Remaining USD'] ?? 0) - Number(a['Remaining USD'] ?? 0)).slice(0, 10).map((row) => ({ Customer: row.Customer ?? null, 'Billed USD': row['Total Billed USD'] ?? null, 'Paid USD': row['Total Paid USD'] ?? null, 'Remaining USD': row['Remaining USD'] ?? null })) : [{ Customer: 'No matching records', 'Billed USD': 0, 'Paid USD': 0, 'Remaining USD': 0 }], 'Customer balances (USD)', 'Customer', ['Billed USD', 'Paid USD', 'Remaining USD'], 'bar'), { name: 'Customer Summary', rows: data.customers }, { name: 'Payment Details', rows: payments(['load', 'openingBalance']).filter((value) => value['Customer ID']) }, { name: 'Opening Balances', rows: data.openingBalances.filter((value) => value['Party Type'] === 'customer') }];
-  if (kind === 'quarry') return [overview, chartSheet('Charts', groupedRows(data.quarryPurchases.filter((row) => row['Record Status'] === 'Active'), 'Supplier', ['Final Total USD'], ['Purchase USD']), 'Quarry purchase value by supplier (USD)', 'Supplier', ['Purchase USD'], 'bar'), { name: 'Supplier Summary', rows: data.suppliers }, { name: 'Purchase Details', rows: data.quarryPurchases }, { name: 'Payment Details', rows: payments(['quarryPurchase', 'openingBalance']).filter((value) => value['Supplier ID']) }];
+  if (kind === 'quarry') return [overview, chartSheet('Charts', groupedRows(data.quarryPurchases.filter((row) => row['Record Status'] === 'Active'), 'Supplier', ['Final Total USD'], ['Purchase USD']), 'Supplier load value by supplier (USD)', 'Supplier', ['Purchase USD'], 'bar'), { name: 'Supplier Summary', rows: data.suppliers }, { name: 'Purchase Details', rows: data.quarryPurchases }, { name: 'Payment Details', rows: payments(['quarryPurchase', 'openingBalance']).filter((value) => value['Supplier ID']) }];
   if (kind === 'fuel') {
     const gauge = [...data.fuelMovements].reverse().find((value) => value.Type === 'gauge' && value.Status === 'Active');
     const fuelChart = [{ Type: 'Delivered', Litres: data.fuelMovements.filter((value) => value.Type === 'delivery' && value.Status === 'Active').reduce((sum, value) => sum + Number(value['Litres In'] ?? 0), 0) }, { Type: 'Equipment fills', Litres: data.fuelMovements.filter((value) => value.Type === 'fill' && value.Status === 'Active').reduce((sum, value) => sum + Number(value['Litres Out'] ?? 0), 0) }];
-    return [overview, { name: 'Balance Summary', rows: [{ Metric: 'Current calculated litres', Value: data.fuelMovements.at(-1)?.['Balance After Litres'] ?? 0 }, { Metric: 'Latest physical gauge litres', Value: gauge?.['Gauge Litres'] ?? null }, { Metric: 'Latest physical gauge date', Value: gauge?.['Confirmed At'] ?? null }, { Metric: 'Total active delivered litres', Value: fuelChart[0]!.Litres }, { Metric: 'Total active filled litres', Value: fuelChart[1]!.Litres }, { Metric: 'Total active correction difference', Value: data.fuelMovements.filter((value) => value.Type === 'gauge' && value.Status === 'Active').reduce((sum, value) => sum + Number(value['Correction Difference'] ?? 0), 0) }] }, chartSheet('Charts', fuelChart, 'Delivered versus equipment-filled fuel (L)', 'Type', ['Litres']), { name: 'Movement Details', rows: data.fuelMovements }, { name: 'Equipment Totals', rows: data.equipmentTotals }, { name: 'Payment Details', rows: payments(['fuelDelivery']) }];
+    return [overview, { name: 'Balance Summary', rows: [{ Metric: 'Current calculated litres', Value: gauge?data.fuelMovements.at(-1)?.['Balance After Litres']??null:null }, { Metric: 'Latest physical gauge litres', Value: gauge?.['Gauge Litres'] ?? null }, { Metric: 'Latest physical gauge date', Value: gauge?.['Confirmed At'] ?? null }, { Metric: 'Total active purchased litres', Value: fuelChart[0]!.Litres }, { Metric: 'Total active filled litres', Value: fuelChart[1]!.Litres }, { Metric: 'Total consumption cost USD', Value: data.fuelMovements.filter(value=>value.Type==='fill'&&value.Status==='Active').reduce((sum,value)=>sum+Number(value['Consumption Cost USD']??0),0) }, {Metric:'Unpriced fill litres',Value:data.fuelMovements.filter(value=>value.Type==='fill'&&value.Status==='Active'&&value['Consumption Cost USD']==null).reduce((sum,value)=>sum+Number(value['Litres Out']??0),0)}, { Metric: 'Total active correction difference', Value: data.fuelMovements.filter((value) => value.Type === 'gauge' && value.Status === 'Active').reduce((sum, value) => sum + Number(value['Correction Difference'] ?? 0), 0) }] }, chartSheet('Charts', fuelChart, 'Purchased versus equipment-filled fuel (L)', 'Type', ['Litres']), { name: 'Movement Details', rows: data.fuelMovements }, { name: 'Project Cost Totals', rows: data.projectFuelTotals??[] }, { name: 'Machine Cost Totals', rows: data.equipmentTotals }, { name: 'Payment Details', rows: payments(['fuelDelivery']) }];
   }
-  if (kind === 'projects') return [overview, chartSheet('Charts', data.projects.length ? data.projects.slice().sort((a, b) => Number(b['Daily Report Count'] ?? 0) - Number(a['Daily Report Count'] ?? 0)).slice(0, 10).map((row) => ({ Project: row.Project ?? null, 'Daily Report Count': row['Daily Report Count'] ?? null })) : [{ Project: 'No matching records', 'Daily Report Count': 0 }], 'Daily reports by project', 'Project', ['Daily Report Count'], 'bar'), { name: 'Project Summary', rows: data.projects }, { name: 'Project Loads', rows: data.loads }, { name: 'Quarry Purchases', rows: data.quarryPurchases }, { name: 'Fuel Movements', rows: data.fuelMovements }, { name: 'Payment Details', rows: data.payments }, { name: 'Daily Report Index', rows: data.dailyReports }, { name: 'Materials Summary', rows: data.materials }];
-  const financialRows = [{ Category: 'Customer receivable', 'Remaining USD': money(data.customers, 'Remaining USD') }, { Category: 'Supplier payable', 'Remaining USD': money(data.suppliers, 'Remaining USD') }, { Category: 'Load sales', 'Remaining USD': money(data.loads, 'Final Total USD') }, { Category: 'Quarry purchases', 'Remaining USD': money(data.quarryPurchases, 'Final Total USD') }];
-  const operationsRows = [{ Category: 'Loads', Count: data.loads.length }, { Category: 'Quarry purchases', Count: data.quarryPurchases.length }, { Category: 'Fuel movements', Count: data.fuelMovements.length }, { Category: 'Daily reports', Count: data.dailyReports.length }];
-  return [overview, { name: 'Executive Summary', rows: summary(data) }, chartSheet('Financial Charts', financialRows, 'Financial overview (USD)', 'Category', ['Remaining USD']), chartSheet('Operations Charts', operationsRows, 'Operational record counts', 'Category', ['Count']), { name: 'Loads and Sales', rows: data.loads }, { name: 'Customer Summary', rows: data.customers }, { name: 'Payments', rows: data.payments }, { name: 'Opening Balances', rows: data.openingBalances }, { name: 'Quarry Purchases', rows: data.quarryPurchases }, { name: 'Supplier Summary', rows: data.suppliers }, { name: 'Fuel Movements', rows: data.fuelMovements }, { name: 'Equipment Totals', rows: data.equipmentTotals }, { name: 'Project Summary', rows: data.projects }, { name: 'Daily Reports', rows: data.dailyReports }, { name: 'Materials Summary', rows: data.materials }, { name: 'Data Dictionary', rows: dictionary }];
+  if (kind === 'projects') return [overview, chartSheet('Charts', data.projects.length ? data.projects.slice().sort((a, b) => Number(b['Daily Report Count'] ?? 0) - Number(a['Daily Report Count'] ?? 0)).slice(0, 10).map((row) => ({ Project: row.Project ?? null, 'Daily Report Count': row['Daily Report Count'] ?? null })) : [{ Project: 'No matching records', 'Daily Report Count': 0 }], 'Daily reports by project', 'Project', ['Daily Report Count'], 'bar'), { name: 'Project Summary', rows: data.projects }, { name: 'Project Loads', rows: data.loads }, { name: 'Supplier Loads', rows: data.quarryPurchases }, { name: 'Fuel Movements', rows: data.fuelMovements }, { name: 'Payment Details', rows: data.payments }, { name: 'Daily Report Index', rows: data.dailyReports }, { name: 'Materials Summary', rows: data.materials }];
+  const financialRows = [{ Category: 'Customer receivable', 'Remaining USD': money(data.customers, 'Remaining USD') }, { Category: 'Supplier payable', 'Remaining USD': money(data.suppliers, 'Remaining USD') }, { Category: 'Load sales', 'Remaining USD': money(data.loads, 'Final Total USD') }, { Category: 'Supplier loads', 'Remaining USD': money(data.quarryPurchases, 'Final Total USD') }];
+  const operationsRows = [{ Category: 'Loads', Count: data.loads.length }, { Category: 'Supplier loads', Count: data.quarryPurchases.length }, { Category: 'Fuel movements', Count: data.fuelMovements.length }, { Category: 'Daily reports', Count: data.dailyReports.length }];
+  return [overview, { name: 'Executive Summary', rows: summary(data) }, chartSheet('Financial Charts', financialRows, 'Financial overview (USD)', 'Category', ['Remaining USD']), chartSheet('Operations Charts', operationsRows, 'Operational record counts', 'Category', ['Count']), { name: 'Loads and Sales', rows: data.loads }, { name: 'Customer Summary', rows: data.customers }, { name: 'Payments', rows: data.payments }, { name: 'Opening Balances', rows: data.openingBalances }, { name: 'Supplier Loads', rows: data.quarryPurchases }, { name: 'Supplier Summary', rows: data.suppliers }, { name: 'Fuel Movements', rows: data.fuelMovements }, { name: 'Equipment Totals', rows: data.equipmentTotals }, { name: 'Project Summary', rows: data.projects }, { name: 'Daily Reports', rows: data.dailyReports }, { name: 'Materials Summary', rows: data.materials }, { name: 'Data Dictionary', rows: dictionary }];
 }
 
 const translate = (value: string, locale: WorkbookLocale) => locale === 'ar' ? (ARABIC_LABELS[value] ?? ARABIC_VALUES[value] ?? value) : value;

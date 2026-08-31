@@ -24,7 +24,7 @@ export const emptyWorkspaceIssue:WorkspaceIssueDraft={title:'',description:'',pr
 const activityOrder:ReadonlyArray<{type:WorkspaceActivity['type'];label:string}>=[
   {type:'Load',label:'Loads'},
   {type:'Daily Report',label:'Daily Reports'},
-  {type:'Quarry',label:'Quarry Purchases'},
+  {type:'Quarry',label:'Supplier Loads'},
   {type:'Waste Dump',label:'Waste Dumps'},
   {type:'Fuel',label:'Fuel Activity'},
   {type:'Schedule',label:'Scheduled Work'},

@@ -1,6 +1,21 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 23;
+export const DATABASE_VERSION = 26;
+
+type TableColumn = { name: string };
+
+async function addColumnIfMissing(db: SQLiteDatabase, table: string, column: string, definition: string): Promise<void> {
+  const getAllAsync = (db as SQLiteDatabase & {getAllAsync?: <T>(sql: string) => Promise<T[]>}).getAllAsync;
+  if (typeof getAllAsync === 'function') {
+    const columns = await getAllAsync.call(db, `PRAGMA table_info(${table})`) as TableColumn[];
+    if (columns.some(value => value.name === column)) return;
+  }
+  await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
+}
+
+function sqlText(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
 
 export const RESERVED_TEST_DATA_DEACTIVATION_SQL = `
   UPDATE projects SET status = 'completed'
@@ -779,6 +794,79 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       INSERT OR IGNORE INTO measurement_units (id,name,symbol,created_at,updated_at) VALUES ('unit_bundle','Bundle','bundle','${seededAt}','${seededAt}');
     `);
     currentVersion = 23;
+  }
+
+  if (currentVersion === 23) {
+    const seededAt=new Date().toISOString();
+    await db.execAsync(`
+      ALTER TABLE quarry_purchases ADD COLUMN delivery_method TEXT NOT NULL DEFAULT 'company'
+        CHECK (delivery_method IN ('company','supplier'));
+      INSERT OR IGNORE INTO driver_profiles (id,name,notes,is_active,created_at,updated_at)
+        VALUES ('system_supplier_delivery_driver','Supplier Delivering','Internal compatibility record; hidden from active driver lists.',0,'${seededAt}','${seededAt}');
+      INSERT OR IGNORE INTO truck_profiles (id,plate,notes,is_active,created_at,updated_at)
+        VALUES ('system_supplier_delivery_truck','SUPPLIER-DELIVERY','Internal compatibility record; hidden from active truck lists.',0,'${seededAt}','${seededAt}');
+    `);
+    currentVersion = 24;
+  }
+
+  if (currentVersion === 24) {
+    await db.execAsync(`
+      CREATE TABLE fuel_price_history (
+        id TEXT PRIMARY KEY NOT NULL,
+        price_per_litre_usd_cents INTEGER NOT NULL CHECK (price_per_litre_usd_cents >= 0),
+        effective_at TEXT NOT NULL,
+        changed_by TEXT NOT NULL DEFAULT 'Owner',
+        reason TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_fuel_price_history_effective
+        ON fuel_price_history(effective_at DESC,created_at DESC);
+      ALTER TABLE fuel_movements ADD COLUMN fuel_price_history_id TEXT REFERENCES fuel_price_history(id);
+      ALTER TABLE fuel_movements ADD COLUMN consumption_cost_usd_cents INTEGER
+        CHECK (consumption_cost_usd_cents IS NULL OR consumption_cost_usd_cents >= 0);
+      ALTER TABLE fuel_movements ADD COLUMN price_override_reason TEXT;
+    `);
+    currentVersion = 25;
+  }
+
+  if (currentVersion === 25) {
+    const seededAt=new Date().toISOString();
+    type ExistingCubicUnit={id:string;name:string;symbol:string};
+    let cubicUnit=await db.getFirstAsync<ExistingCubicUnit>(`
+      SELECT id,name,symbol FROM measurement_units
+      WHERE lower(name) IN ('cubic metre','cubic meter')
+         OR lower(replace(symbol,' ','')) IN ('m³','m3','m^3')
+      ORDER BY CASE WHEN id='unit_m3' THEN 0 ELSE 1 END,created_at
+      LIMIT 1
+    `);
+    if(!cubicUnit?.id){
+      await db.execAsync(`INSERT OR IGNORE INTO measurement_units (id,name,symbol,created_at,updated_at)
+        VALUES ('unit_m3','Cubic metre','m³','${seededAt}','${seededAt}');`);
+      const insertedUnit=await db.getFirstAsync<ExistingCubicUnit>(`
+        SELECT id,name,symbol FROM measurement_units
+        WHERE id='unit_m3' OR lower(name) IN ('cubic metre','cubic meter')
+          OR lower(replace(symbol,' ','')) IN ('m³','m3','m^3')
+        ORDER BY CASE WHEN id='unit_m3' THEN 0 ELSE 1 END,created_at
+        LIMIT 1
+      `);
+      cubicUnit=insertedUnit?.id?insertedUnit:{id:'unit_m3',name:'Cubic metre',symbol:'m³'};
+    }
+    await addColumnIfMissing(db,'quarry_purchases','unit_id','TEXT REFERENCES measurement_units(id)');
+    await addColumnIfMissing(db,'quarry_purchases','unit_name','TEXT');
+    await addColumnIfMissing(db,'quarry_purchases','unit_symbol','TEXT');
+    await addColumnIfMissing(db,'quarry_purchases','price_basis',"TEXT NOT NULL DEFAULT 'per_unit' CHECK (price_basis IN ('per_unit','whole'))");
+    await addColumnIfMissing(db,'quarry_purchases','vat_mode',"TEXT NOT NULL DEFAULT 'company' CHECK (vat_mode IN ('company','none','custom'))");
+    await addColumnIfMissing(db,'quarry_purchases','vat_inclusive','INTEGER NOT NULL DEFAULT 0 CHECK (vat_inclusive IN (0,1))');
+    await addColumnIfMissing(db,'quarry_purchases','correction_history_json',"TEXT NOT NULL DEFAULT '[]'");
+    await addColumnIfMissing(db,'quarry_purchases','updated_at','TEXT');
+    await addColumnIfMissing(db,'daily_project_reports','safety_json',"TEXT NOT NULL DEFAULT '[]'");
+    await db.execAsync(`UPDATE quarry_purchases SET
+      unit_id=${sqlText(cubicUnit.id)},
+      unit_name=COALESCE(unit_name,${sqlText(cubicUnit.name)}),
+      unit_symbol=COALESCE(unit_symbol,${sqlText(cubicUnit.symbol)}),
+      updated_at=COALESCE(updated_at,confirmed_at)
+      WHERE unit_id IS NULL;`);
+    currentVersion = 26;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

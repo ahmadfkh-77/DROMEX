@@ -1,12 +1,13 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedProjectLoad, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption } from '../../domain/projectReports';
+import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedFuelFill, LinkedProjectLoad, LinkedQuarryLoad, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption, WorkerSafetyEntry } from '../../domain/projectReports';
 import { validateDailyReport } from '../../domain/projectReports';
 import type { ProjectReportRepository } from './ProjectReportRepository';
 
 type ReportRow = {
   id: string; project_id: string; work_date: string; work_description: string; workers_json: string;
   drivers_json: string; truck_plates_json: string; machines_json: string; materials_json: string;
+  safety_json: string;
   photos_json: string;
   notes: string | null; problems_delays_incidents: string | null; weather_site_conditions: string | null;
   work_start_time: string | null; work_end_time: string | null; break_minutes: number | null;
@@ -29,7 +30,7 @@ function mergePresenceOptions(saved: ReportPresenceOption[], historical: string[
 function fromRow(row: ReportRow): DailyProjectReport {
   return {
     id: row.id, projectId: row.project_id, workDate: row.work_date, workDescription: row.work_description,
-    workers: parseArray<string>(row.workers_json), drivers: parseArray<string>(row.drivers_json),
+    workers: parseArray<string>(row.workers_json), workerSafety:parseArray<WorkerSafetyEntry>(row.safety_json), drivers: parseArray<string>(row.drivers_json),
     truckPlates: parseArray<string>(row.truck_plates_json), machines: parseArray<string>(row.machines_json),
     materials: parseArray<DailyReportMaterial>(row.materials_json), notes: row.notes ?? '',
     photos: parseArray<string>(row.photos_json),
@@ -84,8 +85,18 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   }
 
   async listLinkedLoads(projectId: string, workDate: string): Promise<LinkedProjectLoad[]> {
-    const rows = await this.db.getAllAsync<{ id: string; transaction_number: string; item_name: string; converted_quantity: number; output_unit_symbol: string; driver_name: string; truck_plate: string }>(`SELECT id, transaction_number, item_name, converted_quantity, output_unit_symbol, driver_name, truck_plate FROM loads WHERE project_id = ? AND is_archived=0 AND date(confirmed_at, 'localtime') = ? ORDER BY confirmed_at`, projectId, workDate);
-    return rows.map((row) => ({ id: row.id, transactionNumber: row.transaction_number, itemName: row.item_name, quantity: row.converted_quantity, unitSymbol: row.output_unit_symbol, driverName: row.driver_name, truckPlate: row.truck_plate }));
+    const rows = await this.db.getAllAsync<{ id: string; transaction_number: string; item_name: string; converted_quantity: number; output_unit_symbol: string; driver_name: string; truck_plate: string;unit_price_usd_cents:number|null;subtotal_usd_cents:number|null;vat_amount_usd_cents:number|null;final_total_usd_cents:number|null }>(`SELECT id, transaction_number, item_name, converted_quantity, output_unit_symbol, driver_name, truck_plate,unit_price_usd_cents,subtotal_usd_cents,vat_amount_usd_cents,final_total_usd_cents FROM loads WHERE project_id = ? AND is_archived=0 AND date(confirmed_at, 'localtime') = ? ORDER BY confirmed_at`, projectId, workDate);
+    return rows.map((row) => ({ id: row.id, transactionNumber: row.transaction_number, itemName: row.item_name, quantity: row.converted_quantity, unitSymbol: row.output_unit_symbol, driverName: row.driver_name, truckPlate: row.truck_plate,unitPriceUsd:row.unit_price_usd_cents==null?null:row.unit_price_usd_cents/100,subtotalUsd:row.subtotal_usd_cents==null?null:row.subtotal_usd_cents/100,vatAmountUsd:row.vat_amount_usd_cents==null?null:row.vat_amount_usd_cents/100,finalTotalUsd:row.final_total_usd_cents==null?null:row.final_total_usd_cents/100 }));
+  }
+
+  async listLinkedQuarryLoads(projectId:string,workDate:string):Promise<LinkedQuarryLoad[]> {
+    const rows=await this.db.getAllAsync<{id:string;purchase_number:string;confirmed_at:string;supplier_name:string;item_name:string;quantity_cubic_metres:number;unit_symbol:string|null;delivery_method:'company'|'supplier';driver_name:string;truck_plate:string;supplier_ticket_number:string|null;notes:string|null;unit_price_usd_cents:number|null;subtotal_usd_cents:number|null;vat_amount_usd_cents:number|null;final_total_usd_cents:number|null}>(`SELECT id,purchase_number,confirmed_at,supplier_name,item_name,quantity_cubic_metres,unit_symbol,delivery_method,driver_name,truck_plate,supplier_ticket_number,notes,unit_price_usd_cents,subtotal_usd_cents,vat_amount_usd_cents,final_total_usd_cents FROM quarry_purchases WHERE project_id=? AND status='Active' AND date(confirmed_at,'localtime')=? ORDER BY confirmed_at`,projectId,workDate);
+    return rows.map(row=>({id:row.id,purchaseNumber:row.purchase_number,confirmedAt:row.confirmed_at,supplierName:row.supplier_name,itemName:row.item_name,quantity:row.quantity_cubic_metres,unitSymbol:row.unit_symbol??'m³',deliveryMethod:row.delivery_method??'company',deliveryLabel:(row.delivery_method??'company')==='supplier'?'Supplier Delivering':row.driver_name,truckPlate:row.truck_plate.trim()||null,supplierTicketNumber:row.supplier_ticket_number,notes:row.notes,unitPriceUsd:row.unit_price_usd_cents==null?null:row.unit_price_usd_cents/100,subtotalUsd:row.subtotal_usd_cents==null?null:row.subtotal_usd_cents/100,vatAmountUsd:row.vat_amount_usd_cents==null?null:row.vat_amount_usd_cents/100,finalTotalUsd:row.final_total_usd_cents==null?null:row.final_total_usd_cents/100}));
+  }
+
+  async listLinkedFuelFills(projectId:string,workDate:string):Promise<LinkedFuelFill[]> {
+    const rows=await this.db.getAllAsync<{id:string;confirmed_at:string;equipment_name:string;litres:number;price_per_litre_usd_cents:number|null;consumption_cost_usd_cents:number|null;odometer_reading:string|null;notes:string|null}>(`SELECT id,confirmed_at,equipment_name,litres,price_per_litre_usd_cents,consumption_cost_usd_cents,odometer_reading,notes FROM fuel_movements WHERE project_id=? AND movement_type='fill' AND status='Active' AND date(confirmed_at,'localtime')=? ORDER BY confirmed_at`,projectId,workDate);
+    return rows.map(row=>({id:row.id,confirmedAt:row.confirmed_at,equipmentName:row.equipment_name??'Unknown equipment',litres:row.litres,pricePerLitreUsd:row.price_per_litre_usd_cents==null?null:row.price_per_litre_usd_cents/100,consumptionCostUsd:row.consumption_cost_usd_cents==null?null:row.consumption_cost_usd_cents/100,odometerReading:row.odometer_reading,notes:row.notes}));
   }
 
   async listLinkedWasteDumps(projectId: string, workDate: string): Promise<LinkedWasteDump[]> {
@@ -112,10 +123,11 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
     if(draft.id&&existing&&existing.id!==draft.id)throw new Error('A daily report already exists for this project and work date. Open that report instead.');
     const id = draft.id ?? existing?.id ?? makeId('daily_report'); const now = new Date().toISOString();
     await this.db.withTransactionAsync(async () => {
-      await this.db.runAsync(`INSERT INTO daily_project_reports (id, project_id, work_date, work_description, workers_json, drivers_json, truck_plates_json, machines_json, materials_json, photos_json, notes, problems_delays_incidents, weather_site_conditions, work_start_time, work_end_time, break_minutes, next_work_planned, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET work_date=excluded.work_date, work_description=excluded.work_description, workers_json=excluded.workers_json, drivers_json=excluded.drivers_json, truck_plates_json=excluded.truck_plates_json, machines_json=excluded.machines_json, materials_json=excluded.materials_json, photos_json=excluded.photos_json, notes=excluded.notes, problems_delays_incidents=excluded.problems_delays_incidents, weather_site_conditions=excluded.weather_site_conditions, work_start_time=excluded.work_start_time, work_end_time=excluded.work_end_time, break_minutes=excluded.break_minutes, next_work_planned=excluded.next_work_planned, updated_at=excluded.updated_at`,
-        id, draft.projectId, draft.workDate, draft.workDescription.trim(), JSON.stringify(draft.workers), JSON.stringify(draft.drivers), JSON.stringify(draft.truckPlates), JSON.stringify(draft.machines), JSON.stringify(draft.materials), JSON.stringify(draft.photos), clean(draft.notes), clean(draft.problemsDelaysIncidents), clean(draft.weatherSiteConditions), clean(draft.workStartTime), clean(draft.workEndTime), draft.breakMinutes ? Number(draft.breakMinutes) : null, clean(draft.nextWorkPlanned), existing?.createdAt ?? now, now);
+      const safety=draft.workers.map(worker=>(draft.workerSafety??[]).find(value=>value.workerName===worker)??{workerName:worker,status:'not_checked' as const,missingItems:[],notes:''});
+      await this.db.runAsync(`INSERT INTO daily_project_reports (id, project_id, work_date, work_description, workers_json, safety_json, drivers_json, truck_plates_json, machines_json, materials_json, photos_json, notes, problems_delays_incidents, weather_site_conditions, work_start_time, work_end_time, break_minutes, next_work_planned, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET work_date=excluded.work_date, work_description=excluded.work_description, workers_json=excluded.workers_json, safety_json=excluded.safety_json, drivers_json=excluded.drivers_json, truck_plates_json=excluded.truck_plates_json, machines_json=excluded.machines_json, materials_json=excluded.materials_json, photos_json=excluded.photos_json, notes=excluded.notes, problems_delays_incidents=excluded.problems_delays_incidents, weather_site_conditions=excluded.weather_site_conditions, work_start_time=excluded.work_start_time, work_end_time=excluded.work_end_time, break_minutes=excluded.break_minutes, next_work_planned=excluded.next_work_planned, updated_at=excluded.updated_at`,
+        id, draft.projectId, draft.workDate, draft.workDescription.trim(), JSON.stringify(draft.workers),JSON.stringify(safety), JSON.stringify(draft.drivers), JSON.stringify(draft.truckPlates), JSON.stringify(draft.machines), JSON.stringify(draft.materials), JSON.stringify(draft.photos), clean(draft.notes), clean(draft.problemsDelaysIncidents), clean(draft.weatherSiteConditions), clean(draft.workStartTime), clean(draft.workEndTime), draft.breakMinutes ? Number(draft.breakMinutes) : null, clean(draft.nextWorkPlanned), existing?.createdAt ?? now, now);
       const payload = { ...draft, id, updatedAt: now };
       await this.db.runAsync(`INSERT INTO sync_outbox (entity_type, entity_id, operation, payload_json, created_at) VALUES ('dailyProjectReport', ?, 'upsert', ?, ?)`, id, JSON.stringify(payload), now);
     });

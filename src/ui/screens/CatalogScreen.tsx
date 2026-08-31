@@ -25,7 +25,7 @@ import { colors } from '../theme';
 
 const usageLabels: Record<UsageArea, string> = {
   loads: 'Loads',
-  quarry: 'Quarry',
+  quarry: 'Supplier',
   dailyReports: 'Daily reports',
 };
 

@@ -1732,3 +1732,39 @@ Is this accurate?
 ## Turn 432
 **INTERVIEWEE:** Confirmed that all instructed update tests were successful and requested committing and pushing everything.
 **INTERVIEWER:** Recorded Android acceptance for the tested DROMEX 0.4.1/build 6 workflows: in-place update/data retention, direct-unit receipts and documents, category organization, quarry supplier/project history and independent truck counters, Project Activity and project-period dates, project/general fuel views, and corrected Bluetooth printing. The signed cable-transfer APK is included in the final acceptance commit as explicitly requested; separately untested device/protocol, performance, cloud, and iPhone scope remains open.
+
+## Turn 433
+**INTERVIEWEE:** Required project-linked quarry purchases to appear in the same-date Daily Report under Loads, requested a `Supplier Delivering` option so no company driver is required, and clarified that the supplier truck/plate must remain optional.
+**INTERVIEWER:** Confirmed one Loads parent split into `DROMEX / Plant Loads` and `Quarry & Supplier Loads`. Defined supplier delivery as a conditional path that needs no company driver/truck, displays `Supplier Delivering` with an optional plate, and keeps different entered supplier plates as separate daily counters while grouping blank-plate deliveries together for the same project/supplier/item.
+
+## Turn 434
+**INTERVIEWEE:** Authorized implementation and added that Receipt Setup measurement units and conversion options must be editable, removable, and organized.
+**INTERVIEWER:** Implemented supplier delivery, counter grouping, and read-only quarry-load inclusion in the Daily Report app view, PDF, and Excel. Organized Receipt Setup into Active/Inactive unit and conversion groups with Edit, Remove, and Reactivate actions. Remove permanently deletes only unused configuration; referenced configuration is deactivated to preserve confirmed historical records and snapshots.
+
+## Turn 435
+**INTERVIEWEE:** Deferred the proposed fuel hour meter, odometer-derived consumption calculations, and fuel-consumption alerts, requesting that the current odometer behavior remain unchanged for now.
+**INTERVIEWER:** Retained the optional odometer as reference-only and kept hour meters, L/hour, L/100 km, historical consumption baselines, abnormal-use thresholds, warnings, and review flags outside the current fuel-management update for possible later development.
+
+## Turn 436
+**INTERVIEWEE:** Authorized the remaining fuel update: current price/history, immutable price and cost on every fill, project Daily Report linkage, Today/This Month Fuel Dashboard, and project/machine cost reports; also requested a summary of all work completed today.
+**INTERVIEWER:** Implemented database version 25 with permanent effective-dated fuel prices and fill cost/override snapshots. Added a Price workflow, purchase-to-current-price option, fill cost preview, required override reason, explicit Unpriced handling, and Unknown tank state until a gauge. Added a Fuel Dashboard separating purchase spend from consumption cost for Today and the calendar month, latest balance/variance, unpriced litres, and closed project/machine breakdowns. Linked active same-project/date fills into a dedicated Daily Report Fuel Used section in app, PDF, and Excel. Expanded the Fuel business workbook with immutable cost fields plus project and machine totals containing priced/unpriced litres, fill count, total cost, and average cost per priced litre. Retained cancellation-and-replacement and deferred efficiency analytics under DEC-364.
+
+## Turn 437
+**INTERVIEWEE:** Requested packaging the update for transfer into the phone Downloads folder and explicitly approved uploading the project to Expo EAS for the signed build. Asked whether older downloaded update APKs may be deleted from the phone.
+**INTERVIEWER:** Validated DROMEX 0.5.0/build 7, built it successfully with the existing Expo project and Android keystore, downloaded the 82,786,578-byte APK to `output/DROMEX-0.5.0-build7.apk`, and verified SHA-256 `0C738706D6C1E0B3D776E229C0FC388EC318191CEBED0CCFD8479A292A403070`. Clarified that old APK installer files may be deleted after successful in-place installation and data verification; deleting installers does not uninstall DROMEX, while Uninstall or Clear data must not be used.
+
+## Turn 438 — Supplier workflow, safety, PDF privacy, and company identity
+
+The owner approved implementation of the accumulated update: rename Quarry Purchases to Suppliers/Supplier Loads without changing Customers; support external items with configurable units; show Per Unit and As a Whole price boxes with a Price field; support VAT included/excluded and company/zero/custom rates; preserve old records and payments through reasoned correction audit; organize Load History by company or supplier source; record worker PPE in each Daily Report; export reports with or without prices while labelling the configured company Contractor; and use the Company & VAT logo on Home. Inventory deduction and VPS/offline synchronization remain outside this update.
+
+## Turn 439 — Android build 8 packaging
+
+**INTERVIEWEE:** Requested creation of the new APK build for updating the Android phone.
+**INTERVIEWER:** Validated the implemented supplier-workflow, safety, PDF privacy, and Home company-logo update as DROMEX 0.6.0 / Android version code 8: type checking passed, 26 test files and 158 tests passed, and Expo resolved the expected package/version. Built the signed internal-distribution APK through the existing Expo project and keystore, retained build 7 unchanged, downloaded the new 82,806,910-byte artifact as `output/DROMEX-0.6.0-build8.apk`, verified its Android archive contents, and calculated SHA-256 `9D2874B950BE5032B63A36856E0D6E21E60B05F1F35C175B21E361381CD032B6`. Physical in-place Android installation and acceptance remain pending.
+
+## Turn 440 — Build 8 startup recovery
+
+**INTERVIEWEE:** Reported that the application did not open after installing build 8 and authorized a fix.
+**INTERVIEWER:** Reproduced a database-version-26 foreign-key failure when an existing Receipt Setup unit already used the unique Cubic metre / m³ identity. Made the upgrade idempotent so it reuses the existing unit, adds only missing supplier/safety columns, and safely resumes after build 8 partially changed the schema without advancing the database version. Prepared the recovery as DROMEX 0.6.1 / Android build 9; type checking and all 159 automated tests pass, including a regression test for the partially attempted upgrade with an existing cubic-metre unit. Phone data must not be cleared or uninstalled before the in-place recovery APK is installed.
+The first build-9 packaging attempt excluded the complete `output` directory to avoid re-uploading old APK installers, which also excluded Home's required packaged fallback-logo asset and caused Expo's JavaScript bundle phase to fail. The EAS exclusion was narrowed to APK/QR artifacts while retaining `output/imagegen`; the failed remote build produced no installable artifact and does not consume a new Android version code.
+The corrected signed build completed successfully and was downloaded as the 82,807,422-byte `output/DROMEX-0.6.1-build9.apk`. Its Android ZIP structure was verified and its SHA-256 is `4AA82068BE87363CCFB46FF7490B1169AA54999AC11A1B104D736E108E0B6645`. It must be installed in place over build 8 without uninstalling or clearing application data, then allowed time to finish the one-time repaired migration on first launch.

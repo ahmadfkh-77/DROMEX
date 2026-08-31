@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as Sharing from 'expo-sharing';
 
-import { type DailyProjectReport, type LinkedProjectLoad, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
+import { type DailyProjectReport, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
 import { encodeWorkbookBytes, type EmbeddedWorkbookImage, type WorkbookLocale, type WorkbookProgress } from './businessWorkbook';
 import {buildDailyReportWorkbook} from './dailyReportWorkbookCore';
 export {buildDailyReportWorkbook,dailyReportWorkbookSheets} from './dailyReportWorkbookCore';
@@ -18,7 +18,7 @@ async function reducedPhoto(uri: string, index: number): Promise<EmbeddedWorkboo
   return { name: `Daily report photo ${index + 1}`, bytes, extension: 'jpeg', row: 2 + index * 18, column: 0 };
 }
 
-export async function exportAndShareDailyReportWorkbook(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], waste: LinkedWasteDump[], company: ProjectReportSetup['company'], options: DailyReportWorkbookOptions = {}) {
+export async function exportAndShareDailyReportWorkbook(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], options: DailyReportWorkbookOptions = {}) {
   if (!FileSystem.documentDirectory) throw new Error('Document storage is unavailable.');
   const locale = options.locale ?? 'en', directory = `${FileSystem.documentDirectory}exports/`, safeProject = project.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'Project';
   const target = `${directory}Daily-Report-${safeProject}-${report.workDate}-${locale}.xlsx`, partial = `${target}.partial`; let finalized = false;
@@ -26,8 +26,8 @@ export async function exportAndShareDailyReportWorkbook(report: DailyProjectRepo
   try {
     const images: EmbeddedWorkbookImage[] = [];
     for (let index = 0; index < report.photos.length; index += 1) { checkCancelled(options.signal); options.onProgress?.({ stage: 'preparing', completed: index, total: report.photos.length, percent: 5 + Math.round(index / Math.max(1, report.photos.length) * 35), message: `Reducing photo ${index + 1} of ${report.photos.length}` }); images.push(await reducedPhoto(report.photos[index]!, index)); }
-    checkCancelled(options.signal); options.onProgress?.({ stage: 'building', completed: 0, total: 7, percent: 45, message: 'Building daily report worksheets' });
-    const bytes = buildDailyReportWorkbook(report, project, loads, waste, company, images, locale); checkCancelled(options.signal);
+    checkCancelled(options.signal); options.onProgress?.({ stage: 'building', completed: 0, total: 8, percent: 45, message: 'Building daily report worksheets' });
+    const bytes = buildDailyReportWorkbook(report, project, loads, quarry, waste, fuel, company, images, locale); checkCancelled(options.signal);
     options.onProgress?.({ stage: 'encoding', completed: 1, total: 1, percent: 85, message: 'Encoding daily report workbook' }); const base64 = encodeWorkbookBytes(bytes); checkCancelled(options.signal);
     await FileSystem.deleteAsync(partial, { idempotent: true }); await FileSystem.writeAsStringAsync(partial, base64, { encoding: FileSystem.EncodingType.Base64 }); checkCancelled(options.signal);
     await FileSystem.deleteAsync(target, { idempotent: true }); await FileSystem.moveAsync({ from: partial, to: target }); finalized = true;

@@ -8,7 +8,7 @@ const actions:{id:CreateAction;number:string;title:string;hint:string;tone:'oran
   {id:'dailyReport',number:'02',title:'Daily Report',hint:'Record today’s work, people, materials, and photos.',tone:'navy'},
   {id:'schedule',number:'03',title:'Scheduled Work',hint:'Add planned work under a project.',tone:'cream'},
   {id:'waste',number:'04',title:'Waste Dump',hint:'Use driver counters or record a one-off dump.',tone:'navy'},
-  {id:'quarry',number:'05',title:'Quarry Purchase',hint:'Record incoming material and supplier cost.',tone:'cream'},
+  {id:'quarry',number:'05',title:'Supplier Load',hint:'Record externally supplied items and cost.',tone:'cream'},
   {id:'fuelDelivery',number:'06',title:'Fuel Delivery',hint:'Record fuel arriving into the tank.',tone:'navy'},
   {id:'equipmentFill',number:'07',title:'Equipment Fill',hint:'Record fuel issued to equipment and a project.',tone:'cream'},
   {id:'quickText',number:'08',title:'Quick Text',hint:'Create a printable company document.',tone:'navy'},

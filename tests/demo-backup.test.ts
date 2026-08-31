@@ -18,7 +18,7 @@ describe('large linked demo backup generator',()=>{
       expect(files['database.sqlite']?.[18]).toBe(1);
       expect(files['database.sqlite']?.[19]).toBe(1);
       const manifest=JSON.parse(strFromU8(files['manifest.json']!)) as {databaseVersion:number;recordCounts:Record<string,number>;media:unknown[]};
-      expect(manifest.databaseVersion).toBe(23);
+      expect(manifest.databaseVersion).toBe(26);
       expect(manifest.recordCounts).toMatchObject({loads:40,customers:25,projects:12,catalog_items:12,quarry_purchases:600,waste_dumps:800,pavement_calculations:96,walls:45,wall_consumptions:180});
       expect(manifest.media.length).toBe(104);
       const databasePath=join(directory,'restored.sqlite');writeFileSync(databasePath,files['database.sqlite']!);

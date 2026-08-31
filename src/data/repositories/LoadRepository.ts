@@ -14,6 +14,14 @@ export interface LoadRepository {
   getSetupOptions(): Promise<LoadSetupOptions>;
   createUnit(draft: UnitDraft): Promise<MeasurementUnit>;
   createConversion(draft: ConversionDraft): Promise<ConversionOption>;
+  listMeasurementUnits(): Promise<MeasurementUnit[]>;
+  updateUnit(id:string,draft:UnitDraft):Promise<MeasurementUnit>;
+  removeUnit(id:string):Promise<'deleted'|'deactivated'>;
+  setUnitActive(id:string,isActive:boolean):Promise<void>;
+  listConversionOptions():Promise<ConversionOption[]>;
+  updateConversion(id:string,draft:ConversionDraft):Promise<ConversionOption>;
+  removeConversion(id:string):Promise<'deleted'|'deactivated'>;
+  setConversionActive(id:string,isActive:boolean):Promise<void>;
   createProject(draft: ProjectDraft): Promise<Project>;
   listProjects(): Promise<Project[]>;
   updateProjectStatus(projectId: string, status: Project['status']): Promise<void>;

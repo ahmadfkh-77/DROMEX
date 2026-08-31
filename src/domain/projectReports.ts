@@ -1,5 +1,8 @@
 export type ReportProjectStatus = 'active' | 'completed';
 export type MaterialMovement = 'used' | 'transported';
+export type WorkerSafetyStatus = 'compliant' | 'missing' | 'not_checked';
+export type WorkerSafetyEntry = { workerName:string;status:WorkerSafetyStatus;missingItems:string[];notes:string };
+export const safetyEquipment=['Helmet','High-visibility vest','Safety boots','Gloves','Safety glasses','Hearing protection','Harness'] as const;
 
 export type ReportProject = {
   id: string;
@@ -30,6 +33,7 @@ export type DailyProjectReportDraft = {
   workDate: string;
   workDescription: string;
   workers: string[];
+  workerSafety?: WorkerSafetyEntry[];
   drivers: string[];
   truckPlates: string[];
   machines: string[];
@@ -58,7 +62,10 @@ export type LinkedProjectLoad = {
   unitSymbol: string;
   driverName: string;
   truckPlate: string;
+  unitPriceUsd?:number|null;subtotalUsd?:number|null;vatAmountUsd?:number|null;finalTotalUsd?:number|null;
 };
+export type LinkedQuarryLoad = { id:string; purchaseNumber:string; confirmedAt:string; supplierName:string; itemName:string; quantity:number; unitSymbol:string; deliveryMethod:'company'|'supplier'; deliveryLabel:string; truckPlate:string|null; supplierTicketNumber:string|null; notes:string|null; unitPriceUsd?:number|null;subtotalUsd?:number|null;vatAmountUsd?:number|null;finalTotalUsd?:number|null };
+export type LinkedFuelFill = {id:string;confirmedAt:string;equipmentName:string;litres:number;pricePerLitreUsd:number|null;consumptionCostUsd:number|null;odometerReading:string|null;notes:string|null};
 export type LinkedWasteDump = { id: string; dumpedAt: string; materialType: string; dumpLocation: string; truckPlate: string | null; driverName: string | null };
 export type ProjectCompletionLoad = LinkedProjectLoad & { workDate: string };
 export type ProjectCompletionWasteDump = LinkedWasteDump & { workDate: string };
@@ -98,7 +105,7 @@ function minutesFromTime(value: string): number {
 
 export function emptyDailyReport(projectId: string): DailyProjectReportDraft {
   return {
-    id: null, projectId, workDate: localDateString(), workDescription: '', workers: [], drivers: [],
+    id: null, projectId, workDate: localDateString(), workDescription: '', workers: [], workerSafety:[], drivers: [],
     truckPlates: [], machines: [], materials: [], photos: [], notes: '', problemsDelaysIncidents: '',
     weatherSiteConditions: '', workStartTime: '', workEndTime: '', breakMinutes: '', nextWorkPlanned: '',
   };

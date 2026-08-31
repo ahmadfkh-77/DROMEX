@@ -8,6 +8,9 @@ node_modules/
 dist/
 dist-ios/
 coverage/
+output/*.apk
+output/DROMEX-Version-3-APK-QR.png
+.expo-build-check/
 android/
 ios/
 demo/
