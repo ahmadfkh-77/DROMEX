@@ -60,7 +60,7 @@ locally saved business change from being omitted from later synchronization.
   round trip through a signed-in Google Drive document provider;
 - supplier/profile and project/unit/conversion lifecycle refinements;
 - remaining business-report charts, progress/cancellation, localization,
-  individual daily-report Excel/photo export, and confirmed-record association correction;
+  and confirmed-record association correction;
 - Bluetooth and built-in Xprinter adapters.
 
 Printer code must remain behind an adapter because supported models are defined
@@ -147,5 +147,5 @@ history, and allows new reports only for active projects. A saved daily report
 contains the required work date and description plus optional people,
 equipment, materials, notes, issues, site conditions, working time, and next
 work. Confirmed loads are queried by project and plant-local work date and are
-shown read-only; they are not copied into the report. Photo capture and PDF
-export are implemented. Excel exports remain a later integration.
+shown read-only; they are not copied into the report. Photo capture, PDF export, and Excel workbook export
+(daily report and business-report workbooks) are implemented.
