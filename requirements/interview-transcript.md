@@ -1768,3 +1768,38 @@ The owner approved implementation of the accumulated update: rename Quarry Purch
 **INTERVIEWER:** Reproduced a database-version-26 foreign-key failure when an existing Receipt Setup unit already used the unique Cubic metre / m³ identity. Made the upgrade idempotent so it reuses the existing unit, adds only missing supplier/safety columns, and safely resumes after build 8 partially changed the schema without advancing the database version. Prepared the recovery as DROMEX 0.6.1 / Android build 9; type checking and all 159 automated tests pass, including a regression test for the partially attempted upgrade with an existing cubic-metre unit. Phone data must not be cleared or uninstalled before the in-place recovery APK is installed.
 The first build-9 packaging attempt excluded the complete `output` directory to avoid re-uploading old APK installers, which also excluded Home's required packaged fallback-logo asset and caused Expo's JavaScript bundle phase to fail. The EAS exclusion was narrowed to APK/QR artifacts while retaining `output/imagegen`; the failed remote build produced no installable artifact and does not consume a new Android version code.
 The corrected signed build completed successfully and was downloaded as the 82,807,422-byte `output/DROMEX-0.6.1-build9.apk`. Its Android ZIP structure was verified and its SHA-256 is `4AA82068BE87363CCFB46FF7490B1169AA54999AC11A1B104D736E108E0B6645`. It must be installed in place over build 8 without uninstalling or clearing application data, then allowed time to finish the one-time repaired migration on first launch.
+
+## Turn 441 — Profile editing, past work, and truck-driver safety
+
+**INTERVIEWEE:** Approved implementation of the discussed SafeTracks update. Clarified that “Tracks” meant Trucks; requested editing for trucks, machines, and supplier information; confirmed that Past Records is needed to enter multiple missed reports and operational data from previous days; and retained the requirement to include truck drivers in Daily Report PPE.
+**INTERVIEWER:** Implemented database version 27 and the corresponding workflows: Machine/Truck fuel selection; saved machine/truck and supplier profile editing with historical snapshots; all active catalog categories in Supplier Loads; reasoned in-place correction/reactivation of cancelled Supplier Loads; past-date entry for receipts, Supplier Loads, fuel, waste counters, and Daily Reports with future/project-boundary validation; and PPE for workers plus truck drivers in app/PDF/Excel. TypeScript and all automated tests pass. Android packaging and physical acceptance remain separate.
+
+## Turn 442 — Supplier-enabled item scope correction
+
+**INTERVIEWEE:** Corrected the Supplier Loads catalog rule: the selector must work as before and show only items explicitly selected/enabled for Suppliers, not every active catalog item.
+**INTERVIEWER:** Restored supplier-enabled filtering while retaining category organization. Only active supplier-enabled items appear beneath their active category; categories without eligible items remain hidden.
+
+## Turn 443 — Android build 10 packaging attempt
+
+**INTERVIEWEE:** Requested implementing the corrected Supplier Loads behavior, updating the Android release, and building the APK; then explicitly approved uploading the project source archive to Expo EAS for compilation.
+**INTERVIEWER:** Prepared DROMEX 0.7.0 / Android version code 10 with the unchanged `com.dromex.management` package and existing Expo keystore. TypeScript validation passed, all 26 test files and 162 tests passed, and Expo configuration resolved the intended version and package. EAS accepted two source uploads, but builds `06a9afde-850d-4199-8fbb-f5c9adde45b6` and `d17012be-b472-4e40-aeb3-4a6b119e7bbc` both ended with Expo `SERVER_ERROR` because the build worker lost its connection. Expo's official status page simultaneously reported EAS Build and Google Compute Engine partial outages with a fix in progress. No build-10 APK was produced or falsely marked complete; packaging must be retried after Expo restores service. The laptop has Java but no local Android SDK, ADB, or keytool, so no unplanned local-toolchain or signing-key migration was attempted.
+
+## Turn 444 — Build and download retry during Expo outage
+
+**INTERVIEWEE:** Requested building and downloading the APK immediately.
+**INTERVIEWER:** Rechecked Expo's official status, which still reported EAS Build and Google Compute Engine partial outages, and proceeded with one user-requested retry. Expo accepted the source archive and existing keystore, created build `cb5c5e6a-80f3-47f5-8843-328b994506ec`, and confirmed DROMEX 0.7.0 / Android build 10, but the build ended with the same `SERVER_ERROR` worker-connection loss. No artifact URL or APK was produced; nothing was downloaded or represented as a valid installer.
+
+## Turn 445 — Second requested retry during the continuing outage
+
+**INTERVIEWEE:** Requested another APK build retry.
+**INTERVIEWER:** Verified that Expo still reported the EAS Build and Google Compute Engine partial outage, then submitted the requested build. The upload and fingerprint completed, and build `97d7f0a2-9805-407a-929b-8374949257dc` entered Android compilation with the correct DROMEX 0.7.0 / build 10 metadata. Expo again lost connection to its worker and returned the same `SERVER_ERROR`; no APK artifact was generated or downloaded.
+
+## Turn 446 — Retry during Expo recovery monitoring
+
+**INTERVIEWEE:** Requested another immediate build attempt after asking when and why Expo would recover.
+**INTERVIEWER:** Expo's status had advanced to Monitoring and listed EAS Build as operational after moving services out of the affected availability zone, although Google Compute Engine remained in partial outage. Submitted build `3126d5a1-86c2-4f69-8846-9d1561f624c6`; it waited in the post-incident queue, then entered compilation with the correct DROMEX 0.7.0 / build 10 metadata. The worker again disconnected with `SERVER_ERROR`. Its detailed log confirms successful dependency installation, prebuild, and Android JavaScript bundling, followed by normal Gradle startup with no project or compilation error before logging stopped. No APK artifact was created or downloaded.
+
+## Turn 447 — Successful build 10 after Expo recovery
+
+**INTERVIEWEE:** Requested another Expo EAS build retry rather than proceeding with a local Android Studio build.
+**INTERVIEWER:** Confirmed Expo still listed EAS Build as operational under incident monitoring, then submitted build `820217d0-cf86-494a-bb5f-0a7ffd16552f`. The job waited in Expo's post-incident queue, compiled successfully with the existing Android keystore as DROMEX 0.7.0 / build 10, and produced an internal-distribution APK. Downloaded it without overwriting older installers as `output/DROMEX-0.7.0-build10.apk`. Verified its 82,824,482-byte Android ZIP structure, one manifest, two DEX files, and SHA-256 `BD17AC89BFDC0CC8A50AF8FF599615D2B8ACC8FA19C44FB3173F2B50C986DBE0`. It must be installed in place without uninstalling or clearing data; phone acceptance remains pending.

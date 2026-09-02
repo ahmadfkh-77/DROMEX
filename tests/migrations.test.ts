@@ -32,7 +32,7 @@ describe('reserved test data deactivation migration', () => {
     expect(statements.some((sql) => sql.includes('CREATE TABLE project_media'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE cloud_sync_state'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE pavement_calculations'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('targets every reserved generator prefix without broad table deletes', () => {
@@ -59,7 +59,7 @@ describe('reserved test data deactivation migration', () => {
     expect(statements.some((sql) => sql.includes('CREATE TABLE schedule_tasks'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE waste_counter_presets'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE project_issues'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('adds project issues and media when upgrading version 17', async () => {
@@ -68,7 +68,7 @@ describe('reserved test data deactivation migration', () => {
     await migrateDatabase(db as never);
     expect(statements.some((sql) => sql.includes('CREATE TABLE project_issues'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE project_media'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('adds account and cloud synchronization state when upgrading version 18', async () => {
@@ -77,7 +77,7 @@ describe('reserved test data deactivation migration', () => {
     await migrateDatabase(db as never);
     expect(statements.some((sql) => sql.includes('CREATE TABLE cloud_sync_state'))).toBe(true);
     expect(statements.some((sql) => sql.includes('CREATE TABLE cloud_sync_records'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('adds project-linked pavement calculations when upgrading version 19',async()=>{
@@ -86,7 +86,7 @@ describe('reserved test data deactivation migration', () => {
     await migrateDatabase(db as never);
     expect(statements.some(sql=>sql.includes('CREATE TABLE pavement_calculations'))).toBe(true);
     expect(statements.some(sql=>sql.includes('spread_rate_kg_m2 REAL NOT NULL'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('adds loose and compacted pavement thickness fields when upgrading version 20',async()=>{
@@ -95,7 +95,7 @@ describe('reserved test data deactivation migration', () => {
     await migrateDatabase(db as never);
     expect(statements.some(sql=>sql.includes('loose_thickness_factor'))).toBe(true);
     expect(statements.some(sql=>sql.includes('loose_thickness_mm'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('adds project walls and material consumption when upgrading version 21',async()=>{
@@ -104,7 +104,7 @@ describe('reserved test data deactivation migration', () => {
     await migrateDatabase(db as never);
     expect(statements.some(sql=>sql.includes('CREATE TABLE walls'))).toBe(true);
     expect(statements.some(sql=>sql.includes('CREATE TABLE wall_consumptions'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('adds direct-quantity receipt snapshots when upgrading version 22',async()=>{
@@ -113,7 +113,7 @@ describe('reserved test data deactivation migration', () => {
     await migrateDatabase(db as never);
     expect(statements.some(sql=>sql.includes('quantity_method'))).toBe(true);
     expect(statements.some(sql=>sql.includes('direct_unit_symbol'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('adds supplier delivery compatibility records when upgrading version 23',async()=>{
@@ -123,7 +123,7 @@ describe('reserved test data deactivation migration', () => {
     expect(statements.some(sql=>sql.includes('delivery_method'))).toBe(true);
     expect(statements.some(sql=>sql.includes('system_supplier_delivery_driver'))).toBe(true);
     expect(statements.some(sql=>sql.includes('system_supplier_delivery_truck'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('adds fuel price history and immutable fill cost snapshots when upgrading version 24',async()=>{
@@ -133,7 +133,7 @@ describe('reserved test data deactivation migration', () => {
     expect(statements.some(sql=>sql.includes('CREATE TABLE fuel_price_history'))).toBe(true);
     expect(statements.some(sql=>sql.includes('consumption_cost_usd_cents'))).toBe(true);
     expect(statements.some(sql=>sql.includes('price_override_reason'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('adds flexible supplier pricing, unit snapshots, correction audit, and worker safety when upgrading version 25',async()=>{
@@ -146,7 +146,7 @@ describe('reserved test data deactivation migration', () => {
     expect(sql).toContain('correction_history_json');
     expect(sql).toContain('safety_json');
     expect(sql).toContain("unit_symbol=COALESCE(unit_symbol,'m³')");
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 26');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 
   it('repairs a partially attempted version 25 upgrade and reuses an existing cubic-metre unit',async()=>{
@@ -158,7 +158,7 @@ describe('reserved test data deactivation migration', () => {
           VALUES ('existing_cubic_unit','Cubic metre','m³',1,'2026-08-01','2026-08-01');
         PRAGMA user_version=25;`);
       await migrateDatabase(db as never);
-      expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(26);
+      expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(27);
       expect((db.raw.prepare(`SELECT id FROM measurement_units WHERE symbol='m³'`).get() as {id:string}).id).toBe('existing_cubic_unit');
       expect((db.raw.prepare(`SELECT COUNT(*) count FROM measurement_units WHERE id='unit_m3'`).get() as {count:number}).count).toBe(0);
       const purchaseColumns=db.raw.prepare(`PRAGMA table_info(quarry_purchases)`).all() as {name:string}[];
@@ -166,5 +166,17 @@ describe('reserved test data deactivation migration', () => {
       const reportColumns=db.raw.prepare(`PRAGMA table_info(daily_project_reports)`).all() as {name:string}[];
       expect(reportColumns.filter(value=>value.name==='safety_json')).toHaveLength(1);
     }finally{db.close();}
+  });
+
+  it('adds truck fuel identity and separate operational entry timestamps when upgrading version 26',async()=>{
+    const statements:string[]=[];
+    const db={execAsync:async(sql:string)=>{statements.push(sql);},getFirstAsync:async()=>({user_version:26}),getAllAsync:async()=>[]};
+    await migrateDatabase(db as never);
+    const sql=statements.join('\n');
+    expect(sql).toContain('fuel_movements ADD COLUMN equipment_type');
+    expect(sql).toContain('fuel_movements ADD COLUMN truck_profile_id');
+    expect(sql).toContain('loads ADD COLUMN entered_at');
+    expect(sql).toContain('quarry_purchases ADD COLUMN entered_at');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 27');
   });
 });

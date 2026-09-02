@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 26;
+export const DATABASE_VERSION = 27;
 
 type TableColumn = { name: string };
 
@@ -867,6 +867,19 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       updated_at=COALESCE(updated_at,confirmed_at)
       WHERE unit_id IS NULL;`);
     currentVersion = 26;
+  }
+
+  if (currentVersion === 26) {
+    await addColumnIfMissing(db,'fuel_movements','equipment_type',"TEXT NOT NULL DEFAULT 'machine' CHECK (equipment_type IN ('machine','truck'))");
+    await addColumnIfMissing(db,'fuel_movements','truck_profile_id','TEXT REFERENCES truck_profiles(id)');
+    await addColumnIfMissing(db,'loads','entered_at','TEXT');
+    await addColumnIfMissing(db,'quarry_purchases','entered_at','TEXT');
+    await db.execAsync(`
+      UPDATE loads SET entered_at=COALESCE(entered_at,confirmed_at);
+      UPDATE quarry_purchases SET entered_at=COALESCE(entered_at,confirmed_at);
+      CREATE INDEX IF NOT EXISTS idx_fuel_movements_truck ON fuel_movements(truck_profile_id,confirmed_at DESC);
+    `);
+    currentVersion = 27;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

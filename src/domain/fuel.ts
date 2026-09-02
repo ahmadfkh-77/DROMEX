@@ -1,19 +1,20 @@
 export type FuelMovementType='gauge'|'delivery'|'fill';
 export type FuelMovementStatus='Active'|'Cancelled';
-export type FuelOption={id:string;name:string;detail?:string};
+export type FuelEquipmentType='machine'|'truck';
+export type FuelOption={id:string;name:string;detail?:string;startDate?:string;endDate?:string|null};
 export type FuelPriceRecord={id:string;pricePerLitreUsd:number;effectiveAt:string;changedBy:string;reason:string|null;createdAt:string};
-export type FuelSetup={suppliers:FuelOption[];equipment:FuelOption[];projects:FuelOption[];vatRatePercent:number;currentFuelPrice:FuelPriceRecord|null;fuelPriceHistory:FuelPriceRecord[]};
-export type FuelMovement={id:string;type:FuelMovementType;confirmedAt:string;litres:number;previousBalanceLitres:number|null;differenceLitres:number|null;supplierId:string|null;supplierName:string|null;equipmentId:string|null;equipmentName:string|null;projectId:string|null;projectName:string|null;ticketNumber:string|null;odometerReading:string|null;reason:string|null;notes:string|null;fuelPriceHistoryId:string|null;pricePerLitreUsd:number|null;priceOverrideReason:string|null;consumptionCostUsd:number|null;subtotalUsd:number|null;vatRatePercent:number|null;vatAmountUsd:number|null;finalTotalUsd:number|null;paymentStatus:string;status:FuelMovementStatus;cancellationReason:string|null;cancelledAt:string|null;balanceAfterLitres:number};
+export type FuelSetup={suppliers:FuelOption[];machines:FuelOption[];trucks:FuelOption[];equipment:FuelOption[];projects:FuelOption[];vatRatePercent:number;currentFuelPrice:FuelPriceRecord|null;fuelPriceHistory:FuelPriceRecord[]};
+export type FuelMovement={id:string;type:FuelMovementType;confirmedAt:string;litres:number;previousBalanceLitres:number|null;differenceLitres:number|null;supplierId:string|null;supplierName:string|null;equipmentType?:FuelEquipmentType;equipmentId:string|null;equipmentName:string|null;projectId:string|null;projectName:string|null;ticketNumber:string|null;odometerReading:string|null;reason:string|null;notes:string|null;fuelPriceHistoryId:string|null;pricePerLitreUsd:number|null;priceOverrideReason:string|null;consumptionCostUsd:number|null;subtotalUsd:number|null;vatRatePercent:number|null;vatAmountUsd:number|null;finalTotalUsd:number|null;paymentStatus:string;status:FuelMovementStatus;cancellationReason:string|null;cancelledAt:string|null;balanceAfterLitres:number};
 export type FuelOverview={currentBalanceLitres:number;hasKnownBalance:boolean;latestGauge:FuelMovement|null;movements:FuelMovement[]};
 export type ProjectEquipmentFuelUsage={equipmentId:string|null;equipmentName:string;totalLitres:number;totalCostUsd:number;unpricedLitres:number;fillCount:number;fills:FuelMovement[]};
 export type FuelMovementFilters={projectId?:string;equipmentId?:string;type?:FuelMovementType|'all';status?:FuelMovementStatus|'all';fromDate?:string;toDate?:string};
-export type FuelDeliveryDraft={litres:string;supplierId:string;ticketNumber:string;pricePerLitreUsd:string;updateCurrentPrice:boolean;notes:string};
-export type FuelFillDraft={litres:string;equipmentId:string;projectId:string;odometerReading:string;pricePerLitreUsd:string;priceOverrideReason:string;notes:string};
-export type FuelGaugeDraft={actualLitres:string;reason:string;notes:string};
+export type FuelDeliveryDraft={recordDate:string;litres:string;supplierId:string;ticketNumber:string;pricePerLitreUsd:string;updateCurrentPrice:boolean;notes:string};
+export type FuelFillDraft={recordDate:string;litres:string;equipmentType:FuelEquipmentType;equipmentId:string;projectId:string;odometerReading:string;pricePerLitreUsd:string;priceOverrideReason:string;notes:string};
+export type FuelGaugeDraft={recordDate:string;actualLitres:string;reason:string;notes:string};
 export type FuelPriceDraft={pricePerLitreUsd:string;reason:string};
-export const emptyFuelDelivery:FuelDeliveryDraft={litres:'',supplierId:'',ticketNumber:'',pricePerLitreUsd:'',updateCurrentPrice:true,notes:''};
-export const emptyFuelFill:FuelFillDraft={litres:'',equipmentId:'',projectId:'',odometerReading:'',pricePerLitreUsd:'',priceOverrideReason:'',notes:''};
-export const emptyFuelGauge:FuelGaugeDraft={actualLitres:'',reason:'',notes:''};
+export const emptyFuelDelivery:FuelDeliveryDraft={recordDate:localDateKey(new Date()),litres:'',supplierId:'',ticketNumber:'',pricePerLitreUsd:'',updateCurrentPrice:true,notes:''};
+export const emptyFuelFill:FuelFillDraft={recordDate:localDateKey(new Date()),litres:'',equipmentType:'machine',equipmentId:'',projectId:'',odometerReading:'',pricePerLitreUsd:'',priceOverrideReason:'',notes:''};
+export const emptyFuelGauge:FuelGaugeDraft={recordDate:localDateKey(new Date()),actualLitres:'',reason:'',notes:''};
 export const emptyFuelPrice:FuelPriceDraft={pricePerLitreUsd:'',reason:''};
 
 const decimal=(value:string)=>Number(value.trim().replace(',','.'));
@@ -28,7 +29,7 @@ export function applyFuelLedger(movements:Omit<FuelMovement,'balanceAfterLitres'
 
 export function groupProjectFuelByEquipment(movements:FuelMovement[],projectId:string):ProjectEquipmentFuelUsage[]{
   const groups=new Map<string,ProjectEquipmentFuelUsage>();
-  movements.filter(value=>value.type==='fill'&&value.status==='Active'&&value.projectId===projectId).forEach(fill=>{const key=fill.equipmentId??`name:${fill.equipmentName??'Unknown equipment'}`;const current=groups.get(key)??{equipmentId:fill.equipmentId,equipmentName:fill.equipmentName??'Unknown equipment',totalLitres:0,totalCostUsd:0,unpricedLitres:0,fillCount:0,fills:[]};current.totalLitres+=fill.litres;current.totalCostUsd+=fill.consumptionCostUsd??0;if(fill.consumptionCostUsd==null)current.unpricedLitres+=fill.litres;current.fillCount+=1;current.fills.push(fill);groups.set(key,current);});
+  movements.filter(value=>value.type==='fill'&&value.status==='Active'&&value.projectId===projectId).forEach(fill=>{const key=`${fill.equipmentType}:${fill.equipmentId??`name:${fill.equipmentName??'Unknown equipment'}`}`;const current=groups.get(key)??{equipmentId:key,equipmentName:fill.equipmentName??'Unknown equipment',totalLitres:0,totalCostUsd:0,unpricedLitres:0,fillCount:0,fills:[]};current.totalLitres+=fill.litres;current.totalCostUsd+=fill.consumptionCostUsd??0;if(fill.consumptionCostUsd==null)current.unpricedLitres+=fill.litres;current.fillCount+=1;current.fills.push(fill);groups.set(key,current);});
   return [...groups.values()].map(group=>({...group,fills:[...group.fills].sort((a,b)=>b.confirmedAt.localeCompare(a.confirmedAt))})).sort((a,b)=>b.totalLitres-a.totalLitres||a.equipmentName.localeCompare(b.equipmentName));
 }
 

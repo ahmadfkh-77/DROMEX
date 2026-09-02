@@ -1,7 +1,8 @@
 export type ReportProjectStatus = 'active' | 'completed';
 export type MaterialMovement = 'used' | 'transported';
 export type WorkerSafetyStatus = 'compliant' | 'missing' | 'not_checked';
-export type WorkerSafetyEntry = { workerName:string;status:WorkerSafetyStatus;missingItems:string[];notes:string };
+export type SafetyParticipantType = 'worker' | 'driver';
+export type WorkerSafetyEntry = { workerName:string;participantType?:SafetyParticipantType;status:WorkerSafetyStatus;missingItems:string[];notes:string };
 export const safetyEquipment=['Helmet','High-visibility vest','Safety boots','Gloves','Safety glasses','Hearing protection','Harness'] as const;
 
 export type ReportProject = {
@@ -10,6 +11,8 @@ export type ReportProject = {
   customerName: string;
   location: string;
   status: ReportProjectStatus;
+  startDate?:string|null;
+  endDate?:string|null;
 };
 
 export type ReportItemOption = { id: string; name: string; categoryName: string };

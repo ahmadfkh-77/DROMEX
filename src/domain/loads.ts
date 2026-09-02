@@ -84,6 +84,7 @@ export type ProjectDraft = {
 };
 
 export type LoadDraft = {
+  recordDate:string;
   customerId: string;
   projectId: string;
   destinationAddress: string;
@@ -104,10 +105,12 @@ export type LoadDraft = {
 };
 
 export const emptyLoadDraft: LoadDraft = {
-  customerId: '', projectId: '', destinationAddress: '', itemId: '', driverId: '', truckId: '', driverName: '',
+  recordDate:localLoadDate(),customerId: '', projectId: '', destinationAddress: '', itemId: '', driverId: '', truckId: '', driverName: '',
   truckPlate: '', quantityMethod: 'weighbridge', requestedQuantityKg: '', emptyWeightKg: '', fullWeightKg: '',
   conversionId: '', directQuantity: '', directUnitId: '', unitPriceUsd: '', notes: '',
 };
+
+function localLoadDate(date=new Date()){return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
 
 export function isMeaningfulLoadDraft(draft: LoadDraft): boolean {
   return Boolean(
@@ -254,6 +257,8 @@ export function validateLoadDraft(draft: LoadDraft, options: LoadSetupOptions): 
     if (!options.conversions.some((value) => value.id === draft.conversionId)) issues.push('Select a conversion.');
   }
   const project = options.projects.find((value) => value.id === draft.projectId);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(draft.recordDate)||draft.recordDate>localLoadDate())issues.push('Record date must be today or a valid past date.');
+  else if(project&&((project.startDate&&draft.recordDate<project.startDate)||(project.endDate&&draft.recordDate>project.endDate)))issues.push('The record date must be within the selected project dates.');
   if (customer?.isOwnCompany && !project) issues.push('An own-company load requires a project.');
   if (customer && !customer.isOwnCompany && !project && !draft.destinationAddress.trim()) {
     issues.push('Select a project or enter a destination address.');

@@ -234,6 +234,16 @@ export class SqliteLoadRepository implements LoadRepository {
     }); return truck;
   }
 
+  async updateTruck(id:string,draft:TruckDraft):Promise<TruckProfile>{
+    const plate=draft.plate.trim().toUpperCase();if(!plate)throw new Error('Truck plate is required.');
+    if(draft.capacityKg!=null&&(!Number.isInteger(draft.capacityKg)||draft.capacityKg<=0))throw new Error('Capacity must be a positive whole kilogram value.');
+    const now=new Date().toISOString();
+    try{const result=await this.db.runAsync('UPDATE truck_profiles SET plate=?,make_model=?,capacity_kg=?,owner_name=?,notes=?,updated_at=? WHERE id=?',plate,clean(draft.makeModel??''),draft.capacityKg??null,clean(draft.ownerName??''),clean(draft.notes??''),now,id);if(!result.changes)throw new Error('Truck was not found.');}
+    catch(cause){if(cause instanceof Error&&cause.message.toLowerCase().includes('unique'))throw new Error('Another truck already uses this plate.');throw cause;}
+    const row=await this.db.getFirstAsync<TruckRow>('SELECT * FROM truck_profiles WHERE id=?',id);if(!row)throw new Error('Truck was not found after saving.');
+    const truck:TruckProfile={id:row.id,plate:row.plate,makeModel:row.make_model,capacityKg:row.capacity_kg,ownerName:row.owner_name,notes:row.notes,isActive:row.is_active===1};await this.enqueue('truckProfile',id,{...truck,updatedAt:now});return truck;
+  }
+
   async createWorker(draft: WorkerDraft): Promise<WorkerProfile> {
     const name = draft.name.trim().replace(/\s+/g, ' '); if (!name) throw new Error('Worker name is required.');
     const now = new Date().toISOString(); const worker: WorkerProfile = { id: makeId('worker'), name, role: clean(draft.role ?? ''), phone: clean(draft.phone ?? ''), notes: clean(draft.notes ?? ''), isActive: true };
@@ -250,6 +260,14 @@ export class SqliteLoadRepository implements LoadRepository {
       await this.db.runAsync('INSERT INTO machine_profiles (id,name,machine_type,identifier,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?)', machine.id, machine.name, machine.machineType, machine.identifier, machine.notes, now, now);
       await this.enqueue('machineProfile', machine.id, machine);
     }); return machine;
+  }
+
+  async updateMachine(id:string,draft:MachineDraft):Promise<MachineProfile>{
+    const name=draft.name.trim().replace(/\s+/g,' ');if(!name)throw new Error('Machine name is required.');const now=new Date().toISOString();
+    try{const result=await this.db.runAsync('UPDATE machine_profiles SET name=?,machine_type=?,identifier=?,notes=?,updated_at=? WHERE id=?',name,clean(draft.machineType??''),clean(draft.identifier??''),clean(draft.notes??''),now,id);if(!result.changes)throw new Error('Machine was not found.');}
+    catch(cause){if(cause instanceof Error&&cause.message.toLowerCase().includes('unique'))throw new Error('Another machine already uses this name or identifier.');throw cause;}
+    const row=await this.db.getFirstAsync<MachineRow>('SELECT * FROM machine_profiles WHERE id=?',id);if(!row)throw new Error('Machine was not found after saving.');
+    const machine:MachineProfile={id:row.id,name:row.name,machineType:row.machine_type,identifier:row.identifier,notes:row.notes,isActive:row.is_active===1};await this.enqueue('machineProfile',id,{...machine,updatedAt:now});return machine;
   }
 
   async getDirectoryProfiles(): Promise<DirectoryProfiles> {
@@ -295,7 +313,7 @@ export class SqliteLoadRepository implements LoadRepository {
     if (calculation.convertedQuantity == null || calculation.billedQuantity == null || (draft.quantityMethod === 'weighbridge' && calculation.netWeightKg == null)) throw new Error('Load calculations are incomplete.');
     if (draft.quantityMethod === 'direct' && !directUnit) throw new Error('The direct quantity unit is unavailable.');
     if (draft.quantityMethod === 'weighbridge' && !conversion) throw new Error('The selected conversion is unavailable.');
-    const confirmedAt = new Date().toISOString(); const id = makeId('load');
+    const enteredAt=new Date().toISOString();const now=new Date(),[year=0,month=0,day=0]=draft.recordDate.split('-').map(Number);const confirmedAt=new Date(year,month-1,day,now.getHours(),now.getMinutes(),now.getSeconds(),now.getMilliseconds()).toISOString(); const id = makeId('load');
     let transactionNumber = '';
     await this.db.withTransactionAsync(async () => {
       const state = await this.db.getFirstAsync<{ device_code: string; next_load_sequence: number }>('SELECT device_code, next_load_sequence FROM device_state WHERE id = ?', 'local');
@@ -316,8 +334,8 @@ export class SqliteLoadRepository implements LoadRepository {
         conversion_name, conversion_rule, output_unit_symbol, converted_quantity, billed_quantity, unit_price_usd_cents,
         subtotal_usd_cents, vat_rate_basis_points, vat_amount_usd_cents, final_total_usd_cents, payment_status, notes,
         company_name, company_address, company_phone, company_email, company_tax_vat_number, company_receipt_footer, company_logo_uri,
-        quantity_method, direct_quantity, direct_unit_id, direct_unit_name, direct_unit_symbol)
-        VALUES (${Array.from({length:46},()=>'?').join(', ')})`,
+        quantity_method, direct_quantity, direct_unit_id, direct_unit_name, direct_unit_symbol,entered_at)
+        VALUES (${Array.from({length:47},()=>'?').join(', ')})`,
         id, transactionNumber, confirmedAt, customer.id, customer.name, project?.id ?? null, project?.name ?? null,
         project?.location ?? null, clean(draft.destinationAddress), item.id, item.name, item.internalCode, item.categoryName,
         draft.driverName.trim(), draft.truckPlate.trim().toUpperCase(), draft.driverId, draft.truckId, !isDirect && draft.requestedQuantityKg.trim() ? Number(draft.requestedQuantityKg) : null,
@@ -329,12 +347,12 @@ export class SqliteLoadRepository implements LoadRepository {
         calculation.vatAmountUsd == null ? null : Math.round(calculation.vatAmountUsd * 100), calculation.finalTotalUsd == null ? null : Math.round(calculation.finalTotalUsd * 100),
         paymentStatus, clean(draft.notes), options.companySettings.companyName, options.companySettings.address,
         options.companySettings.phone, options.companySettings.email, options.companySettings.taxVatNumber, options.companySettings.receiptFooter, options.companySettings.logoUri,
-        draft.quantityMethod, isDirect ? calculation.billedQuantity : null, isDirect ? directUnit!.id : null, isDirect ? directUnit!.name : null, isDirect ? directUnit!.symbol : null);
+        draft.quantityMethod, isDirect ? calculation.billedQuantity : null, isDirect ? directUnit!.id : null, isDirect ? directUnit!.name : null, isDirect ? directUnit!.symbol : null,enteredAt);
       await this.db.runAsync('UPDATE device_state SET next_load_sequence = next_load_sequence + 1 WHERE id = ?', 'local');
       await this.db.runAsync('DELETE FROM load_drafts WHERE id = ?', 'current');
       await this.db.runAsync("DELETE FROM sync_outbox WHERE entity_type='loadDraft' AND entity_id='current'");
       await this.db.runAsync("INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES ('loadDraft','current','delete','{}',?)",confirmedAt);
-      await this.enqueue('load', id, { id, transactionNumber, confirmedAt });
+      await this.enqueue('load', id, { id, transactionNumber, confirmedAt,enteredAt });
     });
     const row = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', id);
     if (!row) throw new Error('Confirmed load was not found.'); return loadFromRow(row);

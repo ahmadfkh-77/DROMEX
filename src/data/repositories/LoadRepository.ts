@@ -27,8 +27,10 @@ export interface LoadRepository {
   updateProjectStatus(projectId: string, status: Project['status']): Promise<void>;
   createDriver(draft: DriverDraft): Promise<DriverProfile>;
   createTruck(draft: TruckDraft): Promise<TruckProfile>;
+  updateTruck(id:string,draft:TruckDraft):Promise<TruckProfile>;
   createWorker(draft: WorkerDraft): Promise<WorkerProfile>;
   createMachine(draft: MachineDraft): Promise<MachineProfile>;
+  updateMachine(id:string,draft:MachineDraft):Promise<MachineProfile>;
   getDirectoryProfiles(): Promise<DirectoryProfiles>;
   setWorkerActive(id: string, isActive: boolean): Promise<void>;
   setDriverActive(id: string, isActive: boolean): Promise<void>;

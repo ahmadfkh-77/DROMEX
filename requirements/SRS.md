@@ -1987,3 +1987,13 @@ No appendices yet.
 - Daily Reports shall store per-present-worker PPE status and missing equipment details.
 - Daily Report PDF shall offer No Prices by default and With Prices on explicit selection. Both shall label the configured company as Contractor.
 - Home shall display the Company & VAT logo with the packaged logo as fallback.
+
+## Profile Editing, Past Work, and Driver PPE Update
+
+- Fuel fills shall select Machine or Truck before selecting the specific saved profile, and shall snapshot both type and display identity.
+- People & Equipment shall allow editing saved machines and trucks without rewriting historical transaction snapshots.
+- Supplier delivery item selection shall include only active items explicitly enabled for Suppliers, grouped beneath their active catalog category; empty categories shall not appear.
+- Supplier name and contact/tax/address/notes information shall be editable; current directory headings use the current name while confirmed transactions preserve their saved snapshot.
+- Cancelled Supplier Loads shall be correctable and reactivatable on the same record with a required audit reason and no duplicate.
+- Company loads, Supplier Loads, fuel movements, waste dumps/counters, and Daily Reports shall accept today or permitted past dates, reject future dates, and enforce linked project date boundaries.
+- Daily Report PPE shall include selected truck drivers as well as workers, with role shown in PDF and Excel output.
