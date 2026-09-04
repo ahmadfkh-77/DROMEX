@@ -12,6 +12,7 @@ type ReportRow = {
   notes: string | null; problems_delays_incidents: string | null; weather_site_conditions: string | null;
   work_start_time: string | null; work_end_time: string | null; break_minutes: number | null;
   next_work_planned: string | null; created_at: string; updated_at: string;
+  consultant_signoff_enabled: number; consultant_name: string | null; consultant_signature_json: string;
 };
 
 function makeId(prefix: string): string { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`; }
@@ -37,6 +38,8 @@ function fromRow(row: ReportRow): DailyProjectReport {
     problemsDelaysIncidents: row.problems_delays_incidents ?? '', weatherSiteConditions: row.weather_site_conditions ?? '',
     workStartTime: row.work_start_time ?? '', workEndTime: row.work_end_time ?? '',
     breakMinutes: row.break_minutes == null ? '' : String(row.break_minutes), nextWorkPlanned: row.next_work_planned ?? '',
+    consultantSignoffEnabled: row.consultant_signoff_enabled === 1, consultantName: row.consultant_name ?? '',
+    consultantSignaturePaths: parseArray<string>(row.consultant_signature_json),
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -85,7 +88,7 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   }
 
   async listLinkedLoads(projectId: string, workDate: string): Promise<LinkedProjectLoad[]> {
-    const rows = await this.db.getAllAsync<{ id: string; transaction_number: string; item_name: string; converted_quantity: number; output_unit_symbol: string; driver_name: string; truck_plate: string;unit_price_usd_cents:number|null;subtotal_usd_cents:number|null;vat_amount_usd_cents:number|null;final_total_usd_cents:number|null }>(`SELECT id, transaction_number, item_name, converted_quantity, output_unit_symbol, driver_name, truck_plate,unit_price_usd_cents,subtotal_usd_cents,vat_amount_usd_cents,final_total_usd_cents FROM loads WHERE project_id = ? AND is_archived=0 AND date(confirmed_at, 'localtime') = ? ORDER BY confirmed_at`, projectId, workDate);
+    const rows = await this.db.getAllAsync<{ id: string; transaction_number: string; item_name: string; converted_quantity: number; output_unit_symbol: string; driver_name: string; truck_plate: string;unit_price_usd_cents:number|null;subtotal_usd_cents:number|null;vat_amount_usd_cents:number|null;final_total_usd_cents:number|null }>(`SELECT id, transaction_number, item_name, converted_quantity, output_unit_symbol, driver_name, truck_plate,unit_price_usd_cents,subtotal_usd_cents,vat_amount_usd_cents,final_total_usd_cents FROM loads WHERE project_id = ? AND is_archived=0 AND status='Active' AND date(confirmed_at, 'localtime') = ? ORDER BY confirmed_at`, projectId, workDate);
     return rows.map((row) => ({ id: row.id, transactionNumber: row.transaction_number, itemName: row.item_name, quantity: row.converted_quantity, unitSymbol: row.output_unit_symbol, driverName: row.driver_name, truckPlate: row.truck_plate,unitPriceUsd:row.unit_price_usd_cents==null?null:row.unit_price_usd_cents/100,subtotalUsd:row.subtotal_usd_cents==null?null:row.subtotal_usd_cents/100,vatAmountUsd:row.vat_amount_usd_cents==null?null:row.vat_amount_usd_cents/100,finalTotalUsd:row.final_total_usd_cents==null?null:row.final_total_usd_cents/100 }));
   }
 
@@ -105,7 +108,7 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   }
 
   async listProjectLoads(projectId: string): Promise<ProjectCompletionLoad[]> {
-    const rows = await this.db.getAllAsync<{ id:string;transaction_number:string;item_name:string;converted_quantity:number;output_unit_symbol:string;driver_name:string;truck_plate:string;work_date:string }>(`SELECT id,transaction_number,item_name,converted_quantity,output_unit_symbol,driver_name,truck_plate,date(confirmed_at, 'localtime') work_date FROM loads WHERE project_id=? AND is_archived=0 ORDER BY confirmed_at`, projectId);
+    const rows = await this.db.getAllAsync<{ id:string;transaction_number:string;item_name:string;converted_quantity:number;output_unit_symbol:string;driver_name:string;truck_plate:string;work_date:string }>(`SELECT id,transaction_number,item_name,converted_quantity,output_unit_symbol,driver_name,truck_plate,date(confirmed_at, 'localtime') work_date FROM loads WHERE project_id=? AND is_archived=0 AND status='Active' ORDER BY confirmed_at`, projectId);
     return rows.map((row) => ({ id:row.id, transactionNumber:row.transaction_number, itemName:row.item_name, quantity:row.converted_quantity, unitSymbol:row.output_unit_symbol, driverName:row.driver_name, truckPlate:row.truck_plate, workDate:row.work_date }));
   }
 
@@ -128,10 +131,10 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
         ...draft.workers.map(worker=>(draft.workerSafety??[]).find(value=>value.workerName===worker&&(value.participantType??'worker')==='worker')??{workerName:worker,participantType:'worker' as const,status:'not_checked' as const,missingItems:[],notes:''}),
         ...draft.drivers.map(driver=>(draft.workerSafety??[]).find(value=>value.workerName===driver&&value.participantType==='driver')??{workerName:driver,participantType:'driver' as const,status:'not_checked' as const,missingItems:[],notes:''}),
       ];
-      await this.db.runAsync(`INSERT INTO daily_project_reports (id, project_id, work_date, work_description, workers_json, safety_json, drivers_json, truck_plates_json, machines_json, materials_json, photos_json, notes, problems_delays_incidents, weather_site_conditions, work_start_time, work_end_time, break_minutes, next_work_planned, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET work_date=excluded.work_date, work_description=excluded.work_description, workers_json=excluded.workers_json, safety_json=excluded.safety_json, drivers_json=excluded.drivers_json, truck_plates_json=excluded.truck_plates_json, machines_json=excluded.machines_json, materials_json=excluded.materials_json, photos_json=excluded.photos_json, notes=excluded.notes, problems_delays_incidents=excluded.problems_delays_incidents, weather_site_conditions=excluded.weather_site_conditions, work_start_time=excluded.work_start_time, work_end_time=excluded.work_end_time, break_minutes=excluded.break_minutes, next_work_planned=excluded.next_work_planned, updated_at=excluded.updated_at`,
-        id, draft.projectId, draft.workDate, draft.workDescription.trim(), JSON.stringify(draft.workers),JSON.stringify(safety), JSON.stringify(draft.drivers), JSON.stringify(draft.truckPlates), JSON.stringify(draft.machines), JSON.stringify(draft.materials), JSON.stringify(draft.photos), clean(draft.notes), clean(draft.problemsDelaysIncidents), clean(draft.weatherSiteConditions), clean(draft.workStartTime), clean(draft.workEndTime), draft.breakMinutes ? Number(draft.breakMinutes) : null, clean(draft.nextWorkPlanned), existing?.createdAt ?? now, now);
+      await this.db.runAsync(`INSERT INTO daily_project_reports (id, project_id, work_date, work_description, workers_json, safety_json, drivers_json, truck_plates_json, machines_json, materials_json, photos_json, notes, problems_delays_incidents, weather_site_conditions, work_start_time, work_end_time, break_minutes, next_work_planned, consultant_signoff_enabled, consultant_name, consultant_signature_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET work_date=excluded.work_date, work_description=excluded.work_description, workers_json=excluded.workers_json, safety_json=excluded.safety_json, drivers_json=excluded.drivers_json, truck_plates_json=excluded.truck_plates_json, machines_json=excluded.machines_json, materials_json=excluded.materials_json, photos_json=excluded.photos_json, notes=excluded.notes, problems_delays_incidents=excluded.problems_delays_incidents, weather_site_conditions=excluded.weather_site_conditions, work_start_time=excluded.work_start_time, work_end_time=excluded.work_end_time, break_minutes=excluded.break_minutes, next_work_planned=excluded.next_work_planned, consultant_signoff_enabled=excluded.consultant_signoff_enabled, consultant_name=excluded.consultant_name, consultant_signature_json=excluded.consultant_signature_json, updated_at=excluded.updated_at`,
+        id, draft.projectId, draft.workDate, draft.workDescription.trim(), JSON.stringify(draft.workers),JSON.stringify(safety), JSON.stringify(draft.drivers), JSON.stringify(draft.truckPlates), JSON.stringify(draft.machines), JSON.stringify(draft.materials), JSON.stringify(draft.photos), clean(draft.notes), clean(draft.problemsDelaysIncidents), clean(draft.weatherSiteConditions), clean(draft.workStartTime), clean(draft.workEndTime), draft.breakMinutes ? Number(draft.breakMinutes) : null, clean(draft.nextWorkPlanned), draft.consultantSignoffEnabled?1:0, clean(draft.consultantName), JSON.stringify(draft.consultantSignaturePaths), existing?.createdAt ?? now, now);
       const payload = { ...draft, id, updatedAt: now };
       await this.db.runAsync(`INSERT INTO sync_outbox (entity_type, entity_id, operation, payload_json, created_at) VALUES ('dailyProjectReport', ?, 'upsert', ?, ?)`, id, JSON.stringify(payload), now);
     });

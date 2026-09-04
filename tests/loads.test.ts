@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { calculateLoad, emptyLoadDraft, type ConversionOption, type LoadSetupOptions, validateLoadDraft } from '../src/domain/loads';
+import { calculateLoad, createAnotherItemDraft, emptyLoadDraft, type ConversionOption, type LoadSetupOptions, validateLoadDraft } from '../src/domain/loads';
 
 const conversion: ConversionOption = {
   id: 'conversion_kg_ton', name: 'Kilograms to metric tons', inputUnitId: 'kg',
@@ -88,5 +88,77 @@ describe('load confirmation validation', () => {
   it('rejects a project belonging to another customer',()=>{
     const options={...baseOptions,projects:[{id:'project_1',name:'Other job',customerId:'someone_else',customerName:'Other',location:'Beirut',status:'active' as const,notes:null}]};
     expect(validateLoadDraft({...validDraft,projectId:'project_1'},options)).toContain('The selected project belongs to another customer.');
+  });
+});
+
+describe('createAnotherItemDraft (Create Another Item for Same Delivery)', () => {
+  const confirmedDeliverySource = Object.freeze({
+    ...validDraft,
+    projectId: 'project_9',
+    quantityMethod: 'direct' as const,
+    directQuantity: '50',
+    directUnitId: 'unit_piece',
+    conversionId: conversion.id,
+    unitPriceUsd: '90',
+    notes: 'Fragile load, handle with care',
+    requestedQuantityKg: '20000',
+    emptyWeightKg: '10000',
+    fullWeightKg: '30555',
+  });
+
+  it('copies every approved shared-delivery field', () => {
+    const next = createAnotherItemDraft(confirmedDeliverySource);
+    expect(next.recordDate).toBe(confirmedDeliverySource.recordDate);
+    expect(next.customerId).toBe(confirmedDeliverySource.customerId);
+    expect(next.projectId).toBe(confirmedDeliverySource.projectId);
+    expect(next.destinationAddress).toBe(confirmedDeliverySource.destinationAddress);
+    expect(next.driverId).toBe(confirmedDeliverySource.driverId);
+    expect(next.driverName).toBe(confirmedDeliverySource.driverName);
+    expect(next.truckId).toBe(confirmedDeliverySource.truckId);
+    expect(next.truckPlate).toBe(confirmedDeliverySource.truckPlate);
+  });
+
+  it('returns the standard default quantity method, never the source method', () => {
+    expect(confirmedDeliverySource.quantityMethod).toBe('direct');
+    const next = createAnotherItemDraft(confirmedDeliverySource);
+    expect(next.quantityMethod).toBe('weighbridge');
+    expect(next.quantityMethod).toBe(emptyLoadDraft.quantityMethod);
+  });
+
+  it('resets every item, weight, quantity, conversion, price, and notes field to the empty-draft defaults', () => {
+    const next = createAnotherItemDraft(confirmedDeliverySource);
+    expect(next.itemId).toBe(emptyLoadDraft.itemId);
+    expect(next.requestedQuantityKg).toBe(emptyLoadDraft.requestedQuantityKg);
+    expect(next.emptyWeightKg).toBe(emptyLoadDraft.emptyWeightKg);
+    expect(next.fullWeightKg).toBe(emptyLoadDraft.fullWeightKg);
+    expect(next.conversionId).toBe(emptyLoadDraft.conversionId);
+    expect(next.directQuantity).toBe(emptyLoadDraft.directQuantity);
+    expect(next.directUnitId).toBe(emptyLoadDraft.directUnitId);
+    expect(next.unitPriceUsd).toBe(emptyLoadDraft.unitPriceUsd);
+    expect(next.notes).toBe(emptyLoadDraft.notes);
+  });
+
+  it('carries no confirmed-record identity or calculated data — the result is exactly a fresh LoadDraft', () => {
+    const next = createAnotherItemDraft(confirmedDeliverySource);
+    expect(Object.keys(next).sort()).toEqual(Object.keys(emptyLoadDraft).sort());
+    expect(next).not.toHaveProperty('id');
+    expect(next).not.toHaveProperty('transactionNumber');
+    expect(next).not.toHaveProperty('confirmedAt');
+    expect(next).not.toHaveProperty('billedQuantity');
+    expect(next).not.toHaveProperty('convertedQuantity');
+    expect(next).not.toHaveProperty('finalTotalUsd');
+    expect(next).not.toHaveProperty('signaturePaths');
+  });
+
+  it('never mutates the source draft or confirmed record it reads from', () => {
+    // confirmedDeliverySource is frozen: any attempted write inside createAnotherItemDraft throws immediately.
+    expect(() => createAnotherItemDraft(confirmedDeliverySource)).not.toThrow();
+    const before = { ...confirmedDeliverySource };
+    const next = createAnotherItemDraft(confirmedDeliverySource);
+    expect(confirmedDeliverySource).toEqual(before);
+    next.notes = 'edited only on the new draft';
+    next.itemId = 'a-different-item';
+    expect(confirmedDeliverySource.notes).toBe(before.notes);
+    expect(confirmedDeliverySource.itemId).toBe(before.itemId);
   });
 });

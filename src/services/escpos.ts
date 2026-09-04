@@ -65,6 +65,12 @@ function companyHeader(doc:EscPosDocument,name:string,address:string|null,phone:
 export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper:PaperWidth):Buffer{
   const doc=new EscPosDocument(paper),columns=paper==='58'?32:48;
   companyHeader(doc,record.companyName,record.companyAddress,record.companyPhone,record.companyEmail,record.companyTaxVatNumber);
+  if(record.status==='Cancelled'){
+    doc.align(1).bold(true).wrapped('*** CANCELLED ***').wrapped('NOT AN ACTIVE DELIVERY').bold(false);
+    doc.wrapped(`Reason: ${record.cancellationReason??'—'}`);
+    doc.wrapped(`Cancelled ${record.cancelledAt?new Date(record.cancelledAt).toLocaleString():'—'}`);
+    doc.line('').line(divider(columns)).align(0);
+  }
   doc.align(1).bold(true).wrapped(kind==='receipt'?'RECEIPT':'DELIVERY AUTHORIZATION').bold(false).line('').align(0);
   labelled(doc,'Transaction',record.transactionNumber);
   labelled(doc,'Date',new Date(record.confirmedAt).toLocaleString());

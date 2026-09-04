@@ -10,6 +10,7 @@ import {
   type DriverProfile,
   type LoadDraft,
   type LoadCorrectionDraft,
+  type LoadCorrectionEntry,
   type LoadItemOption,
   type LoadSetupOptions,
   type MachineDraft,
@@ -23,6 +24,7 @@ import {
   type WorkerDraft,
   type WorkerProfile,
   validateLoadDraft,
+  validateProjectStartDate,
 } from '../../domain/loads';
 import type { DirectoryProfiles, LoadRepository } from './LoadRepository';
 import {paymentStatus} from '../../domain/financials';
@@ -64,6 +66,8 @@ type LoadRow = {
   conversion_id: string;
   quantity_method: 'weighbridge' | 'direct'; direct_quantity: number | null;
   direct_unit_id: string | null; direct_unit_name: string | null; direct_unit_symbol: string | null;
+  status: 'Active' | 'Cancelled'; cancellation_reason: string | null; cancelled_at: string | null;
+  correction_history_json: string | null;
 };
 
 function makeId(prefix: string): string {
@@ -82,6 +86,9 @@ function conversionFromRow(row: ConversionRow): ConversionOption {
     inputQuantity: row.input_quantity, outputQuantity: row.output_quantity,
     decimalPlaces: row.decimal_places, isActive: row.is_active === 1,
   };
+}
+function safeCorrectionHistory(value: string | null): LoadCorrectionEntry[] {
+  try { return JSON.parse(value || '[]') as LoadCorrectionEntry[]; } catch { return []; }
 }
 function projectFromRow(row: ProjectRow): Project {
   return { id: row.id, customerId: row.customer_id, customerName: row.customer_name, name: row.name, location: row.location, status: row.status, notes: row.notes,startDate:row.start_date??row.created_at.slice(0,10),endDate:row.end_date??(row.status==='completed'?row.updated_at.slice(0,10):null) };
@@ -112,6 +119,8 @@ function loadFromRow(row: LoadRow): ConfirmedLoad {
     companyName: row.company_name, companyAddress: row.company_address, companyPhone: row.company_phone,
     companyEmail: row.company_email, companyTaxVatNumber: row.company_tax_vat_number,
     companyReceiptFooter: row.company_receipt_footer, companyLogoUri: row.company_logo_uri,
+    status: row.status ?? 'Active', cancellationReason: row.cancellation_reason, cancelledAt: row.cancelled_at,
+    correctionHistory: safeCorrectionHistory(row.correction_history_json),
   };
 }
 
@@ -213,6 +222,42 @@ export class SqliteLoadRepository implements LoadRepository {
     });
   }
 
+  async updateProjectStartDate(projectId: string, startDate: string): Promise<Project> {
+    const row = await this.db.getFirstAsync<ProjectRow>(`SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.id = ?`, projectId);
+    if (!row) throw new Error('Project was not found.');
+    const project = projectFromRow(row);
+    const issues = validateProjectStartDate(startDate, project);
+    if (issues.length) throw new Error(issues.join('\n'));
+    if (project.startDate && startDate > project.startDate) {
+      const conflict = await this.earliestLinkedRecordBefore(projectId, startDate);
+      if (conflict) throw new Error(`Cannot move the start date to ${startDate} — ${conflict.label} is recorded on ${conflict.date}, before that date. Correct or cancel that record first, or choose an earlier start date.`);
+    }
+    const now = new Date().toISOString();
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync('UPDATE projects SET start_date = ?, updated_at = ? WHERE id = ?', startDate, now, projectId);
+      await this.enqueue('project', projectId, { ...projectFromRow(row), startDate, updatedAt: now });
+    });
+    const updated = await this.db.getFirstAsync<ProjectRow>(`SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.id = ?`, projectId);
+    if (!updated) throw new Error('Project was not found after saving.');
+    return projectFromRow(updated);
+  }
+
+  private async earliestLinkedRecordBefore(projectId: string, newStartDate: string): Promise<{ label: string; date: string } | null> {
+    const checks: { label: string; sql: string }[] = [
+      { label: 'A confirmed load', sql: 'SELECT MIN(date(confirmed_at)) earliest FROM loads WHERE project_id = ?' },
+      { label: 'A supplier load', sql: 'SELECT MIN(date(confirmed_at)) earliest FROM quarry_purchases WHERE project_id = ?' },
+      { label: 'A fuel movement', sql: 'SELECT MIN(date(confirmed_at)) earliest FROM fuel_movements WHERE project_id = ?' },
+      { label: 'A daily report', sql: 'SELECT MIN(work_date) earliest FROM daily_project_reports WHERE project_id = ?' },
+      { label: 'A waste dump', sql: 'SELECT MIN(work_date) earliest FROM waste_dumps WHERE project_id = ?' },
+    ];
+    let earliest: { label: string; date: string } | null = null;
+    for (const check of checks) {
+      const row = await this.db.getFirstAsync<{ earliest: string | null }>(check.sql, projectId);
+      if (row?.earliest && row.earliest < newStartDate && (!earliest || row.earliest < earliest.date)) earliest = { label: check.label, date: row.earliest };
+    }
+    return earliest;
+  }
+
   async createDriver(draft: DriverDraft): Promise<DriverProfile> {
     if (!draft.name.trim()) throw new Error('Driver name is required.');
     const now = new Date().toISOString(); const driver: DriverProfile = { id: makeId('driver'), name: draft.name.trim().replace(/\s+/g, ' '), phone: clean(draft.phone ?? ''), licenseNumber: clean(draft.licenseNumber ?? ''), notes: clean(draft.notes ?? ''), isActive: true };
@@ -221,6 +266,13 @@ export class SqliteLoadRepository implements LoadRepository {
         VALUES (?, ?, ?, ?, ?, ?, ?)`, driver.id, driver.name, driver.phone, driver.licenseNumber, driver.notes, now, now);
       await this.enqueue('driverProfile', driver.id, driver);
     }); return driver;
+  }
+
+  async updateDriver(id:string,draft:DriverDraft):Promise<DriverProfile>{
+    const name=draft.name.trim().replace(/\s+/g,' ');if(!name)throw new Error('Driver name is required.');const now=new Date().toISOString();
+    const result=await this.db.runAsync('UPDATE driver_profiles SET name=?,phone=?,license_number=?,notes=?,updated_at=? WHERE id=?',name,clean(draft.phone??''),clean(draft.licenseNumber??''),clean(draft.notes??''),now,id);if(!result.changes)throw new Error('Driver was not found.');
+    const row=await this.db.getFirstAsync<DriverRow>('SELECT * FROM driver_profiles WHERE id=?',id);if(!row)throw new Error('Driver was not found after saving.');
+    const driver:DriverProfile={id:row.id,name:row.name,phone:row.phone,licenseNumber:row.license_number,notes:row.notes,isActive:row.is_active===1};await this.enqueue('driverProfile',id,{...driver,updatedAt:now});return driver;
   }
 
   async createTruck(draft: TruckDraft): Promise<TruckProfile> {
@@ -251,6 +303,13 @@ export class SqliteLoadRepository implements LoadRepository {
       await this.db.runAsync('INSERT INTO worker_profiles (id,name,role,phone,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?)', worker.id, worker.name, worker.role, worker.phone, worker.notes, now, now);
       await this.enqueue('workerProfile', worker.id, worker);
     }); return worker;
+  }
+
+  async updateWorker(id:string,draft:WorkerDraft):Promise<WorkerProfile>{
+    const name=draft.name.trim().replace(/\s+/g,' ');if(!name)throw new Error('Worker name is required.');const now=new Date().toISOString();
+    const result=await this.db.runAsync('UPDATE worker_profiles SET name=?,role=?,phone=?,notes=?,updated_at=? WHERE id=?',name,clean(draft.role??''),clean(draft.phone??''),clean(draft.notes??''),now,id);if(!result.changes)throw new Error('Worker was not found.');
+    const row=await this.db.getFirstAsync<WorkerRow>('SELECT * FROM worker_profiles WHERE id=?',id);if(!row)throw new Error('Worker was not found after saving.');
+    const worker:WorkerProfile={id:row.id,name:row.name,role:row.role,phone:row.phone,notes:row.notes,isActive:row.is_active===1};await this.enqueue('workerProfile',id,{...worker,updatedAt:now});return worker;
   }
 
   async createMachine(draft: MachineDraft): Promise<MachineProfile> {
@@ -374,6 +433,8 @@ export class SqliteLoadRepository implements LoadRepository {
   }
   async correctLoad(loadId:string,draft:LoadCorrectionDraft):Promise<ConfirmedLoad>{
     const row=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!row)throw new Error('Load was not found.');
+    if((row.status??'Active')==='Cancelled')throw new Error('A cancelled load cannot be corrected.');
+    const reason=(draft.correctionReason??'').trim();if(!reason)throw new Error('Correction reason is required.');
     const isDirect=(row.quantity_method??'weighbridge')==='direct';
     const whole=(value:string,optional=false)=>optional&&!value.trim()?null:/^\d+$/.test(value.trim())?Number(value):NaN;
     const directText=draft.directQuantity.trim().replace(',','.');
@@ -388,8 +449,42 @@ export class SqliteLoadRepository implements LoadRepository {
     const priceText=draft.unitPriceUsd.trim().replace(',','.');if(priceText&&!/^\d+(\.\d{1,2})?$/.test(priceText))throw new Error('Unit price must be zero or more with no more than two decimals.');const price=priceText?Number(priceText):null;
     let net:number;let converted:number;let billed:number;
     if(isDirect){net=1;converted=direct;billed=direct;}else{const conversion=await this.db.getFirstAsync<{input_quantity:number;output_quantity:number;decimal_places:number}>('SELECT input_quantity,output_quantity,decimal_places FROM conversion_options WHERE id=?',row.conversion_id);if(!conversion)throw new Error('The retained conversion is unavailable.');net=(full as number)-(empty as number);converted=net/conversion.input_quantity*conversion.output_quantity;const factor=10**conversion.decimal_places;billed=Math.round((converted+Number.EPSILON)*factor)/factor;}
-    const subtotal=price==null?null:Math.round(billed*price*100);const vat=price==null?null:Math.round((subtotal??0)*(row.vat_rate_basis_points??0)/10000);const total=subtotal==null?null:subtotal+(vat??0);const paid=await this.db.getFirstAsync<{cents:number}>("SELECT COALESCE(SUM(amount_usd_cents),0) cents FROM payment_entries WHERE load_id=? AND status='Active'",loadId);if(total==null&&(paid?.cents??0)>0)throw new Error('A load with active payments cannot be corrected to Unpriced.');const status=total==null?'Unpriced':paymentStatus(total,paid?.cents??0);const now=new Date().toISOString();
-    await this.db.withTransactionAsync(async()=>{await this.db.runAsync('UPDATE loads SET requested_quantity_kg=?,empty_weight_kg=?,full_weight_kg=?,net_weight_kg=?,direct_quantity=?,converted_quantity=?,billed_quantity=?,unit_price_usd_cents=?,subtotal_usd_cents=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,destination_address=?,notes=? WHERE id=?',requested,empty,full,net,isDirect?billed:null,converted,billed,price==null?null:Math.round(price*100),subtotal,vat,total,status,clean(draft.destinationAddress),clean(draft.notes),loadId);await this.enqueue('load',loadId,{id:loadId,correction:{...draft,netWeightKg:isDirect?null:net,billedQuantity:billed,finalTotalUsd:total==null?null:total/100,paymentStatus:status},updatedAt:now});});const updated=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!updated)throw new Error('Corrected load was not found.');return loadFromRow(updated);
+    const subtotal=price==null?null:Math.round(billed*price*100);const vat=price==null?null:Math.round((subtotal??0)*(row.vat_rate_basis_points??0)/10000);const total=subtotal==null?null:subtotal+(vat??0);
+    const paid=await this.activePaymentCents(loadId);
+    if(total==null&&paid>0)throw new Error('A load with active payments cannot be corrected to Unpriced.');
+    const paymentStatusValue=total==null?'Unpriced':paymentStatus(total,paid);
+    const now=new Date().toISOString();
+    const oldValues:Record<string,string|null>=isDirect
+      ?{'Direct quantity':row.direct_quantity==null?null:String(row.direct_quantity),'Unit price':row.unit_price_usd_cents==null?null:String(row.unit_price_usd_cents/100),'Destination address':row.destination_address,Notes:row.notes}
+      :{'Requested quantity kg':row.requested_quantity_kg==null?null:String(row.requested_quantity_kg),'Empty weight kg':String(row.empty_weight_kg),'Full weight kg':String(row.full_weight_kg),'Unit price':row.unit_price_usd_cents==null?null:String(row.unit_price_usd_cents/100),'Destination address':row.destination_address,Notes:row.notes};
+    const newValues:Record<string,string|null>=isDirect
+      ?{'Direct quantity':String(direct),'Unit price':price==null?null:String(price),'Destination address':clean(draft.destinationAddress),Notes:clean(draft.notes)}
+      :{'Requested quantity kg':requested==null?null:String(requested),'Empty weight kg':String(empty),'Full weight kg':String(full),'Unit price':price==null?null:String(price),'Destination address':clean(draft.destinationAddress),Notes:clean(draft.notes)};
+    const changes=Object.keys(newValues).filter(field=>newValues[field]!==oldValues[field]).map(field=>({field,originalValue:oldValues[field]??null,newValue:newValues[field]??null}));
+    if(!changes.length)throw new Error('No information was changed.');
+    const history=[...safeCorrectionHistory(row.correction_history_json),{correctedAt:now,correctedBy:'Admin',reason,changes}];
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync('UPDATE loads SET requested_quantity_kg=?,empty_weight_kg=?,full_weight_kg=?,net_weight_kg=?,direct_quantity=?,converted_quantity=?,billed_quantity=?,unit_price_usd_cents=?,subtotal_usd_cents=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,destination_address=?,notes=?,correction_history_json=?,updated_at=? WHERE id=?',requested,empty,full,net,isDirect?billed:null,converted,billed,price==null?null:Math.round(price*100),subtotal,vat,total,paymentStatusValue,clean(draft.destinationAddress),clean(draft.notes),JSON.stringify(history),now,loadId);
+      await this.enqueue('load',loadId,{id:loadId,correctedAt:now,reason,changes,paymentStatus:paymentStatusValue,updatedAt:now});
+    });
+    const updated=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!updated)throw new Error('Corrected load was not found.');return loadFromRow(updated);
+  }
+  async cancelLoad(loadId:string,reason:string):Promise<ConfirmedLoad>{
+    const value=reason.trim();if(!value)throw new Error('Cancellation reason is required.');
+    const row=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!row)throw new Error('Load was not found.');
+    if((row.status??'Active')==='Cancelled')throw new Error('This load is already cancelled.');
+    const paid=await this.activePaymentCents(loadId);
+    if(paid>0)throw new Error('Cancel all active payments for this load first.');
+    const now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync("UPDATE loads SET status='Cancelled',cancellation_reason=?,cancelled_at=?,updated_at=? WHERE id=?",value,now,now,loadId);
+      await this.enqueue('load',loadId,{id:loadId,status:'Cancelled',cancellationReason:value,cancelledAt:now,updatedAt:now});
+    });
+    const updated=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!updated)throw new Error('Cancelled load was not found.');return loadFromRow(updated);
+  }
+  private async activePaymentCents(loadId:string):Promise<number>{
+    const row=await this.db.getFirstAsync<{total:number}>("SELECT COALESCE(SUM(amount_usd_cents),0) total FROM payment_entries WHERE load_id=? AND status='Active'",loadId);
+    return row?.total??0;
   }
   private async enqueue(entityType: string, entityId: string, payload: unknown): Promise<void> {
     await this.db.runAsync(`INSERT INTO sync_outbox (entity_type, entity_id, operation, payload_json, created_at)

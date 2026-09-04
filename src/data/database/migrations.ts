@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 27;
+export const DATABASE_VERSION = 30;
 
 type TableColumn = { name: string };
 
@@ -880,6 +880,28 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_fuel_movements_truck ON fuel_movements(truck_profile_id,confirmed_at DESC);
     `);
     currentVersion = 27;
+  }
+
+  if (currentVersion === 27) {
+    await addColumnIfMissing(db, 'loads', 'status', "TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active','Cancelled'))");
+    await addColumnIfMissing(db, 'loads', 'cancellation_reason', 'TEXT');
+    await addColumnIfMissing(db, 'loads', 'cancelled_at', 'TEXT');
+    await addColumnIfMissing(db, 'loads', 'correction_history_json', "TEXT NOT NULL DEFAULT '[]'");
+    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_loads_status ON loads(status, confirmed_at DESC);`);
+    currentVersion = 28;
+  }
+
+  if (currentVersion === 28) {
+    await addColumnIfMissing(db, 'loads', 'updated_at', 'TEXT');
+    await db.execAsync(`UPDATE loads SET updated_at = COALESCE(entered_at, confirmed_at) WHERE updated_at IS NULL;`);
+    currentVersion = 29;
+  }
+
+  if (currentVersion === 29) {
+    await addColumnIfMissing(db, 'daily_project_reports', 'consultant_signoff_enabled', 'INTEGER NOT NULL DEFAULT 0 CHECK (consultant_signoff_enabled IN (0,1))');
+    await addColumnIfMissing(db, 'daily_project_reports', 'consultant_name', 'TEXT');
+    await addColumnIfMissing(db, 'daily_project_reports', 'consultant_signature_json', "TEXT NOT NULL DEFAULT '[]'");
+    currentVersion = 30;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

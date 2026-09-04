@@ -25,6 +25,24 @@ describe('load PDF documents',()=>{
     expect(html).not.toContain('Net weight:');
     expect(html).not.toContain('Converted quantity:');
   });
+  it('shows no cancelled banner for an active load',()=>{
+    const html=buildLoadDocumentHtml({...load,status:'Active',cancellationReason:null,cancelledAt:null},'receipt','58');
+    expect(html).not.toContain('CANCELLED');
+  });
+  it('shows a cancelled banner with reason and date on both the receipt and delivery authorization for a cancelled load',()=>{
+    const cancelled={...load,status:'Cancelled',cancellationReason:'Customer changed the order',cancelledAt:'2026-08-12T09:30:00.000Z'} as unknown as ConfirmedLoad;
+    const receipt=buildLoadDocumentHtml(cancelled,'receipt','58');
+    expect(receipt).toContain('CANCELLED — NOT AN ACTIVE DELIVERY');
+    expect(receipt).toContain('Reason: Customer changed the order');
+    expect(receipt).toContain(new Date('2026-08-12T09:30:00.000Z').toLocaleString());
+    const auth=buildLoadDocumentHtml(cancelled,'authorization','80');
+    expect(auth).toContain('CANCELLED — NOT AN ACTIVE DELIVERY');
+  });
+  it('shows a dash for the cancellation reason when none was recorded',()=>{
+    const cancelled={...load,status:'Cancelled',cancellationReason:null,cancelledAt:'2026-08-12T09:30:00.000Z'} as unknown as ConfirmedLoad;
+    const html=buildLoadDocumentHtml(cancelled,'receipt','58');
+    expect(html).toContain('Reason: —');
+  });
 });
 
 describe('Quick Text PDF documents',()=>{

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, LayoutAnimation, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Image, LayoutAnimation, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { ProjectReportRepository } from '../../data/repositories/ProjectReportRepository';
 import type { BusinessReportRepository } from '../../data/repositories/BusinessReportRepository';
@@ -7,13 +7,15 @@ import {activeBusinessFilterCount,businessReportLabels,emptyBusinessReportFilter
 import type {WorkbookLocale,WorkbookProgress} from '../../services/businessWorkbook';
 import {exportAndShareDailyReportWorkbook} from '../../services/dailyReportWorkbook';
 import {
-  addPresence, emptyDailyReport, netWorkMinutes, safetyEquipment, splitPresence,
+  addPresence, consultantSignoffState, emptyDailyReport, netWorkMinutes, safetyEquipment, splitPresence,
   type DailyProjectReport, type DailyProjectReportDraft, type DailyReportMaterial,
   type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWasteDump, type ProjectReportSetup, type ReportProject, type SafetyParticipantType, type WorkerSafetyStatus,
 } from '../../domain/projectReports';
 import { SearchableSelect } from '../components/SearchableSelect';
 import {CollapsibleFilterCard} from '../components/CollapsibleFilterCard';
 import {DatePickerField,todayIso} from '../components/DatePickerField';
+import {TimePickerField} from '../components/TimePickerField';
+import {SignaturePad} from '../components/SignaturePad';
 import {useReducedMotion} from '../components/ExpandableMenu';
 import { capturePersistentImage, pickPersistentImage } from '../../services/media';
 import { exportAndShareProjectCompletion, exportAndShareProjectReport } from '../../services/documentExport';
@@ -289,6 +291,10 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
   const loadsCount=linkedLoads.length+linkedQuarryLoads.length;
   const sectionsWithEntries=[Boolean(draft.workDescription.trim()),peopleCount>0,ppeSummary.compliant+ppeSummary.missing>0,draft.materials.length>0,loadsCount>0,linkedFuelFills.length>0,linkedWasteDumps.length>0,notesFilledCount>0,draft.photos.length>0,minutes!=null].filter(Boolean).length;
   const ppeBadge=ppeSummary.total===0?'No entries':ppeSummary.missing>0?`${ppeSummary.missing} missing PPE`:ppeSummary.notChecked===ppeSummary.total?'Not checked':ppeSummary.compliant===ppeSummary.total?`${ppeSummary.compliant} compliant`:`${ppeSummary.compliant} compliant · ${ppeSummary.notChecked} not checked`;
+  const signoffState=useMemo(()=>consultantSignoffState(draft),[draft]);
+  const hasConsultantData=Boolean(draft.consultantName.trim())||draft.consultantSignaturePaths.length>0;
+  const signoffBadge=signoffState==='disabled'?(hasConsultantData?'Off · data saved':'Off'):signoffState==='complete'?'Complete':'Incomplete';
+  function removeConsultantData(){Alert.alert('Remove Sign-off Data Permanently','This deletes the saved consultant name and signature from this report. This cannot be undone.',[{text:'Cancel',style:'cancel'},{text:'Remove Permanently',style:'destructive',onPress:()=>onChange({...draft,consultantName:'',consultantSignaturePaths:[]})}]);}
 
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -360,10 +366,21 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
       </LedgerSection>
 
       <LedgerSection number="10" title="Working Time" badge={minutes!=null?`Net ${Math.floor(minutes/60)}h ${minutes%60}m`:'No entries'} open={openSections.has('time')} onToggle={()=>toggleSection('time')} reducedMotion={reducedMotion}>
-        <Text style={styles.sectionHint}>Optional times for {draft.workDate}. Every daily report keeps its own start, end, and break. Use 24-hour time, for example 07:00 and 17:00.</Text>
-        <View style={styles.twoColumns}><View style={styles.flex}><Field label="Start time" value={draft.workStartTime} onChangeText={(value) => update('workStartTime', value)} placeholder="For example 07:00" /></View><View style={styles.flex}><Field label="End time" value={draft.workEndTime} onChangeText={(value) => update('workEndTime', value)} placeholder="For example 17:00" /></View></View>
+        <Text style={styles.sectionHint}>Optional times for {draft.workDate}. Every daily report keeps its own start, end, and break. Tap a time to scroll to it.</Text>
+        <View style={styles.twoColumns}><View style={styles.flex}><TimePickerField label="Start time" value={draft.workStartTime} onChange={(value) => update('workStartTime', value)} placeholder="For example 07:00" /></View><View style={styles.flex}><TimePickerField label="End time" value={draft.workEndTime} onChange={(value) => update('workEndTime', value)} placeholder="For example 17:00" /></View></View>
         <Field label="Break for this day (minutes)" value={draft.breakMinutes} onChangeText={(value) => update('breakMinutes', value)} keyboardType="number-pad" placeholder="For example 60" />
         <View style={styles.totalsCard}><Text style={styles.totalsValue}>{minutes != null ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : '—'}</Text><Text style={styles.totalsLabel}>NET WORKING TIME</Text></View>
+      </LedgerSection>
+
+      <LedgerSection number="11" title="Consultant Sign-off" badge={signoffBadge} badgeTone={signoffState==='incomplete'?'warning':'neutral'} open={openSections.has('consultant')} onToggle={()=>toggleSection('consultant')} reducedMotion={reducedMotion}>
+        <Text style={styles.sectionHint}>Optional. When on, the consultant can add their name and digital signature here, before or after generating the PDF. Turning this off never deletes name or signature data already saved — it only hides the block from the next PDF.</Text>
+        <View style={styles.chipWrap}><Choice label="Off" selected={!draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',false)}/><Choice label="On" selected={draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',true)}/></View>
+        {draft.consultantSignoffEnabled?<>
+          <Field label="Consultant name" value={draft.consultantName} onChangeText={(value)=>update('consultantName',value)} placeholder="Consultant's full name"/>
+          <Text style={styles.fieldLabel}>Consultant signature</Text>
+          <SignaturePad value={draft.consultantSignaturePaths} onChange={(paths)=>update('consultantSignaturePaths',paths)} hint="Consultant signs here"/>
+          {signoffState==='incomplete'?<Text style={styles.notice}>Sign-off is on but not complete yet. The PDF will show "Consultant sign-off incomplete" until both a name and a signature are saved.</Text>:null}
+        </>:hasConsultantData?<View style={styles.duplicateWarning}><Text style={styles.duplicateWarningTitle}>Sign-off is off, but saved data remains</Text><Text style={styles.duplicateWarningText}>The consultant name and/or signature already saved for this report are kept and will not appear on the PDF while sign-off is off. Remove them permanently only if you are sure.</Text><TouchableOpacity style={styles.duplicateWarningButton} onPress={removeConsultantData} accessibilityRole="button"><Text style={styles.duplicateWarningButtonText}>Remove Sign-off Data Permanently</Text></TouchableOpacity></View>:null}
       </LedgerSection>
 
       <View style={styles.reviewCard}>

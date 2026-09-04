@@ -49,6 +49,9 @@ export type DailyProjectReportDraft = {
   workEndTime: string;
   breakMinutes: string;
   nextWorkPlanned: string;
+  consultantSignoffEnabled: boolean;
+  consultantName: string;
+  consultantSignaturePaths: string[];
 };
 
 export type DailyProjectReport = Omit<DailyProjectReportDraft, 'id'> & {
@@ -111,7 +114,17 @@ export function emptyDailyReport(projectId: string): DailyProjectReportDraft {
     id: null, projectId, workDate: localDateString(), workDescription: '', workers: [], workerSafety:[], drivers: [],
     truckPlates: [], machines: [], materials: [], photos: [], notes: '', problemsDelaysIncidents: '',
     weatherSiteConditions: '', workStartTime: '', workEndTime: '', breakMinutes: '', nextWorkPlanned: '',
+    consultantSignoffEnabled: false, consultantName: '', consultantSignaturePaths: [],
   };
+}
+
+export type ConsultantSignoffState = 'disabled' | 'incomplete' | 'complete';
+/** Single source of truth for "is the sign-off actually complete" — shared by the editor and the PDF template so they can never disagree. */
+export function consultantSignoffState(draft: Pick<DailyProjectReportDraft, 'consultantSignoffEnabled' | 'consultantName' | 'consultantSignaturePaths'>): ConsultantSignoffState {
+  if (!draft.consultantSignoffEnabled) return 'disabled';
+  const hasName = draft.consultantName.trim().length > 0;
+  const hasSignature = draft.consultantSignaturePaths.length > 0;
+  return hasName && hasSignature ? 'complete' : 'incomplete';
 }
 
 export function validateDailyReport(draft: DailyProjectReportDraft): string[] {

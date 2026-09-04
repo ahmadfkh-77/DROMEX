@@ -25,10 +25,13 @@ export interface LoadRepository {
   createProject(draft: ProjectDraft): Promise<Project>;
   listProjects(): Promise<Project[]>;
   updateProjectStatus(projectId: string, status: Project['status']): Promise<void>;
+  updateProjectStartDate(projectId: string, startDate: string): Promise<Project>;
   createDriver(draft: DriverDraft): Promise<DriverProfile>;
+  updateDriver(id:string,draft:DriverDraft):Promise<DriverProfile>;
   createTruck(draft: TruckDraft): Promise<TruckProfile>;
   updateTruck(id:string,draft:TruckDraft):Promise<TruckProfile>;
   createWorker(draft: WorkerDraft): Promise<WorkerProfile>;
+  updateWorker(id:string,draft:WorkerDraft):Promise<WorkerProfile>;
   createMachine(draft: MachineDraft): Promise<MachineProfile>;
   updateMachine(id:string,draft:MachineDraft):Promise<MachineProfile>;
   getDirectoryProfiles(): Promise<DirectoryProfiles>;
@@ -43,4 +46,5 @@ export interface LoadRepository {
   listLoads(): Promise<ConfirmedLoad[]>;
   saveLoadSignature(loadId: string, signaturePaths: string[]): Promise<ConfirmedLoad>;
   correctLoad(loadId: string, draft: LoadCorrectionDraft): Promise<ConfirmedLoad>;
+  cancelLoad(loadId: string, reason: string): Promise<ConfirmedLoad>;
 }

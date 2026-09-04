@@ -6,6 +6,7 @@ import {buildLoadEscPos,labelValueLines,signatureRaster,wrapText} from '../src/s
 const load:ConfirmedLoad={
   quantityMethod:'direct',netWeightKg:null,convertedQuantity:25,billedQuantity:25,subtotalUsd:50,vatAmountUsd:5.5,finalTotalUsd:55.5,
   id:'load-1',transactionNumber:'20260825-A-00001',confirmedAt:'2026-08-25T12:00:00.000Z',customerName:'Road Works Ltd',projectName:'North Road',projectLocation:'North district',destinationAddress:null,itemName:'PVC Pipe',itemCode:'PVC-01',categoryName:'Pipes',driverName:'Ali Driver',truckPlate:'123456',requestedQuantityKg:null,emptyWeightKg:null,fullWeightKg:null,conversionName:null,conversionRule:null,directQuantity:25,directUnitName:'Piece',directUnitSymbol:'pc',outputUnitSymbol:'pc',unitPriceUsd:2,vatRatePercent:11,paymentStatus:'Unpaid',signatureStatus:'Signed',signaturePaths:['M 10 20 L 100 80 L 250 40'],notes:null,companyName:'DROMEX',companyAddress:'Beirut',companyPhone:'01000000',companyEmail:null,companyTaxVatNumber:null,companyReceiptFooter:'Thank you',companyLogoUri:null,
+  status:'Active',cancellationReason:null,cancelledAt:null,correctionHistory:[],
 };
 
 describe('ESC/POS thermal output',()=>{
@@ -45,5 +46,21 @@ describe('ESC/POS thermal output',()=>{
   it('creates non-empty signature pixels',()=>{
     const raster=signatureRaster(['M 0 0 L 320 140'],'58');
     expect([...raster.subarray(8,-1)].some(value=>value!==0)).toBe(true);
+  });
+
+  it('prints no cancelled marker for an active load',()=>{
+    const output=buildLoadEscPos(load,'receipt','58').toString('utf8');
+    expect(output).not.toContain('CANCELLED');
+  });
+
+  it('prints a cancelled marker with reason and date before the document body for a cancelled load',()=>{
+    const cancelled:ConfirmedLoad={...load,status:'Cancelled',cancellationReason:'Customer changed the order',cancelledAt:'2026-08-26T09:30:00.000Z'};
+    const output=buildLoadEscPos(cancelled,'receipt','58').toString('utf8');
+    expect(output).toContain('CANCELLED');
+    expect(output).toContain('NOT AN ACTIVE DELIVERY');
+    expect(output).toContain('Reason: Customer changed the');
+    expect(output).toContain('order');
+    expect(output).toContain('Cancelled 8/26/2026');
+    expect(output.indexOf('CANCELLED')).toBeLessThan(output.indexOf('RECEIPT'));
   });
 });

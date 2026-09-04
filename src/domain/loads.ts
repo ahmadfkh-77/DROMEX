@@ -52,7 +52,11 @@ export type TruckDraft = { plate: string; makeModel?: string; capacityKg?: numbe
 export type WorkerDraft = { name: string; role?: string; phone?: string; notes?: string };
 export type MachineDraft = { name: string; machineType?: string; identifier?: string; notes?: string };
 export type QuantityMethod = 'weighbridge' | 'direct';
-export type LoadCorrectionDraft = { requestedQuantityKg: string; emptyWeightKg: string; fullWeightKg: string; directQuantity: string; unitPriceUsd: string; destinationAddress: string; notes: string };
+/** `correctionReason` is optional on the type so not-yet-updated screens still compile; the repository requires a non-empty value at runtime. */
+export type LoadCorrectionDraft = { requestedQuantityKg: string; emptyWeightKg: string; fullWeightKg: string; directQuantity: string; unitPriceUsd: string; destinationAddress: string; notes: string; correctionReason?: string };
+export type LoadStatus = 'Active' | 'Cancelled';
+export type LoadCorrectionChange = { field: string; originalValue: string | null; newValue: string | null };
+export type LoadCorrectionEntry = { correctedAt: string; correctedBy: string; reason: string; changes: LoadCorrectionChange[] };
 
 export type LoadSetupOptions = {
   customers: Customer[];
@@ -112,6 +116,20 @@ export const emptyLoadDraft: LoadDraft = {
 
 function localLoadDate(date=new Date()){return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
 
+/** Format/range checks only. Whether narrowing the date would exclude existing linked records is a repository-level, DB-backed check. */
+export function validateProjectStartDate(startDate: string, project: Pick<Project, 'endDate'>): string[] {
+  const issues: string[] = [];
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(startDate);
+  if (!match) { issues.push('Start date must be a valid date.'); return issues; }
+  const [, y, m, d] = match;
+  const parsed = new Date(Number(y), Number(m) - 1, Number(d));
+  const roundTrip = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+  if (roundTrip !== startDate) { issues.push('Start date must be a valid date.'); return issues; }
+  if (startDate > localLoadDate()) issues.push('Start date cannot be in the future.');
+  if (project.endDate && startDate > project.endDate) issues.push("Start date cannot be after the project's end date.");
+  return issues;
+}
+
 export function isMeaningfulLoadDraft(draft: LoadDraft): boolean {
   return Boolean(
     draft.destinationAddress.trim()
@@ -130,6 +148,33 @@ export function isMeaningfulLoadDraft(draft: LoadDraft): boolean {
     || draft.unitPriceUsd.trim()
     || draft.notes.trim()
   );
+}
+
+/** The shared delivery context "Create Another Item for Same Delivery" is allowed to carry forward. */
+export type SharedDeliveryContext = Pick<
+  LoadDraft,
+  'recordDate' | 'customerId' | 'projectId' | 'destinationAddress' | 'driverId' | 'driverName' | 'truckId' | 'truckPlate'
+>;
+
+/**
+ * Builds a genuinely new draft for a second item on the same delivery. Only the shared
+ * delivery context (who, where, driver, truck) survives from `source`; everything
+ * item-, quantity-, price-, and document-specific resets to `emptyLoadDraft`, including
+ * the quantity method, which always returns to the app default rather than being retained.
+ * `source` is read only, never mutated, and the result is always a fresh object.
+ */
+export function createAnotherItemDraft(source: SharedDeliveryContext): LoadDraft {
+  return {
+    ...emptyLoadDraft,
+    recordDate: source.recordDate,
+    customerId: source.customerId,
+    projectId: source.projectId,
+    destinationAddress: source.destinationAddress,
+    driverId: source.driverId,
+    driverName: source.driverName,
+    truckId: source.truckId,
+    truckPlate: source.truckPlate,
+  };
 }
 
 export type LoadCalculation = {
@@ -180,7 +225,30 @@ export type ConfirmedLoad = Omit<LoadCalculation, 'netWeightKg' | 'convertedQuan
   companyTaxVatNumber: string | null;
   companyReceiptFooter: string | null;
   companyLogoUri: string | null;
+  status: LoadStatus;
+  cancellationReason: string | null;
+  cancelledAt: string | null;
+  correctionHistory: LoadCorrectionEntry[];
 };
+
+/** Mirrors correctLoad's own field validation so an invalid draft is blocked in the editor instead of surfacing as a raw repository error at Confirm. */
+export function correctionValidationError(selected: Pick<ConfirmedLoad, 'quantityMethod'>, draft: LoadCorrectionDraft): string | null {
+  const isDirect = selected.quantityMethod === 'direct';
+  if (isDirect) {
+    const directText = draft.directQuantity.trim().replace(',', '.');
+    const direct = /^\d+(\.\d{1,6})?$/.test(directText) ? Number(directText) : NaN;
+    if (!Number.isFinite(direct) || direct <= 0) return 'Direct quantity must be greater than zero with no more than six decimals.';
+  } else {
+    const wholeRequired = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value) : NaN);
+    const empty = wholeRequired(draft.emptyWeightKg), full = wholeRequired(draft.fullWeightKg);
+    if (!Number.isInteger(empty) || !Number.isInteger(full)) return 'Empty and full weights must be whole kilogram values.';
+    if (full <= empty) return 'Full weight must be greater than empty weight.';
+    if (draft.requestedQuantityKg.trim() && !/^\d+$/.test(draft.requestedQuantityKg.trim())) return 'Requested quantity must be a whole kilogram value.';
+  }
+  const priceText = draft.unitPriceUsd.trim().replace(',', '.');
+  if (priceText && !/^\d+(\.\d{1,2})?$/.test(priceText)) return 'Unit price must be zero or more with no more than two decimals.';
+  return null;
+}
 
 function wholeNumber(value: string): number | null {
   if (!/^\d+$/.test(value.trim())) return null;
