@@ -335,6 +335,73 @@ built, only the `preview`/APK profile, matching every prior release in
 `output/`. No GitHub Release was created for the artifact — it lives only
 as a committed binary in `main`'s history via the repo-local push above.
 
+## Release — DROMEX 0.9.0, Android build 12 (2026-09-04/05)
+
+**Shipped.** Company Load audited correction and cancellation (reason
+required, before/after history, no reactivation — supersedes the earlier
+direct-edit-only model recorded in DEC-060/061; database version 28),
+project start-date correction with linked-record date-conflict blocking
+(database version 29), optional Consultant Sign-off for Daily Reports
+(off by default, never implies approval when incomplete, prior data only
+removed via an explicit confirmed action; database version 30), and
+in-place editing for Worker and Driver profiles (previously only Trucks
+and Machines supported this — additive `updateWorker`/`updateDriver`
+repository methods, no schema change). See `requirements/decisions.md`
+DEC-385 through DEC-388 for the corresponding product decisions.
+
+Also shipped: a display-layer-only design/accessibility pass across six
+screens reached from Business Directory — Financials, Workspace Hub
+(Business Directory grouping only), Projects, Customers, People &
+Equipment, and Item Catalog. Each phase added 48dp touch targets, full
+`accessibilityRole`/`accessibilityLabel`/`accessibilityState` coverage
+(several of these screens had none before), search/sort/active-inactive
+filtering, consistent loading/empty/no-results states, and visual
+treatment consistent with the existing Foreman's Field Ledger identity
+(navy hero headers, collapsible bands, the app's existing color tokens
+only — no new palette). **These six phases were not run through
+`/impeccable document`** — `DESIGN.md`/`PRODUCT.md` and
+`docs/ui-improvement-log.md` still only reflect the earlier Home/Project
+Command Center/Supplier Loads/Daily Reports phases and do not mention
+Financials/Workspace Hub/Projects/Customers/People & Equipment/Item
+Catalog at all. Treat those two files as stale for those six screens
+until a future session runs the Impeccable documentation flow (or they
+are updated by hand) — the actual implementation and its rationale are
+recorded only in this session's conversation history, not in a durable
+project doc.
+
+- **Version**: `package.json`/`app.json` bumped `0.8.0`→`0.9.0`,
+  `android.versionCode` `11`→`12`. Package identity
+  (`com.dromex.management`) and the existing EAS Android signing
+  credentials were reused unchanged.
+- **EAS build**: `ca288d1a-e30e-4658-b5b4-59b01f8afeb0` finished
+  successfully (the local `eas build` CLI process was killed twice by the
+  machine's own low-memory condition while waiting/polling — the remote
+  EAS build was unaffected both times, since EAS builds run server-side;
+  status was recovered via `eas build:view <id> --json`).
+- **Artifact**: downloaded to `output/DROMEX-0.9.0-build12.apk`,
+  82,919,462 bytes (~79 MB). SHA-256:
+  `818340f9bebb80e137dea86c33dd2e739f482da0ea18ef87e41728abdd4222c6`.
+  Verified as a structurally valid ZIP (correct local file header
+  `504b0304` and end-of-central-directory signature) before committing.
+- **Committed and pushed**: commit `c917872` on `main`. Unlike the
+  0.8.0/build11 release, this commit staged and pushed **all** of the
+  session's application-code changes (not just the release-artifact
+  files) — 46 files, including every UI phase, the new
+  `updateWorker`/`updateDriver` repository methods, migrations through
+  database version 30, and the corresponding test files — since the user
+  asked for the accumulated work to be committed and pushed, not only the
+  release identifiers. Deliberately excluded: `.claude/`, `.codex/`,
+  `.cursor/`, `skills-lock.json` — local AI-tool configuration, not
+  application code. The push succeeded on the first attempt (no `HTTP
+  408` this time); GitHub again warned the APK exceeds its 50MB
+  recommended threshold (informational only, did not block).
+
+**Not done this session**: no App Bundle build; no GitHub Release; no
+`/impeccable document` run to refresh `DESIGN.md`/`PRODUCT.md` for the six
+new UI phases (see above); `docs/ui-improvement-log.md` was not updated
+with per-phase entries for Financials/Workspace Hub/Projects/Customers/
+People & Equipment/Item Catalog.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:
