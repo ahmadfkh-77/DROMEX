@@ -6,7 +6,7 @@
 
 android
 
-Both Android and iOS are configured (`app.json`: `com.dromex.management` on each) and share one custom design system with no per-OS visual differences beyond copy wording (e.g. `BackupRestoreScreen.tsx`, `BluetoothPrinterScreen.tsx` swap document-provider names, not layout or components). Android is the confirmed primary platform for native-affordance decisions: the accepted internal release artifact is an Android APK (`output/DROMEX-0.7.0-build10.apk`), and Bluetooth Classic receipt printing is explicitly Android-first (iOS support requires a not-yet-identified MFi/BLE printer protocol). iOS keeps its own OS guarantees (safe-area insets, Reduce Motion, edge-swipe back, Apple Files/iCloud backup flows) but is not the platform new native-pattern work is designed against first.
+Both Android and iOS are configured (`app.json`: `com.dromex.management` on each) and share one custom design system with no per-OS visual differences beyond copy wording (e.g. `BackupRestoreScreen.tsx`, `BluetoothPrinterScreen.tsx` swap document-provider names, not layout or components). Android is the confirmed primary platform for native-affordance decisions: the accepted internal release artifact is an Android APK (`output/DROMEX-0.9.0-build12.apk`), and Bluetooth Classic receipt printing is explicitly Android-first (iOS support requires a not-yet-identified MFi/BLE printer protocol). iOS keeps its own OS guarantees (safe-area insets, Reduce Motion, edge-swipe back, Apple Files/iCloud backup flows) but is not the platform new native-pattern work is designed against first.
 
 ## Stack
 
