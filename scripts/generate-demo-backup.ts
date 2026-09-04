@@ -48,7 +48,7 @@ export async function generateDemoBackup(options:DemoGenerationOptions={}):Promi
     ];
     const mediaPath='media/00001.png';
     const media=buildMediaLocators();
-    const manifest={format:ARCHIVE_FORMAT,formatVersion:ARCHIVE_VERSION,backupId,createdAt,appVersion:'0.3.1',databaseVersion:DATABASE_VERSION,recordCounts:counts,preferenceCount:preferences.length,media};
+    const manifest={format:ARCHIVE_FORMAT,formatVersion:ARCHIVE_VERSION,backupId,createdAt,appVersion:'0.7.0',databaseVersion:DATABASE_VERSION,recordCounts:counts,preferenceCount:preferences.length,media};
     const archive=zipSync({'manifest.json':strToU8(JSON.stringify(manifest)),'database.sqlite':databaseBytes,'preferences.json':strToU8(JSON.stringify(preferences)),[mediaPath]:ONE_PIXEL_PNG},{level:6});
     const encrypted=await encryptBackupBytes(archive,password,{randomBytes:size=>Uint8Array.from(randomBytes(size)),...(options.encryptionIterations===undefined?{}:{iterations:options.encryptionIterations})});
     mkdirSync(dirname(output),{recursive:true});

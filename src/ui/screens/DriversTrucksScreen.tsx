@@ -1,3 +1,15 @@
+// DEPRECATED — not imported or routed anywhere in the app.
+//
+// A repository-wide search (src/, tests/, docs/, requirements/) found no
+// import, route, or test referencing `DriversTrucksScreen`. The 'directory'
+// route in src/ui/DromexApp.tsx renders `PeopleEquipmentScreen`
+// (src/ui/screens/PeopleEquipmentScreen.tsx) instead, which covers the same
+// drivers/trucks management plus workers, machines, and deactivate/reactivate
+// lifecycle that this earlier, simpler screen does not.
+//
+// Left in place (not deleted) during the 2026-09 maintenance pass pending an
+// explicit decision to delete it; flagged as finding H-2 in the DROMEX
+// technical audit report. Safe to delete in a future pass once confirmed.
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -5,6 +17,7 @@ import type { LoadRepository } from '../../data/repositories/LoadRepository';
 import type { LoadSetupOptions } from '../../domain/loads';
 import { colors } from '../theme';
 
+/** @deprecated Unused — superseded by PeopleEquipmentScreen. See file header. */
 export function DriversTrucksScreen({ repository, onBack }: { repository: LoadRepository; onBack: () => void }) {
   const [options, setOptions] = useState<LoadSetupOptions | null>(null); const [tab, setTab] = useState<'drivers' | 'trucks'>('drivers');
   const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [license, setLicense] = useState(''); const [driverNotes, setDriverNotes] = useState('');

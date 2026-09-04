@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-04T02:00:00Z",
+  "title": "Design System: DROMEX",
+  "extensions": {
+    "colorMeta": {
+      "signal-orange": { "role": "primary", "displayName": "Signal Orange", "canonical": "#C84B31", "tonalRamp": ["#3D160E", "#5E211A", "#8E2E1B", "#C84B31", "#D97052", "#E89880", "#F2BEAC", "#FBE9E4"] },
+      "signal-orange-deep": { "role": "primary-deep", "displayName": "Signal Orange Deep", "canonical": "#8E2E1B", "tonalRamp": ["#2A0D07", "#41140B", "#611D10", "#8E2E1B", "#B14B36", "#CC7B60", "#E0A692", "#F5D9CE"] },
+      "structural-navy": { "role": "secondary", "displayName": "Structural Navy", "canonical": "#173F67", "tonalRamp": ["#050E17", "#0A1D2E", "#0F2E4A", "#173F67", "#2A5E8F", "#5C89B3", "#9DBBD6", "#D5E4EF"] },
+      "structural-navy-deep": { "role": "secondary-deep", "displayName": "Structural Navy Deep", "canonical": "#082D61", "tonalRamp": ["#020D1D", "#041838", "#062252", "#082D61", "#1B4C8F", "#4E75AC", "#8FA9C9", "#CBD9E8"] },
+      "ledger-cream": { "role": "background", "displayName": "Ledger Cream", "canonical": "#FFF8ED", "tonalRamp": ["#8C7A56", "#B3A17C", "#D6C7A3", "#EFE3CB", "#FFF8ED", "#FFFAF3", "#FFFCF8", "#FFFEFC"] },
+      "ledger-cream-soft": { "role": "background-soft", "displayName": "Ledger Cream Soft", "canonical": "#F5F2EC", "tonalRamp": ["#847C6C", "#A69C87", "#C8BFA9", "#E1DAC9", "#F5F2EC", "#F8F6F1", "#FBFAF6", "#FDFCFA"] },
+      "ink": { "role": "on-surface", "displayName": "Ink", "canonical": "#17212B", "tonalRamp": ["#000000", "#0B1017", "#17212B", "#2A3846", "#4C5C6D", "#77879A", "#A9B7C4", "#DCE3E9"] },
+      "muted": { "role": "on-surface-variant", "displayName": "Muted", "canonical": "#65717D", "tonalRamp": ["#1E2226", "#33383E", "#4B535A", "#65717D", "#87929B", "#ACB4BB", "#CFD4D9", "#EBEDEF"] },
+      "surface": { "role": "surface", "displayName": "Surface White", "canonical": "#FFFFFF", "tonalRamp": ["#B3B3B3", "#CCCCCC", "#E0E0E0", "#F0F0F0", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"] },
+      "line": { "role": "outline", "displayName": "Line", "canonical": "#DDD7CC", "tonalRamp": ["#4A463E", "#6D675A", "#948D7C", "#BAB2A0", "#DDD7CC", "#E9E5DC", "#F2EFE9", "#F9F7F3"] },
+      "status-success": { "role": "success", "displayName": "Status Success", "canonical": "#287A55", "tonalRamp": ["#0B2A1D", "#124030", "#1B5C42", "#287A55", "#3E9E72", "#6FBE9A", "#A6D8C0", "#E5F3EC"], "scope": "Confirmations and positive states app-wide. As of 2026-09-04 also marks Daily Reports' PPE Compliant status control." },
+      "status-warning": { "role": "warning", "displayName": "Status Warning", "canonical": "#9A6512", "tonalRamp": ["#2E1E05", "#48300A", "#6B480F", "#9A6512", "#C08526", "#DDA958", "#EDCB94", "#FFF3D8"], "scope": "Caution states app-wide (e.g. unpriced records, pending attention). As of 2026-09-03 also used for Supplier Loads' Reactivated badge. As of 2026-09-04 also used for Daily Reports' PPE Missing-PPE status control and its Work Information required-but-empty badge." },
+      "status-danger": { "role": "error", "displayName": "Status Danger", "canonical": "#B3261E", "tonalRamp": ["#360C09", "#54120E", "#7E1B15", "#B3261E", "#D14A3F", "#E37D74", "#F0AEA7", "#FCE8E6"], "scope": "Cancellation, destructive, and error states app-wide. As of 2026-09-04 also used for Daily Reports' initial-load error panel and its Problems/Delays/Incidents note panel." },
+      "calc-result": { "role": "tertiary", "displayName": "Calc Result Teal", "canonical": "#087F8C", "tonalRamp": ["#022A2E", "#044247", "#065F68", "#087F8C", "#2CA3AF", "#67C3CC", "#A6DEE3", "#DDF7F5"] },
+      "calc-result-deep": { "role": "tertiary-deep", "displayName": "Calc Result Deep", "canonical": "#04545D", "tonalRamp": ["#011A1D", "#022A2E", "#033E44", "#04545D", "#127884", "#4CA0A9", "#8FC7CD", "#D3ECEE"] },
+      "calc-result-soft": { "role": "tertiary-soft", "displayName": "Calc Result Soft", "canonical": "#DDF7F5", "tonalRamp": ["#799290", "#9FB6B4", "#C0D6D4", "#D3EAE8", "#DDF7F5", "#E5F9F8", "#EFFBFA", "#F7FDFD"] },
+      "hero-text-warm": { "role": "on-orange-text", "displayName": "Hero Text Warm", "canonical": "#FFFCF6", "tonalRamp": ["#B5B2AC", "#C9C6C0", "#DDDAD4", "#EEEBE5", "#FFFCF6", "#FFFDF9", "#FFFEFC", "#FFFFFF"], "scope": "Home screen only: text and symbols (title, eyebrow, hint) inside the Make Receipt hero card. Computed contrast against signal-orange is ~4.56:1 (WCAG AA normal-text pass). Not a general on-orange text color — every other orange surface in the app keeps white/cream text per the button and collapsible-header components below." }
+    },
+    "typographyMeta": {
+      "eyebrow": { "displayName": "Eyebrow", "purpose": "Short uppercase-style overline above a title; orange for brand emphasis, muted for neutral context." },
+      "pageTitle": { "displayName": "Page Title", "purpose": "The single title of a secondary screen, following the standard header pattern." },
+      "sectionTitle": { "displayName": "Section Title", "purpose": "Group or section headers within a screen." },
+      "cardTitle": { "displayName": "Card Title", "purpose": "The title inside a standard card." },
+      "body": { "displayName": "Body", "purpose": "Ordinary record and paragraph text." },
+      "helper": { "displayName": "Helper", "purpose": "Supporting/explanatory sentence under a header or field." }
+    },
+    "shadows": [
+      { "name": "floating-action", "value": "0 4px 7px rgba(142,46,27,0.3)", "purpose": "The center create circle in the bottom navigation." },
+      { "name": "primary-hero", "value": "0 5px 10px rgba(142,46,27,0.24)", "purpose": "The Home screen's primary action card." },
+      { "name": "collapsible-header", "value": "0 3px 6px rgba(142,46,27,0.12)", "purpose": "The collapsed orange filter header and its inline equivalents." },
+      { "name": "sticky-action-bar", "value": "0 -3px 8px rgba(23,33,43,0.12)", "purpose": "The bottom-anchored save bar on long forms." },
+      { "name": "resting-row", "value": "0 2px 4px rgba(23,33,43,0.04)", "purpose": "Ordinary interactive rows (quick actions, counter cards) — a near-imperceptible lift." }
+    ],
+    "motion": [
+      { "name": "menu-expand", "value": "230ms ease-in-out", "purpose": "Expandable menu section opening (accent bar grow, child fade/slide-in)." },
+      { "name": "menu-collapse", "value": "170ms ease-in-out", "purpose": "Expandable menu section closing." },
+      { "name": "filter-toggle", "value": "LayoutAnimation.easeInEaseOut (platform default timing)", "purpose": "Collapsible filter card open/close." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid Signal Orange button, white label — the one principal action per page section.",
+      "html": "<button class=\"ds-btn-primary\">Save Fuel Delivery</button>",
+      "css": ".ds-btn-primary { min-height: 48px; padding: 13px 16px; border-radius: 13px; background: #C84B31; color: #FFFFFF; font-size: 15px; font-weight: 900; border: none; display: inline-flex; align-items: center; justify-content: center; gap: 3px; transition: opacity 0.15s; } .ds-btn-primary:hover { background: #B33F28; } .ds-btn-primary:focus-visible { outline: 2px solid #082D61; outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.4; }"
+    },
+    {
+      "name": "Navy Button",
+      "kind": "button",
+      "refersTo": "button-navy",
+      "description": "Solid Structural Navy button, white label — save/confirm actions when orange already carries the page's primary emphasis.",
+      "html": "<button class=\"ds-btn-navy\">Open Report</button>",
+      "css": ".ds-btn-navy { min-height: 48px; padding: 13px 16px; border-radius: 13px; background: #173F67; color: #FFFFFF; font-size: 15px; font-weight: 900; border: none; display: inline-flex; align-items: center; justify-content: center; gap: 3px; } .ds-btn-navy:hover { background: #10304F; } .ds-btn-navy:focus-visible { outline: 2px solid #C84B31; outline-offset: 2px; } .ds-btn-navy:disabled { opacity: 0.4; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "White fill, thin navy border — preview, export, retry, and non-destructive alternatives.",
+      "html": "<button class=\"ds-btn-secondary\">Preview</button>",
+      "css": ".ds-btn-secondary { min-height: 48px; padding: 13px 16px; border-radius: 13px; background: #FFFFFF; color: #173F67; font-size: 15px; font-weight: 900; border: 1px solid #173F67; display: inline-flex; align-items: center; justify-content: center; } .ds-btn-secondary:hover { background: #F5F2EC; } .ds-btn-secondary:focus-visible { outline: 2px solid #173F67; outline-offset: 2px; } .ds-btn-secondary:disabled { opacity: 0.4; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "White fill, thin red border and red text — cancellation/deactivation only, always placed away from primary actions.",
+      "html": "<button class=\"ds-btn-danger\">Cancel Movement</button>",
+      "css": ".ds-btn-danger { min-height: 48px; padding: 13px 16px; border-radius: 13px; background: #FFFFFF; color: #B3261E; font-size: 15px; font-weight: 900; border: 1px solid #B3261E; display: inline-flex; align-items: center; justify-content: center; } .ds-btn-danger:hover { background: #FCE8E6; } .ds-btn-danger:focus-visible { outline: 2px solid #B3261E; outline-offset: 2px; } .ds-btn-danger:disabled { opacity: 0.4; }"
+    },
+    {
+      "name": "Standard Card",
+      "kind": "card",
+      "refersTo": "card-standard",
+      "description": "White, 16px radius card holding one group of related fields or records.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Load Details</div><div class=\"ds-card-body\">Card content goes here.</div></div>",
+      "css": ".ds-card { background: #FFFFFF; border-radius: 16px; padding: 17px; display: flex; flex-direction: column; gap: 12px; } .ds-card-title { color: #17212B; font-size: 16px; font-weight: 900; } .ds-card-body { color: #17212B; font-size: 14px; line-height: 20px; }"
+    },
+    {
+      "name": "Context Card (Navy)",
+      "kind": "card",
+      "refersTo": "card-context-navy",
+      "description": "Solid navy card with cream text — the selected project, tank state, or other strong page context that should outrank surrounding white cards.",
+      "html": "<div class=\"ds-card-context\"><div class=\"ds-card-context-title\">Selected Project: North Yard Paving</div><div class=\"ds-card-context-body\">Active since Jan 2026.</div></div>",
+      "css": ".ds-card-context { background: #173F67; border-radius: 16px; padding: 17px; display: flex; flex-direction: column; gap: 12px; } .ds-card-context-title { color: #FFF8ED; font-size: 16px; font-weight: 900; } .ds-card-context-body { color: #E8E2D7; font-size: 13px; line-height: 19px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Labeled text input, 46px minimum height, thin neutral border, warm-white fill.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Driver Name *</span><input class=\"ds-field-input\" type=\"text\" placeholder=\"Enter driver name\" /></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 6px; } .ds-field-label { color: #17212B; font-size: 13px; font-weight: 800; } .ds-field-input { min-height: 46px; border: 1px solid #DDD7CC; border-radius: 11px; padding: 11px 13px; background: #FCFBF8; color: #17212B; font-size: 15px; } .ds-field-input::placeholder { color: #89939B; } .ds-field-input:focus { outline: none; border-color: #C84B31; }"
+    },
+    {
+      "name": "Searchable Dropdown Control",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "The collapsed control for a searchable select — looks like a text field with a bold navy chevron; opens a full-screen list with search on tap.",
+      "html": "<button class=\"ds-select\"><span class=\"ds-select-copy\"><span class=\"ds-select-value\">Acme Construction Co.</span><span class=\"ds-select-detail\">Customer · 12 loads on file</span></span><span class=\"ds-select-chevron\">⌄</span></button>",
+      "css": ".ds-select { width: 100%; min-height: 49px; border: 1px solid #DDD7CC; border-radius: 11px; padding: 9px 13px; background: #FCFBF8; display: flex; align-items: center; gap: 8px; text-align: left; } .ds-select-copy { flex: 1; display: flex; flex-direction: column; } .ds-select-value { color: #17212B; font-size: 15px; font-weight: 700; } .ds-select-detail { color: #65717D; font-size: 11px; margin-top: 2px; } .ds-select-chevron { color: #8E2E1B; font-size: 22px; font-weight: 900; } .ds-select:hover { border-color: #C84B31; }"
+    },
+    {
+      "name": "Metric Card (Result)",
+      "kind": "card",
+      "refersTo": "card-standard",
+      "description": "A metric card in its result variant — solid calc-result teal fill with a deep-teal border, reserved for calculated totals such as pavement area.",
+      "html": "<div class=\"ds-metric-result\"><div class=\"ds-metric-value\">248.5 m²</div><div class=\"ds-metric-label\">CALCULATED AREA</div></div>",
+      "css": ".ds-metric-result { flex: 1; min-width: 130px; background: #087F8C; border: 2px solid #04545D; border-radius: 13px; padding: 15px; display: flex; flex-direction: column; gap: 3px; } .ds-metric-value { color: #17212B; font-size: 26px; font-weight: 900; } .ds-metric-label { color: #E8E2D7; font-size: 11px; font-weight: 800; }"
+    },
+    {
+      "name": "Feedback Panel",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "One-line tinted panel for success, warning, or error state — never a general decorative banner.",
+      "html": "<div class=\"ds-feedback ds-feedback-warning\">Unpriced: this fuel delivery has no recorded price.</div>",
+      "css": ".ds-feedback { padding: 12px; border-radius: 10px; font-weight: 700; line-height: 18px; font-size: 13px; } .ds-feedback-error { color: #B3261E; background: #FCE8E6; } .ds-feedback-success { color: #287A55; background: #E5F3EC; } .ds-feedback-warning { color: #9A6512; background: #FFF3D8; }"
+    },
+    {
+      "name": "Menu Action Row",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Base/default treatment, used by five screens (DraftCenterScreen, PavementCalculatorScreen, WallConstructionScreen, WorkspaceHubScreen, PavementAdvancedSections): a row inside an expanded menu section — numbered index, 4px left accent border, bold title, muted description, trailing chevron, individually shadowed white card. Home uses 'Menu Action Row (Refined)' and Project Command Center uses 'Menu Action Row (Polished)' below instead.",
+      "html": "<button class=\"ds-menu-action\"><span class=\"ds-menu-action-number\">01</span><span class=\"ds-menu-action-copy\"><span class=\"ds-menu-action-title\">Make Receipt</span><span class=\"ds-menu-action-body\">Record an outgoing company load.</span></span><span class=\"ds-menu-action-arrow\">›</span></button>",
+      "css": ".ds-menu-action { min-height: 80px; width: 100%; background: #FFFFFF; border-radius: 14px; border: none; border-left: 4px solid #173F67; padding: 14px; display: flex; align-items: center; gap: 11px; text-align: left; box-shadow: 0 2px 4px rgba(23,33,43,0.04); } .ds-menu-action-number { width: 28px; color: #C84B31; font-size: 10px; font-weight: 900; } .ds-menu-action-copy { flex: 1; display: flex; flex-direction: column; gap: 3px; } .ds-menu-action-title { color: #17212B; font-size: 16px; font-weight: 900; } .ds-menu-action-body { color: #65717D; font-size: 11px; line-height: 16px; } .ds-menu-action-arrow { color: #C84B31; font-size: 27px; font-weight: 900; } .ds-menu-action:hover { background: #FFF8ED; }"
+    },
+    {
+      "name": "Menu Action Row (Refined)",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Home-only variant (`refined` prop on `MenuAction`, `src/ui/components/ExpandableMenu.tsx`), implemented 2026-09-03: rows sit inside one bounded Ledger-Cream section card instead of floating individually, so each row is flat and ruled (thin bottom divider, no per-row shadow) with a narrower 3px left accent; title weight 700 (was 900); row numbers and the trailing arrow are Structural Navy instead of Signal Orange. Project Command Center layers a further 'Polished' treatment on top (see below); the five base/default consumers do not use either variant.",
+      "html": "<div class=\"ds-section-body-refined\"><button class=\"ds-menu-action-refined\"><span class=\"ds-menu-action-refined-number\">01</span><span class=\"ds-menu-action-refined-copy\"><span class=\"ds-menu-action-refined-title\">Fuel Tracking</span><span class=\"ds-menu-action-refined-body\">Record tank readings, deliveries, equipment fills, supplier cost, and current balance.</span></span><span class=\"ds-menu-action-refined-arrow\">›</span></button></div>",
+      "css": ".ds-section-body-refined { background: #FFF8ED; border: 1px solid #E8DED0; border-radius: 16px; padding: 10px; } .ds-menu-action-refined { min-height: 80px; width: 100%; background: transparent; border: none; border-left: 3px solid #173F67; border-bottom: 1px solid #EFE6D8; padding: 13px 10px; display: flex; align-items: center; gap: 11px; text-align: left; } .ds-menu-action-refined-number { width: 28px; color: #173F67; font-size: 11px; font-weight: 700; } .ds-menu-action-refined-copy { flex: 1; display: flex; flex-direction: column; gap: 3px; } .ds-menu-action-refined-title { color: #17212B; font-size: 16px; font-weight: 700; } .ds-menu-action-refined-body { color: #65717D; font-size: 11px; line-height: 16px; } .ds-menu-action-refined-arrow { color: #173F67; font-size: 27px; font-weight: 900; } .ds-menu-action-refined:hover { background: rgba(23,33,43,0.03); }"
+    },
+    {
+      "name": "Section Marker Chip (Refined)",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Home-only (`marker` + `refined` on `ExpandableMenuSection`), implemented 2026-09-03: a solid Ledger-Cream rounded-square index chip (01-04) on each of Home's four navigation-section headers, replacing an earlier translucent circle. Matches the two-digit convention row numbers already use, at heavier visual weight to signal the section level. Explicitly not a distinct color per section — all four sections stay Structural Navy; only the chip's numeral differs. Project Command Center uses the further 'Attached' tab variant below instead of this inline chip.",
+      "html": "<span class=\"ds-marker-refined\">01</span>",
+      "css": ".ds-marker-refined { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 30px; border-radius: 8px; background: #FFF8ED; color: #173F67; font-size: 13px; font-weight: 900; }"
+    },
+    {
+      "name": "Menu Action Row (Polished)",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Project-Command-Center-only variant (`polished` prop, always paired with `refined`, on `MenuAction`/record rows in `src/ui/screens/ProjectCommandCenterScreen.tsx`), implemented 2026-09-03: reverses 'Refined''s flat ruled-row look back to an individually-shadowed white card (a deliberate choice made after physical-review feedback that the flat treatment read as too plain for this screen), still contained inside the same bounded Ledger-Cream section body; row number/badge weight is 600 (Home's Refined rows use 700). Home does not use this variant.",
+      "html": "<div class=\"ds-section-body-polished\"><button class=\"ds-menu-action-polished\"><span class=\"ds-menu-action-polished-number\">01</span><span class=\"ds-menu-action-polished-copy\"><span class=\"ds-menu-action-polished-title\">Project Schedule</span><span class=\"ds-menu-action-polished-body\">All tasks stay locked under this project.</span></span><span class=\"ds-menu-action-polished-arrow\">›</span></button></div>",
+      "css": ".ds-section-body-polished { background: #FFF8ED; border: 1px solid #E8DED0; border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px; } .ds-menu-action-polished { min-height: 80px; width: 100%; background: #FFFFFF; border: none; border-left: 3px solid #173F67; border-radius: 13px; padding: 13px 12px; display: flex; align-items: center; gap: 11px; text-align: left; box-shadow: 0 2px 4px rgba(23,33,43,0.06); } .ds-menu-action-polished-number { width: 28px; color: #173F67; font-size: 11px; font-weight: 600; } .ds-menu-action-polished-copy { flex: 1; display: flex; flex-direction: column; gap: 3px; } .ds-menu-action-polished-title { color: #17212B; font-size: 16px; font-weight: 700; } .ds-menu-action-polished-body { color: #65717D; font-size: 11px; line-height: 16px; } .ds-menu-action-polished-arrow { color: #173F67; font-size: 27px; font-weight: 900; }"
+    },
+    {
+      "name": "Section Ledger Tab (Polished)",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Project-Command-Center-only (`marker` + `polished` on `ExpandableMenuSection`), implemented 2026-09-03: the numbered marker becomes a small Ledger-Cream rounded-square tab, absolutely positioned to protrude above the header's top edge like a physical folder tab, instead of Home's inline chip. Triggered by physical-review feedback that mixed-color headers looked busy and needed a more distinctive, less generic device. On open, the header's bottom corners and the body's top corners flatten and a static 4px Signal Orange rule marks the seam where they meet, so header and body read as one opened folder.",
+      "html": "<div class=\"ds-section-polished\"><span class=\"ds-tab-polished\">01</span><div class=\"ds-header-polished\">Planning and Today</div></div>",
+      "css": ".ds-section-polished { position: relative; margin-top: 9px; } .ds-tab-polished { position: absolute; top: -9px; left: 16px; z-index: 3; min-width: 36px; height: 28px; padding: 0 8px; border-radius: 7px; background: #FFF8ED; color: #173F67; font-size: 13px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #E3D6C2; box-shadow: 0 1px 3px rgba(23,33,43,0.18); } .ds-header-polished { background: #173F67; color: #FFF8ED; border-radius: 15px; padding: 20px 15px 12px; font-size: 19px; font-weight: 700; box-shadow: 0 3px 6px rgba(23,33,43,0.16); }"
+    },
+    {
+      "name": "Supplied Material Record",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Screen-local (src/ui/screens/QuarryPurchasesScreen.tsx), implemented 2026-09-03, not a shared component: one Supplier Load in a fixed 13-point reading order. Material name leads at 700-weight; quantity-and-unit is one inseparable 900-weight value (joined by a non-breaking space so it can never wrap apart); a status-colored 3px left border (brand/danger/warning) replaces a domain color; Operational and Financial details sit in two flex-wrapping blocks that stack on narrow phones without a JS breakpoint; the reference/ticket number — previously the card's most prominent line at 900-weight — is now 600-weight, placed last near status. First screen to use the full 4-step typography target (900/700/600/500) rather than Home's and Project Command Center's 3-step (900/700/500) subset.",
+      "html": "<div class=\"ds-material-row\"><div class=\"ds-material-top\"><span class=\"ds-material-name\">Crushed Aggregate 3/4\"</span><span class=\"ds-trip-badge\">Trip 2 of 3</span></div><div class=\"ds-material-quantity\">18 m³</div><div class=\"ds-material-blocks\"><div class=\"ds-material-block\"><span class=\"ds-material-heading\">OPERATIONAL</span><span class=\"ds-material-line\">Sep 3, 2026 2:14 PM</span></div><div class=\"ds-material-block\"><span class=\"ds-material-heading\">FINANCIAL</span><span class=\"ds-material-strong\">$412.00</span></div></div><div class=\"ds-material-footer\"><span class=\"ds-status-badge ds-status-warning\">Reactivated</span><span class=\"ds-material-ref\">Ref SUP-0142</span></div></div>",
+      "css": ".ds-material-row { background: #FFFFFF; border-radius: 13px; padding: 14px; display: flex; flex-direction: column; gap: 8px; border: 1px solid #D7E2E8; border-left-width: 3px; border-left-color: #C84B31; } .ds-material-top { display: flex; align-items: flex-start; gap: 10px; } .ds-material-name { flex: 1; color: #17212B; font-size: 17px; font-weight: 700; } .ds-trip-badge { background: #173F67; color: #FFFFFF; font-size: 11px; font-weight: 600; border-radius: 9px; padding: 4px 8px; } .ds-material-quantity { color: #17212B; font-size: 26px; font-weight: 900; } .ds-material-blocks { display: flex; flex-wrap: wrap; gap: 14px; } .ds-material-block { flex-grow: 1; flex-basis: 150px; min-width: 140px; } .ds-material-heading { display: block; color: #173F67; font-size: 11px; font-weight: 600; } .ds-material-line { display: block; color: #65717D; font-size: 12px; } .ds-material-strong { display: block; color: #17212B; font-size: 17px; font-weight: 700; } .ds-material-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } .ds-status-warning { background: #FFF3D8; color: #17212B; font-size: 11px; font-weight: 600; border-radius: 8px; padding: 4px 8px; } .ds-material-ref { color: #65717D; font-size: 11px; font-weight: 600; }"
+    },
+    {
+      "name": "Daily Report Ledger Section",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Screen-local (src/ui/screens/ReportsScreen.tsx), implemented 2026-09-04, a third independently-built bespoke disclosure device (distinct from ExpandableMenuSection and from Supplier Loads' own bespoke pattern) for the Daily Report editor's ten fixed sections. Structural Navy header, an attached Ledger-Cream numbered tab (01-10) protruding above the top edge, a rotating +/x glyph, and a Signal-Orange-topped Ledger Cream body on open. A neutral count/state badge sits on every closed header ('3 workers', '2 materials', 'No entries'); only Work Information's badge switches to Status-Warning when empty, since it is the one genuinely required section among the ten.",
+      "html": "<div class=\"ds-ledger-wrap\"><span class=\"ds-ledger-tab\">03</span><button class=\"ds-ledger-header\"><span class=\"ds-ledger-title\">Worker Safety / PPE</span><span class=\"ds-ledger-badge\">2 compliant &middot; 1 missing PPE</span><span class=\"ds-ledger-mark\">+</span></button></div>",
+      "css": ".ds-ledger-wrap { position: relative; margin-top: 16px; } .ds-ledger-tab { position: absolute; top: -10px; left: 14px; z-index: 2; min-width: 34px; height: 26px; border-radius: 7px; background: #FFF8ED; color: #173F67; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #E3D6C2; } .ds-ledger-header { min-height: 64px; width: 100%; background: #173F67; border-radius: 15px; padding: 16px; display: flex; align-items: center; gap: 10px; border: none; text-align: left; } .ds-ledger-title { flex: 1; color: #FFF8ED; font-size: 16px; font-weight: 700; } .ds-ledger-badge { background: rgba(255,248,237,0.18); color: #FFF8ED; font-size: 11px; font-weight: 600; border-radius: 9px; padding: 5px 9px; } .ds-ledger-mark { color: #FFF8ED; font-size: 24px; font-weight: 700; width: 22px; text-align: center; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Foreman's Field Ledger",
+    "overview": "DROMEX is documented, not redesigned, here: every rule describes the interface as it actually ships in src/ui/theme.ts, src/ui/components/AppPrimitives.tsx, and the screen implementations, cross-checked against docs/design-system.md, which remains the authoritative source of record. Where the confirmed target direction differs from what ships today, that gap is named explicitly rather than folded into the current-system description.\n\nDROMEX presents as a durable, organized field ledger for running a construction/plant operation: Structural Navy gives it authority and hierarchy, Ledger Cream stands in for paper record stock, and Signal Orange marks the one thing that matters most on a given screen — the action to take or the record that needs attention. The voice is sturdy, direct, and field-professional rather than decorative.\n\nDomain separation (projects, loads, suppliers, fuel, equipment, safety, reports) is carried by grouping, labels, numbering, and icons — not by a unique color per domain. Color is otherwise reserved for role, not decoration.\n\nImplemented on Home (2026-09-03): the two Approved Refinement Targets below (graded typography weight, restrained domain markers) ship on the Home screen via an opt-in `refined` prop on ExpandableMenuSection/MenuAction (see 'Menu Action Row (Refined)' and 'Section Marker Chip (Refined)'), plus a locally-scoped warm on-orange text color (`hero-text-warm`) for the Make Receipt hero card.\n\nImplemented on Project Command Center (2026-09-03, two passes): the same two targets, plus a richer second layer gated behind a new, independent `polished` prop (always paired with `refined`, never alone) — an attached numbered ledger tab instead of an inline chip, a connected header/body folder seam (animated Signal Orange, static once settled), individually-shadowed white rows layered on the Ledger Cream body (see 'Menu Action Row (Polished)' and 'Section Ledger Tab (Polished)'), a capped staggered row reveal, and content-specific compositions including a real vertical timeline for the combined activity view. This second pass followed direct physical-review feedback that the first pass's mixed-color headers looked busy and its opened sections looked like generic cards.\n\nImplemented on Supplier Loads (2026-09-03): an ambitious refinement of an already-approved, already-liked screen, not a replacement — its bespoke Structural-Navy-supplier/cream-tan-project/blue-gray-container hierarchy and Supplier-to-Project disclosure stayed exactly as shipped, and it was deliberately not migrated to ExpandableMenuSection. It is the first screen to implement the full 4-step typography target (900/700/600/500, see 'Supplied Material Record' above) rather than Home's and Project Command Center's 3-step subset, and introduces a Status-Warning Reactivated badge plus a locally-computed 'Trip N of M' connected-rail device for repeated same-day deliveries (see 'The Connected Trip Rule'). Domain visual identity was deliberately left untouched here, since its existing two-tier color hierarchy already serves that role.\n\nImplemented on Daily Reports (2026-09-04): the per-project Daily Report editor's ten fixed sections adopt a third, independently-built bespoke Ledger Section device (see 'Daily Report Ledger Section' above) — a Structural Navy header, an attached Ledger-Cream numbered tab (01-10), a rotating +/x glyph, and a Signal-Orange-topped Ledger Cream body, closed by default. It is the second surface (after Supplier Loads) to use the full 4-step typography target, and the third (after Home and Project Command Center) to implement restrained numbered-marker domain identity, in both cases via fresh screen-local code rather than the shared ExpandableMenuSection/refined/polished mechanism. The whole-business Report Generation Excel-workbook section living in the same file was deliberately left untouched, including every style it depends on. The Daily Report PDF template's four summary cards, previously decorated in unrelated green/blue/orange/purple fills, were brought into compliance with the already-standing One Ledger Rule — a pre-existing violation corrected, not a new rule introduced — with semantic color now reserved for the PPE status column and the Problems/Delays/Incidents panel only.\n\nEvery other screen, and the global theme.ts type-scale tokens, remain on the base/default pervasive-weight-900, no-marker treatment described throughout this file.",
+    "keyCharacteristics": [
+      "One consistent orange/navy/cream hierarchy reused across every screen, PDF, and spreadsheet export.",
+      "Color communicates role, not decoration — status colors mean status, the result teal means \"this number was calculated,\" nothing else borrows those hues.",
+      "Bold, high-weight type used pervasively as the base/default treatment — except Home's and Project Command Center's navigation sections, which use a graded 900/700/600/500 hierarchy (see 'Implemented on Home' and 'Implemented on Project Command Center' above).",
+      "Rounded, card-based composition throughout; no bare unstyled lists or borderless flat sections.",
+      "Restrained, functional shadows: elevation appears only on floating/interactive elements, never as decoration on static content."
+    ],
+    "rules": [
+      { "name": "The One Ledger Rule", "body": "Every screen, PDF, and Excel export shares the same orange/navy/cream hierarchy. A new surface introducing its own palette is a defect, not a variant.", "section": "colors" },
+      { "name": "The Reserved-Hue Rule", "body": "Green, amber, red, and calc-result teal each mean exactly one thing (success, warning, danger, calculated value). None of the four may be reused for brand emphasis or decoration, and no other hue may be used for those four meanings.", "section": "colors" },
+      { "name": "The Direct-Verb Rule", "body": "Button and action labels are direct verbs describing the exact effect (Save Fuel Delivery, Open Report, Cancel Movement), never vague labels like \"Submit\" or \"Go.\"", "section": "typography" },
+      { "name": "The Tinted-Shadow Rule", "body": "Shadows are colored from the element they fall from (brand-orange-deep under orange/warm elements, ink under neutral surfaces), never a generic flat black.", "section": "elevation" },
+      { "name": "The Seam Rule", "body": "Wherever a collapsed/solid-color header opens into a lighter body, a colored rule marks the seam — 3px navy under an orange header, or an animated 3px orange bar that grows across an opening menu header. The seam is always present; it is never a plain, unmarked edge.", "section": "elevation" },
+      { "name": "The Hero-Only Warm Rule", "body": "hero-text-warm (#FFFCF6) is used exclusively for text and symbols inside Home's Make Receipt card. No other orange surface in the app uses it; every other orange surface keeps white/cream text per the Buttons and Collapsible Filters components.", "section": "colors" },
+      { "name": "The Numbered Marker Rule", "body": "Every Home, Project Command Center, and Daily Reports navigation section carries a numbered index instead of a color-coded identity — Home as an inline Ledger-Cream chip, Project Command Center as an attached tab protruding above the header, Daily Reports as an independently-built attached tab of the same kind — restrained wayfinding via numbering and fill, not a dedicated hue per section, per the Reserved-Hue and One Ledger Rules. Home and Project Command Center implement it via the shared `marker` prop plus `refined` (Home) or `refined`+`polished` (Project Command Center); Daily Reports implements the same idea as screen-local code, not through that shared prop; the five base/default ExpandableMenuSection consumers, and Supplier Loads by explicit decision, do not use it.", "section": "shapes" },
+      { "name": "The Rotating Disclosure Rule", "body": "Home's and Project Command Center's navigation sections animate one + glyph rotating 45 degrees into an × on open, instead of swapping between two separate glyphs. The base/default treatment used by the five other ExpandableMenuSection consumers still swaps + and × as instant text.", "section": "components" },
+      { "name": "The Connected Folder Rule (Project Command Center only)", "body": "When a Project Command Center section opens, the header's bottom corners and the body's top corners both flatten, and a static 4px Signal Orange rule marks exactly where they meet, continuing the animated accent bar that grew across the header during the opening transition. Header and body must read as one opened folder, never as two stacked, unrelated cards. Home's refined sections do not use this connected treatment.", "section": "elevation" },
+      { "name": "The Refined/Polished Separation Rule", "body": "`refined` and `polished` are independent props on ExpandableMenuSection/MenuAction. `refined` alone reproduces Home's exact shipped treatment; `polished` is Project Command Center's additional layer and must only ever be passed alongside `refined`, never alone. A future screen wanting Project Command Center's richer look opts into both explicitly; Home must never inherit `polished` behavior by accident.", "section": "components" },
+      { "name": "The Connected Trip Rule (Supplier Loads only)", "body": "Supplier Loads visually connects repeated deliveries that share the same supplier, project, item, unit, transport signature, and calendar day with a restrained Structural Navy rail and a 'Trip N of M' badge — a display-only grouping computed locally in the screen, never merging the underlying records, totals, audit histories, correction state, or cancellation state. Each connected trip keeps its own independent edit/correct/cancel action. Different trucks or drivers are never grouped together.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do reuse AppPage, PageHeader, AppCard, AppButton, AppField, MetricCard, Feedback, and EmptyState from src/ui/components/AppPrimitives.tsx for any new screen.",
+      "Do keep the calc-result teal exclusive to calculated/derived values; keep semantic (green/amber/red) colors exclusive to status.",
+      "Do mark the seam between a solid collapsed header and its lighter expanded body with a colored rule (the Seam Rule).",
+      "Do keep destructive (danger) actions visually separated from the primary action on every screen.",
+      "Do close large record sections by default and require an explicit tap to open them.",
+      "Do check all three render paths in ExpandableMenu.tsx before changing it — `refined` only (Home), `refined`+`polished` (Project Command Center), and neither (the five other screens) — they are meant to diverge, not to be merged for simplicity.",
+      "Do cap staggered row-reveal delays (e.g. min(index * 26ms, 220ms)) so a section with hundreds of records still finishes revealing in well under a second."
+    ],
+    "donts": [
+      "Don't introduce a new brand hue outside Signal Orange / Structural Navy / Ledger Cream without a stated, non-decorative role.",
+      "Don't give a domain (fuel, safety, waste, etc.) its own strong brand color today — that isn't how the current system separates domains.",
+      "Don't place unrelated controls inside one card, or a paragraph inside a button.",
+      "Don't use a flat, uncolored black shadow — shadows are tinted from the element they fall from.",
+      "Don't treat the pervasive weight-900 usage across every text role as an intentional hierarchy device outside Home's and Project Command Center's refined/polished navigation sections — everywhere else it is still the current shipped base state, not a confirmed target.",
+      "Don't use hero-text-warm anywhere outside Home's Make Receipt card.",
+      "Don't pass the `polished` prop without also passing `refined` — it is an additive layer, not a standalone variant."
+    ]
+  }
+}

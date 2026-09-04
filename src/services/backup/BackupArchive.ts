@@ -6,7 +6,7 @@ import {base64ToBytes} from './BackupCrypto';
 
 export const BACKUP_ARCHIVE_FORMAT='DROMEX-COMPLETE-BACKUP';
 export const BACKUP_ARCHIVE_VERSION=1;
-export const DROMEX_APP_VERSION='0.4.0';
+export const DROMEX_APP_VERSION='0.7.0';
 
 type MediaLocator={table:string;recordId:string;column:string;jsonIndex:number|null;archivePath:string};
 export type BackupManifest={format:string;formatVersion:number;backupId:string;createdAt:string;appVersion:string;databaseVersion:number;recordCounts:BackupRecordCounts;preferenceCount:number;media:MediaLocator[]};
