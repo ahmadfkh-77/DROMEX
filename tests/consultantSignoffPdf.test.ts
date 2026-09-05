@@ -3,11 +3,11 @@ import {buildProjectReportHtmlWithWaste} from '../src/services/projectReportWast
 import type {DailyProjectReport,ReportProject,ProjectReportSetup} from '../src/domain/projectReports';
 
 const project:ReportProject={id:'p',name:'Road',customerName:'Customer',location:'Aley',status:'active'};
-const company:ProjectReportSetup['company']={name:'DROMEX',logoUri:null,address:null,phone:null,email:null,taxVatNumber:null};
+const company:ProjectReportSetup['company']={name:'DROMEX',logoUri:null,address:null,phone:null,email:null,taxVatNumber:null,ministryName:null,ministryLogoUri:null,consultingAgencyName:null};
 const baseReport:DailyProjectReport={
   id:'r',projectId:'p',workDate:'2026-08-11',workDescription:'Excavation',workers:[],drivers:[],truckPlates:[],machines:[],
   materials:[],workerSafety:[],photos:[],notes:'',problemsDelaysIncidents:'',weatherSiteConditions:'',workStartTime:'',workEndTime:'',
-  breakMinutes:'',nextWorkPlanned:'',consultantSignoffEnabled:false,consultantName:'',consultantSignaturePaths:[],createdAt:'',updatedAt:'',
+  breakMinutes:'',nextWorkPlanned:'',consultantSignoffEnabled:false,consultantName:'',consultantSignaturePaths:[],showMinistryHeader:false,createdAt:'',updatedAt:'',
 };
 function render(report:DailyProjectReport){return buildProjectReportHtmlWithWaste(report,project,[],[],company,null,[]);}
 

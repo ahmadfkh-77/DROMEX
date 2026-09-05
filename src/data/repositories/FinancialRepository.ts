@@ -1,2 +1,2 @@
-import type { FinancialOverview, FinancialTarget, OpeningBalanceDraft, PaymentDraft, PaymentEntry } from '../../domain/financials';
-export interface FinancialRepository{getOverview():Promise<FinancialOverview>;createOpeningBalance(draft:OpeningBalanceDraft):Promise<FinancialTarget>;recordPayment(draft:PaymentDraft):Promise<FinancialTarget>;cancelPayment(paymentId:string,reason:string):Promise<FinancialTarget>;}
+import type { FinancialOverview, FinancialTarget, OpeningBalanceDraft, PaymentDraft, PaymentEntry, ProjectFinancialSummary } from '../../domain/financials';
+export interface FinancialRepository{getOverview():Promise<FinancialOverview>;getProjectFinancials(projectId:string):Promise<ProjectFinancialSummary>;createOpeningBalance(draft:OpeningBalanceDraft):Promise<FinancialTarget>;recordPayment(draft:PaymentDraft):Promise<FinancialTarget>;cancelPayment(paymentId:string,reason:string):Promise<FinancialTarget>;}

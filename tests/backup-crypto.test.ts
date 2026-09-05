@@ -19,5 +19,20 @@ describe('encrypted complete backup format',()=>{
 
   it('requires a separate backup password of at least 12 characters',()=>{expect(()=>validateNewBackupPassword('too-short')).toThrow('12 characters');expect(()=>validateNewBackupPassword('long-enough-password')).not.toThrow();});
 
+  // DEC-389: the ministry logo is a media-bearing column, so it must be inside the backup
+  // allow-list. Without it the file is silently dropped and restore leaves a dead URI behind.
+  it('accepts a ministry logo media locator and rejects a column outside the allow-list',()=>{
+    const header=new Uint8Array(100);header.set(strToU8('SQLite format 3'));
+    const build=(column:string)=>{
+      const manifest:BackupManifest={format:BACKUP_ARCHIVE_FORMAT,formatVersion:BACKUP_ARCHIVE_VERSION,backupId:'backup-ministry',createdAt:'2026-09-05T10:00:00.000Z',appVersion:'0.9.0',databaseVersion:31,recordCounts:{},preferenceCount:0,media:[{table:'company_settings',recordId:'company',column,jsonIndex:null,archivePath:'media/ministry.png'}]};
+      return zipSync({'manifest.json':strToU8(JSON.stringify(manifest)),'database.sqlite':header,'preferences.json':strToU8(JSON.stringify([])),'media/ministry.png':Uint8Array.from([1,2,3])});
+    };
+    const archive=decodeBackupArchive(build('ministry_logo_uri'));
+    expect(archive.manifest.media).toHaveLength(1);
+    expect(archive.manifest.media[0]).toMatchObject({table:'company_settings',column:'ministry_logo_uri',recordId:'company'});
+    // Control: an unlisted column must still be refused, so the assertion above is meaningful.
+    expect(()=>decodeBackupArchive(build('some_other_uri'))).toThrow();
+  });
+
   it('validates the inner manifest and produces the restore preview',()=>{const manifest:BackupManifest={format:BACKUP_ARCHIVE_FORMAT,formatVersion:BACKUP_ARCHIVE_VERSION,backupId:'backup-1',createdAt:'2026-08-21T10:00:00.000Z',appVersion:'0.1.0',databaseVersion:19,recordCounts:{loads:4,projects:2},preferenceCount:3,media:[]};const header=new Uint8Array(100);header.set(strToU8('SQLite format 3'));const archive=decodeBackupArchive(zipSync({'manifest.json':strToU8(JSON.stringify(manifest)),'database.sqlite':header,'preferences.json':strToU8(JSON.stringify([['dromex.test','value']]))}));expect(previewFromManifest(archive.manifest,2048)).toMatchObject({backupId:'backup-1',databaseVersion:19,recordCounts:{loads:4,projects:2},preferenceCount:3,encryptedBytes:2048});});
 });

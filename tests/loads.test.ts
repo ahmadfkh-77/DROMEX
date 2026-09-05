@@ -15,7 +15,7 @@ const baseOptions: LoadSetupOptions = {
   drivers: [{ id: 'driver_1', name: 'Ali', phone: null, licenseNumber: null, notes: null, isActive: true }],
   trucks: [{ id: 'truck_1', plate: 'B123', makeModel: null, capacityKg: null, ownerName: null, notes: null, isActive: true }],
   workers: [], machines: [],
-  companySettings: { companyName: 'DROMEX', logoUri: null, address: null, phone: null, email: null, taxVatNumber: null, receiptFooter: null, vatRatePercent: 11, updatedAt: '' },
+  companySettings: { companyName: 'DROMEX', logoUri: null, address: null, phone: null, email: null, taxVatNumber: null, receiptFooter: null, ministryName: null, ministryLogoUri: null, consultingAgencyName: null, vatRatePercent: 11, updatedAt: '' },
 };
 const validDraft = { ...emptyLoadDraft, customerId: 'outside', destinationAddress: 'Beirut', itemId: 'asphalt', driverId: 'driver_1', truckId: 'truck_1', driverName: 'Ali', truckPlate: 'B123', emptyWeightKg: '10000', fullWeightKg: '30555', conversionId: conversion.id, unitPriceUsd: '90' };
 

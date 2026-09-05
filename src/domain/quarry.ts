@@ -34,6 +34,52 @@ export type QuarryProjectGroup={id:string|null;name:string;purchases:QuarryPurch
 export type QuarrySupplierGroup={id:string;name:string;purchases:QuarryPurchase[];projectGroups:QuarryProjectGroup[]};
 export type QuarryDailyCounter={key:string;sourcePurchaseId:string;supplierName:string;projectName:string|null;itemName:string;unitId:string;unitSymbol:string;deliveryMethod:QuarryDeliveryMethod;driverName:string;truckPlate:string;tripCount:number;totalQuantityCubicMetres:number;defaultQuantityCubicMetres:number;lastConfirmedAt:string};
 
+export type SupplierMaterialTotal={itemId:string;itemName:string;categoryName:string;unitId:string;unitSymbol:string;quantity:number;deliveries:number;firstDeliveryAt:string;lastDeliveryAt:string};
+export type SupplierDeliveryGroup={projectId:string|null;projectName:string;deliveries:number;materials:SupplierMaterialTotal[]};
+export type SupplierDeliverySummary={supplierId:string;supplierName:string;deliveries:number;cancelledDeliveries:number;projectGroups:SupplierDeliveryGroup[];materialTotals:SupplierMaterialTotal[]};
+
+export const unassignedDeliveriesLabel='Unassigned Deliveries';
+// Quantities are decimals in the record's own unit. Summing floats directly produces artefacts such
+// as 13.999999999999998, so every accumulated total is settled to six decimals — the most precision
+// any quantity input accepts.
+const settleQuantity=(value:number)=>Number(value.toFixed(6));
+
+function accumulate(bucket:Map<string,SupplierMaterialTotal>,purchase:QuarryPurchase){
+  const key=`${purchase.itemId}|${purchase.unitId}`;const current=bucket.get(key);
+  if(!current){bucket.set(key,{itemId:purchase.itemId,itemName:purchase.itemName,categoryName:purchase.categoryName,unitId:purchase.unitId,unitSymbol:purchase.unitSymbol,quantity:purchase.quantityCubicMetres,deliveries:1,firstDeliveryAt:purchase.confirmedAt,lastDeliveryAt:purchase.confirmedAt});return;}
+  current.quantity+=purchase.quantityCubicMetres;current.deliveries+=1;
+  if(purchase.confirmedAt<current.firstDeliveryAt)current.firstDeliveryAt=purchase.confirmedAt;
+  if(purchase.confirmedAt>current.lastDeliveryAt)current.lastDeliveryAt=purchase.confirmedAt;
+}
+
+const sortMaterials=(materials:SupplierMaterialTotal[])=>materials.map(material=>({...material,quantity:settleQuantity(material.quantity)})).sort((a,b)=>a.itemName.localeCompare(b.itemName)||a.unitSymbol.localeCompare(b.unitSymbol));
+
+// Supplier -> Project (or Unassigned Deliveries) -> Material totals, counted in deliveries. Only
+// active confirmed loads reach the totals; cancelled ones are counted separately and stay visible in
+// the existing history views. Materials are keyed by item AND unit so unlike units never merge.
+export function summarizeSupplierDeliveries(purchases:QuarryPurchase[]):SupplierDeliverySummary[]{
+  const suppliers=new Map<string,{id:string;name:string;deliveries:number;cancelled:number;projects:Map<string,{projectId:string|null;projectName:string;deliveries:number;materials:Map<string,SupplierMaterialTotal>}>;materials:Map<string,SupplierMaterialTotal>}>();
+  for(const purchase of purchases){
+    let supplier=suppliers.get(purchase.supplierId);
+    if(!supplier){supplier={id:purchase.supplierId,name:purchase.supplierName,deliveries:0,cancelled:0,projects:new Map(),materials:new Map()};suppliers.set(purchase.supplierId,supplier);}
+    if(purchase.status!=='Active'){supplier.cancelled+=1;continue;}
+    supplier.deliveries+=1;
+    accumulate(supplier.materials,purchase);
+    const projectKey=purchase.projectId??'__unassigned__';
+    let project=supplier.projects.get(projectKey);
+    if(!project){project={projectId:purchase.projectId,projectName:purchase.projectId?(purchase.projectName??'Historical project'):unassignedDeliveriesLabel,deliveries:0,materials:new Map()};supplier.projects.set(projectKey,project);}
+    project.deliveries+=1;
+    accumulate(project.materials,purchase);
+  }
+  return [...suppliers.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(supplier=>({
+    supplierId:supplier.id,supplierName:supplier.name,deliveries:supplier.deliveries,cancelledDeliveries:supplier.cancelled,
+    projectGroups:[...supplier.projects.values()]
+      .sort((a,b)=>a.projectId===null?1:b.projectId===null?-1:a.projectName.localeCompare(b.projectName))
+      .map(project=>({projectId:project.projectId,projectName:project.projectName,deliveries:project.deliveries,materials:sortMaterials([...project.materials.values()])})),
+    materialTotals:sortMaterials([...supplier.materials.values()]),
+  }));
+}
+
 export const emptyQuarryPurchaseDraft: QuarryPurchaseDraft = {
   recordDate:localQuarryDate(),supplierId: '', projectId:'', itemId: '', unitId:'unit_m3', quantityCubicMetres: '', deliveryMethod:'company',
   driverId: '', truckId: '', supplierTruckPlate:'', supplierTicketNumber: '', priceBasis:'per_unit', unitPriceUsd: '',

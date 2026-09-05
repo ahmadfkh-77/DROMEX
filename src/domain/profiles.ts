@@ -34,6 +34,9 @@ export type CompanySettingsDraft = {
   email?: string;
   taxVatNumber?: string;
   receiptFooter?: string;
+  ministryName?: string | null;
+  ministryLogoUri?: string | null;
+  consultingAgencyName?: string | null;
   vatRatePercent: number;
 };
 
@@ -45,9 +48,27 @@ export type CompanySettings = {
   email: string | null;
   taxVatNumber: string | null;
   receiptFooter: string | null;
+  ministryName: string | null;
+  ministryLogoUri: string | null;
+  // DEC-391. Global, optional, and deliberately outside consultantSignoffState: an agency name never
+  // makes a sign-off complete or incomplete.
+  consultingAgencyName: string | null;
   vatRatePercent: number;
   updatedAt: string | null;
 };
+
+// Which parts of the optional Ministry header are configured (DEC-389). A report may switch the
+// header on at any time; this decides what the PDF can actually render and what the editor must
+// warn about. Both values are optional by design, so 'not-configured' is a normal state.
+export type MinistryHeaderState = 'not-configured' | 'name-only' | 'logo-only' | 'complete';
+export function ministryHeaderState(config: {ministryName?: string | null; ministryLogoUri?: string | null}): MinistryHeaderState {
+  const hasName = (config.ministryName ?? '').trim().length > 0;
+  const hasLogo = (config.ministryLogoUri ?? '').trim().length > 0;
+  if (hasName && hasLogo) return 'complete';
+  if (hasName) return 'name-only';
+  if (hasLogo) return 'logo-only';
+  return 'not-configured';
+}
 
 function normalizeText(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');

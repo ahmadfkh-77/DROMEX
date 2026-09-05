@@ -37,6 +37,9 @@ type SettingsRow = {
   email: string | null;
   tax_vat_number: string | null;
   receipt_footer: string | null;
+  ministry_name: string | null;
+  ministry_logo_uri: string | null;
+  consulting_agency_name: string | null;
   updated_at: string;
   vat_rate_basis_points: number | null;
 };
@@ -132,7 +135,7 @@ export class SqliteProfileRepository implements ProfileRepository {
   async getCompanySettings(): Promise<CompanySettings> {
     const row = await this.db.getFirstAsync<SettingsRow>(
       `SELECT company_name, logo_uri, address, phone, email, tax_vat_number,
-              receipt_footer, company_settings.updated_at,
+              receipt_footer, ministry_name, ministry_logo_uri, consulting_agency_name, company_settings.updated_at,
               tax_settings.vat_rate_basis_points
        FROM company_settings
        LEFT JOIN tax_settings ON tax_settings.id = 'tax'
@@ -147,6 +150,9 @@ export class SqliteProfileRepository implements ProfileRepository {
         email: null,
         taxVatNumber: null,
         receiptFooter: null,
+        ministryName: null,
+        ministryLogoUri: null,
+        consultingAgencyName: null,
         vatRatePercent: 0,
         updatedAt: null,
       };
@@ -159,6 +165,9 @@ export class SqliteProfileRepository implements ProfileRepository {
       email: row.email,
       taxVatNumber: row.tax_vat_number,
       receiptFooter: row.receipt_footer,
+      ministryName: row.ministry_name,
+      ministryLogoUri: row.ministry_logo_uri,
+      consultingAgencyName: row.consulting_agency_name,
       vatRatePercent: (row.vat_rate_basis_points ?? 0) / 100,
       updatedAt: row.updated_at,
     };
@@ -176,6 +185,9 @@ export class SqliteProfileRepository implements ProfileRepository {
       email: clean(draft.email),
       taxVatNumber: clean(draft.taxVatNumber),
       receiptFooter: clean(draft.receiptFooter),
+      ministryName: clean(draft.ministryName ?? undefined),
+      ministryLogoUri: draft.ministryLogoUri ?? null,
+      consultingAgencyName: clean(draft.consultingAgencyName ?? undefined),
       vatRatePercent: draft.vatRatePercent,
       updatedAt: now,
     };
@@ -184,8 +196,8 @@ export class SqliteProfileRepository implements ProfileRepository {
       await this.db.runAsync(
         `INSERT INTO company_settings (
           id, company_name, logo_uri, address, phone, email, tax_vat_number,
-          receipt_footer, updated_at
-        ) VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?)
+          receipt_footer, ministry_name, ministry_logo_uri, consulting_agency_name, updated_at
+        ) VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           company_name = excluded.company_name,
           logo_uri = excluded.logo_uri,
@@ -194,6 +206,9 @@ export class SqliteProfileRepository implements ProfileRepository {
           email = excluded.email,
           tax_vat_number = excluded.tax_vat_number,
           receipt_footer = excluded.receipt_footer,
+          ministry_name = excluded.ministry_name,
+          ministry_logo_uri = excluded.ministry_logo_uri,
+          consulting_agency_name = excluded.consulting_agency_name,
           updated_at = excluded.updated_at`,
         settings.companyName,
         settings.logoUri,
@@ -202,6 +217,9 @@ export class SqliteProfileRepository implements ProfileRepository {
         settings.email,
         settings.taxVatNumber,
         settings.receiptFooter,
+        settings.ministryName,
+        settings.ministryLogoUri,
+        settings.consultingAgencyName,
         now,
       );
       await this.db.runAsync(

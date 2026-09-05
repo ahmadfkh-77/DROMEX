@@ -52,6 +52,7 @@ export type DailyProjectReportDraft = {
   consultantSignoffEnabled: boolean;
   consultantName: string;
   consultantSignaturePaths: string[];
+  showMinistryHeader: boolean;
 };
 
 export type DailyProjectReport = Omit<DailyProjectReportDraft, 'id'> & {
@@ -86,7 +87,7 @@ export type ProjectReportSetup = {
     truckPlates: ReportPresenceOption[];
     machines: ReportPresenceOption[];
   };
-  company: { name: string; logoUri: string | null; address: string | null; phone: string | null; email: string | null; taxVatNumber: string | null };
+  company: { name: string; logoUri: string | null; address: string | null; phone: string | null; email: string | null; taxVatNumber: string | null; ministryName: string | null; ministryLogoUri: string | null; consultingAgencyName: string | null };
 };
 
 export function splitPresence(value: string): string[] {
@@ -114,7 +115,7 @@ export function emptyDailyReport(projectId: string): DailyProjectReportDraft {
     id: null, projectId, workDate: localDateString(), workDescription: '', workers: [], workerSafety:[], drivers: [],
     truckPlates: [], machines: [], materials: [], photos: [], notes: '', problemsDelaysIncidents: '',
     weatherSiteConditions: '', workStartTime: '', workEndTime: '', breakMinutes: '', nextWorkPlanned: '',
-    consultantSignoffEnabled: false, consultantName: '', consultantSignaturePaths: [],
+    consultantSignoffEnabled: false, consultantName: '', consultantSignaturePaths: [], showMinistryHeader: false,
   };
 }
 

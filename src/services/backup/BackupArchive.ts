@@ -14,6 +14,7 @@ export type DecodedArchive={manifest:BackupManifest;databaseBytes:Uint8Array;pre
 
 const singleSpecs=[
   {table:'company_settings',column:'logo_uri'},
+  {table:'company_settings',column:'ministry_logo_uri'},
   {table:'loads',column:'company_logo_uri'},
   {table:'quick_text_documents',column:'company_logo_uri'},
   {table:'project_media',column:'uri'},

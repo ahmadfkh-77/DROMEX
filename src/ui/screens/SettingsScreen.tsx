@@ -16,6 +16,9 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
   const [receiptFooter, setReceiptFooter] = useState('');
   const [vatRate, setVatRate] = useState('0');
   const [logoUri, setLogoUri] = useState<string | null>(null);
+  const [ministryName, setMinistryName] = useState('');
+  const [ministryLogoUri, setMinistryLogoUri] = useState<string | null>(null);
+  const [consultingAgencyName, setConsultingAgencyName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -35,6 +38,9 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
       setReceiptFooter(settings.receiptFooter ?? '');
       setVatRate(String(settings.vatRatePercent));
       setLogoUri(settings.logoUri);
+      setMinistryName(settings.ministryName ?? '');
+      setMinistryLogoUri(settings.ministryLogoUri);
+      setConsultingAgencyName(settings.consultingAgencyName ?? '');
     });
     return () => { active = false; };
   }, [repository]);
@@ -54,6 +60,9 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
       email,
       taxVatNumber,
       receiptFooter,
+      ministryName,
+      ministryLogoUri,
+      consultingAgencyName,
       vatRatePercent: vatRate.trim() ? Number(vatRate.replace(',', '.')) : 0,
     };
     const issues = validateCompanySettings(draft);
@@ -106,6 +115,21 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
           {logoUri ? <Image source={{ uri: logoUri }} style={styles.logoPreview} resizeMode="contain" /> : <View style={styles.logoEmpty}><Text style={styles.logoMonogram}>D</Text><Text style={styles.logoEmptyText}>No logo selected</Text></View>}
           <View style={styles.logoActions}><View style={styles.logoAction}><AppButton label={logoUri ? 'Replace Logo' : 'Choose Logo'} tone="secondary" onPress={() => void pickPersistentImage('company').then((uri) => { if (uri) setLogoUri(uri); }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not select logo.'))} /></View>{logoUri ? <View style={styles.logoAction}><AppButton label="Remove Logo" tone="danger" onPress={() => setLogoUri(null)} /></View> : null}</View>
         </View>
+      </AppCard>
+
+      <AppCard title="Ministry header" hint="Optional. Used only on Daily Report PDFs where that report's Ministry Header option is switched on.">
+        <Text style={styles.helper} accessibilityRole="text">These values are global and shared by every project. A report shows them only when its own Ministry Header option is on, so existing and non-ministry reports stay unbranded. Changing them here also changes any historical report you generate again. Leaving either value empty is allowed — the PDF then shows only the part you configured.</Text>
+        <AppField label="Ministry name" value={ministryName} onChangeText={setMinistryName} placeholder="Ministry of Works" accessibilityLabel="Ministry name, optional" accessibilityHint="Appears at the top of the first page of reports with the Ministry Header switched on" />
+        <View style={styles.logoPanel}>
+          <View style={styles.logoHeading}><View style={styles.logoCopy}><Text style={styles.logoTitle}>Ministry logo</Text><Text style={styles.helper}>Keeps its own colours on the report.</Text></View><Text style={[styles.logoStatus, ministryLogoUri && styles.logoStatusReady]} accessibilityLabel={ministryLogoUri ? 'Ministry logo ready' : 'Ministry logo optional, none selected'}>{ministryLogoUri ? 'READY' : 'OPTIONAL'}</Text></View>
+          {ministryLogoUri ? <Image source={{ uri: ministryLogoUri }} style={styles.logoPreview} resizeMode="contain" accessibilityLabel="Selected ministry logo preview" /> : <View style={styles.logoEmpty} accessibilityRole="text" accessibilityLabel="No ministry logo selected"><Text style={styles.logoMonogram}>M</Text><Text style={styles.logoEmptyText}>No ministry logo selected</Text></View>}
+          <View style={styles.logoActions}><View style={styles.logoAction}><AppButton label={ministryLogoUri ? 'Replace Ministry Logo' : 'Choose Ministry Logo'} tone="secondary" onPress={() => void pickPersistentImage('ministry').then((uri) => { if (uri) setMinistryLogoUri(uri); }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not select the ministry logo.'))} /></View>{ministryLogoUri ? <View style={styles.logoAction}><AppButton label="Remove Ministry Logo" tone="danger" onPress={() => setMinistryLogoUri(null)} /></View> : null}</View>
+        </View>
+      </AppCard>
+
+      <AppCard title="Consulting agency" hint="Optional. The agency the signing consultant belongs to.">
+        <Text style={styles.helper} accessibilityRole="text">This value is global and shared by every project. It appears on a Daily Report PDF only when that report's Consultant Sign-off is switched on, printed under the report title as an identity line — never as an approval. It has no logo, and it never affects whether a sign-off counts as complete: that still depends only on the consultant's own name and signature.</Text>
+        <AppField label="Consulting agency name" value={consultingAgencyName} onChangeText={setConsultingAgencyName} placeholder="Cedar Engineering Consultants" accessibilityLabel="Consulting agency name, optional" accessibilityHint="Appears under the report title on reports with Consultant Sign-off switched on" />
       </AppCard>
 
       <AppCard title="Contact details" hint="These details appear beneath the company name on new documents.">

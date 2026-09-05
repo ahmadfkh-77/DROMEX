@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 30;
+export const DATABASE_VERSION = 32;
 
 type TableColumn = { name: string };
 
@@ -902,6 +902,18 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'daily_project_reports', 'consultant_name', 'TEXT');
     await addColumnIfMissing(db, 'daily_project_reports', 'consultant_signature_json', "TEXT NOT NULL DEFAULT '[]'");
     currentVersion = 30;
+  }
+
+  if (currentVersion === 30) {
+    await addColumnIfMissing(db, 'company_settings', 'ministry_name', 'TEXT');
+    await addColumnIfMissing(db, 'company_settings', 'ministry_logo_uri', 'TEXT');
+    await addColumnIfMissing(db, 'daily_project_reports', 'show_ministry_header', 'INTEGER NOT NULL DEFAULT 0 CHECK (show_ministry_header IN (0,1))');
+    currentVersion = 31;
+  }
+
+  if (currentVersion === 31) {
+    await addColumnIfMissing(db, 'company_settings', 'consulting_agency_name', 'TEXT');
+    currentVersion = 32;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

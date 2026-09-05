@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, Animated, Image, LayoutAnimation, ScrollView,
 
 import type { ProjectReportRepository } from '../../data/repositories/ProjectReportRepository';
 import type { BusinessReportRepository } from '../../data/repositories/BusinessReportRepository';
+import {ministryHeaderState} from '../../domain/profiles';
 import {activeBusinessFilterCount,businessReportLabels,emptyBusinessReportFilters,filterBusinessReportData,type BusinessReportFilters,type BusinessReportKind} from '../../domain/businessReports';
 import type {WorkbookLocale,WorkbookProgress} from '../../services/businessWorkbook';
 import {exportAndShareDailyReportWorkbook} from '../../services/dailyReportWorkbook';
@@ -294,6 +295,9 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
   const signoffState=useMemo(()=>consultantSignoffState(draft),[draft]);
   const hasConsultantData=Boolean(draft.consultantName.trim())||draft.consultantSignaturePaths.length>0;
   const signoffBadge=signoffState==='disabled'?(hasConsultantData?'Off · data saved':'Off'):signoffState==='complete'?'Complete':'Incomplete';
+  const ministryState=useMemo(()=>ministryHeaderState(setup.company),[setup.company]);
+  const consultingAgency=(setup.company.consultingAgencyName??'').trim();
+  const ministryBadge=!draft.showMinistryHeader?'Off':ministryState==='complete'?'On':ministryState==='not-configured'?'On · not configured':'On · partial';
   function removeConsultantData(){Alert.alert('Remove Sign-off Data Permanently','This deletes the saved consultant name and signature from this report. This cannot be undone.',[{text:'Cancel',style:'cancel'},{text:'Remove Permanently',style:'destructive',onPress:()=>onChange({...draft,consultantName:'',consultantSignaturePaths:[]})}]);}
 
   return (
@@ -373,14 +377,24 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
       </LedgerSection>
 
       <LedgerSection number="11" title="Consultant Sign-off" badge={signoffBadge} badgeTone={signoffState==='incomplete'?'warning':'neutral'} open={openSections.has('consultant')} onToggle={()=>toggleSection('consultant')} reducedMotion={reducedMotion}>
-        <Text style={styles.sectionHint}>Optional. When on, the consultant can add their name and digital signature here, before or after generating the PDF. Turning this off never deletes name or signature data already saved — it only hides the block from the next PDF.</Text>
-        <View style={styles.chipWrap}><Choice label="Off" selected={!draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',false)}/><Choice label="On" selected={draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',true)}/></View>
+        <Text style={styles.sectionHint}>Optional. When on, the consultant can add their name and digital signature here, before or after generating the PDF. Turning this off never deletes name or signature data already saved — it only hides it from the next PDF.</Text>
+        <View style={styles.chipWrap} accessibilityRole="radiogroup" accessibilityLabel="Consultant sign-off on this report"><Choice label="Off" selected={!draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',false)}/><Choice label="On" selected={draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',true)}/></View>
+        {draft.consultantSignoffEnabled?<Text style={styles.sectionHint} accessibilityRole="text">On the PDF, {consultingAgency?`${consultingAgency} appears under the report title on page one, and the`:'the'} consultant name and signature appear at the end, just before Photo Evidence.{consultingAgency?'':' No consulting agency name is configured, so no agency line is printed — add one in More → Settings → Consulting agency.'}</Text>:null}
         {draft.consultantSignoffEnabled?<>
           <Field label="Consultant name" value={draft.consultantName} onChangeText={(value)=>update('consultantName',value)} placeholder="Consultant's full name"/>
           <Text style={styles.fieldLabel}>Consultant signature</Text>
           <SignaturePad value={draft.consultantSignaturePaths} onChange={(paths)=>update('consultantSignaturePaths',paths)} hint="Consultant signs here"/>
-          {signoffState==='incomplete'?<Text style={styles.notice}>Sign-off is on but not complete yet. The PDF will show "Consultant sign-off incomplete" until both a name and a signature are saved.</Text>:null}
+          {signoffState==='incomplete'?<Text style={styles.notice} accessibilityRole="text">Sign-off is on but not complete yet. Where the signature would print — at the end of the report, before Photo Evidence — the PDF will show "Consultant sign-off incomplete" until both a name and a signature are saved. No signature image is printed while it is incomplete.</Text>:null}
         </>:hasConsultantData?<View style={styles.duplicateWarning}><Text style={styles.duplicateWarningTitle}>Sign-off is off, but saved data remains</Text><Text style={styles.duplicateWarningText}>The consultant name and/or signature already saved for this report are kept and will not appear on the PDF while sign-off is off. Remove them permanently only if you are sure.</Text><TouchableOpacity style={styles.duplicateWarningButton} onPress={removeConsultantData} accessibilityRole="button"><Text style={styles.duplicateWarningButtonText}>Remove Sign-off Data Permanently</Text></TouchableOpacity></View>:null}
+      </LedgerSection>
+
+      <LedgerSection number="12" title="Ministry Header" badge={ministryBadge} badgeTone={draft.showMinistryHeader&&ministryState!=='complete'?'warning':'neutral'} open={openSections.has('ministry')} onToggle={()=>toggleSection('ministry')} reducedMotion={reducedMotion}>
+        <Text style={styles.sectionHint}>Optional. When on, the ministry name and logo saved in Settings appear at the top of the first page of this report's PDF only — never on later pages. This is off by default, so every other report stays unbranded.</Text>
+        <View style={styles.chipWrap} accessibilityRole="radiogroup" accessibilityLabel="Show Ministry Header on this report"><Choice label="Off" selected={!draft.showMinistryHeader} onPress={()=>update('showMinistryHeader',false)}/><Choice label="On" selected={draft.showMinistryHeader} onPress={()=>update('showMinistryHeader',true)}/></View>
+        {draft.showMinistryHeader?(ministryState==='not-configured'
+          ?<Text style={styles.notice} accessibilityRole="text">No ministry name or logo is configured yet, so this report's PDF will not show a ministry header. Add them in More → Settings → Ministry header.</Text>
+          :<Text style={styles.sectionHint} accessibilityRole="text">{ministryState==='complete'?'This PDF will show the ministry logo and name.':ministryState==='name-only'?'This PDF will show the ministry name only — no ministry logo is configured yet.':'This PDF will show the ministry logo only — no ministry name is configured yet.'}</Text>)
+          :null}
       </LedgerSection>
 
       <View style={styles.reviewCard}>
