@@ -1,5 +1,5 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
-import {paymentStatus,summarizeProjectFinancials,validateOpeningBalance,validatePayment,type FinancialOverview,type FinancialParty,type FinancialPartyType,type FinancialTarget,type FinancialTargetType,type OpeningBalanceDraft,type PaymentDraft,type PaymentEntry,type ProjectFinancialSummary} from '../../domain/financials';
+import {paymentStatus,summarizeMoneyBlock,validateOpeningBalance,validatePayment,type FinancialOverview,type FinancialParty,type FinancialPartyType,type FinancialTarget,type FinancialTargetType,type OpeningBalanceDraft,type PaymentDraft,type PaymentEntry,type ProjectFinancialSummary,type ProjectMoneyBlock,type ProjectFuelCost,type UncostedQuantity} from '../../domain/financials';
 import type {FinancialRepository} from './FinancialRepository';
 
 type PaymentRow={id:string;target_type:FinancialTargetType;target_id:string;amount_usd_cents:number;payment_date:string;status:'Active'|'Cancelled';cancellation_reason:string|null;cancelled_at:string|null;created_at:string};
@@ -45,7 +45,44 @@ export class SqliteFinancialRepository implements FinancialRepository{
       this.db.getFirstAsync<{cancelled:number;unpriced:number}>(`SELECT (SELECT COUNT(*) FROM loads WHERE project_id=? AND is_archived=0 AND status='Cancelled') cancelled,(SELECT COUNT(*) FROM loads WHERE project_id=? AND is_archived=0 AND status='Active' AND final_total_usd_cents IS NULL) unpriced`,projectId,projectId),
     ]);
     const targets=this.buildTargets(rows,paymentRows.map(paymentFromRow)).sort((a,b)=>b.recordDate.localeCompare(a.recordDate));
-    return summarizeProjectFinancials(projectId,targets,{cancelledLoads:excluded?.cancelled??0,unpricedLoads:excluded?.unpriced??0});
+    const revenue=summarizeMoneyBlock(targets,{cancelled:excluded?.cancelled??0,unpriced:excluded?.unpriced??0});
+    const [supplierPayables,fuel,uncosted]=await Promise.all([this.projectSupplierPayables(projectId),this.projectFuelCost(projectId),this.projectUncostedQuantities(projectId)]);
+    return{projectId,revenue,supplierPayables,fuel,uncosted};
+  }
+
+  // Supplier loads carry project_id on the record; getOverview() deliberately reports them without a
+  // project, so project attribution lives here only and the global Financials screens are unchanged.
+  private async projectSupplierPayables(projectId:string):Promise<ProjectMoneyBlock>{
+    const [rows,paymentRows,excluded]=await Promise.all([
+      this.db.getAllAsync<TargetRow>(`SELECT id,'quarryPurchase' type,supplier_id party_id,supplier_name party_name,'supplier' party_type,purchase_number reference,confirmed_at record_date,project_id,project_name,NULL project_status,item_name,quantity_cubic_metres quantity,COALESCE(unit_symbol,'m³') unit_symbol,final_total_usd_cents total_cents FROM quarry_purchases WHERE project_id=? AND final_total_usd_cents IS NOT NULL AND status='Active'`,projectId),
+      this.db.getAllAsync<PaymentRow>(`SELECT p.id,p.target_type,p.quarry_purchase_id target_id,p.amount_usd_cents,p.payment_date,p.status,p.cancellation_reason,p.cancelled_at,p.created_at FROM payment_entries p JOIN quarry_purchases q ON q.id=p.quarry_purchase_id WHERE p.target_type='quarryPurchase' AND q.project_id=? AND q.final_total_usd_cents IS NOT NULL AND q.status='Active' ORDER BY p.payment_date DESC,p.created_at DESC`,projectId),
+      this.db.getFirstAsync<{cancelled:number;unpriced:number}>(`SELECT (SELECT COUNT(*) FROM quarry_purchases WHERE project_id=? AND status='Cancelled') cancelled,(SELECT COUNT(*) FROM quarry_purchases WHERE project_id=? AND status='Active' AND final_total_usd_cents IS NULL) unpriced`,projectId,projectId),
+    ]);
+    const targets=this.buildTargets(rows,paymentRows.map(paymentFromRow)).sort((a,b)=>b.recordDate.localeCompare(a.recordDate));
+    return summarizeMoneyBlock(targets,{cancelled:excluded?.cancelled??0,unpriced:excluded?.unpriced??0});
+  }
+
+  // Fuel fills are project-linked consumption, not supplier debt: a fuel delivery fills the shared
+  // tank and carries no project, so project fuel is reported as cost only (DEC-392).
+  private async projectFuelCost(projectId:string):Promise<ProjectFuelCost>{
+    const row=await this.db.getFirstAsync<{litres:number|null;cost:number|null;unpriced:number|null;fills:number}>(`SELECT COALESCE(SUM(litres),0) litres,COALESCE(SUM(consumption_cost_usd_cents),0) cost,COALESCE(SUM(CASE WHEN consumption_cost_usd_cents IS NULL THEN litres ELSE 0 END),0) unpriced,COUNT(*) fills FROM fuel_movements WHERE project_id=? AND movement_type='fill' AND status='Active'`,projectId);
+    return{litres:row?.litres??0,costUsd:(row?.cost??0)/100,unpricedLitres:row?.unpriced??0,fillCount:row?.fills??0};
+  }
+
+  // Recorded quantities that carry no price anywhere in the product (DEC-155). Returned without any
+  // money field so they can never be rendered as a zero cost.
+  private async projectUncostedQuantities(projectId:string):Promise<UncostedQuantity[]>{
+    const [walls,pavement,waste]=await Promise.all([
+      this.db.getFirstAsync<{concrete:number|null;cement:number|null;sand:number|null;gravel:number|null;stone:number|null}>(`SELECT COALESCE(SUM(c.finished_volume_m3),0) concrete,COALESCE(SUM(c.cement_bags),0) cement,COALESCE(SUM(c.sand_quantity),0) sand,COALESCE(SUM(c.gravel_quantity),0) gravel,COALESCE(SUM(c.stone_quantity),0) stone FROM wall_consumptions c JOIN walls w ON w.id=c.wall_id WHERE w.project_id=?`,projectId),
+      this.db.getFirstAsync<{area:number|null;count:number}>(`SELECT COALESCE(SUM(area_m2),0) area,COUNT(*) count FROM pavement_calculations WHERE project_id=?`,projectId),
+      this.db.getAllAsync<{material:string;dumps:number}>(`SELECT material_type material,COUNT(*) dumps FROM waste_dumps WHERE project_id=? AND status='Active' GROUP BY material_type ORDER BY material_type COLLATE NOCASE`,projectId),
+    ]);
+    const quantities:UncostedQuantity[]=[];
+    const wall=(label:string,quantity:number|null|undefined,unit:string)=>{if((quantity??0)>0)quantities.push({source:'Wall materials',label,quantity:Number((quantity??0).toFixed(3)),unit});};
+    wall('Concrete',walls?.concrete,'m³');wall('Cement',walls?.cement,'bags');wall('Sand',walls?.sand,'m³');wall('Gravel',walls?.gravel,'m³');wall('Stone',walls?.stone,'m³');
+    if((pavement?.area??0)>0)quantities.push({source:'Pavement',label:`Calculated area (${pavement?.count??0} calculation${(pavement?.count??0)===1?'':'s'})`,quantity:Number((pavement?.area??0).toFixed(3)),unit:'m²'});
+    for(const row of waste)quantities.push({source:'Waste dumps',label:row.material,quantity:row.dumps,unit:row.dumps===1?'dump':'dumps'});
+    return quantities;
   }
   async createOpeningBalance(draft:OpeningBalanceDraft):Promise<FinancialTarget>{const overview=await this.getOverview();const issues=validateOpeningBalance(draft,overview.parties);if(issues.length)throw new Error(issues.join('\n'));const party=overview.parties.find((p)=>p.id===draft.partyId&&p.type===draft.partyType)!;const id=makeId('opening_balance');const now=new Date().toISOString();const cents=Math.round(Number(draft.amountUsd.replace(',','.'))*100);await this.db.withTransactionAsync(async()=>{await this.db.runAsync(`INSERT INTO opening_balances (id,party_type,customer_id,supplier_id,party_name,original_amount_usd_cents,as_of_date,reference,notes,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,id,draft.partyType,draft.partyType==='customer'?party.id:null,draft.partyType==='supplier'?party.id:null,party.name,cents,draft.asOfDate,clean(draft.reference),clean(draft.notes),now);await this.enqueue('openingBalance',id,{id,...draft,partyName:party.name,amountUsd:cents/100,createdAt:now});});return (await this.getOverview()).targets.find((t)=>t.id===id)!;}
   async recordPayment(draft:PaymentDraft):Promise<FinancialTarget>{const overview=await this.getOverview();const target=overview.targets.find((t)=>t.id===draft.targetId&&t.type===draft.targetType)??null;const issues=validatePayment(draft,target);if(issues.length)throw new Error(issues.join('\n'));const id=makeId('payment');const now=new Date().toISOString();const cents=Math.round(Number(draft.amountUsd.replace(',','.'))*100);await this.db.withTransactionAsync(async()=>{const current=await this.currentTargetBalance(draft.targetType,draft.targetId);if(!current)throw new Error('Financial record was not found.');if(cents>current.remainingCents)throw new Error('Payment cannot exceed the current remaining balance. Refresh and try again.');await this.db.runAsync(`INSERT INTO payment_entries (id,target_type,load_id,quarry_purchase_id,opening_balance_id,fuel_movement_id,amount_usd_cents,payment_date,created_at) VALUES (?,?,?,?,?,?,?,?,?)`,id,draft.targetType,draft.targetType==='load'?draft.targetId:null,draft.targetType==='quarryPurchase'?draft.targetId:null,draft.targetType==='openingBalance'?draft.targetId:null,draft.targetType==='fuelDelivery'?draft.targetId:null,cents,draft.paymentDate,now);await this.updateTargetStatus(draft.targetType,draft.targetId);await this.enqueue('payment',id,{id,...draft,amountUsd:cents/100,status:'Active',createdAt:now});});return (await this.getOverview()).targets.find((t)=>t.id===draft.targetId&&t.type===draft.targetType)!;}

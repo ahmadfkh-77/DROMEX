@@ -27,9 +27,9 @@ application. It records outgoing company loads, incoming supplier loads, project
 daily reports, equipment, fuel, waste, walls, pavement calculations, finances,
 documents, and backups.
 
-Current source release metadata is version `0.11.0`, Android version code `14`,
+Current source release metadata is version `0.12.0`, Android version code `15`,
 package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
-internal Android artifact is `output/DROMEX-0.11.0-build14.apk` when present.
+internal Android artifact is `output/DROMEX-0.12.0-build15.apk` when present.
 
 The first production rollout is a single-admin, offline-only deployment. Firebase
 cloud code exists as a later/config-gated slice; SQLite remains the immediate

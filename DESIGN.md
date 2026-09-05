@@ -259,7 +259,7 @@ As of 2026-09-03: a third, independently-built bespoke disclosure device (not `E
 
 ### Optional Document Headers (Daily Report PDF, editor sections `11` and `12`)
 
-Recorded 2026-09 (DEC-389, DEC-390, DEC-391). The Ministry header ships in its earlier stacked-band form; the header-row layout, the agency line, and the split consultant placement described here are approved and **not yet implemented**.
+Implemented 2026-09 (DEC-389, DEC-390, DEC-391). The header-row layout, the agency line beneath the report title, and the split consultant placement described below all ship as written; the earlier stacked-band form of the Ministry header was replaced by the header-row treatment.
 
 Two independent optional headers, both off by default, both driven by a per-report option rather than by global configuration alone — so existing reports and non-ministry, non-consultant projects stay unbranded.
 
