@@ -51,7 +51,9 @@ export function QuarryPurchasesScreen({ repository, onBack,initialProjectId,star
   const supplierGroups=useMemo(()=>groupQuarryPurchases(searchedPurchases),[searchedPurchases]);
   // Delivered totals are an all-time business fact, so they read the complete history rather than
   // the searched/date-filtered slice the purchase list below uses.
-  const deliverySummaries=useMemo(()=>summarizeSupplierDeliveries(purchases),[purchases]);
+  // Current supplier/project names, so a renamed supplier's rollup heading matches the directory and
+  // the purchase list below it. The per-purchase snapshots on each record are left untouched.
+  const deliverySummaries=useMemo(()=>summarizeSupplierDeliveries(purchases,{suppliers:setup?.suppliers,projects:setup?.projects}),[purchases,setup]);
   const toggleSummarySupplier=(supplierId:string)=>animatedToggle(()=>setOpenSummarySuppliers(current=>{const next=new Set(current);if(next.has(supplierId))next.delete(supplierId);else next.add(supplierId);return next;}));
   useEffect(()=>{setVisibleCounts({});},[fromDate,toDate,searchQuery]);
   const dailyCounters=useMemo(()=>quarryDailyCounters(purchases,todayIso()),[purchases]);

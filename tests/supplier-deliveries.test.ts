@@ -133,6 +133,39 @@ describe('supplier material delivery summary', () => {
     expect(material.lastDeliveryAt).toBe('2026-08-21T10:00:00.000Z');
   });
 
+  it('shows the supplier current name after a rename, not the name stored on old purchases', () => {
+    // Purchases keep the name they were confirmed under; the rollup heading is a directory heading.
+    const summary = summarizeSupplierDeliveries(
+      [purchase({ quantityCubicMetres: 4 }), purchase({ quantityCubicMetres: 6 })],
+      { suppliers: [{ id: 'supplier_1', name: 'Main Quarry Company SARL' }] },
+    );
+    expect(at(summary, 0).supplierName).toBe('Main Quarry Company SARL');
+    expect(at(summary, 0).deliveries).toBe(2);
+    expect(at(at(summary, 0).materialTotals, 0).quantity).toBe(10);
+  });
+
+  it('shows the project current name after a rename, and still labels unassigned deliveries', () => {
+    const summary = summarizeSupplierDeliveries(
+      [purchase({ quantityCubicMetres: 4 }), purchase({ projectId: null, projectName: null, quantityCubicMetres: 2 })],
+      { projects: [{ id: 'project_1', name: 'Mountain Road Phase 2' }] },
+    );
+    const groups = at(summary, 0).projectGroups;
+    expect(groups.map((group) => group.projectName)).toEqual(['Mountain Road Phase 2', unassignedDeliveriesLabel]);
+  });
+
+  it('falls back to the stored snapshot name when the supplier or project is not in the directory', () => {
+    const summary = summarizeSupplierDeliveries([purchase({ quantityCubicMetres: 4 })], { suppliers: [], projects: [] });
+    expect(at(summary, 0).supplierName).toBe('Main Quarry');
+    expect(at(at(summary, 0).projectGroups, 0).projectName).toBe('Mountain Road');
+  });
+
+  it('keeps the per-purchase snapshot untouched while the heading follows the rename', () => {
+    const purchases = [purchase({ quantityCubicMetres: 4 })];
+    summarizeSupplierDeliveries(purchases, { suppliers: [{ id: 'supplier_1', name: 'Renamed Quarry' }] });
+    expect(at(purchases, 0).supplierName).toBe('Main Quarry');
+    expect(at(purchases, 0).projectName).toBe('Mountain Road');
+  });
+
   it('returns nothing for an empty history', () => {
     expect(summarizeSupplierDeliveries([])).toEqual([]);
   });

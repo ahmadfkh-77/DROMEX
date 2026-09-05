@@ -57,17 +57,28 @@ const sortMaterials=(materials:SupplierMaterialTotal[])=>materials.map(material=
 // Supplier -> Project (or Unassigned Deliveries) -> Material totals, counted in deliveries. Only
 // active confirmed loads reach the totals; cancelled ones are counted separately and stay visible in
 // the existing history views. Materials are keyed by item AND unit so unlike units never merge.
-export function summarizeSupplierDeliveries(purchases:QuarryPurchase[]):SupplierDeliverySummary[]{
+// Headings in this summary are directory headings, so they show the supplier's and project's
+// CURRENT name. Each purchase stores the name it was confirmed under, and that snapshot stays
+// untouched on the record itself — it is only the rollup heading that follows a later rename.
+export function summarizeSupplierDeliveries(purchases:QuarryPurchase[],current?:{suppliers?:{id:string;name:string}[];projects?:{id:string;name:string}[]}):SupplierDeliverySummary[]{
+  const currentSupplierNames=new Map((current?.suppliers??[]).map(value=>[value.id,value.name]));
+  const currentProjectNames=new Map((current?.projects??[]).map(value=>[value.id,value.name]));
+  const supplierName=(purchase:QuarryPurchase)=>currentSupplierNames.get(purchase.supplierId)??purchase.supplierName;
+  const projectName=(purchase:QuarryPurchase)=>purchase.projectId?(currentProjectNames.get(purchase.projectId)??purchase.projectName??'Historical project'):unassignedDeliveriesLabel;
+  return summarize(purchases,supplierName,projectName);
+}
+
+function summarize(purchases:QuarryPurchase[],supplierName:(p:QuarryPurchase)=>string,projectName:(p:QuarryPurchase)=>string):SupplierDeliverySummary[]{
   const suppliers=new Map<string,{id:string;name:string;deliveries:number;cancelled:number;projects:Map<string,{projectId:string|null;projectName:string;deliveries:number;materials:Map<string,SupplierMaterialTotal>}>;materials:Map<string,SupplierMaterialTotal>}>();
   for(const purchase of purchases){
     let supplier=suppliers.get(purchase.supplierId);
-    if(!supplier){supplier={id:purchase.supplierId,name:purchase.supplierName,deliveries:0,cancelled:0,projects:new Map(),materials:new Map()};suppliers.set(purchase.supplierId,supplier);}
+    if(!supplier){supplier={id:purchase.supplierId,name:supplierName(purchase),deliveries:0,cancelled:0,projects:new Map(),materials:new Map()};suppliers.set(purchase.supplierId,supplier);}
     if(purchase.status!=='Active'){supplier.cancelled+=1;continue;}
     supplier.deliveries+=1;
     accumulate(supplier.materials,purchase);
     const projectKey=purchase.projectId??'__unassigned__';
     let project=supplier.projects.get(projectKey);
-    if(!project){project={projectId:purchase.projectId,projectName:purchase.projectId?(purchase.projectName??'Historical project'):unassignedDeliveriesLabel,deliveries:0,materials:new Map()};supplier.projects.set(projectKey,project);}
+    if(!project){project={projectId:purchase.projectId,projectName:projectName(purchase),deliveries:0,materials:new Map()};supplier.projects.set(projectKey,project);}
     project.deliveries+=1;
     accumulate(project.materials,purchase);
   }

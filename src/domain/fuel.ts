@@ -1,21 +1,29 @@
 export type FuelMovementType='gauge'|'delivery'|'fill';
+// DEC-392. Diesel is the stored, balanced fuel; gasoline is fill-only and never affects the tank.
+export type FuelType='diesel'|'gasoline';
+export const fuelTypeLabels:Record<FuelType,string>={diesel:'Diesel',gasoline:'Gasoline'};
+// DEC-393. Reasoned correction audit, mirroring the company-load and supplier-load model.
+export type FuelCorrectionChange={field:string;originalValue:string|null;newValue:string|null};
+export type FuelCorrectionEntry={correctedAt:string;correctedBy:string;reason:string;changes:FuelCorrectionChange[]};
 export type FuelMovementStatus='Active'|'Cancelled';
 export type FuelEquipmentType='machine'|'truck';
 export type FuelOption={id:string;name:string;detail?:string;startDate?:string;endDate?:string|null};
-export type FuelPriceRecord={id:string;pricePerLitreUsd:number;effectiveAt:string;changedBy:string;reason:string|null;createdAt:string};
-export type FuelSetup={suppliers:FuelOption[];machines:FuelOption[];trucks:FuelOption[];equipment:FuelOption[];projects:FuelOption[];vatRatePercent:number;currentFuelPrice:FuelPriceRecord|null;fuelPriceHistory:FuelPriceRecord[]};
-export type FuelMovement={id:string;type:FuelMovementType;confirmedAt:string;litres:number;previousBalanceLitres:number|null;differenceLitres:number|null;supplierId:string|null;supplierName:string|null;equipmentType?:FuelEquipmentType;equipmentId:string|null;equipmentName:string|null;projectId:string|null;projectName:string|null;ticketNumber:string|null;odometerReading:string|null;reason:string|null;notes:string|null;fuelPriceHistoryId:string|null;pricePerLitreUsd:number|null;priceOverrideReason:string|null;consumptionCostUsd:number|null;subtotalUsd:number|null;vatRatePercent:number|null;vatAmountUsd:number|null;finalTotalUsd:number|null;paymentStatus:string;status:FuelMovementStatus;cancellationReason:string|null;cancelledAt:string|null;balanceAfterLitres:number};
+export type FuelPriceRecord={id:string;fuelType:FuelType;pricePerLitreUsd:number;effectiveAt:string;changedBy:string;reason:string|null;createdAt:string};
+export type FuelSetup={suppliers:FuelOption[];machines:FuelOption[];trucks:FuelOption[];equipment:FuelOption[];projects:FuelOption[];vatRatePercent:number;currentFuelPrice:FuelPriceRecord|null;fuelPriceHistory:FuelPriceRecord[];fuelPrices:Record<FuelType,{current:FuelPriceRecord|null;history:FuelPriceRecord[]}>};
+export type FuelMovement={id:string;type:FuelMovementType;fuelType:FuelType;correctionHistory:FuelCorrectionEntry[];confirmedAt:string;litres:number;previousBalanceLitres:number|null;differenceLitres:number|null;supplierId:string|null;supplierName:string|null;equipmentType?:FuelEquipmentType;equipmentId:string|null;equipmentName:string|null;projectId:string|null;projectName:string|null;ticketNumber:string|null;odometerReading:string|null;reason:string|null;notes:string|null;fuelPriceHistoryId:string|null;pricePerLitreUsd:number|null;priceOverrideReason:string|null;consumptionCostUsd:number|null;subtotalUsd:number|null;vatRatePercent:number|null;vatAmountUsd:number|null;finalTotalUsd:number|null;paymentStatus:string;status:FuelMovementStatus;cancellationReason:string|null;cancelledAt:string|null;balanceAfterLitres:number};
 export type FuelOverview={currentBalanceLitres:number;hasKnownBalance:boolean;latestGauge:FuelMovement|null;movements:FuelMovement[]};
 export type ProjectEquipmentFuelUsage={equipmentId:string|null;equipmentName:string;totalLitres:number;totalCostUsd:number;unpricedLitres:number;fillCount:number;fills:FuelMovement[]};
 export type FuelMovementFilters={projectId?:string;equipmentId?:string;type?:FuelMovementType|'all';status?:FuelMovementStatus|'all';fromDate?:string;toDate?:string};
 export type FuelDeliveryDraft={recordDate:string;litres:string;supplierId:string;ticketNumber:string;pricePerLitreUsd:string;updateCurrentPrice:boolean;notes:string};
-export type FuelFillDraft={recordDate:string;litres:string;equipmentType:FuelEquipmentType;equipmentId:string;projectId:string;odometerReading:string;pricePerLitreUsd:string;priceOverrideReason:string;notes:string};
+export type FuelFillDraft={recordDate:string;fuelType:FuelType;litres:string;equipmentType:FuelEquipmentType;equipmentId:string;projectId:string;odometerReading:string;pricePerLitreUsd:string;priceOverrideReason:string;notes:string};
 export type FuelGaugeDraft={recordDate:string;actualLitres:string;reason:string;notes:string};
-export type FuelPriceDraft={pricePerLitreUsd:string;reason:string};
+export type FuelPriceDraft={fuelType:FuelType;pricePerLitreUsd:string;reason:string};
+export type FuelFillCorrectionDraft=FuelFillDraft&{correctionReason:string};
+export type FuelDeliveryCorrectionDraft=Omit<FuelDeliveryDraft,'updateCurrentPrice'>&{correctionReason:string};
 export const emptyFuelDelivery:FuelDeliveryDraft={recordDate:localDateKey(new Date()),litres:'',supplierId:'',ticketNumber:'',pricePerLitreUsd:'',updateCurrentPrice:true,notes:''};
-export const emptyFuelFill:FuelFillDraft={recordDate:localDateKey(new Date()),litres:'',equipmentType:'machine',equipmentId:'',projectId:'',odometerReading:'',pricePerLitreUsd:'',priceOverrideReason:'',notes:''};
+export const emptyFuelFill:FuelFillDraft={recordDate:localDateKey(new Date()),fuelType:'diesel',litres:'',equipmentType:'machine',equipmentId:'',projectId:'',odometerReading:'',pricePerLitreUsd:'',priceOverrideReason:'',notes:''};
 export const emptyFuelGauge:FuelGaugeDraft={recordDate:localDateKey(new Date()),actualLitres:'',reason:'',notes:''};
-export const emptyFuelPrice:FuelPriceDraft={pricePerLitreUsd:'',reason:''};
+export const emptyFuelPrice:FuelPriceDraft={fuelType:'diesel',pricePerLitreUsd:'',reason:''};
 
 const decimal=(value:string)=>Number(value.trim().replace(',','.'));
 const decimalFormat=(value:string)=>/^\d+([.,]\d+)?$/.test(value.trim());
@@ -25,7 +33,10 @@ export function validateFuelPrice(value:string,required=false):number|null{if(!v
 export function calculateFuelDelivery(litres:number,priceText:string,vatRatePercent:number){const price=validateFuelPrice(priceText);if(price==null)return{pricePerLitreUsd:null,subtotalUsd:null,vatAmountUsd:null,finalTotalUsd:null};const subtotal=Math.round(litres*price*100)/100;const vat=Math.round(subtotal*vatRatePercent)/100;return{pricePerLitreUsd:price,subtotalUsd:subtotal,vatAmountUsd:vat,finalTotalUsd:Math.round((subtotal+vat)*100)/100};}
 export function calculateFuelFillCost(litres:number,priceText:string):{pricePerLitreUsd:number|null;consumptionCostUsd:number|null}{const price=validateFuelPrice(priceText);return{pricePerLitreUsd:price,consumptionCostUsd:price==null?null:Math.round(litres*price*100)/100};}
 
-export function applyFuelLedger(movements:Omit<FuelMovement,'balanceAfterLitres'>[]):FuelMovement[]{let balance=0;return [...movements].sort((a,b)=>a.confirmedAt.localeCompare(b.confirmedAt)).map(movement=>{let previousBalanceLitres=movement.previousBalanceLitres;let differenceLitres=movement.differenceLitres;if(movement.status==='Active'){if(movement.type==='gauge'){previousBalanceLitres=balance;differenceLitres=movement.litres-balance;balance=movement.litres;}else if(movement.type==='delivery')balance+=movement.litres;else balance-=movement.litres;}return{...movement,previousBalanceLitres,differenceLitres,balanceAfterLitres:balance};});}
+// The tank holds diesel only (DEC-392), so the running balance is computed from diesel movements
+// alone. A gasoline fill is a purchase-and-consume event with no stock effect: it passes through
+// carrying the diesel balance unchanged, and never contributes previous/difference litres.
+export function applyFuelLedger(movements:Omit<FuelMovement,'balanceAfterLitres'>[]):FuelMovement[]{let balance=0;return [...movements].sort((a,b)=>a.confirmedAt.localeCompare(b.confirmedAt)).map(movement=>{let previousBalanceLitres=movement.previousBalanceLitres;let differenceLitres=movement.differenceLitres;if(movement.status==='Active'&&movement.fuelType==='diesel'){if(movement.type==='gauge'){previousBalanceLitres=balance;differenceLitres=movement.litres-balance;balance=movement.litres;}else if(movement.type==='delivery')balance+=movement.litres;else balance-=movement.litres;}return{...movement,previousBalanceLitres,differenceLitres,balanceAfterLitres:balance};});}
 
 export function groupProjectFuelByEquipment(movements:FuelMovement[],projectId:string):ProjectEquipmentFuelUsage[]{
   const groups=new Map<string,ProjectEquipmentFuelUsage>();

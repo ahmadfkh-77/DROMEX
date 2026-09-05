@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 32;
+export const DATABASE_VERSION = 33;
 
 type TableColumn = { name: string };
 
@@ -914,6 +914,13 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   if (currentVersion === 31) {
     await addColumnIfMissing(db, 'company_settings', 'consulting_agency_name', 'TEXT');
     currentVersion = 32;
+  }
+
+  if (currentVersion === 32) {
+    await addColumnIfMissing(db, 'fuel_movements', 'fuel_type', "TEXT NOT NULL DEFAULT 'diesel' CHECK (fuel_type IN ('diesel','gasoline'))");
+    await addColumnIfMissing(db, 'fuel_price_history', 'fuel_type', "TEXT NOT NULL DEFAULT 'diesel' CHECK (fuel_type IN ('diesel','gasoline'))");
+    await addColumnIfMissing(db, 'fuel_movements', 'correction_history_json', "TEXT NOT NULL DEFAULT '[]'");
+    currentVersion = 33;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);
