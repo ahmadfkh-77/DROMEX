@@ -27,9 +27,9 @@ application. It records outgoing company loads, incoming supplier loads, project
 daily reports, equipment, fuel, waste, walls, pavement calculations, finances,
 documents, and backups.
 
-Current source release metadata is version `0.13.0`, Android version code `16`,
+Current source release metadata is version `0.14.0`, Android version code `17`,
 package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
-internal Android artifact is `output/DROMEX-0.13.0-build16.apk` when present.
+internal Android artifact is `output/DROMEX-0.14.0-build17.apk` when present.
 
 Release APKs are no longer committed to Git from build 14 onward (DEC-396):
 `output/*.apk` is ignored, so the signed artifact lives in `output/` on the
