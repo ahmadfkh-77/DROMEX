@@ -605,7 +605,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Actors: Owner.
 - Trigger: A required measurement unit is not available.
 - Preconditions: The user has permission.
-- Main behavior: In Receipt Setup, organize units under Active and Inactive labels. Require and save a display name and symbol for selection in applicable item and transaction records. Compare names and symbols case-insensitively and require each to be unique. Permit direct editing, safe Remove, and Reactivate actions.
+- Main behavior: In Units & Conversions (named Receipt Setup before DEC-394), organize units under Active and Inactive labels. Require and save a display name and symbol for selection in applicable item and transaction records. Compare names and symbols case-insensitively and require each to be unique. Permit direct editing, safe Remove, and Reactivate actions.
 - Alternate and exception behavior: A unit referenced by any record cannot be deleted and may only be deactivated. Deactivated units are hidden from new selections, remain in history, and may be reactivated. A never-used unit may be moved to recoverable Trash. Confirmed records permanently retain the unit name and symbol used at confirmation.
 - Postconditions: The unit is available for applicable configuration and records.
 - Priority: Must

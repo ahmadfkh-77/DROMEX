@@ -1483,3 +1483,402 @@ and reduced motion's actual on-screen effect were reasoned through in code
 **Status**: implemented, typechecked, tested, and **physically reviewed and
 approved on Android via Expo Go by the owner.** Not committed, not pushed,
 no APK built. No other screen has been started.
+
+## 2026-09-04/05 — Business Directory: six screens, phase complete
+
+**Backfilled 2026-09-06.** This entry was written after the fact, from the
+shipped code, not from the session that produced it: that session's
+conversation history is gone, and the gap was flagged in
+`docs/claude-context.md`'s 0.9.0 release section rather than left silent.
+Design intent below is inferred from what ships; where an original rationale
+is not recoverable from the code, it is not invented here.
+
+### Scope
+
+Financials (`FinancialsScreen.tsx`), Workspace Hub's Business Directory
+grouping only (`WorkspaceHubScreen.tsx`), Projects, Customers, People &
+Equipment, and Item Catalog.
+
+### What changed
+
+A display-layer-only pass introducing six repeated screen-local patterns,
+each documented in `DESIGN.md` under Components: the **Directory Hero
+Header** (navy banner with a 48dp back pill, eyebrow, title, purpose
+sentence, and a live 2-3 metric summary row), the **Search Bar** (pill,
+52dp, orange glyph, clear button once text exists), the **Status Pill**
+(dot plus label, inactive deliberately outlined rather than tinted so the
+two states survive greyscale and sunlight), the **Collapsible Status Band**
+(which always states its own disclosure state in words), the **Monogram
+Avatar**, and the **Quiet Inline Action**.
+
+Alongside those: full `accessibilityRole`/`accessibilityLabel`/
+`accessibilityState` coverage, which Customers and People & Equipment had
+none of beforehand; every interactive control raised to the documented 48dp
+floor; and consistent loading, empty, and no-search-results states.
+
+Workspace Hub's Business Directory section adopted Home's existing
+`refined` `ExpandableMenuSection`/`MenuAction` treatment rather than a
+bespoke one. A "Business Directory tile grid" was attempted and explicitly
+reverted by the owner in favour of the plainer treatment that ships.
+
+### Not changed
+
+`ExpandableMenu.tsx` itself, every repository method, all domain
+calculations, migrations, and every screen not named above. These six did
+**not** adopt the graded typography-weight target and still use `800`/`900`
+heavily; the new pattern family is about findability and record identity,
+not the two Approved Refinement Targets, and does not count toward closing
+either gap.
+
+### Status
+
+Implemented and released in Android build 12 (DROMEX 0.9.0). Documented in
+`DESIGN.md` at the time by `/impeccable document` (commit `0ed24e2`); this
+improvement-log entry is the piece that was missing until 2026-09-06.
+
+## 2026-09-05 — Daily Report PDFs: Ministry and Consultant headers, phase complete
+
+Backfilled 2026-09-06. Shipped in Android build 13 (DROMEX 0.10.0, commit
+`c178c1a`). The product decisions are DEC-388 through DEC-391; this entry
+records the implementation and the corrections made along the way.
+
+### What changed
+
+Two independent, optional, off-by-default document headers for the Daily
+Report PDF, plus the settings and editor controls that drive them.
+
+- **Ministry identity** — a globally configured name and logo in Company
+  Settings, rendered only when that individual report's `Show Ministry
+  Header` option is on. When on, it becomes the right-hand identity of the
+  page-one header row, with the company on the left, and the report title
+  moves to a strip beneath that row. When off, the page-one header is
+  byte-identical to what it produced before: there is deliberately no empty
+  ministry slot. Page one only; it never repeats on page two. The logo
+  renders in its own colours under the **Third-Party Logo Exception**
+  (DEC-389), a deliberately narrow carve-out from the One Ledger Rule that
+  covers the logo image alone — no surrounding type, rule, or fill borrows
+  its colour, and no colour is sampled from it into the interface.
+- **Consultant identity, split across two placements** (DEC-390). This was
+  a direct correction from physical review: the first implementation put the
+  whole consultant block at the top of page one. The owner's instruction was
+  that the ministry belongs beside the company in the header row, the
+  consultant *header* belongs under the title, and the signature belongs at
+  the end. As shipped, the consulting agency name alone appears beneath the
+  report title on page one as a plain Structural Navy identity line, and the
+  consultant's personal name and signature appear together at the end of
+  page two, immediately before Photo Evidence.
+- **Consulting Agency Name** (DEC-391) — one optional global value in
+  Company Settings. It never affects sign-off completeness:
+  `consultantSignoffState` still depends only on the personal name and
+  signature, so adding or removing an agency can never turn an incomplete
+  sign-off into a complete one.
+- The PDF label reads **Consultant**, not "Consulting agency" — a wording
+  correction the owner made during review.
+
+### The DPR title discrepancy, reconciled
+
+DEC-262 recorded the Daily Report's title as `DPR`, but the shipped template
+rendered the full title. `git log -S"DPR"` established that `<h1>DPR</h1>`
+existed until commit `079678a` (the UI redesign), which was physically
+reviewed and approved on Android. Rather than reverting approved output, the
+owner chose to update DEC-262 to record the full title as shipped.
+
+### A test bug found and fixed
+
+The first assertions written for this work checked
+`expect(html).not.toContain('ministry-band')`, which could never pass: the
+template's `<style>` block names every CSS class it defines, so the string
+is always present regardless of whether the element renders. Fixed by
+scoping every such assertion to the document body rather than the whole
+HTML. A bulk edit intended to introduce that helper also produced an
+infinitely recursive `body()` function, caught and repaired by hand.
+
+### Not changed
+
+No approval workflow was introduced, and none may be implied: DROMEX has no
+report approval concept (DEC-032). Labels are `Consultant name` and
+`Signature` only; `Approved by`, `Certified by`, and any endorsement wording
+remain prohibited. An incomplete sign-off renders no signature image.
+Turning a toggle off never deletes stored data.
+
+### Status
+
+Implemented, released in Android build 13, and documented in `DESIGN.md`
+under "Optional Document Headers". Not verified on a physical device by the
+session that built it.
+
+## 2026-09-05 — Financials: project financial data layer, phase complete
+
+**Backfilled 2026-09-06** from shipped code and the decision record, for the
+same reason as the entry above.
+
+### What changed
+
+`SqliteFinancialRepository` gained `getProjectFinancials(projectId)`,
+returning `{projectId, revenue, supplierPayables, fuel, uncosted}`. The
+domain gained `ProjectMoneyBlock`, `ProjectFuelCost`, `UncostedQuantity`,
+`ProjectFinancialSummary`, `summarizeMoneyBlock`,
+`projectAttentionTargets`, `projectPaymentEvents`, and
+`groupSupplierTargets`. Supplier Loads gained a Delivery Summary organised
+Supplier → Project → Material, never merging unlike units.
+
+Two corrections shipped with it, both verified non-vacuously:
+
+- **Zero-value records were being excluded from Financials.** Three
+  `final_total_usd_cents > 0` filters conflated `NULL` (Unpriced) with `0`
+  (No Payment Due), contradicting DEC-099 and FR-054. Changed to
+  `IS NOT NULL`. Verified by temporarily restoring the old filter and
+  confirming two tests failed as expected.
+- **`getOverview()` was quadratic.** Payments were linked with
+  `payments.filter()` inside `targets.map()`: 89,360 targets against
+  35,040 payments. Replaced with a `Map` index keyed
+  `${targetType}|${targetId}`. Measured **103,153ms → 962ms**, with
+  seeding time reported separately from the read.
+
+A supplier-name staleness bug reported from the device was also fixed:
+Delivery Summary read raw purchase snapshots while Purchase History resolved
+current directory names, so a renamed supplier appeared under both names.
+Resolution moved into the domain via an optional current-directory lookup;
+records keep their confirmed-at snapshots.
+
+### Not changed
+
+`getOverview()` still hardcodes `NULL project_id` for quarry purchases, so
+the global Financials screens are byte-identical. No payment behaviour,
+validation, duplicate detection, snapshot, or receipt calculation moved.
+
+### Status
+
+Attribution verified against the release commits rather than session memory.
+The revenue-only data layer, the zero-value correction, the `getOverview()`
+performance fix, and the Supplier Delivery Summary shipped in **Android
+build 13** (DROMEX 0.10.0, commit `c178c1a`). The supplier-name staleness
+fix shipped in **build 14** (commit `9121734`). The expansion to three
+sections — supplier payables, fuel, and uncosted quantities — shipped in
+**build 15** (commit `5f58ef5`). None was verified on a physical device.
+The three-section contract was not recorded as a decision at the time; it is
+now DEC-395.
+
+## 2026-09-06 — Fuel Ledger: fuel-type and correction UI
+
+### What changed
+
+`src/ui/screens/FuelTrackingScreen.tsx`, +36/−5, implementing the UI half of
+DEC-392 and DEC-393 against repository methods that already shipped in
+build 15:
+
+- Fuel-type selection on a fill, as a `radiogroup` chip row labelled "Fuel
+  type for this fill".
+- A **Correct equipment fill** form: date, fuel type, litres, equipment,
+  project, price per litre, notes, and a **mandatory correction reason**
+  that gates the Save button. Its hint states the rule plainly — change only
+  what was wrong, everything untouched keeps its current value — and a
+  helper line makes explicit that leaving the price empty keeps the fill
+  unpriced, or entering one now prices a fill that was saved without a
+  price. That last case is the reason DEC-393 exists: cancel-and-re-enter
+  cannot add a price to an existing movement.
+- A **Correct fuel purchase** form covering the delivery equivalent.
+
+### Not changed
+
+No repository method, migration, domain calculation, or ledger rule. Gauge
+readings remain cancel-only per OQ-086, and cancelled movements remain
+non-reactivatable, both unchanged by this UI.
+
+### Status
+
+Written and typechecked. **Not committed, not built, and not verified on a
+physical device.** It is the oldest uncommitted work in the tree.
+
+## 2026-09-06 — Units & Conversions: rename and redesign, phase complete
+
+### Original problems found (audit)
+
+1. **Three visible names shipped at once**: `Receipt setup` (Home, screen
+   title), `Receipt Setup` (Workspace Hub), and `Units & Conversions` (the
+   Make Receipt button, already renamed). Even the casing disagreed.
+2. **The name described nothing the screen contains.** No receipt
+   numbering, layout, or footer setting lives here — only measurement units
+   and conversion rules.
+3. **Edit gave no visible feedback.** Tapping Edit populated a form pinned
+   to the bottom of the card, potentially off-screen; only the form's title
+   changed. On a long list, Edit appeared to do nothing.
+4. **Nothing explained what a conversion is**, and both lists used the same
+   `ManageRow` with the same inline form beneath, so the unit/conversion
+   distinction was blurred by the layout that was meant to carry it.
+5. **A stale sentence**: "Projects now have their own section on Home," a
+   migration note left behind.
+6. **No search**, despite DEC-247 having established searchable pickers as
+   business data grows.
+7. **Remove was unknowable before tapping** — the alert body explained
+   delete-or-deactivate, but the button said only "Remove".
+8. **A wasted query.** `getSetupOptions()` fetched customers, projects,
+   catalog items, drivers, trucks, workers, and machines on every load and
+   after every save; its result was assigned to `options` and read **only**
+   as `if (!options)`. Zero property accesses.
+
+### What changed
+
+Renamed to **Units & Conversions** everywhere a user reads it (DEC-394);
+route `receiptSetup`, all callbacks, the filename, every repository method,
+both tables, and `tests/receipt-setup.test.ts` unchanged. Verified by grep
+that no visible `Receipt setup`/`Receipt Setup` string remains in `src/`.
+
+Rebuilt around a Directory Hero Header with live counts and two numbered
+sections. Units carry a **Unit Symbol Tile** showing the record's own
+symbol; conversions carry a **Conversion Equation Strip** setting the rule
+as `1,000 kg = 1 t`. That contrast is the core fix: a unit row and a
+conversion row are no longer the same shape. Add moved to the top of each
+section, search appears past eight entries, inactive records sit behind a
+Collapsible Status Band with an outlined Inactive pill, and add/edit moved
+into a **Focused Record Sheet** with a live preview.
+
+`getSetupOptions()` removed from this screen: **12 SQL statements → 2**, per
+load and per save. The repository method is untouched and still serves Make
+Receipt, Projects, and Drivers & Trucks.
+
+### Three defects fixed in passing
+
+- `refresh()` had no `catch`, so any load failure left the spinner up
+  permanently. There is now a load-error state with Try again and Go back.
+- `run()` overwrote each action's own outcome sentence with a generic
+  success line, so removing an in-use unit reported "removed" and hid the
+  fact that history had been preserved. It now honours a returned sentence.
+- The `#89939B` placeholder computes to 3.05:1 and fails AA; this screen
+  uses `#6B7681` at 4.53:1. Sixteen other files still ship the failing
+  value — recorded as gap 3 in `DESIGN.md`.
+
+### Not changed
+
+Unit and conversion validation, duplicate detection (which remains solely
+the database's `UNIQUE COLLATE NOCASE` constraints — only the resulting
+message is rewritten), active/inactive semantics, dependent-conversion
+deactivation, the ordered reactivation rule, historical snapshots, receipt
+and supplier-load calculations, migrations, and offline behaviour.
+
+### Verification
+
+`npm run typecheck` clean; `npm test` 360/360 across 40 files, unchanged
+before and after. **No device or emulator is attached to this machine**, so
+the phone checklist was written but not executed: narrow-width wrapping,
+font scale, reduced motion, TalkBack, and keyboard behaviour are reasoned
+from the code, not measured.
+
+### Status
+
+Implemented and typechecked. Not committed, not built, not device-verified.
+
+## 2026-09-06 — Project Financial Review: refinement and extraction, phase complete
+
+### Original problems found (audit)
+
+1. **Two competing identities**: the plain header showed the project, the
+   navy hero below was titled `BILLED TO {customer}`. The hero's record
+   count was `revenue.recordCount` presented as if project-wide.
+2. **The three sections were not containers** — bare 19px `Text` with
+   `marginTop: 6`. Separation rested on font weight alone.
+3. **The metric grid changed shape with the data.** `flexWrap` plus
+   `minWidth: '45%'` gave 2+1 with a stretched orphan at three tiles and a
+   clean 2×2 at four, so Customer Revenue relaid out whenever an
+   overpayment existed.
+4. **Billed, paid, outstanding, and overpaid were visually identical** —
+   same box, same navy top rule, same 20px/900 value.
+5. **The status grid was five cells of mostly zero**, wrapping 3+2 on a
+   narrow phone with "Partially Paid" breaking to two lines, and read aloud
+   in full including zeros.
+6. **One treatment, three meanings**: `excludedNote` served exclusions, the
+   priced-deliveries-only caveat, and the uncosted explainer.
+7. **Fuel cost and litres were indistinguishable** — a dollar amount, a
+   litre count, and an integer as peers in the same component.
+8. **Revenue and supplier rows looked identical**, though `DESIGN.md`
+   already documents the two-hue device for exactly that distinction.
+9. **`statusPill`'s base colour was danger**, so the unmapped `Unpriced`
+   rendered as an error.
+10. **The only view in the file with no entrance transition**, while its
+    three siblings all ran a 280ms `Animated.timing`.
+11. **`helper` on the page background computes to 4.46:1** and fails AA —
+    including the five-line rule-explanation paragraph.
+12. **The genuinely-empty project** showed three dashed cards, three zeroed
+    grids, and a five-cell grid of zeros.
+
+### What changed
+
+Extracted to `src/ui/screens/ProjectFinancialReviewScreen.tsx` with its own
+stylesheet, re-exported from `FinancialsScreen.tsx` so Project Command
+Center's import path and navigation contract are byte-identical. The
+extraction is the point: this screen previously shared a 200-line stylesheet
+with three views it was not allowed to touch.
+
+Rebuilt as three **Ledger Folders** (Components, `DESIGN.md`), each with a
+fixed reading order — purpose, totals, status and exclusions, then records
+behind a **Disclosure Row**. **Money Role Tiles** give billed, paid,
+outstanding, and overpaid four different treatments with Outstanding as the
+single navy 27px emphasis; the arrangement is fixed so the block never
+relayouts. A **Quantity Tile** sits beside fuel cost as its visual opposite,
+and the wall/pavement/waste block has no money column at all. The **Status
+Strip** renders only non-zero statuses with dots plus words, `Unpriced`
+corrected to warning, glossing only what cannot be inferred. **Exclusion
+Strips** are visually distinct from footnotes. **Supplier Payable Summary
+Blocks** put Billed and Outstanding in fixed columns so suppliers can be
+compared by scanning. One consolidated empty state replaces three.
+
+Money is grouped (`$1,240.00`) and record quantities moved from a hardcoded
+`toFixed(3)` to the `formatQuantity` the material rows already used.
+
+### Four defects caught in self-review before finishing
+
+- `muted` body text inside a disclosure would have landed on the cream tint
+  at 4.46:1; prose bodies now use a white ground.
+- The overpaid tile's 11px label was warning-on-warning-tint at 4.49:1; the
+  hue now lives on the border and the large value only.
+- Supplier headers on `#E8F0F6` put the warning outstanding figure at
+  4.29:1; they are white with a navy rule instead.
+- A `quiet` prop on `Disclosure` set a background identical to the base.
+  Replaced with `prose`, which does real work.
+
+### A tooling mistake worth recording
+
+The first attempt at the `FinancialsScreen.tsx` edit used PowerShell
+`Get-Content`/`Set-Content`, which round-tripped the file through the ANSI
+codepage and turned every `·` into `Â·`. Caught immediately, reverted with
+`git checkout`, and redone with UTF-8-safe I/O. **Do not use
+`Get-Content`/`Set-Content` to rewrite source files in this repository** —
+they are not UTF-8 safe by default on this machine.
+
+### Not changed
+
+`getProjectFinancials()`, every domain function, the repository,
+migrations, payment and cancellation rules, cancelled/unpriced/zero-value
+handling, and the read-only boundary — verified by grep that the screen
+contains no `recordPayment`, `cancelPayment`, `createOpeningBalance`,
+`onSelect`, or `TextInput`. `FinancialControlCenter`,
+`CustomerFinancialView`, `SupplierFinancialView`, `OpeningBalanceForm`,
+`FinanceTargetRow`, and every shared style are untouched; the
+`FinancialsScreen.tsx` diff is 8 insertions and 141 deletions, all of them
+either the review block, its 21 now-dead style keys (each asserted unused
+before removal), or the re-export.
+
+### Verification
+
+`npm run typecheck` clean. `npm test` 377/377 across 41 files, up from
+360/40. Seventeen new tests in
+`tests/project-financial-review-presentation.test.ts` cover money grouping
+and its no-cent-movement guarantee, negative zero, quantity settlement, the
+status tone map across all six statuses, which statuses carry a gloss,
+attention-first ordering, zero-count omission, exclusion phrasing and
+plurals, period text, and the empty-project predicate — including that a
+project holding only cancelled or unpriced records is **not** empty, since
+collapsing it would hide the exclusion strips explaining where those records
+went. All 20 existing `project-financials` data-layer tests pass untouched.
+
+Component rendering is still untestable: `devDependencies` contains no
+React Native renderer, which is why the screen's decision logic lives in
+`projectFinancialReviewPresentation.ts` rather than the `.tsx`.
+
+**Not verified on a physical device**: no device or emulator is attached to
+this machine.
+
+### Status
+
+Implemented, typechecked, and tested. Not committed, not built, not
+device-verified.

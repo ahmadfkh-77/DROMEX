@@ -358,16 +358,11 @@ Equipment, and Item Catalog. Each phase added 48dp touch targets, full
 filtering, consistent loading/empty/no-results states, and visual
 treatment consistent with the existing Foreman's Field Ledger identity
 (navy hero headers, collapsible bands, the app's existing color tokens
-only — no new palette). **These six phases were not run through
-`/impeccable document`** — `DESIGN.md`/`PRODUCT.md` and
-`docs/ui-improvement-log.md` still only reflect the earlier Home/Project
-Command Center/Supplier Loads/Daily Reports phases and do not mention
-Financials/Workspace Hub/Projects/Customers/People & Equipment/Item
-Catalog at all. Treat those two files as stale for those six screens
-until a future session runs the Impeccable documentation flow (or they
-are updated by hand) — the actual implementation and its rationale are
-recorded only in this session's conversation history, not in a durable
-project doc.
+only — no new palette). **Resolved.** `/impeccable document` was run for these six screens in
+commit `0ed24e2`, so `DESIGN.md`/`PRODUCT.md` cover them, and the missing
+`docs/ui-improvement-log.md` entry was backfilled on 2026-09-06 from the
+shipped code (the original session's conversation history was already gone,
+which the entry states rather than papering over).
 
 - **Version**: `package.json`/`app.json` bumped `0.8.0`→`0.9.0`,
   `android.versionCode` `11`→`12`. Package identity
@@ -396,11 +391,37 @@ project doc.
   408` this time); GitHub again warned the APK exceeds its 50MB
   recommended threshold (informational only, did not block).
 
-**Not done this session**: no App Bundle build; no GitHub Release; no
-`/impeccable document` run to refresh `DESIGN.md`/`PRODUCT.md` for the six
-new UI phases (see above); `docs/ui-improvement-log.md` was not updated
-with per-phase entries for Financials/Workspace Hub/Projects/Customers/
-People & Equipment/Item Catalog.
+**Not done this session**: no App Bundle build; no GitHub Release. The two
+documentation gaps originally listed here — the `/impeccable document` run
+and the missing improvement-log entries — were both closed later, in commit
+`0ed24e2` and in the 2026-09-06 documentation pass respectively.
+
+## Releases — DROMEX 0.10.0/0.11.0/0.12.0, Android builds 13/14/15 (2026-09-05)
+
+**Backfilled 2026-09-06.** These three releases shipped without a handoff
+entry. Contents attributed from the release commits, not from memory.
+
+- **Build 13 — 0.10.0, commit `c178c1a`.** Ministry header, split Consultant
+  sign-off placement, and Consulting Agency Name for Daily Report PDFs
+  (DEC-388 to DEC-391); the Supplier Delivery Summary organised Supplier →
+  Project → Material; the first Project Financial Review (customer revenue
+  only); the zero-value exclusion fix, where three
+  `final_total_usd_cents > 0` filters conflated NULL/Unpriced with 0/No
+  Payment Due against DEC-099 and FR-054; and the `getOverview()`
+  performance fix, measured 103,153ms → 962ms.
+- **Build 14 — 0.11.0, commit `9121734`.** Fuel types with per-type pricing
+  (DEC-392) and in-place fuel correction repository paths (DEC-393), both
+  data layer only. The supplier-name staleness fix reported from the device.
+  This commit also added `output/DROMEX-0.10.0-build13.apk` to Git — the
+  last APK that will be committed, per DEC-396.
+- **Build 15 — 0.12.0, commit `5f58ef5`.** Project Financial Review expanded
+  to its three sections: customer revenue, supplier payables, and project
+  costs, with no combined total (now DEC-395).
+
+**None of builds 13, 14, or 15 has been verified on a physical device.**
+Build 13 shipped a `recordGauge` defect (nine columns bound to ten value
+slots) that no test called; it was found and fixed later by reading, not by
+running.
 
 ## Standing rules this project expects every session to follow
 

@@ -12,3 +12,18 @@ firebase/functions/lib/
 !.env.example
 android/
 ios/
+
+# Release APKs are build outputs, not source. Builds 6 through 13 were committed
+# before this rule and remain in Git history untouched (see DEC-396); the local
+# copies of builds 6 through 12 were intentionally deleted to reclaim disk space.
+# From build 14 onward the signed artifact is kept in output/ on the build
+# machine and distributed outside the repository.
+output/*.apk
+
+# Local AI-tool configuration, not application code. Deliberately excluded from
+# the build-12 release and every release since; this rule enforces that instead
+# of relying on it being remembered each session.
+.claude/
+.codex/
+.cursor/
+skills-lock.json

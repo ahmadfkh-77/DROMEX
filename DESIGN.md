@@ -151,6 +151,16 @@ The palette is small and role-driven: three brand hues (orange, navy, cream) plu
 ### Directory-screen neutral tints
 A small number of additional near-white/near-cream neutrals appear once each on Projects' completed-project card fill (`#F7F4EE`) and People & Equipment's active-record avatar fill (`#E8F0F6`), introduced during the 2026-09-04/05 Business Directory pass below. Both sit in the same low-saturation neutral family as the already-documented `#FCFBF8`/`#FFFEFC`/`#F5F2EC` tints elsewhere in the app; they are not a new brand hue and carry no independent role beyond "quiet neutral surface," so they are noted here rather than promoted to a named color.
 
+The 2026-09-06 pass added three more to the same family, all in Project Financial Review: `#FFFCF4` (the warning-toned disclosure fill, a far paler amber than the `#FFF3D8` status tint it sits beside), and `#D9CFBE`/`#E0D6C6` (cream-family border and rule tints on the not-costed block and the labelled divider). `#E8F0F6` is reused, not re-introduced, as the Units & Conversions symbol tile fill. None is a new brand hue.
+
+### Contrast-driven variants
+Two values exist purely because a documented color does not clear WCAG AA in a specific placement. They are variants of existing roles, not new roles, and neither may be used outside the case that produced it.
+
+- **Muted Dark** (`#6B7681`): the placeholder color in Units & Conversions. The app-wide placeholder `#89939B` computes to **3.05:1** against the `#FCFBF8` input fill and fails AA; `#6B7681` computes to **4.53:1**. `#89939B` still ships in sixteen other files including `AppPrimitives.tsx`, `SearchableSelect.tsx`, and `GroupedSearchableSelect.tsx` — see the gap list.
+- **Success Light** (`#8FD6B4`): the Active status dot on Project Financial Review's Structural Navy hero. Status Success (`#287A55`) is unreadable as a small mark on navy; this is that hue lifted for the dark surface only. On any light surface the dot stays `#287A55`.
+
+Three measured failures are recorded rather than fixed, because each belongs to a pattern that ships identically on several screens and wants one coordinated pass rather than a divergence introduced here: the Collapsible Status Band hint (`muted` on `creamSoft`, **4.46:1**, six screens), the Status Pill's warning text (`warning` on `#FFF3D8`, **4.49:1**, app-wide), and `helper` text placed directly on the page background (`muted` on `#F5F2EC`, **4.46:1**). Both 2026-09-06 screens work around the last of these by placing every helper sentence on a surface rather than on the bare page or the cream folder ground.
+
 ### Named Rules
 **The One Ledger Rule.** Every screen, PDF, and Excel export shares the same orange/navy/cream hierarchy (`docs/design-system.md`, "Documents and reports"). A new surface introducing its own palette is a defect, not a variant.
 
@@ -289,6 +299,50 @@ A 40-44dp circle showing a record's initials (first letters of its first two wor
 ### Quiet Inline Action (Projects, Customers, People & Equipment, Item Catalog)
 A lower-emphasis alternative to a bordered/filled button for a secondary, reversible-adjacent action (Mark Completed/Reactivate, Deactivate/Reactivate, Edit information, Cancel editing): plain `colors.brandDark` bold text, no border or fill, inside a 44-48dp touch target created by padding rather than visible size. Used specifically to visually step back an action from the screen's one primary button, per the existing "Action placement" layout rule, without shrinking its actual tap target below the 48dp floor.
 
+### Ledger Folder (`ProjectFinancialReviewScreen.tsx`, screen-local)
+As of 2026-09-06: a fourth, independently-built instance of the numbered-marker device, and the first one whose header is **not** a disclosure control. A Ledger-Cream numbered tab (`01`-`03`) is absolutely positioned to protrude above a Structural Navy header, which carries the section title, a one-line purpose sentence, and — right-aligned — that section's single headline figure with a Signal-Orange-tinted (`#F2A184`) label above it. A static 3px Signal Orange rule (the Seam Rule) joins the header to a Ledger Cream body bounded by a 1px `#E8DED0` border with the top edge removed, so header and body read as one opened folder.
+
+The header is deliberately static: unlike Project Command Center's tab, Daily Reports' tab, and every `ExpandableMenuSection`, a Ledger Folder never collapses. Its totals must stay visible, so disclosure is pushed one level down to the records inside it. Anything that opens and closes within a folder is a **Disclosure Row** (below), never the folder itself.
+
+### Money Role Tile and Quantity Tile (`ProjectFinancialReviewScreen.tsx`, screen-local)
+Five money roles that must never read as peers, each given its own surface, rule color, and value size:
+
+| Role | Treatment |
+|---|---|
+| Billed | Surface white, 3px Structural Navy left rule, Ink value at 20px/900 |
+| Cost | Surface white, 3px Signal-Orange-Deep left rule, Ink value at 20px/900 |
+| Paid | Surface white, 3px Status Success left rule, plus a 6px success dot beside a lower-case note |
+| Outstanding | Solid Structural Navy fill, `#FFF8ED` value at **27px/900**, full width — the single emphasis per section |
+| Overpaid | `#FFF3D8` fill with a 1px Status Warning border, warning value at 20px/900, rendered only when the amount exceeds zero |
+
+Billed and Paid are fixed `flex: 1` halves on one row; Outstanding and Overpaid are full width. The arrangement is deliberately fixed rather than `flexWrap`-with-`minWidth`, so the block's shape never changes when an optional tile appears.
+
+The **Quantity Tile** is its visual opposite and shares only the outer geometry: a `creamSoft` fill with a **dashed** `#E8DED0` border, the value in Structural Navy with its unit beside it, no currency mark anywhere, and a `QUANTITY, NOT MONEY` micro-label. Placing one beside a Money Role Tile is the app's device for showing that two adjacent figures are not the same kind of thing.
+
+### Status Strip and Exclusion Strip (`ProjectFinancialReviewScreen.tsx`, screen-local)
+The **Status Strip** renders one pill per payment status that has at least one record, ordered attention-first (`Unpaid`, `Partially Paid`, `Overpaid`, `Paid`, `No Payment Due`, `Unpriced`), each showing its count, its name, and a 6px dot in its semantic color — so status never depends on hue alone. A status with a zero count renders nothing at all: an absent status is not information. Tones follow the Reserved-Hue Rule exactly, with `Unpriced` mapped to Status Warning rather than Status Danger. Immediately below, a plain-language gloss appears **only** for the statuses a reader cannot infer from the words alone: `No Payment Due`, `Overpaid`, and `Unpriced`.
+
+The **Exclusion Strip** is a separate device for a separate meaning, so the two are never confused: an outlined `colors.line` strip on `colors.surface` with a `NOT IN THESE TOTALS` micro-label, the excluded count and kind in Ink, and a muted line naming the screen where those records are still visible. Explanatory footnotes keep plain helper styling and never borrow this treatment.
+
+### Disclosure Row (`ProjectFinancialReviewScreen.tsx`, screen-local)
+A 56dp-minimum bordered header inside a Ledger Folder body carrying a title, a summary that always states its own disclosure state in words (`Tap to view` / `Tap to hide`, matching the Collapsible Status Band rule), and a `+` glyph that rotates 45° into `×` over 180ms. Record bodies open onto a `creamSoft` ground with 1px gaps so the white rows separate; prose bodies open onto `colors.surface` instead, because `muted` body text drops to 4.46:1 on the tint. An attention-toned variant switches the border to Status Warning with a `#FFFCF4` fill.
+
+### Financial Record Row (`ProjectFinancialReviewScreen.tsx`, screen-local)
+Extends Daily Reports' two-hue company-versus-supplier device to money direction: a 3px left accent in Signal Orange for customer revenue, Structural Navy for supplier payables, Status Danger for a cancelled payment. Reading order is reference, then date and material, then quantity-and-unit as one value, then a right-aligned billed amount above a `BILLED` micro-label, then a status pill beside `Paid $X of $Y`, then an outstanding or overpaid line in warning tone only when non-zero. A cancelled payment strikes its amount through and states "Not counted in any total" with its reason.
+
+### Supplier Payable Summary Block (`ProjectFinancialReviewScreen.tsx`, screen-local)
+One supplier per block: a `colors.surface` header with a 3px Structural Navy left rule, the supplier name, and **Billed and Outstanding as two fixed columns** rather than a run-on sentence, so several suppliers can be compared by scanning straight down. Outstanding switches to Status Warning only when above zero. The header is white rather than tinted specifically because the warning-colored figure only clears AA on a surface. Beneath it, one material row per material-and-unit pair, quantity in Structural Navy and billed amount in muted beneath it, with unlike units never merged — the same rule the Supplier Delivery Summary follows.
+
+### Unit Symbol Tile and Conversion Equation Strip (`ReceiptSetupScreen.tsx`, screen-local)
+As of 2026-09-06, the device that makes a unit and a conversion structurally impossible to confuse, replacing an earlier layout in which both used the same generic row.
+
+A **Unit Symbol Tile** is a 46dp-minimum rounded square (13px radius) on `#E8F0F6` carrying the unit's own symbol in Structural Navy 900 — the Monogram Avatar idea with the record's real symbol in place of initials. It grows horizontally for long symbols rather than truncating. Inactive units swap to a `colors.surface` fill with a `colors.line` border.
+
+A **Conversion Equation Strip** is full width on Ledger Cream behind a 1px `#E8DED0` border, setting the rule as an actual equation: input value and unit, an `=` in Signal-Orange-Deep, output value and unit, values in Structural Navy 900 with `adjustsFontSizeToFit` so a long figure shrinks rather than truncating. It is deliberately **not** given the calc-result teal: a conversion's quantities are user-entered, and the Reserved-Hue Rule limits that teal to values the app derived. The same component renders live inside the add/edit sheet, so the five separate fields resolve into the sentence the user is actually authoring.
+
+### Focused Record Sheet (`ReceiptSetupScreen.tsx`, screen-local)
+A full-screen `Modal` (`presentationStyle="pageSheet"`, `animationType` dropped to `none` under reduced motion) holding an eyebrow, a title, a Close pill, a scrolling body, and a sticky footer bearing Cancel and one Signal Orange primary action with the "Sticky action bar" shadow. It replaces an inline form rendered below a long list, where tapping Edit produced no visible change because the form was off-screen. Errors render inside the sheet so the sheet stays open and the user's typing survives. Unit selection inside a sheet uses chips rather than `SearchableSelect`, since that component opens its own `Modal` and nesting modals on Android is unreliable — consistent with the existing rule that small fixed choices use chips.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -386,11 +440,34 @@ Financials (`FinancialsScreen.tsx`), Workspace Hub's Business Directory grouping
 
 Workspace Hub's Business Directory section specifically: its four `MenuAction` rows now pass `refined` and its `ExpandableMenuSection` passes `refined`+`marker`, identical to Home's mechanical `refined` usage — not a bespoke pattern, just Home's existing device applied to one more section. A `tone="cream"` + `refined` combination is now live on these four rows and on Workspace Hub's "More" tab's Reports Center row; `MenuAction`'s `refined` path only special-cases `tone="orange"`, so `cream`-toned refined rows currently render identically to untoned ones (confirmed intentional, not a defect — see the session record for the "Business Directory tile grid" attempt that was tried and then explicitly reverted by the product owner in favor of keeping this plainer treatment).
 
-**Everywhere else** (`ExpandableMenu.tsx` itself, and every other screen not named above) is unchanged. Full phase-by-phase rationale, before/after descriptions, and audit findings for each of these six screens live only in this session's conversation history — `docs/ui-improvement-log.md` was not updated with matching per-phase entries for them (flagged in `docs/claude-context.md`'s 0.9.0 release section as follow-up work for a future session, not done silently).
+**Everywhere else** (`ExpandableMenu.tsx` itself, and every other screen not named above) is unchanged. Full phase-by-phase rationale, before/after descriptions, and audit findings for each of these six screens originally lived only in that session's conversation history; the missing `docs/ui-improvement-log.md` entry was flagged in `docs/claude-context.md`'s 0.9.0 release section as follow-up work, and **was backfilled during the 2026-09-06 documentation pass** from the shipped code rather than from the lost transcript, which is stated in the entry itself.
+
+## Implemented on Units & Conversions (2026-09-06)
+
+`src/ui/screens/ReceiptSetupScreen.tsx` (filename, route key `receiptSetup`, and every callback unchanged per DEC-394) was redesigned around the **Unit Symbol Tile**, **Conversion Equation Strip**, and **Focused Record Sheet** documented above, plus the existing Directory Hero Header, Search Bar, and Collapsible Status Band from the Business Directory family. Two numbered sections (`01 Units`, `02 Conversions`) each lead with their Add action, reveal search past eight entries, and hold inactive records behind a status band.
+
+- **Typography weight hierarchy — partial.** Section titles `800`, row titles `700`, values and hero figures `900`, metadata `500`/default. Closer to the graded target than the pervasive-900 base, but this screen does not count toward closing gap 1: it keeps `900` on several small labels.
+- **Domain visual identity — not extended.** The `01`/`02` markers here separate two halves of one setup screen, not operational domains, so this is not an instance of that target.
+- Three visible names shipped simultaneously before this pass (`Receipt setup`, `Receipt Setup`, and `Units & Conversions`); all now read `Units & Conversions`.
+- A full `getSetupOptions()` fetch — ten SQL statements covering customers, projects, catalog, drivers, trucks, workers, and machines — was removed. Its result had been assigned but never read, and it re-ran after every save. The screen now issues two statements.
+- Three defects fixed in passing: a missing `catch` that could leave the screen loading forever, a success message that overwrote the "moved to Inactive, history kept" outcome with a generic line, and the failing `#89939B` placeholder.
+
+## Implemented on Project Financial Review (2026-09-06)
+
+Extracted from `FinancialsScreen.tsx` into `src/ui/screens/ProjectFinancialReviewScreen.tsx` with its own stylesheet, re-exported from the original module so Project Command Center's import path and navigation contract stay byte-identical. The extraction exists specifically so this screen can no longer restyle the control-center, customer, and supplier views it previously shared a 200-line stylesheet with.
+
+- **Ledger Folder, Money Role Tile, Quantity Tile, Status Strip, Exclusion Strip, Disclosure Row, Financial Record Row, and Supplier Payable Summary Block** are all first-instanced here; see Components above.
+- **Typography weight hierarchy — full 4-step scale, third instance.** `900` for the Outstanding emphasis value and record billed amounts, `800` for folder titles and tile labels, `700` for record references and supplier names, `500`/default for metadata. Follows the Supplier Loads and Daily Reports precedent.
+- **Domain visual identity — a fourth bespoke numbered instance**, and the first whose numbered header is not a disclosure control. It does not extend gap 2, which concerns operational-domain wayfinding.
+- **Motion**: a 280ms opacity-and-lift entrance matching the three sibling Financials views, `LayoutAnimation` collapse, and a 180ms 45° glyph rotation, all gated on `useReducedMotion()`. **No numeric value animates anywhere on this screen**, deliberately: an animated money figure would suggest the amount itself is moving.
+- Presentation logic lives in `projectFinancialReviewPresentation.ts` rather than the `.tsx`, because this project has no React Native renderer in `devDependencies` and importing the screen into a test would pull in `react-native`. That module has 17 tests in `tests/project-financial-review-presentation.test.ts`.
+- Money is grouped for legibility (`$1,240.00`); a test asserts grouping never moves a cent. The three-section, no-combined-total contract is DEC-395.
 
 ## Current-vs-Target Gap List
 
 1. **Typography weight.** Current: `fontWeight: '900'` used pervasively in `src/ui/theme.ts`'s global tokens and on every screen except Home, Project Command Center, Supplier Loads, and Daily Reports. Target: graded hierarchy above. **Partially implemented** — Home's and Project Command Center's navigation sections use a 3-step subset (`900`/`700`/`500`); Supplier Loads' supplied-material records and Daily Reports' section/record content use the full 4-step scale including `600` (see "Implemented on Supplier Loads" and "Implemented on Daily Reports"). Every other screen is still the pre-existing pervasive-900 state, and the global `theme.ts` tokens themselves are unchanged.
 2. **Domain visual identity.** Current: domain separation via grouping, labels, and icons only, with no domain-dedicated color, on every screen except Home, Project Command Center, and Daily Reports. Target: restrained non-color identifiers per domain. **Partially implemented — Home's four sections (numbered chip), Project Command Center's seven sections (attached numbered tab), and Daily Reports' twelve sections (a third, independently-built attached numbered tab)**; Supplier Loads deliberately kept its existing two-tier color hierarchy instead (see "Implemented on Supplier Loads"); the five other `ExpandableMenuSection` consumers are unchanged.
+
+3. **Placeholder contrast.** `#89939B` on the `#FCFBF8` input fill computes to **3.05:1** and fails WCAG AA. It ships in sixteen files, three of which are the shared components every form inherits from: `AppPrimitives.tsx`, `SearchableSelect.tsx`, and `GroupedSearchableSelect.tsx`. **Not implemented** — Units & Conversions uses `#6B7681` (4.53:1) locally, but changing the three shared components would fix most of the app's forms in one edit. See "Contrast-driven variants" above for the two other measured failures deliberately left for a single coordinated pass.
 
 These gaps are now first-instanced on Home, Project Command Center, and (typography only) Supplier Loads, rather than unimplemented everywhere. Extending either target to another screen is a separate, explicitly scoped future phase — not a mandate implied by any one screen's implementation, and not a reason to redesign the color system or restate `docs/design-system.md`. Financials, Workspace Hub's Business Directory grouping, Projects, Customers, People & Equipment, and Item Catalog (see "Implemented on Business Directory Screens" above) do not count toward either gap closing — their 2026-09-04/05 pass was accessibility/findability work using a separate pattern family, not an implementation of these two targets.
