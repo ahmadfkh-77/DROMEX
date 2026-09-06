@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { migrateDatabase } from '../src/data/database/migrations';
 import { SqliteFinancialRepository } from '../src/data/repositories/SqliteFinancialRepository';
-import { groupSupplierTargets, projectAttentionTargets, projectPaymentEvents, summarizeMoneyBlock, type FinancialTarget } from '../src/domain/financials';
+import { groupSupplierTargets, paymentStatus, projectAttentionTargets, projectPaymentEvents, summarizeMoneyBlock, type FinancialTarget } from '../src/domain/financials';
 
 class TestDatabase {
   readonly raw = new DatabaseSync(':memory:');
@@ -307,6 +307,49 @@ describe('project financial review data layer', () => {
 
   it('returns no supplier groups when the project has no priced deliveries', () => {
     expect(groupSupplierTargets([])).toEqual([]);
+  });
+
+  // DEC-405 needs a paid figure per supplier. These pin why it is accumulated rather than derived.
+  const supplierTarget = (id: string, supplier: string, total: number, paid: number): FinancialTarget => ({
+    id, type: 'quarryPurchase', partyId: supplier, partyName: supplier, partyType: 'supplier', reference: id, recordDate: '2026-08-12',
+    projectId: 'p', projectName: 'P', projectStatus: 'active', itemName: 'Gravel', quantity: 1, unitSymbol: 'm³',
+    totalUsd: total, paidUsd: paid, remainingUsd: Math.max(0, total - paid), overpaidUsd: Math.max(0, paid - total),
+    status: paymentStatus(Math.round(total * 100), Math.round(paid * 100)), payments: [],
+  });
+
+  it('accumulates paid and overpaid per supplier', () => {
+    const group = groupSupplierTargets([
+      supplierTarget('a', 'Quarry Co', 100, 60),
+      supplierTarget('b', 'Quarry Co', 200, 200),
+    ])[0]!;
+    expect(group).toMatchObject({ billed: 300, paid: 260, outstanding: 40, overpaid: 0, deliveries: 2 });
+  });
+
+  it('reports paid correctly when a supplier is overpaid, where billed minus outstanding would not', () => {
+    // The repository clamps remaining and overpaid at zero, so an overpaid supplier has
+    // outstanding 0 and billed - outstanding equals billed, understating what was actually paid.
+    const group = groupSupplierTargets([supplierTarget('a', 'Quarry Co', 1000, 1200)])[0]!;
+    expect(group.paid).toBe(1200);
+    expect(group.outstanding).toBe(0);
+    expect(group.overpaid).toBe(200);
+    expect(group.billed - group.outstanding).toBe(1000);
+    expect(group.paid).not.toBe(group.billed - group.outstanding);
+  });
+
+  it('keeps one supplier\'s overpayment from hiding another supplier\'s outstanding balance', () => {
+    const groups = groupSupplierTargets([
+      supplierTarget('a', 'Quarry Co', 1000, 1200),
+      supplierTarget('b', 'Zahle Quarry', 500, 100),
+    ]);
+    expect(groups.find((g) => g.supplier === 'Quarry Co')).toMatchObject({ paid: 1200, outstanding: 0, overpaid: 200 });
+    expect(groups.find((g) => g.supplier === 'Zahle Quarry')).toMatchObject({ paid: 100, outstanding: 400, overpaid: 0 });
+  });
+
+  it('does not drift on repeated cent fractions across many deliveries', () => {
+    const group = groupSupplierTargets(Array.from({ length: 30 }, (_, i) => supplierTarget(`t${i}`, 'Quarry Co', 10.01, 3.34)))[0]!;
+    expect(group.billed).toBe(300.3);
+    expect(group.paid).toBe(100.2);
+    expect(group.outstanding).toBe(200.1);
   });
 
   it('summarizes pure target lists without drifting on repeated cent fractions', () => {

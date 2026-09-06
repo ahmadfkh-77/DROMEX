@@ -5,6 +5,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {strFromU8,unzipSync} from 'fflate';
 import {describe,expect,it} from 'vitest';
 import {generateDemoBackup} from '../scripts/generate-demo-backup';
+import {DATABASE_VERSION} from '../src/data/database/migrations';
 import {decryptBackupBytes} from '../src/services/backup/BackupCrypto';
 
 describe('large linked demo backup generator',()=>{
@@ -18,7 +19,7 @@ describe('large linked demo backup generator',()=>{
       expect(files['database.sqlite']?.[18]).toBe(1);
       expect(files['database.sqlite']?.[19]).toBe(1);
       const manifest=JSON.parse(strFromU8(files['manifest.json']!)) as {databaseVersion:number;recordCounts:Record<string,number>;media:unknown[]};
-      expect(manifest.databaseVersion).toBe(33);
+      expect(manifest.databaseVersion).toBe(DATABASE_VERSION);
       expect(manifest.recordCounts).toMatchObject({loads:40,customers:25,projects:12,catalog_items:12,quarry_purchases:600,waste_dumps:800,pavement_calculations:96,walls:45,wall_consumptions:180});
       expect(manifest.media.length).toBe(104);
       const databasePath=join(directory,'restored.sqlite');writeFileSync(databasePath,files['database.sqlite']!);

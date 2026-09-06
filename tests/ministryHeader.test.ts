@@ -52,9 +52,10 @@ describe('ministry header persistence', () => {
     expect(emptyDailyReport('project_1').showMinistryHeader).toBe(false);
   });
 
-  it('round-trips ministry name and logo through company settings', async () => {
+  it('round-trips ministry name and logo through PDF settings, alongside company identity', async () => {
     const { profiles } = await setup();
-    const saved = await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png' });
+    await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11 });
+    const saved = await profiles.savePdfSettings({ ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png' });
     expect(saved).toMatchObject({ ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png' });
     const loaded = await profiles.getCompanySettings();
     expect(loaded).toMatchObject({ ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png', companyName: 'DROMEX' });
@@ -72,9 +73,9 @@ describe('ministry header persistence', () => {
 
   it('allows configuring only one of the two values', async () => {
     const { profiles } = await setup();
-    await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, ministryName: 'Ministry of Works' });
+    await profiles.savePdfSettings({ ministryName: 'Ministry of Works' });
     expect(ministryHeaderState(await profiles.getCompanySettings())).toBe('name-only');
-    await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, ministryLogoUri: 'file:///ministry.png' });
+    await profiles.savePdfSettings({ ministryLogoUri: 'file:///ministry.png' });
     expect(ministryHeaderState(await profiles.getCompanySettings())).toBe('logo-only');
   });
 
@@ -107,7 +108,8 @@ describe('ministry header persistence', () => {
 
   it('exposes the configured ministry values through daily-report setup', async () => {
     const { profiles, reports } = await setup();
-    await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png' });
+    await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11 });
+    await profiles.savePdfSettings({ ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png' });
     const setupResult = await reports.getSetup();
     expect(setupResult.company).toMatchObject({ name: 'DROMEX', ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png' });
   });
@@ -117,7 +119,7 @@ describe('ministry header persistence', () => {
   it('derives the editor state from saved settings for every configuration', async () => {
     const { profiles, reports } = await setup();
     const stateAfter = async (extra: {ministryName?: string | null; ministryLogoUri?: string | null}) => {
-      await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, ...extra });
+      await profiles.savePdfSettings({ ...extra });
       return ministryHeaderState((await reports.getSetup()).company);
     };
     expect(await stateAfter({})).toBe('not-configured');
@@ -142,7 +144,7 @@ describe('ministry header persistence', () => {
   // DEC-391: the consulting agency is global, optional, and deliberately outside completeness.
   it('round-trips the consulting agency name through company settings', async () => {
     const { profiles } = await setup();
-    const saved = await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, consultingAgencyName: 'Cedar Engineering Consultants' });
+    const saved = await profiles.savePdfSettings({ consultingAgencyName: 'Cedar Engineering Consultants' });
     expect(saved.consultingAgencyName).toBe('Cedar Engineering Consultants');
     expect((await profiles.getCompanySettings()).consultingAgencyName).toBe('Cedar Engineering Consultants');
   });
@@ -151,16 +153,16 @@ describe('ministry header persistence', () => {
     const { profiles } = await setup();
     await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11 });
     expect((await profiles.getCompanySettings()).consultingAgencyName).toBeNull();
-    await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, consultingAgencyName: '   ' });
+    await profiles.savePdfSettings({ consultingAgencyName: '   ' });
     expect((await profiles.getCompanySettings()).consultingAgencyName).toBeNull();
-    await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, consultingAgencyName: '  Cedar  Engineering  ' });
+    await profiles.savePdfSettings({ consultingAgencyName: '  Cedar  Engineering  ' });
     expect((await profiles.getCompanySettings()).consultingAgencyName).toBe('Cedar Engineering');
   });
 
   it('exposes the consulting agency name through daily-report setup', async () => {
     const { profiles, reports } = await setup();
     expect((await reports.getSetup()).company.consultingAgencyName).toBeNull();
-    await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, consultingAgencyName: 'Cedar Engineering Consultants' });
+    await profiles.savePdfSettings({ consultingAgencyName: 'Cedar Engineering Consultants' });
     expect((await reports.getSetup()).company.consultingAgencyName).toBe('Cedar Engineering Consultants');
   });
 
@@ -175,10 +177,10 @@ describe('ministry header persistence', () => {
 
   it('leaves ministry values and the report flag untouched when only the agency name changes', async () => {
     const { profiles, reports } = await setup();
-    await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png' });
+    await profiles.savePdfSettings({ ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png' });
     const draft = { ...emptyDailyReport('project_1'), workDate: '2026-08-19', workDescription: 'Base course', showMinistryHeader: true };
     const savedReport = await reports.saveReport(draft);
-    await profiles.saveCompanySettings({ companyName: 'DROMEX', vatRatePercent: 11, ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png', consultingAgencyName: 'Cedar Engineering Consultants' });
+    await profiles.savePdfSettings({ ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png', consultingAgencyName: 'Cedar Engineering Consultants' });
     const company = (await reports.getSetup()).company;
     expect(company).toMatchObject({ ministryName: 'Ministry of Works', ministryLogoUri: 'file:///ministry.png', consultingAgencyName: 'Cedar Engineering Consultants' });
     expect((await reports.getReportForDate('project_1', '2026-08-19'))?.showMinistryHeader).toBe(true);

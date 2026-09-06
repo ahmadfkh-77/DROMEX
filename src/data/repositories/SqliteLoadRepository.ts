@@ -18,13 +18,14 @@ import {
   type MeasurementUnit,
   type Project,
   type ProjectDraft,
+  type ProjectInformationDraft,
   type TruckDraft,
   type TruckProfile,
   type UnitDraft,
   type WorkerDraft,
   type WorkerProfile,
   validateLoadDraft,
-  validateProjectStartDate,
+  validateProjectStartDate, validateProjectInformation,
 } from '../../domain/loads';
 import type { DirectoryProfiles, LoadRepository } from './LoadRepository';
 import {paymentStatus} from '../../domain/financials';
@@ -236,6 +237,31 @@ export class SqliteLoadRepository implements LoadRepository {
     await this.db.withTransactionAsync(async () => {
       await this.db.runAsync('UPDATE projects SET start_date = ?, updated_at = ? WHERE id = ?', startDate, now, projectId);
       await this.enqueue('project', projectId, { ...projectFromRow(row), startDate, updatedAt: now });
+    });
+    const updated = await this.db.getFirstAsync<ProjectRow>(`SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.id = ?`, projectId);
+    if (!updated) throw new Error('Project was not found after saving.');
+    return projectFromRow(updated);
+  }
+
+  /**
+   * DEC-404. Updates only `name`, `location`, and `notes` on the project row. It touches no other
+   * column and no other table, so transaction numbers, stored snapshots, payments, financial
+   * calculations, generated documents, and every project relationship are untouched by construction.
+   * Confirmed records keep the `project_name` they snapshotted; screens and newly generated
+   * documents read the live row and therefore show the correction (DEC-403).
+   */
+  async updateProjectInformation(projectId: string, draft: ProjectInformationDraft): Promise<Project> {
+    const issues = validateProjectInformation(draft);
+    if (issues.length) throw new Error(issues.join('\n'));
+    const row = await this.db.getFirstAsync<ProjectRow>(`SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.id = ?`, projectId);
+    if (!row) throw new Error('Project was not found.');
+    const name = draft.name.trim().replace(/\s+/g, ' ');
+    const location = draft.location.trim().replace(/\s+/g, ' ');
+    const notes = clean(draft.notes ?? '');
+    const now = new Date().toISOString();
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync('UPDATE projects SET name = ?, location = ?, notes = ?, updated_at = ? WHERE id = ?', name, location, notes, now, projectId);
+      await this.enqueue('project', projectId, { ...projectFromRow(row), name, location, notes, updatedAt: now });
     });
     const updated = await this.db.getFirstAsync<ProjectRow>(`SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.id = ?`, projectId);
     if (!updated) throw new Error('Project was not found after saving.');

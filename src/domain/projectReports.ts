@@ -52,7 +52,11 @@ export type DailyProjectReportDraft = {
   consultantSignoffEnabled: boolean;
   consultantName: string;
   consultantSignaturePaths: string[];
+  // DEC-398. Three independent per-report switches; none gates another, and the agency no longer
+  // depends on consultantSignoffEnabled (DEC-399).
   showMinistryHeader: boolean;
+  showConsultingAgency: boolean;
+  showCustomHeader: boolean;
 };
 
 export type DailyProjectReport = Omit<DailyProjectReportDraft, 'id'> & {
@@ -87,7 +91,10 @@ export type ProjectReportSetup = {
     truckPlates: ReportPresenceOption[];
     machines: ReportPresenceOption[];
   };
-  company: { name: string; logoUri: string | null; address: string | null; phone: string | null; email: string | null; taxVatNumber: string | null; ministryName: string | null; ministryLogoUri: string | null; consultingAgencyName: string | null };
+  company: { name: string; logoUri: string | null; address: string | null; phone: string | null; email: string | null; taxVatNumber: string | null;
+    ministryName: string | null; ministryNameAr: string | null; ministryLogoUri: string | null;
+    consultingAgencyName: string | null; consultingAgencyNameAr: string | null;
+    customHeaderEn: string | null; customHeaderAr: string | null };
 };
 
 export function splitPresence(value: string): string[] {
@@ -115,7 +122,8 @@ export function emptyDailyReport(projectId: string): DailyProjectReportDraft {
     id: null, projectId, workDate: localDateString(), workDescription: '', workers: [], workerSafety:[], drivers: [],
     truckPlates: [], machines: [], materials: [], photos: [], notes: '', problemsDelaysIncidents: '',
     weatherSiteConditions: '', workStartTime: '', workEndTime: '', breakMinutes: '', nextWorkPlanned: '',
-    consultantSignoffEnabled: false, consultantName: '', consultantSignaturePaths: [], showMinistryHeader: false,
+    consultantSignoffEnabled: false, consultantName: '', consultantSignaturePaths: [],
+    showMinistryHeader: false, showConsultingAgency: false, showCustomHeader: false,
   };
 }
 

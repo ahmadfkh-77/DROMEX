@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 33;
+export const DATABASE_VERSION = 34;
 
 type TableColumn = { name: string };
 
@@ -921,6 +921,23 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'fuel_price_history', 'fuel_type', "TEXT NOT NULL DEFAULT 'diesel' CHECK (fuel_type IN ('diesel','gasoline'))");
     await addColumnIfMissing(db, 'fuel_movements', 'correction_history_json', "TEXT NOT NULL DEFAULT '[]'");
     currentVersion = 33;
+  }
+
+  if (currentVersion === 33) {
+    // DEC-398. `ministry_name` and `consulting_agency_name` stay the English values so existing rows
+    // and the backup format are untouched; only the Arabic partners are new. The custom header has
+    // no legacy column, so both of its languages are explicit.
+    await addColumnIfMissing(db, 'company_settings', 'ministry_name_ar', 'TEXT');
+    await addColumnIfMissing(db, 'company_settings', 'consulting_agency_name_ar', 'TEXT');
+    await addColumnIfMissing(db, 'company_settings', 'custom_header_en', 'TEXT');
+    await addColumnIfMissing(db, 'company_settings', 'custom_header_ar', 'TEXT');
+    await addColumnIfMissing(db, 'daily_project_reports', 'show_consulting_agency', 'INTEGER NOT NULL DEFAULT 0 CHECK (show_consulting_agency IN (0,1))');
+    await addColumnIfMissing(db, 'daily_project_reports', 'show_custom_header', 'INTEGER NOT NULL DEFAULT 0 CHECK (show_custom_header IN (0,1))');
+    // DEC-399. A plain DEFAULT 0 would be a silent regression: every existing report that prints an
+    // agency line today (because its Consultant Sign-off is on) would stop printing it on
+    // regeneration. Backfilling reproduces today's output exactly. New reports still default to off.
+    await db.execAsync('UPDATE daily_project_reports SET show_consulting_agency = 1 WHERE consultant_signoff_enabled = 1;');
+    currentVersion = 34;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

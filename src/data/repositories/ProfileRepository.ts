@@ -1,6 +1,7 @@
 import type {
   CompanySettings,
   CompanySettingsDraft,
+  PdfSettingsDraft,
   Customer,
   CustomerDraft,
 } from '../../domain/profiles';
@@ -19,6 +20,8 @@ export interface ProfileRepository {
   setCustomerActive(id: string, isActive: boolean): Promise<Customer>;
   getCompanySettings(): Promise<CompanySettings>;
   saveCompanySettings(draft: CompanySettingsDraft): Promise<CompanySettings>;
+  /** DEC-397. Owns the document-header values only; it can never alter company identity. */
+  savePdfSettings(draft: PdfSettingsDraft): Promise<CompanySettings>;
   getDemoArchiveStatus(): Promise<DemoArchiveStatus>;
   setDemoRecordsArchived(archived: boolean): Promise<DemoArchiveStatus>;
 }

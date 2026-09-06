@@ -1,6 +1,6 @@
 import type {
   ConfirmedLoad, ConversionDraft, ConversionOption, DriverDraft, DriverProfile, LoadCorrectionDraft, LoadDraft, LoadSetupOptions,
-  MachineDraft, MachineProfile, MeasurementUnit, Project, ProjectDraft, TruckDraft, TruckProfile, UnitDraft, WorkerDraft, WorkerProfile,
+  MachineDraft, MachineProfile, MeasurementUnit, Project, ProjectDraft, ProjectInformationDraft, TruckDraft, TruckProfile, UnitDraft, WorkerDraft, WorkerProfile,
 } from '../../domain/loads';
 
 export type DirectoryProfiles = {
@@ -26,6 +26,8 @@ export interface LoadRepository {
   listProjects(): Promise<Project[]>;
   updateProjectStatus(projectId: string, status: Project['status']): Promise<void>;
   updateProjectStartDate(projectId: string, startDate: string): Promise<Project>;
+  /** DEC-404. Descriptive fields only: never the customer, the dates, the status, or any record. */
+  updateProjectInformation(projectId: string, draft: ProjectInformationDraft): Promise<Project>;
   createDriver(draft: DriverDraft): Promise<DriverProfile>;
   updateDriver(id:string,draft:DriverDraft):Promise<DriverProfile>;
   createTruck(draft: TruckDraft): Promise<TruckProfile>;

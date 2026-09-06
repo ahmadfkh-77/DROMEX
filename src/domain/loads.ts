@@ -116,6 +116,31 @@ export const emptyLoadDraft: LoadDraft = {
 
 function localLoadDate(date=new Date()){return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
 
+/**
+ * DEC-404. The descriptive fields a project may be corrected on. Customer is deliberately absent:
+ * reassigning a project between customers moves financial attribution and is a separate audited
+ * feature. Start and end dates are absent too, keeping the existing protected start-date workflow
+ * as the only way they change.
+ */
+export type ProjectInformationDraft = {name: string; location: string; notes?: string};
+
+export function validateProjectInformation(draft: ProjectInformationDraft): string[] {
+  const issues: string[] = [];
+  if (!draft.name.trim()) issues.push('Project name is required.');
+  if (!draft.location.trim()) issues.push('Project location is required.');
+  return issues;
+}
+
+/**
+ * True when saving would change how the project is identified on screens and on newly generated
+ * documents, so the editor can ask for confirmation rather than renaming silently (DEC-404).
+ * Whitespace-only differences and pure notes edits are not identity changes.
+ */
+export function projectIdentityChanged(before: Pick<Project, 'name' | 'location'>, draft: ProjectInformationDraft): boolean {
+  const same = (a: string, b: string) => a.trim().replace(/\s+/g, ' ') === b.trim().replace(/\s+/g, ' ');
+  return !same(before.name, draft.name) || !same(before.location, draft.location);
+}
+
 /** Format/range checks only. Whether narrowing the date would exclude existing linked records is a repository-level, DB-backed check. */
 export function validateProjectStartDate(startDate: string, project: Pick<Project, 'endDate'>): string[] {
   const issues: string[] = [];

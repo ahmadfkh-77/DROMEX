@@ -6,6 +6,7 @@ import type {
   Customer,
   CustomerDraft,
   CustomerType,
+  PdfSettingsDraft,
 } from '../../domain/profiles';
 import { validateCompanySettings, validateCustomerDraft } from '../../domain/profiles';
 import type { DemoArchiveStatus, ProfileRepository } from './ProfileRepository';
@@ -38,8 +39,12 @@ type SettingsRow = {
   tax_vat_number: string | null;
   receipt_footer: string | null;
   ministry_name: string | null;
+  ministry_name_ar: string | null;
   ministry_logo_uri: string | null;
   consulting_agency_name: string | null;
+  consulting_agency_name_ar: string | null;
+  custom_header_en: string | null;
+  custom_header_ar: string | null;
   updated_at: string;
   vat_rate_basis_points: number | null;
 };
@@ -135,7 +140,9 @@ export class SqliteProfileRepository implements ProfileRepository {
   async getCompanySettings(): Promise<CompanySettings> {
     const row = await this.db.getFirstAsync<SettingsRow>(
       `SELECT company_name, logo_uri, address, phone, email, tax_vat_number,
-              receipt_footer, ministry_name, ministry_logo_uri, consulting_agency_name, company_settings.updated_at,
+              receipt_footer, ministry_name, ministry_name_ar, ministry_logo_uri,
+       consulting_agency_name, consulting_agency_name_ar, custom_header_en, custom_header_ar,
+       company_settings.updated_at,
               tax_settings.vat_rate_basis_points
        FROM company_settings
        LEFT JOIN tax_settings ON tax_settings.id = 'tax'
@@ -151,8 +158,12 @@ export class SqliteProfileRepository implements ProfileRepository {
         taxVatNumber: null,
         receiptFooter: null,
         ministryName: null,
+        ministryNameAr: null,
         ministryLogoUri: null,
         consultingAgencyName: null,
+        consultingAgencyNameAr: null,
+        customHeaderEn: null,
+        customHeaderAr: null,
         vatRatePercent: 0,
         updatedAt: null,
       };
@@ -166,8 +177,12 @@ export class SqliteProfileRepository implements ProfileRepository {
       taxVatNumber: row.tax_vat_number,
       receiptFooter: row.receipt_footer,
       ministryName: row.ministry_name,
+      ministryNameAr: row.ministry_name_ar,
       ministryLogoUri: row.ministry_logo_uri,
       consultingAgencyName: row.consulting_agency_name,
+      consultingAgencyNameAr: row.consulting_agency_name_ar,
+      customHeaderEn: row.custom_header_en,
+      customHeaderAr: row.custom_header_ar,
       vatRatePercent: (row.vat_rate_basis_points ?? 0) / 100,
       updatedAt: row.updated_at,
     };
@@ -177,7 +192,11 @@ export class SqliteProfileRepository implements ProfileRepository {
     const issue = validateCompanySettings(draft)[0];
     if (issue) throw new Error(issue);
     const now = new Date().toISOString();
+    // DEC-397. The document-header columns are deliberately absent from this statement, so Company &
+    // VAT physically cannot blank a value that PDF Settings owns.
+    const existing = await this.getCompanySettings();
     const settings: CompanySettings = {
+      ...existing,
       companyName: draft.companyName.trim().replace(/\s+/g, ' '),
       logoUri: draft.logoUri ?? null,
       address: clean(draft.address),
@@ -185,9 +204,6 @@ export class SqliteProfileRepository implements ProfileRepository {
       email: clean(draft.email),
       taxVatNumber: clean(draft.taxVatNumber),
       receiptFooter: clean(draft.receiptFooter),
-      ministryName: clean(draft.ministryName ?? undefined),
-      ministryLogoUri: draft.ministryLogoUri ?? null,
-      consultingAgencyName: clean(draft.consultingAgencyName ?? undefined),
       vatRatePercent: draft.vatRatePercent,
       updatedAt: now,
     };
@@ -196,8 +212,8 @@ export class SqliteProfileRepository implements ProfileRepository {
       await this.db.runAsync(
         `INSERT INTO company_settings (
           id, company_name, logo_uri, address, phone, email, tax_vat_number,
-          receipt_footer, ministry_name, ministry_logo_uri, consulting_agency_name, updated_at
-        ) VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          receipt_footer, updated_at
+        ) VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           company_name = excluded.company_name,
           logo_uri = excluded.logo_uri,
@@ -206,9 +222,6 @@ export class SqliteProfileRepository implements ProfileRepository {
           email = excluded.email,
           tax_vat_number = excluded.tax_vat_number,
           receipt_footer = excluded.receipt_footer,
-          ministry_name = excluded.ministry_name,
-          ministry_logo_uri = excluded.ministry_logo_uri,
-          consulting_agency_name = excluded.consulting_agency_name,
           updated_at = excluded.updated_at`,
         settings.companyName,
         settings.logoUri,
@@ -217,9 +230,6 @@ export class SqliteProfileRepository implements ProfileRepository {
         settings.email,
         settings.taxVatNumber,
         settings.receiptFooter,
-        settings.ministryName,
-        settings.ministryLogoUri,
-        settings.consultingAgencyName,
         now,
       );
       await this.db.runAsync(
@@ -281,6 +291,57 @@ export class SqliteProfileRepository implements ProfileRepository {
       await this.enqueue('companySettings', 'company', settings);
       await this.enqueue('taxSettings', 'tax', { vatRatePercent: settings.vatRatePercent });
       await this.enqueue('customer', ownCustomer.id, ownCustomer);
+    });
+
+    return settings;
+  }
+
+  /**
+   * PDF Settings owns the document-header columns and nothing else (DEC-397). The company columns
+   * are absent from this statement for the same reason they are absent from the other one: neither
+   * screen can reach the other's data. The INSERT branch only fires when no settings row exists yet,
+   * and supplies an empty company_name because that column is NOT NULL; the conflict branch never
+   * touches it, so an existing company name is safe.
+   */
+  async savePdfSettings(draft: PdfSettingsDraft): Promise<CompanySettings> {
+    const now = new Date().toISOString();
+    const existing = await this.getCompanySettings();
+    const next = {
+      ministryName: clean(draft.ministryName ?? undefined),
+      ministryNameAr: clean(draft.ministryNameAr ?? undefined),
+      ministryLogoUri: draft.ministryLogoUri ?? null,
+      consultingAgencyName: clean(draft.consultingAgencyName ?? undefined),
+      consultingAgencyNameAr: clean(draft.consultingAgencyNameAr ?? undefined),
+      customHeaderEn: clean(draft.customHeaderEn ?? undefined),
+      customHeaderAr: clean(draft.customHeaderAr ?? undefined),
+    };
+    const settings: CompanySettings = {...existing, ...next, updatedAt: now};
+
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync(
+        `INSERT INTO company_settings (
+          id, company_name, ministry_name, ministry_name_ar, ministry_logo_uri,
+          consulting_agency_name, consulting_agency_name_ar, custom_header_en, custom_header_ar, updated_at
+        ) VALUES ('company', '', ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          ministry_name = excluded.ministry_name,
+          ministry_name_ar = excluded.ministry_name_ar,
+          ministry_logo_uri = excluded.ministry_logo_uri,
+          consulting_agency_name = excluded.consulting_agency_name,
+          consulting_agency_name_ar = excluded.consulting_agency_name_ar,
+          custom_header_en = excluded.custom_header_en,
+          custom_header_ar = excluded.custom_header_ar,
+          updated_at = excluded.updated_at`,
+        next.ministryName,
+        next.ministryNameAr,
+        next.ministryLogoUri,
+        next.consultingAgencyName,
+        next.consultingAgencyNameAr,
+        next.customHeaderEn,
+        next.customHeaderAr,
+        now,
+      );
+      await this.enqueue('companySettings', 'company', settings);
     });
 
     return settings;

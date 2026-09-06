@@ -6,8 +6,10 @@ import { SearchableSelect } from '../components/SearchableSelect';
 import { DatePickerField, displayDate, todayIso } from '../components/DatePickerField';
 import { useReducedMotion } from '../components/ExpandableMenu';
 import { colors } from '../theme';
+import { EditProjectInformationScreen } from './EditProjectInformationScreen';
 
 export function ProjectsScreen({repository,onBack,onOpenProject,onProjectStatusChange}:{repository:LoadRepository;onBack:()=>void;onOpenProject:(project:Project)=>void;onProjectStatusChange?:(project:Project,status:Project['status'])=>void}){
+  const [editingProject,setEditingProject]=useState<Project|null>(null);
   const reducedMotion=useReducedMotion();
   const [setup,setSetup]=useState<LoadSetupOptions|null>(null); const [projects,setProjects]=useState<Project[]>([]); const [showForm,setShowForm]=useState(false);
   const [customerId,setCustomerId]=useState(''); const [name,setName]=useState(''); const [location,setLocation]=useState(''); const [notes,setNotes]=useState('');
@@ -42,6 +44,7 @@ export function ProjectsScreen({repository,onBack,onOpenProject,onProjectStatusC
   const completed=useMemo(()=>completedAll.filter(matches),[completedAll,matches]);
   const hasQuery=query.length>0;
   if(!setup)return <View style={styles.loading}><ActivityIndicator size="large" color={colors.brand}/><Text style={styles.helper}>Loading projects…</Text></View>;
+  if(editingProject)return <EditProjectInformationScreen repository={repository} project={editingProject} onBack={()=>setEditingProject(null)} onSaved={updated=>{setEditingProject(null);setProjects(current=>current.map(value=>value.id===updated.id?updated:value));}}/>;
   return <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
     <View style={styles.hero}>
       <View style={styles.heroTopRow}>
@@ -64,7 +67,7 @@ export function ProjectsScreen({repository,onBack,onOpenProject,onProjectStatusC
       {search.length?<TouchableOpacity style={styles.searchClear} onPress={()=>setSearch('')} accessibilityRole="button" accessibilityLabel="Clear search"><Text style={styles.searchClearText}>×</Text></TouchableOpacity>:null}
     </View>:null}
     <View style={styles.sectionHeadingRow}><Text style={styles.sectionTitle}>Active Projects</Text><Text style={styles.sectionCount}>{activeAll.length}</Text></View>
-    {active.length?active.map((p)=><ProjectCard key={p.id} project={p} busy={busy} onOpenProject={()=>onOpenProject(p)} onStatus={()=>requestStatusChange(p)} onSaveStartDate={(startDate)=>saveStartDate(p,startDate)}/>):<Empty title={hasQuery?'No matches':'No active projects yet'} body={hasQuery?`No active projects match "${search.trim()}".`:'Create one above to get started.'} onClearSearch={hasQuery?()=>setSearch(''):undefined}/>}
+    {active.length?active.map((p)=><ProjectCard key={p.id} project={p} busy={busy} onOpenProject={()=>onOpenProject(p)} onStatus={()=>requestStatusChange(p)} onSaveStartDate={(startDate)=>saveStartDate(p,startDate)} onEditInformation={()=>setEditingProject(p)}/>):<Empty title={hasQuery?'No matches':'No active projects yet'} body={hasQuery?`No active projects match "${search.trim()}".`:'Create one above to get started.'} onClearSearch={hasQuery?()=>setSearch(''):undefined}/>}
     <TouchableOpacity activeOpacity={.75} style={styles.completedBand} onPress={toggleCompleted} accessibilityRole="button" accessibilityState={{expanded:completedOpen}} accessibilityLabel={`Completed Projects, ${completedAll.length} project${completedAll.length===1?'':'s'}`}>
       <View style={styles.flex}>
         <Text style={styles.completedBandTitle}>Completed Projects</Text>
@@ -72,10 +75,10 @@ export function ProjectsScreen({repository,onBack,onOpenProject,onProjectStatusC
       </View>
       <View style={styles.completedHeaderRight}><View style={styles.countBadge}><Text style={styles.countBadgeText}>{completedAll.length}</Text></View><Text style={styles.expandMark}>{completedOpen?'×':'+'}</Text></View>
     </TouchableOpacity>
-    {completedOpen?(completed.length?completed.map((p)=><ProjectCard key={p.id} project={p} busy={busy} onOpenProject={()=>onOpenProject(p)} onStatus={()=>requestStatusChange(p)} onSaveStartDate={(startDate)=>saveStartDate(p,startDate)}/>):<Empty title={hasQuery?'No matches':'No completed projects yet'} body={hasQuery?`No completed projects match "${search.trim()}".`:'Projects you mark completed will appear here.'} onClearSearch={hasQuery?()=>setSearch(''):undefined}/>):null}
+    {completedOpen?(completed.length?completed.map((p)=><ProjectCard key={p.id} project={p} busy={busy} onOpenProject={()=>onOpenProject(p)} onStatus={()=>requestStatusChange(p)} onSaveStartDate={(startDate)=>saveStartDate(p,startDate)} onEditInformation={()=>setEditingProject(p)}/>):<Empty title={hasQuery?'No matches':'No completed projects yet'} body={hasQuery?`No completed projects match "${search.trim()}".`:'Projects you mark completed will appear here.'} onClearSearch={hasQuery?()=>setSearch(''):undefined}/>):null}
   </ScrollView>;
 }
-function ProjectCard({project,busy,onOpenProject,onStatus,onSaveStartDate}:{project:Project;busy:boolean;onOpenProject:()=>void;onStatus:()=>void;onSaveStartDate:(startDate:string)=>Promise<void>}){
+function ProjectCard({project,busy,onOpenProject,onStatus,onSaveStartDate,onEditInformation}:{project:Project;busy:boolean;onOpenProject:()=>void;onStatus:()=>void;onSaveStartDate:(startDate:string)=>Promise<void>;onEditInformation:()=>void}){
   const[editingDate,setEditingDate]=useState(false);const[dateValue,setDateValue]=useState(project.startDate??todayIso());const[dateBusy,setDateBusy]=useState(false);const[dateError,setDateError]=useState<string|null>(null);
   useEffect(()=>{setDateValue(project.startDate??todayIso());},[project.startDate]);
   function openEdit(){setEditingDate(true);setDateError(null);}
@@ -98,6 +101,7 @@ function ProjectCard({project,busy,onOpenProject,onStatus,onSaveStartDate}:{proj
     </TouchableOpacity>
     <View style={styles.card2Footer}>
       {!editingDate?<TouchableOpacity style={styles.dateChip} onPress={openEdit} accessibilityRole="button" accessibilityLabel={`Edit start date for ${project.name}. Currently ${project.startDate?displayDate(project.startDate):'not set'}.`}><Text style={styles.dateChipText}>Start {project.startDate?displayDate(project.startDate):'not set'} · Edit</Text></TouchableOpacity>:null}
+      <TouchableOpacity style={styles.quietAction} disabled={busy} onPress={onEditInformation} accessibilityRole="button" accessibilityLabel={`Edit information for ${project.name}`} accessibilityHint="Opens name, location, and notes. Records and payments are not affected." accessibilityState={{disabled:busy}}><Text style={styles.quietActionText}>Edit Information ›</Text></TouchableOpacity>
       <TouchableOpacity style={styles.quietAction} disabled={busy} onPress={onStatus} accessibilityRole="button" accessibilityLabel={completed?`Reactivate ${project.name}`:`Mark ${project.name} as completed`} accessibilityState={{disabled:busy,busy}}><Text style={styles.quietActionText}>{completed?'Reactivate ›':'Mark Completed ›'}</Text></TouchableOpacity>
     </View>
     {editingDate?<View style={styles.dateEdit}>

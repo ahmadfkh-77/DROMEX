@@ -26,6 +26,11 @@ export type Customer = {
   updatedAt: string;
 };
 
+/**
+ * Company & VAT owns these and only these (DEC-397). The document-header values are deliberately
+ * absent: a screen that cannot name a column cannot blank it, which is what keeps Company & VAT from
+ * wiping PDF Settings on its next save.
+ */
 export type CompanySettingsDraft = {
   companyName: string;
   logoUri?: string | null;
@@ -34,10 +39,18 @@ export type CompanySettingsDraft = {
   email?: string;
   taxVatNumber?: string;
   receiptFooter?: string;
+  vatRatePercent: number;
+};
+
+/** PDF Settings owns these and only these (DEC-397, DEC-398). `ministryName` is the English value. */
+export type PdfSettingsDraft = {
   ministryName?: string | null;
+  ministryNameAr?: string | null;
   ministryLogoUri?: string | null;
   consultingAgencyName?: string | null;
-  vatRatePercent: number;
+  consultingAgencyNameAr?: string | null;
+  customHeaderEn?: string | null;
+  customHeaderAr?: string | null;
 };
 
 export type CompanySettings = {
@@ -48,14 +61,36 @@ export type CompanySettings = {
   email: string | null;
   taxVatNumber: string | null;
   receiptFooter: string | null;
+  // DEC-398. `ministryName` and `consultingAgencyName` are the English values; the legacy column
+  // names are kept so existing rows and the backup format are untouched.
   ministryName: string | null;
+  ministryNameAr: string | null;
   ministryLogoUri: string | null;
-  // DEC-391. Global, optional, and deliberately outside consultantSignoffState: an agency name never
-  // makes a sign-off complete or incomplete.
+  // DEC-391, as amended by DEC-399. Global, optional, and deliberately outside
+  // consultantSignoffState: an agency name never makes a sign-off complete or incomplete, and since
+  // DEC-399 it no longer depends on the sign-off being enabled at all.
   consultingAgencyName: string | null;
+  consultingAgencyNameAr: string | null;
+  customHeaderEn: string | null;
+  customHeaderAr: string | null;
   vatRatePercent: number;
   updatedAt: string | null;
 };
+
+export type DocumentHeaderKind = 'ministry' | 'consultingAgency' | 'customHeader';
+/** What a header can actually draw, so the editor can say precisely what is missing (DEC-402). */
+export type DocumentHeaderConfigured = {english: boolean; arabic: boolean; logo: boolean};
+const filled = (value: string | null | undefined) => (value ?? '').trim().length > 0;
+export function documentHeaderConfigured(settings: Partial<CompanySettings>, kind: DocumentHeaderKind): DocumentHeaderConfigured {
+  if (kind === 'ministry') return {english: filled(settings.ministryName), arabic: filled(settings.ministryNameAr), logo: filled(settings.ministryLogoUri)};
+  if (kind === 'consultingAgency') return {english: filled(settings.consultingAgencyName), arabic: filled(settings.consultingAgencyNameAr), logo: false};
+  return {english: filled(settings.customHeaderEn), arabic: filled(settings.customHeaderAr), logo: false};
+}
+/** True when a header would render nothing at all, whichever language or logo it relies on. */
+export function documentHeaderIsEmpty(settings: Partial<CompanySettings>, kind: DocumentHeaderKind): boolean {
+  const state = documentHeaderConfigured(settings, kind);
+  return !state.english && !state.arabic && !state.logo;
+}
 
 // Which parts of the optional Ministry header are configured (DEC-389). A report may switch the
 // header on at any time; this decides what the PDF can actually render and what the editor must

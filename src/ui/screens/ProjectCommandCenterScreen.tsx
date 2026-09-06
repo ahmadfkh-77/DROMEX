@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useState,type ReactNode} from 'react';
 import {ActivityIndicator,Image,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 import type {FinancialRepository} from '../../data/repositories/FinancialRepository';
+import type {LoadRepository} from '../../data/repositories/LoadRepository';
 import type {WorkspaceRepository} from '../../data/repositories/WorkspaceRepository';
 import type {Project} from '../../domain/loads';
 import {emptyWorkspaceIssue,groupWorkspaceActivities,type ProjectWorkspaceSnapshot,type WorkspaceActivity,type WorkspaceIssue,type WorkspaceIssueDraft} from '../../domain/workspace';
@@ -8,6 +9,7 @@ import {capturePersistentImage,pickPersistentImage} from '../../services/media';
 import {AppButton,AppCard,AppField,AppPage,EmptyState,Feedback,MetricCard,PageHeader} from '../components/AppPrimitives';
 import {DatePickerField,todayIso} from '../components/DatePickerField';
 import {ExpandableMenuSection,MenuAction} from '../components/ExpandableMenu';
+import {EditProjectInformationScreen} from './EditProjectInformationScreen';
 import {ProjectFinancialReview} from './FinancialsScreen';
 import {colors} from '../theme';
 
@@ -17,7 +19,7 @@ const PHOTO_PAGE=8;
 const priorityColor:Record<WorkspaceIssue['priority'],string>={Urgent:colors.danger,High:colors.warning,Normal:colors.navy,Low:colors.muted};
 const priorityTint:Record<WorkspaceIssue['priority'],string>={Urgent:'#FCE8E6',High:'#FFF3D8',Normal:'#E8F0F7',Low:'#F1EFEA'};
 
-export function ProjectCommandCenterScreen({project,repository,financialRepository,routes,onBack,initialPanel}:{project:Project;repository:WorkspaceRepository;financialRepository:FinancialRepository;routes:Routes;onBack:()=>void;initialPanel?:'issues'|'photos'|null}){
+export function ProjectCommandCenterScreen({project,repository,financialRepository,loadRepository,routes,onBack,initialPanel,onProjectUpdated}:{project:Project;repository:WorkspaceRepository;financialRepository:FinancialRepository;loadRepository:LoadRepository;routes:Routes;onBack:()=>void;initialPanel?:'issues'|'photos'|null;onProjectUpdated?:(project:Project)=>void}){
   const[status,setStatus]=useState<ScreenStatus>('loading');
   const[loadError,setLoadError]=useState<string|null>(null);
   const[reloadToken,setReloadToken]=useState(0);
@@ -35,6 +37,7 @@ export function ProjectCommandCenterScreen({project,repository,financialReposito
   const[timelineActivities,setTimelineActivities]=useState<WorkspaceActivity[]|null>(null);
   const[timelineBusy,setTimelineBusy]=useState(false);
   const[showFinancialReview,setShowFinancialReview]=useState(false);
+  const[editingInformation,setEditingInformation]=useState(false);
   const refresh=useCallback(async()=>{const value=await repository.getProjectWorkspace(project.id);setSnapshot(value);},[project.id,repository]);
   useEffect(()=>{let active=true;setStatus('loading');setLoadError(null);void refresh().then(()=>{if(active)setStatus('ready');}).catch(cause=>{if(active){setLoadError(cause instanceof Error?cause.message:'Could not load the project command center.');setStatus('error');}});return()=>{active=false;};},[refresh,reloadToken]);
   const toggle=(key:string)=>setOpen(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});
@@ -45,6 +48,7 @@ export function ProjectCommandCenterScreen({project,repository,financialReposito
   async function filterTimeline(){setTimelineBusy(true);setError(null);try{setTimelineActivities(await repository.listProjectActivities(project.id,timelineFrom,timelineTo));}catch(cause){setError(cause instanceof Error?cause.message:'Could not filter project activity.');}finally{setTimelineBusy(false);}}
   function clearTimeline(){setTimelineFrom('');setTimelineTo('');setTimelineActivities(null);setError(null);}
 
+  if(editingInformation)return <EditProjectInformationScreen repository={loadRepository} project={project} onBack={()=>setEditingInformation(false)} onSaved={updated=>{setEditingInformation(false);onProjectUpdated?.(updated);}}/>;
   if(showFinancialReview)return <ProjectFinancialReview repository={financialRepository} projectId={project.id} projectName={project.name} customerName={project.customerName} projectStatus={project.status} onBack={()=>setShowFinancialReview(false)}/>;
   if(status==='loading')return <AppPage><PageHeader eyebrow="PROJECT COMMAND CENTER" title={project.name} onBack={onBack}/><View style={styles.centerState}><ActivityIndicator color={colors.brand}/><Text style={styles.centerStateText}>Loading {project.name}…</Text></View></AppPage>;
   if(status==='error')return <AppPage><PageHeader eyebrow="PROJECT COMMAND CENTER" title={project.name} onBack={onBack}/><View style={styles.centerState}><Text style={styles.centerStateTitle}>Could not open this project</Text><Text style={styles.centerStateText}>{loadError}</Text><AppButton label="Retry" onPress={()=>setReloadToken(value=>value+1)}/></View></AppPage>;
@@ -137,7 +141,7 @@ export function ProjectCommandCenterScreen({project,repository,financialReposito
     <ExpandableMenuSection title="Records and Documents" hint="Open project loads, reports, PDFs, and Excel output." marker="07" refined polished open={open.has('documents')} onToggle={()=>toggle('documents')}>
       <MenuAction refined polished number="01" title="Project Load Records" body="Open confirmed loads and documents." onPress={routes.onLoads}/>
       <MenuAction refined polished number="02" title="Project Reports" body="Daily history, completed-project PDF, and Excel exports." onPress={routes.onReports}/>
-      <MenuAction refined polished number="03" title="Project Financial Review" body="Billed, paid, and outstanding for this project. Read-only." onPress={()=>setShowFinancialReview(true)}/>
+      <MenuAction refined polished number="03" title="Project Financial Review" body="Billed, paid, and outstanding for this project. Read-only." onPress={()=>setShowFinancialReview(true)}/><MenuAction refined polished number="04" title="Edit Project Information" body="Correct the project name, location, and notes. Records, payments, and history are untouched." onPress={()=>setEditingInformation(true)}/>
     </ExpandableMenuSection>
   </AppPage>;
 }

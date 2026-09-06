@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Animated, Image, LayoutAnimation, ScrollView,
 
 import type { ProjectReportRepository } from '../../data/repositories/ProjectReportRepository';
 import type { BusinessReportRepository } from '../../data/repositories/BusinessReportRepository';
-import {ministryHeaderState} from '../../domain/profiles';
+import {documentHeaderConfigured,type DocumentHeaderConfigured} from '../../domain/profiles';
 import {activeBusinessFilterCount,businessReportLabels,emptyBusinessReportFilters,filterBusinessReportData,type BusinessReportFilters,type BusinessReportKind} from '../../domain/businessReports';
 import type {WorkbookLocale,WorkbookProgress} from '../../services/businessWorkbook';
 import {exportAndShareDailyReportWorkbook} from '../../services/dailyReportWorkbook';
@@ -26,7 +26,7 @@ import { colors } from '../theme';
 
 const HISTORY_PAGE=20;
 
-export function ReportsScreen({ repository,businessReportRepository,onBack,initialBusinessFilters,initialProjectId,initialReportId,startNewReport=false }: { repository: ProjectReportRepository;businessReportRepository:BusinessReportRepository;onBack: () => void;initialBusinessFilters?:Partial<BusinessReportFilters>;initialProjectId?:string|null;initialReportId?:string|null;startNewReport?:boolean }) {
+export function ReportsScreen({ repository,businessReportRepository,onBack,onOpenPdfSettings,initialBusinessFilters,initialProjectId,initialReportId,startNewReport=false }: { repository: ProjectReportRepository;businessReportRepository:BusinessReportRepository;onOpenPdfSettings:()=>void;onBack: () => void;initialBusinessFilters?:Partial<BusinessReportFilters>;initialProjectId?:string|null;initialReportId?:string|null;startNewReport?:boolean }) {
   const [setup, setSetup] = useState<ProjectReportSetup | null>(null);
   const [setupStatus, setSetupStatus] = useState<'loading' | 'error' | 'ready'>('loading');
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -155,7 +155,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,initi
 
   if (setupStatus === 'error') return <ScrollView contentContainerStyle={styles.content}><Header eyebrow="OPERATIONS" title="Reports" onBack={onBack}/><View style={styles.errorState}><Text style={styles.errorStateTitle}>Could not load reports</Text><Text style={styles.errorStateText}>{setupError}</Text><TouchableOpacity style={styles.retryButton} onPress={()=>void refreshSetup()} accessibilityRole="button"><Text style={styles.retryButtonText}>Retry</Text></TouchableOpacity></View></ScrollView>;
   if (!setup) return <ScrollView contentContainerStyle={styles.content}><Header eyebrow="OPERATIONS" title="Reports" onBack={onBack}/><View style={styles.centerState}><ActivityIndicator size="large" color={colors.brand}/><Text style={styles.helper}>Loading reports…</Text></View></ScrollView>;
-  if (draft && project) return <DailyReportEditor setup={setup} project={project} draft={draft} reports={reports} linkedLoads={linkedLoads} linkedQuarryLoads={linkedQuarryLoads} linkedFuelFills={linkedFuelFills} linkedWasteDumps={linkedWasteDumps} busy={busy} error={error} reducedMotion={reducedMotion} onChange={setDraft} onSave={() => void save()} onBack={() => setDraft(null)} onOpenReport={editReport}/>;
+  if (draft && project) return <DailyReportEditor setup={setup} project={project} draft={draft} onOpenPdfSettings={onOpenPdfSettings} reports={reports} linkedLoads={linkedLoads} linkedQuarryLoads={linkedQuarryLoads} linkedFuelFills={linkedFuelFills} linkedWasteDumps={linkedWasteDumps} busy={busy} error={error} reducedMotion={reducedMotion} onChange={setDraft} onSave={() => void save()} onBack={() => setDraft(null)} onOpenReport={editReport}/>;
   if (project) {
     const visibleReports=reports.slice(0,historyVisible);
     const remaining=reports.length-visibleReports.length;
@@ -267,7 +267,7 @@ function summarizePpe(safetyPeople:{name:string;type:SafetyParticipantType;label
   return {compliant,missing,notChecked,total:safetyPeople.length};
 }
 
-function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linkedQuarryLoads, linkedFuelFills, linkedWasteDumps, busy, error, reducedMotion, onChange, onSave, onBack, onOpenReport }: { setup: ProjectReportSetup; project: ReportProject; draft: DailyProjectReportDraft; reports:DailyProjectReport[]; linkedLoads: LinkedProjectLoad[]; linkedQuarryLoads:LinkedQuarryLoad[]; linkedFuelFills:LinkedFuelFill[]; linkedWasteDumps: LinkedWasteDump[]; busy: boolean; error: string | null; reducedMotion:boolean; onChange: (draft: DailyProjectReportDraft) => void; onSave: () => void; onBack: () => void; onOpenReport:(report:DailyProjectReport)=>void }) {
+function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linkedQuarryLoads, linkedFuelFills, linkedWasteDumps, busy, error, reducedMotion, onChange, onSave, onBack, onOpenReport, onOpenPdfSettings }: { onOpenPdfSettings:()=>void; setup: ProjectReportSetup; project: ReportProject; draft: DailyProjectReportDraft; reports:DailyProjectReport[]; linkedLoads: LinkedProjectLoad[]; linkedQuarryLoads:LinkedQuarryLoad[]; linkedFuelFills:LinkedFuelFill[]; linkedWasteDumps: LinkedWasteDump[]; busy: boolean; error: string | null; reducedMotion:boolean; onChange: (draft: DailyProjectReportDraft) => void; onSave: () => void; onBack: () => void; onOpenReport:(report:DailyProjectReport)=>void }) {
   const [materialItemId, setMaterialItemId] = useState(''); const [materialUnitId, setMaterialUnitId] = useState('');
   const [materialQuantity, setMaterialQuantity] = useState(''); const [materialMovement, setMaterialMovement] = useState<'used' | 'transported'>('used');
   const [mediaError,setMediaError]=useState<string|null>(null);
@@ -295,9 +295,17 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
   const signoffState=useMemo(()=>consultantSignoffState(draft),[draft]);
   const hasConsultantData=Boolean(draft.consultantName.trim())||draft.consultantSignaturePaths.length>0;
   const signoffBadge=signoffState==='disabled'?(hasConsultantData?'Off · data saved':'Off'):signoffState==='complete'?'Complete':'Incomplete';
-  const ministryState=useMemo(()=>ministryHeaderState(setup.company),[setup.company]);
+  // DEC-402. One badge for the whole section: how many of the three are on, and whether any of
+  // those cannot actually draw anything yet.
+  const headerStates=useMemo(()=>({
+    ministry:{on:draft.showMinistryHeader,state:documentHeaderConfigured(setup.company,'ministry')},
+    consultingAgency:{on:draft.showConsultingAgency,state:documentHeaderConfigured(setup.company,'consultingAgency')},
+    customHeader:{on:draft.showCustomHeader,state:documentHeaderConfigured(setup.company,'customHeader')},
+  }),[draft.showMinistryHeader,draft.showConsultingAgency,draft.showCustomHeader,setup.company]);
+  const headersOn=Object.values(headerStates).filter(value=>value.on);
+  const headersOnButUnconfigured=headersOn.some(value=>!value.state.english&&!value.state.arabic&&!value.state.logo);
+  const headerBadge=headersOn.length===0?'All off':headersOnButUnconfigured?`${headersOn.length} on · needs setup`:`${headersOn.length} on`;
   const consultingAgency=(setup.company.consultingAgencyName??'').trim();
-  const ministryBadge=!draft.showMinistryHeader?'Off':ministryState==='complete'?'On':ministryState==='not-configured'?'On · not configured':'On · partial';
   function removeConsultantData(){Alert.alert('Remove Sign-off Data Permanently','This deletes the saved consultant name and signature from this report. This cannot be undone.',[{text:'Cancel',style:'cancel'},{text:'Remove Permanently',style:'destructive',onPress:()=>onChange({...draft,consultantName:'',consultantSignaturePaths:[]})}]);}
 
   return (
@@ -379,7 +387,7 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
       <LedgerSection number="11" title="Consultant Sign-off" badge={signoffBadge} badgeTone={signoffState==='incomplete'?'warning':'neutral'} open={openSections.has('consultant')} onToggle={()=>toggleSection('consultant')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Optional. When on, the consultant can add their name and digital signature here, before or after generating the PDF. Turning this off never deletes name or signature data already saved — it only hides it from the next PDF.</Text>
         <View style={styles.chipWrap} accessibilityRole="radiogroup" accessibilityLabel="Consultant sign-off on this report"><Choice label="Off" selected={!draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',false)}/><Choice label="On" selected={draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',true)}/></View>
-        {draft.consultantSignoffEnabled?<Text style={styles.sectionHint} accessibilityRole="text">On the PDF, {consultingAgency?`${consultingAgency} appears under the report title on page one, and the`:'the'} consultant name and signature appear at the end, just before Photo Evidence.{consultingAgency?'':' No consulting agency name is configured, so no agency line is printed — add one in More → Settings → Consulting agency.'}</Text>:null}
+        {draft.consultantSignoffEnabled?<Text style={styles.sectionHint} accessibilityRole="text">On the PDF, the consultant name and signature appear at the end, just before Photo Evidence. The consulting agency is a separate header controlled in PDF Headers below.{consultingAgency?'':' No consulting agency name is configured, so no agency line is printed — add one in More → Settings → Consulting agency.'}</Text>:null}
         {draft.consultantSignoffEnabled?<>
           <Field label="Consultant name" value={draft.consultantName} onChangeText={(value)=>update('consultantName',value)} placeholder="Consultant's full name"/>
           <Text style={styles.fieldLabel}>Consultant signature</Text>
@@ -388,13 +396,35 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
         </>:hasConsultantData?<View style={styles.duplicateWarning}><Text style={styles.duplicateWarningTitle}>Sign-off is off, but saved data remains</Text><Text style={styles.duplicateWarningText}>The consultant name and/or signature already saved for this report are kept and will not appear on the PDF while sign-off is off. Remove them permanently only if you are sure.</Text><TouchableOpacity style={styles.duplicateWarningButton} onPress={removeConsultantData} accessibilityRole="button"><Text style={styles.duplicateWarningButtonText}>Remove Sign-off Data Permanently</Text></TouchableOpacity></View>:null}
       </LedgerSection>
 
-      <LedgerSection number="12" title="Ministry Header" badge={ministryBadge} badgeTone={draft.showMinistryHeader&&ministryState!=='complete'?'warning':'neutral'} open={openSections.has('ministry')} onToggle={()=>toggleSection('ministry')} reducedMotion={reducedMotion}>
-        <Text style={styles.sectionHint}>Optional. When on, the ministry name and logo saved in Settings appear at the top of the first page of this report's PDF only — never on later pages. This is off by default, so every other report stays unbranded.</Text>
-        <View style={styles.chipWrap} accessibilityRole="radiogroup" accessibilityLabel="Show Ministry Header on this report"><Choice label="Off" selected={!draft.showMinistryHeader} onPress={()=>update('showMinistryHeader',false)}/><Choice label="On" selected={draft.showMinistryHeader} onPress={()=>update('showMinistryHeader',true)}/></View>
-        {draft.showMinistryHeader?(ministryState==='not-configured'
-          ?<Text style={styles.notice} accessibilityRole="text">No ministry name or logo is configured yet, so this report's PDF will not show a ministry header. Add them in More → Settings → Ministry header.</Text>
-          :<Text style={styles.sectionHint} accessibilityRole="text">{ministryState==='complete'?'This PDF will show the ministry logo and name.':ministryState==='name-only'?'This PDF will show the ministry name only — no ministry logo is configured yet.':'This PDF will show the ministry logo only — no ministry name is configured yet.'}</Text>)
-          :null}
+      {/* DEC-402. One section, three independent controls: three separate numbered sections would
+          make the common case, all headers off, longer to scroll past rather than shorter. */}
+      <LedgerSection number="12" title="PDF Headers" badge={headerBadge} badgeTone={headersOnButUnconfigured?'warning':'neutral'} open={openSections.has('headers')} onToggle={()=>toggleSection('headers')} reducedMotion={reducedMotion}>
+        <Text style={styles.sectionHint}>Optional. These print at the top of page one only, never on later pages, and each is off by default so every other report stays unbranded. The values themselves are saved once in PDF Settings and shared by every project.</Text>
+        <HeaderControl
+          label="Show Ministry"
+          hint="Ministry name and logo, beside your company logo."
+          on={draft.showMinistryHeader}
+          onChange={(value)=>update('showMinistryHeader',value)}
+          state={documentHeaderConfigured(setup.company,'ministry')}
+          hasLogoSlot
+          onOpenPdfSettings={onOpenPdfSettings}
+        />
+        <HeaderControl
+          label="Show Consulting Agency"
+          hint="The supervising organisation. Independent of Consultant Sign-off: turning that off never hides this."
+          on={draft.showConsultingAgency}
+          onChange={(value)=>update('showConsultingAgency',value)}
+          state={documentHeaderConfigured(setup.company,'consultingAgency')}
+          onOpenPdfSettings={onOpenPdfSettings}
+        />
+        <HeaderControl
+          label="Show Custom Header"
+          hint="Any extra line this report needs, such as a contract reference."
+          on={draft.showCustomHeader}
+          onChange={(value)=>update('showCustomHeader',value)}
+          state={documentHeaderConfigured(setup.company,'customHeader')}
+          onOpenPdfSettings={onOpenPdfSettings}
+        />
       </LedgerSection>
 
       <View style={styles.reviewCard}>
@@ -452,7 +482,60 @@ function PresenceField({ label, options, values, onChange }: { label: string; op
 }
 function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) { return <TouchableOpacity style={[styles.drChip, selected && styles.drChipSelected]} onPress={onPress} accessibilityRole="button" accessibilityState={{selected}}><Text style={[styles.drChipText, selected && styles.drChipTextSelected]}>{label}</Text></TouchableOpacity>; }
 
+/**
+ * One header switch plus the truth about whether it can actually draw anything (DEC-402). When a
+ * value is missing it offers the settings screen rather than only naming the problem, because the
+ * configuration lives somewhere else entirely.
+ */
+function HeaderControl({label,hint,on,onChange,state,hasLogoSlot=false,onOpenPdfSettings}:{label:string;hint:string;on:boolean;onChange:(value:boolean)=>void;state:DocumentHeaderConfigured;hasLogoSlot?:boolean;onOpenPdfSettings:()=>void}){
+  const nothingConfigured=!state.english&&!state.arabic&&!state.logo;
+  const parts=[state.english?'English':null,state.arabic?'Arabic':null,hasLogoSlot&&state.logo?'logo':null].filter(Boolean) as string[];
+  const summary=parts.length?`Will print: ${parts.join(' and ')}.`:'Nothing is configured for this header yet.';
+  return (
+    <View style={styles.headerControl}>
+      <Text style={styles.headerControlLabel}>{label}</Text>
+      <Text style={styles.sectionHint}>{hint}</Text>
+      <View style={styles.chipWrap} accessibilityRole="radiogroup" accessibilityLabel={`${label} on this report`}>
+        <Choice label="Off" selected={!on} onPress={()=>onChange(false)}/>
+        <Choice label="On" selected={on} onPress={()=>onChange(true)}/>
+      </View>
+      <View style={styles.headerStateRow}>
+        <HeaderStatePill label="English" set={state.english}/>
+        <HeaderStatePill label="Arabic" set={state.arabic}/>
+        {hasLogoSlot?<HeaderStatePill label="Logo" set={state.logo}/>:null}
+      </View>
+      {on?(nothingConfigured
+        ?<>
+          <Text style={styles.notice} accessibilityRole="text">This header is on, but nothing is configured for it yet, so this report's PDF will not show it.</Text>
+          <TouchableOpacity style={styles.headerSettingsButton} onPress={onOpenPdfSettings} accessibilityRole="button" accessibilityLabel={`Open PDF Settings to configure ${label}`}>
+            <Text style={styles.headerSettingsButtonText}>Open PDF Settings</Text>
+          </TouchableOpacity>
+        </>
+        :<Text style={styles.sectionHint} accessibilityRole="text">{summary}</Text>)
+        :null}
+    </View>
+  );
+}
+
+function HeaderStatePill({label,set}:{label:string;set:boolean}){
+  return <View style={[styles.headerStatePill,set&&styles.headerStatePillOn]} accessibilityRole="text" accessibilityLabel={`${label} ${set?'is set':'is not set'} in PDF Settings`}>
+    <View style={[styles.headerStateDot,set&&styles.headerStateDotOn]}/>
+    <Text style={[styles.headerStatePillText,set&&styles.headerStatePillTextOn]}>{label} · {set?'Set':'Not set'}</Text>
+  </View>;
+}
+
 const styles = StyleSheet.create({
+  headerControl:{backgroundColor:'#FFFFFF',borderRadius:13,borderWidth:1,borderColor:'#DDD7CC',padding:13,gap:8},
+  headerControlLabel:{color:'#17212B',fontSize:15,fontWeight:'800'},
+  headerStateRow:{flexDirection:'row',flexWrap:'wrap',gap:8},
+  headerStatePill:{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:10,paddingVertical:5,borderRadius:14,borderWidth:1,borderColor:'#DDD7CC'},
+  headerStatePillOn:{backgroundColor:'#E5F3EC',borderColor:'transparent'},
+  headerStateDot:{width:6,height:6,borderRadius:3,backgroundColor:'#65717D'},
+  headerStateDotOn:{backgroundColor:'#287A55'},
+  headerStatePillText:{color:'#65717D',fontSize:11,fontWeight:'900'},
+  headerStatePillTextOn:{color:'#287A55'},
+  headerSettingsButton:{minHeight:48,borderRadius:12,borderWidth:1,borderColor:'#173F67',backgroundColor:'#FFFFFF',alignItems:'center',justifyContent:'center',paddingHorizontal:16},
+  headerSettingsButtonText:{color:'#173F67',fontWeight:'800',fontSize:14},
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' }, centerState:{alignItems:'center',justifyContent:'center',paddingVertical:60,gap:10}, content: { padding: 20, paddingBottom: 42, gap: 16 },
   errorState:{backgroundColor:'#FCE8E6',borderRadius:16,padding:20,gap:12,borderLeftWidth:4,borderLeftColor:colors.danger},errorStateTitle:{color:colors.ink,fontSize:17,fontWeight:'700'},errorStateText:{color:colors.danger,fontSize:13,lineHeight:19,fontWeight:'600'},retryButton:{minHeight:48,alignItems:'center',justifyContent:'center',backgroundColor:colors.ink,borderRadius:11,paddingHorizontal:16},retryButtonText:{color:'#FFF',fontWeight:'700'},
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 }, back: { minHeight:48,minWidth:48,justifyContent:'center',backgroundColor: colors.surface, paddingHorizontal:14, borderRadius: 10 }, backText: { color: colors.ink, fontWeight: '700' }, eyebrow: { color: colors.brand, fontSize: 11, fontWeight: '700', letterSpacing: 1.4 }, title: { color: colors.ink, fontSize: 28, fontWeight: '900' },

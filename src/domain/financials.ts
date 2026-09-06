@@ -43,7 +43,10 @@ export function projectAttentionTargets(targets:FinancialTarget[]):FinancialTarg
 export function projectPaymentEvents(targets:FinancialTarget[]):{target:FinancialTarget;payment:PaymentEntry}[]{
   return targets.flatMap(target=>target.payments.map(payment=>({target,payment}))).sort((a,b)=>b.payment.paymentDate.localeCompare(a.payment.paymentDate)||b.payment.createdAt.localeCompare(a.payment.createdAt));
 }
-export type SupplierPayableGroup={supplier:string;billed:number;outstanding:number;deliveries:number;materials:{key:string;name:string;unit:string;quantity:number;billed:number;deliveries:number}[]};
+// `paid` and `overpaid` are accumulated rather than derived: the repository clamps both remaining
+// and overpaid at zero, so `billed - outstanding` silently understates an overpaid supplier by the
+// overpayment. DEC-405 requires a paid figure per supplier, and this is the only correct source.
+export type SupplierPayableGroup={supplier:string;billed:number;paid:number;outstanding:number;overpaid:number;deliveries:number;materials:{key:string;name:string;unit:string;quantity:number;billed:number;deliveries:number}[]};
 // Groups priced supplier deliveries by supplier and then by material+unit. Unlike units are never
 // merged, matching the Delivery Summary rule.
 export function groupSupplierTargets(targets:FinancialTarget[]):SupplierPayableGroup[]{
@@ -51,15 +54,15 @@ export function groupSupplierTargets(targets:FinancialTarget[]):SupplierPayableG
   for(const target of targets){
     const name=target.partyName;
     let group=suppliers.get(name);
-    if(!group){group={supplier:name,billed:0,outstanding:0,deliveries:0,materials:[],materialIndex:new Map()};suppliers.set(name,group);}
-    group.billed+=target.totalUsd;group.outstanding+=target.remainingUsd;group.deliveries+=1;
+    if(!group){group={supplier:name,billed:0,paid:0,outstanding:0,overpaid:0,deliveries:0,materials:[],materialIndex:new Map()};suppliers.set(name,group);}
+    group.billed+=target.totalUsd;group.paid+=target.paidUsd;group.outstanding+=target.remainingUsd;group.overpaid+=target.overpaidUsd;group.deliveries+=1;
     const unit=target.unitSymbol??'';const label=target.itemName??'Unspecified material';const key=`${label}|${unit}`;
     const material=group.materialIndex.get(key)??{key,name:label,unit,quantity:0,billed:0,deliveries:0};
     material.quantity+=target.quantity??0;material.billed+=target.totalUsd;material.deliveries+=1;
     group.materialIndex.set(key,material);
   }
   return [...suppliers.values()].sort((a,b)=>b.billed-a.billed||a.supplier.localeCompare(b.supplier)).map(group=>({
-    supplier:group.supplier,billed:Number(group.billed.toFixed(2)),outstanding:Number(group.outstanding.toFixed(2)),deliveries:group.deliveries,
+    supplier:group.supplier,billed:Number(group.billed.toFixed(2)),paid:Number(group.paid.toFixed(2)),outstanding:Number(group.outstanding.toFixed(2)),overpaid:Number(group.overpaid.toFixed(2)),deliveries:group.deliveries,
     materials:[...group.materialIndex.values()].map(material=>({...material,quantity:Number(material.quantity.toFixed(3)),billed:Number(material.billed.toFixed(2))})).sort((a,b)=>a.name.localeCompare(b.name)||a.unit.localeCompare(b.unit)),
   }));
 }

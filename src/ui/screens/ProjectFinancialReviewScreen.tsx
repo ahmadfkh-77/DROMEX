@@ -234,16 +234,23 @@ export function ProjectFinancialReview({ repository, projectId, projectName, cus
               <Text style={styles.blockEmpty} accessibilityRole="text" accessibilityLabel="No priced supplier deliveries linked to this project yet.">No priced supplier deliveries linked to this project yet.</Text>
             ) : (
               <>
-                <Disclosure
-                  title="By supplier and material"
-                  summary={`${plural(supplierGroups.length, 'supplier')} · priced deliveries only`}
-                  open={expanded.has('supplierMaterials')}
-                  onToggle={() => toggle('supplierMaterials')}
-                  reducedMotion={reducedMotion}
-                >
-                  {supplierGroups.map((group) => <SupplierGroupBlock key={group.supplier} group={group} />)}
-                  <Text style={styles.footnote}>Quantities here cover priced deliveries only. For every delivered quantity including unpriced ones, use Supplier Loads, then Delivery Summary.</Text>
-                </Disclosure>
+                {/* DEC-405. One separated block per supplier rather than one continuous list, so two
+                    suppliers can be compared by scanning a column instead of re-reading prose. */}
+                <View style={styles.supplierHeading}>
+                  <Text style={styles.supplierHeadingText}>{plural(supplierGroups.length, 'supplier')}</Text>
+                  <Text style={styles.rowMeta}>Priced deliveries only</Text>
+                </View>
+                {supplierGroups.map((group) => (
+                  <SupplierGroupBlock
+                    key={group.supplier}
+                    group={group}
+                    records={summary.supplierPayables.targets.filter((target) => target.partyName === group.supplier)}
+                    open={expanded.has(`supplier:${group.supplier}`)}
+                    onToggle={() => toggle(`supplier:${group.supplier}`)}
+                    reducedMotion={reducedMotion}
+                  />
+                ))}
+                <Text style={styles.footnote}>Quantities here cover priced deliveries only. For every delivered quantity including unpriced ones, use Supplier Loads, then Delivery Summary.</Text>
                 <Disclosure
                   title="All supplier records"
                   summary={plural(summary.supplierPayables.targets.length, 'delivery', 'deliveries')}
@@ -593,42 +600,85 @@ function PaymentRow({ target, payment }: { target: FinancialTarget; payment: Pay
   );
 }
 
-/** Billed and outstanding sit in fixed columns so two suppliers can be compared by scanning down. */
-function SupplierGroupBlock({ group }: { group: ReturnType<typeof groupSupplierTargets>[number] }) {
+/**
+ * DEC-405. One supplier per separated block: name, then billed / paid / outstanding in three fixed
+ * columns so several suppliers compare by scanning straight down, then the materials, then the
+ * delivery records behind a disclosure that is closed by default. The disclosure is a flat ruled row
+ * inside the block rather than another bordered card, because card-in-card is prohibited here.
+ */
+function SupplierGroupBlock({ group, records, open, onToggle, reducedMotion }: {
+  group: ReturnType<typeof groupSupplierTargets>[number];
+  records: FinancialTarget[]; open: boolean; onToggle: () => void; reducedMotion: boolean;
+}) {
+  const owed = group.outstanding > 0;
+  const label = `${group.supplier}. Billed ${formatMoney(group.billed)}. Paid ${formatMoney(group.paid)}. `
+    + `${owed ? `Outstanding ${formatMoney(group.outstanding)}` : 'Nothing outstanding'}.`
+    + `${group.overpaid > 0 ? ` Overpaid ${formatMoney(group.overpaid)}.` : ''}`
+    + ` ${plural(group.deliveries, 'delivery', 'deliveries')}, ${plural(group.materials.length, 'material')}.`;
   return (
     <View style={styles.supplierBlock}>
-      <View
-        style={styles.supplierHeader}
-        accessibilityRole="text"
-        accessibilityLabel={`${group.supplier}. Billed ${formatMoney(group.billed)}. Outstanding ${formatMoney(group.outstanding)}. ${plural(group.deliveries, 'delivery', 'deliveries')}.`}
-      >
+      <View style={styles.supplierHeader} accessibilityRole="text" accessibilityLabel={label}>
         <Text style={styles.supplierName}>{group.supplier}</Text>
-        <View style={styles.supplierTotals}>
-          <View style={styles.supplierTotal}><Text style={styles.supplierTotalLabel}>BILLED</Text><Text style={styles.supplierTotalValue}>{formatMoney(group.billed)}</Text></View>
-          <View style={styles.supplierTotal}>
-            <Text style={styles.supplierTotalLabel}>OUTSTANDING</Text>
-            <Text style={[styles.supplierTotalValue, group.outstanding > 0 && styles.supplierTotalValueOwed]}>{formatMoney(group.outstanding)}</Text>
-          </View>
-        </View>
-        <Text style={styles.rowMeta}>{plural(group.deliveries, 'delivery', 'deliveries')}</Text>
+        <Text style={styles.rowMeta}>{plural(group.deliveries, 'delivery', 'deliveries')} · {plural(group.materials.length, 'material')}</Text>
       </View>
-      {group.materials.map((material) => (
-        <View
-          key={material.key}
-          style={styles.materialRow}
-          accessibilityRole="text"
-          accessibilityLabel={`${material.name}: ${formatQuantity(material.quantity)} ${material.unit} across ${plural(material.deliveries, 'delivery', 'deliveries')}, billed ${formatMoney(material.billed)}.`}
-        >
-          <View style={styles.flex}>
-            <Text style={styles.materialName}>{material.name}</Text>
-            <Text style={styles.rowMeta}>{plural(material.deliveries, 'delivery', 'deliveries')}</Text>
+
+      <View style={styles.supplierTotals}>
+        <SupplierTotal label="BILLED" value={formatMoney(group.billed)} />
+        <SupplierTotal label="PAID" value={formatMoney(group.paid)} tone="paid" />
+        <SupplierTotal label="OUTSTANDING" value={formatMoney(group.outstanding)} tone={owed ? 'owed' : undefined} />
+      </View>
+      {group.overpaid > 0 ? (
+        <Text style={styles.supplierOverpaid} accessibilityRole="text" accessibilityLabel={`Overpaid ${formatMoney(group.overpaid)}. Payments recorded come to more than this supplier billed.`}>
+          Overpaid {formatMoney(group.overpaid)} · payments recorded exceed what this supplier billed
+        </Text>
+      ) : null}
+
+      <View style={styles.supplierMaterials}>
+        {group.materials.map((material) => (
+          <View
+            key={material.key}
+            style={styles.materialRow}
+            accessibilityRole="text"
+            accessibilityLabel={`${material.name}: ${formatQuantity(material.quantity)} ${material.unit} delivered across ${plural(material.deliveries, 'trip')}, billed ${formatMoney(material.billed)}.`}
+          >
+            <View style={styles.flex}>
+              <Text style={styles.materialName}>{material.name}</Text>
+              <Text style={styles.rowMeta}>{plural(material.deliveries, 'trip')}</Text>
+            </View>
+            <View style={styles.materialRight}>
+              <Text style={styles.materialQuantity}>{formatQuantity(material.quantity)}&#160;{material.unit}</Text>
+              <Text style={styles.materialMoney}>{formatMoney(material.billed)}</Text>
+            </View>
           </View>
-          <View style={styles.materialRight}>
-            <Text style={styles.materialQuantity}>{formatQuantity(material.quantity)}&#160;{material.unit}</Text>
-            <Text style={styles.materialMoney}>{formatMoney(material.billed)}</Text>
-          </View>
+        ))}
+      </View>
+
+      <TouchableOpacity
+        activeOpacity={0.75}
+        style={styles.supplierDisclosure}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${group.supplier} delivery records, ${plural(records.length, 'record')}`}
+        accessibilityHint={open ? 'Hides these records' : 'Shows these records'}
+      >
+        <Text style={styles.supplierDisclosureText}>{open ? 'Tap to hide' : 'Tap to view'} · {plural(records.length, 'delivery record')}</Text>
+        <DisclosureMark open={open} reducedMotion={reducedMotion} />
+      </TouchableOpacity>
+      {open ? (
+        <View style={styles.supplierRecords}>
+          {records.map((target) => <RecordRow key={target.id} target={target} direction="supplier" />)}
         </View>
-      ))}
+      ) : null}
+    </View>
+  );
+}
+
+function SupplierTotal({ label, value, tone }: { label: string; value: string; tone?: 'paid' | 'owed' }) {
+  return (
+    <View style={styles.supplierTotal}>
+      <Text style={styles.supplierTotalLabel}>{label}</Text>
+      <Text style={[styles.supplierTotalValue, tone === 'owed' && styles.supplierTotalValueOwed, tone === 'paid' && styles.supplierTotalValuePaid]}>{value}</Text>
     </View>
   );
 }
@@ -784,16 +834,23 @@ const styles = StyleSheet.create({
   strikethrough: { textDecorationLine: 'line-through', color: colors.muted },
   cancelledNote: { color: colors.danger, fontSize: 12, lineHeight: 17 },
 
-  supplierBlock: { backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.line },
-  // White rather than a tint: the outstanding figure is Status Warning, which only clears AA on a
-  // surface. The group is marked by the navy rule instead.
-  supplierHeader: { backgroundColor: colors.surface, borderLeftWidth: 3, borderLeftColor: colors.navy, paddingHorizontal: 13, paddingVertical: 12, gap: 8 },
-  supplierName: { color: colors.ink, fontSize: 15, fontWeight: '800' },
-  supplierTotals: { flexDirection: 'row', gap: 12 },
+  supplierHeading: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginTop: 2 },
+  supplierHeadingText: { color: colors.ink, fontSize: 13, fontWeight: '800' },
+  // One block per supplier, separated by real space and a boundary rather than nested inside a card.
+  supplierBlock: { backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.line, borderLeftWidth: 3, borderLeftColor: colors.navy, paddingVertical: 12, gap: 10 },
+  supplierHeader: { paddingHorizontal: 13, gap: 2 },
+  supplierName: { color: colors.ink, fontSize: 16, fontWeight: '800' },
+  supplierTotals: { flexDirection: 'row', gap: 10, paddingHorizontal: 13 },
   supplierTotal: { flex: 1, minWidth: 0, gap: 2 },
   supplierTotalLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: .5 },
   supplierTotalValue: { color: colors.ink, fontSize: 16, fontWeight: '900' },
   supplierTotalValueOwed: { color: colors.warning },
+  supplierTotalValuePaid: { color: colors.success },
+  supplierOverpaid: { color: colors.warning, fontSize: 12, fontWeight: '700', lineHeight: 17, paddingHorizontal: 13 },
+  supplierMaterials: { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 2 },
+  supplierDisclosure: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 13, borderTopWidth: 1, borderTopColor: colors.line },
+  supplierDisclosureText: { color: colors.brandDark, fontSize: 12, fontWeight: '800' },
+  supplierRecords: { backgroundColor: colors.creamSoft, gap: 1, paddingTop: 1 },
   materialRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 13, paddingVertical: 11, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   materialName: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   materialRight: { alignItems: 'flex-end', flexShrink: 0, gap: 2 },

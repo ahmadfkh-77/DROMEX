@@ -1,4 +1,3 @@
-import {ministryHeaderState} from '../domain/profiles';
 import {consultantSignoffState,netWorkMinutes,type DailyProjectReport,type LinkedFuelFill,type LinkedProjectLoad,type LinkedQuarryLoad,type LinkedWasteDump,type ProjectReportSetup,type ReportProject} from '../domain/projectReports';
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]??c));
@@ -25,37 +24,66 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
   const safetyRows=[...report.workers.map(name=>({name,type:'Worker',key:'worker'})),...report.drivers.map(name=>({name,type:'Truck Driver',key:'driver'}))].map(person=>{const safety=(report.workerSafety??[]).find(value=>value.workerName===person.name&&(value.participantType??'worker')===person.key);const status=safety?.status==='compliant'?'Compliant':safety?.status==='missing'?'Missing PPE':'Not checked';const statusColor=safety?.status==='compliant'?'#287A55':safety?.status==='missing'?'#9A6512':'#65717D';const details=safety?.status==='missing'?(safety.missingItems.join(', ')||'Missing item not specified'):'—';return`<tr><td>${e(person.name)}</td><td>${e(person.type)}</td><td><span style="color:${statusColor};font-weight:700">${e(status)}</span></td><td>${e(details)}</td><td>${display(safety?.notes)}</td></tr>`;}).join('')||'<tr><td colspan="5" class="empty">No workers or truck drivers recorded</td></tr>';
   const photoHtml=photos.filter((photo):photo is string=>!!photo).map((src,index)=>`<figure><img src="${src}"/><figcaption>Photo ${index+1} &middot; ${e(report.workDate)}</figcaption></figure>`).join('')||'<div class="empty-photo">No photos attached to this daily report</div>';
   const modeBadge='';
-  // DEC-389. The header is opt-in per report, and the state is computed from what can actually be
-  // drawn: a logo whose file went missing arrives here as null, which degrades the block to the
-  // name alone (or omits it) instead of failing the export.
-  const ministryLogo=ministryLogoArg??null;
-  const ministryState=report.showMinistryHeader?ministryHeaderState({ministryName:company.ministryName,ministryLogoUri:ministryLogo}):'not-configured';
-  const ministryLogoHtml=ministryLogo?`<img class="ministry-logo" src="${ministryLogo}" alt=""/>`:'';
-  const ministryNameHtml=`<div class="ministry-name">${e(company.ministryName??'')}</div>`;
-  // DEC-389: when shown, the ministry takes the right of the page-one header row opposite the
-  // company and the title drops to a strip beneath it. When it is not shown the header keeps its
-  // original layout with the title on the right, so an unbranded report is unchanged.
-  const ministryIdentity=!report.showMinistryHeader||ministryState==='not-configured'?''
-    :`<div class="ministry-identity">${ministryState==='name-only'?ministryNameHtml:ministryState==='logo-only'?ministryLogoHtml:`${ministryLogoHtml}${ministryNameHtml}`}</div>`;
-  const reportTitleHtml=`<h1>DAILY PROJECT REPORT</h1><p>${e(report.workDate)}</p>`;
-  const headerRight=ministryIdentity||`<div class="report-title">${reportTitleHtml}${modeBadge}</div>`;
-  const titleStrip=ministryIdentity?`<div class="report-heading">${reportTitleHtml}${modeBadge}</div>`:'';
-  // DEC-391: the agency identifies whose supervision the report was produced under, so it sits with
-  // the report identity. The consultant's own name and signature belong at the end, with the record
-  // they acknowledge — see the page-two block below.
-  const agencyName=(company.consultingAgencyName??'').trim();
-  const agencyLine=consultantSignoffState(report)!=='disabled'&&agencyName?`<div class="agency-line"><span class="agency-label">Consultant</span><span class="agency-name">${e(agencyName)}</span></div>`:'';
+  // DEC-398 to DEC-401. Three independent optional headers. Each reads its own per-report switch and
+  // its own global values; none gates another, and in particular the consulting agency no longer
+  // depends on Consultant Sign-off (DEC-399, superseding the coupling in DEC-391).
+  const value=(raw:string|null|undefined,on:boolean)=>on?(raw??'').trim():'';
+  const ministryLogo=report.showMinistryHeader?(ministryLogoArg??null):null;
+  const ministryEn=value(company.ministryName,report.showMinistryHeader);
+  const ministryAr=value(company.ministryNameAr,report.showMinistryHeader);
+  const agencyEn=value(company.consultingAgencyName,report.showConsultingAgency);
+  const agencyAr=value(company.consultingAgencyNameAr,report.showConsultingAgency);
+  const customEn=value(company.customHeaderEn,report.showCustomHeader);
+  const customAr=value(company.customHeaderAr,report.showCustomHeader);
+  // DEC-400. English left and LTR, Arabic right and RTL, facing each other. A header with only one
+  // configured language takes the full width instead of leaving an empty facing column.
+  const biLine=(en:string,ar:string,kind:string)=>{
+    if(!en&&!ar)return '';
+    if(en&&ar)return `<div class="bi-line ${kind}"><div class="bi-en" dir="ltr" lang="en">${e(en)}</div><div class="bi-ar" dir="rtl" lang="ar">${e(ar)}</div></div>`;
+    return en
+      ?`<div class="bi-line ${kind}"><div class="bi-en bi-solo" dir="ltr" lang="en">${e(en)}</div></div>`
+      :`<div class="bi-line ${kind}"><div class="bi-ar bi-solo" dir="rtl" lang="ar">${e(ar)}</div></div>`;
+  };
+  const institutionalLines=`${biLine(ministryEn,ministryAr,'inst-ministry')}${biLine(agencyEn,agencyAr,'inst-agency')}${biLine(customEn,customAr,'inst-custom')}`;
+  const institutional=institutionalLines?`<div class="institutional">${institutionalLines}</div>`:'';
+  // The ministry logo belongs to the ministry option alone; the company logo is never part of an
+  // optional header and never disappears with one.
+  const ministryLogoHtml=ministryLogo?`<div class="ministry-slot"><img class="ministry-logo" src="${ministryLogo}" alt=""/></div>`:'';
+  const companyMark=resolvedLogo?`<img class="company-logo" src="${resolvedLogo}"/>`:`<div class="brand-name">${e(company.name)}</div>`;
+  // The Contractor cell is roughly 94mm wide. At 10.5pt an Arial name runs about 2mm per character,
+  // so ~30 characters is where it stops fitting on one line; past ~60 even the compact size cannot,
+  // and wrapping is preferred to overlapping the column beside it.
+  const contractorLength=(company.name??'').length;
+  const contractorClass=contractorLength>60?'value value-compact':contractorLength>30?'value value-compact value-nowrap':'value value-nowrap';
   const signoffState=consultantSignoffState(report);
   const consultantSection=signoffState==='disabled'?'':signoffState==='complete'
     ?`<section class="section consultant-section"><h2>Consultant Sign-off</h2><div class="consultant-complete"><div class="consultant-signature-box"><svg viewBox="0 0 320 140">${report.consultantSignaturePaths.map(p=>`<path d="${e(p)}" fill="none" stroke="#17212b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}</svg></div><div class="consultant-name-line">${e(report.consultantName)}</div></div></section>`
     :`<section class="section consultant-section"><h2>Consultant Sign-off</h2><p class="consultant-incomplete">${report.consultantName.trim()?`Name on file: ${e(report.consultantName)}. `:''}Consultant sign-off incomplete.${report.consultantSignaturePaths.length?'':' Signature not supplied.'}${report.consultantName.trim()?'':' Consultant name not supplied.'}</p></section>`;
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-    @page{size:A4;margin:13mm 13mm 15mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#17212b;font-size:9pt;line-height:1.4}
+    /* Latin resolves from Arial; Arabic glyphs fall through per-glyph to the platform Arabic face
+       (DEC-400), so mixed lines shape correctly without bundling a font. */
+    @page{size:A4;margin:13mm 13mm 15mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,'Noto Naskh Arabic','Geeza Pro',sans-serif;color:#17212b;font-size:9pt;line-height:1.4}
     header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #c84b31;padding-bottom:4mm;margin-bottom:5mm}
-    .brand img{max-width:36mm;max-height:18mm}.brand-name{font-size:16pt;font-weight:900;color:#17212b}.company-line{font-size:7.5pt;color:#65717d;margin-top:1mm}
+    .brand img{max-width:36mm;max-height:18mm}.company-line{font-size:7.5pt;color:#65717d;margin:0 0 5mm;text-align:center}
     .report-title{text-align:right}.report-title h1{font-size:14pt;line-height:1.05;margin:0;color:#173f67;letter-spacing:1.2pt;font-weight:900}.report-title p{font-size:7.5pt;margin:1.5mm 0 1mm;color:#65717d}
     .mode-badge{display:inline-block;border:1px solid #173f67;color:#173f67;font-size:7.5pt;font-weight:700;padding:1mm 2.8mm;border-radius:3mm;letter-spacing:.4pt}.mode-badge-prices{border-color:#c84b31;color:#8e2e1b}
-    .project-line{display:grid;grid-template-columns:1fr 1fr;gap:3mm 8mm;margin-bottom:5mm;padding-bottom:4mm;border-bottom:1px solid #e3d6c2}
+    /* A contained two-column grid: both columns are inset from the page edges, the second column is
+       wider so a real contractor name fits, and both columns stay left-aligned so Contractor and
+       Work date share one left edge. The gap is tightened from 8mm; 5mm still separates the columns
+       for scanning without stranding the second one near the right margin. */
+    /* fr, not %: 45% + 55% + a 5mm gap overflows the row, which pushed the second column past the
+       right edge. minmax(0,..fr) divides what is actually left after the gap, and the min of 0 lets
+       a cell shrink instead of being forced wider by its own content. */
+    .project-line{display:grid;grid-template-columns:minmax(0,45fr) minmax(0,55fr);column-gap:5mm;row-gap:3mm;margin-bottom:5mm;padding:0 4mm 4mm;border-bottom:1px solid #e3d6c2;box-sizing:border-box}
+    .project-line>div{min-width:0;box-sizing:border-box}
+    /* Contractor and Work date: right-hand column, but their own text stays left-aligned on one
+       shared left edge. Stated explicitly so no future rule can right-align them by inheritance. */
+    .project-line>div:nth-child(2),.project-line>div:nth-child(4){text-align:left;justify-self:stretch}
+    /* Contractor stays on one line. Past a tested length it steps down one size rather than being
+       clipped; past the point where even that cannot fit, wrapping is allowed so it can never
+       overlap the neighbouring column. Nothing is ever truncated or hidden. */
+    .value-compact{font-size:8.5pt;line-height:1.25}
+    .value-nowrap{white-space:nowrap}
     .label{display:block;color:#65717d;font-size:7.5pt;font-weight:700;letter-spacing:.5pt;margin-bottom:.8mm;text-transform:uppercase}.value{font-size:10.5pt;font-weight:700;color:#17212b}
     .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:2.5mm;margin:4mm 0}
     .card{min-height:24mm;padding:3mm;background:#fff8ed;border:1px solid #e3d6c2;border-left:3px solid #173f67}
@@ -80,24 +108,39 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
     .consultant-signature-box{width:55mm;height:22mm;border-bottom:1px solid #17212b}.consultant-signature-box svg{width:100%;height:100%}
     .consultant-name-line{font-size:9.5pt;font-weight:700;color:#17212b;padding-bottom:1mm}
     .consultant-incomplete{margin:0;padding:3.5mm 4mm;background:#fff3d8;border:1px solid #e3c681;border-left:3px solid #9a6512;color:#7a5010;font-size:9pt;font-weight:700}
-    .ministry-identity{display:flex;flex-direction:column;align-items:flex-end;gap:1.5mm;text-align:right;max-width:60mm}
-    header.branded{align-items:center;gap:8mm;padding-bottom:5mm;margin-bottom:4mm}
-    header.branded .brand{flex:1 1 0;min-width:0}
-    header.branded .ministry-identity{flex:1 1 0;min-width:0;max-width:none}
-    header.branded .brand img,header.branded .ministry-identity .ministry-logo{max-width:min(100%,56mm);width:auto;height:auto;max-height:26mm}
-    header.branded .brand-name{font-size:19pt;line-height:1.12;overflow-wrap:anywhere}
-    header.branded .ministry-identity .ministry-name{font-size:13pt;font-weight:800;line-height:1.12;overflow-wrap:anywhere}
-    header.branded .company-line{font-size:8pt;margin-top:1.5mm}
-    .ministry-identity .ministry-logo{max-width:32mm;max-height:16mm}
-    .ministry-identity .ministry-name{font-size:11pt;font-weight:700;color:#173f67;letter-spacing:.3pt}
-    .report-heading{display:flex;justify-content:space-between;align-items:baseline;gap:6mm;margin:0 0 3mm}
-    .report-heading h1{font-size:14pt;line-height:1.05;margin:0;color:#173f67;letter-spacing:1.2pt;font-weight:900}.report-heading p{font-size:7.5pt;margin:0;color:#65717d}
-    .agency-line{display:flex;align-items:baseline;gap:3mm;margin:0 0 4mm;padding-bottom:2.5mm;border-bottom:1px solid #e3d6c2}
-    .agency-label{color:#65717d;font-size:7.5pt;font-weight:700;letter-spacing:.5pt;text-transform:uppercase}.agency-name{color:#173f67;font-size:10.5pt;font-weight:700}
+    /* DEC-401 page-one composition: logo row, institutional text, divider, centred title. */
+    .doc-head{margin-bottom:3mm}
+    .logo-row{display:flex;align-items:center;justify-content:space-between;gap:8mm;min-height:20mm}
+    .company-slot,.ministry-slot{flex:1 1 0;min-width:0;display:flex;align-items:center}
+    .ministry-slot{justify-content:flex-end}
+    .company-logo,.ministry-logo{max-width:min(100%,56mm);width:auto;height:auto;max-height:26mm;object-fit:contain}
+    .brand-name{font-size:19pt;font-weight:900;line-height:1.12;color:#17212b;overflow-wrap:anywhere}
+    /* 6mm, not 3mm: at the tighter gap the logo row and the names read as one four-row grid whose
+       columns look like they correspond, which they do not. No second rule here on purpose, since a
+       line between the logo row and the names would separate the ministry from its own name. */
+    .institutional{margin-top:6mm;display:flex;flex-direction:column;gap:2mm}
+    /* DEC-400 bilingual pair: English left and LTR, Arabic right and RTL, facing each other. */
+    .bi-line{display:flex;align-items:baseline;justify-content:space-between;gap:6mm}
+    .bi-en,.bi-ar{flex:1 1 0;min-width:0;overflow-wrap:anywhere;color:#173f67;line-height:1.35}
+    .bi-en{direction:ltr;text-align:left}
+    .bi-ar{direction:rtl;text-align:right;font-family:'Noto Naskh Arabic','Geeza Pro','Segoe UI',Arial,sans-serif}
+    .bi-solo{flex:1 1 100%}
+    .inst-ministry .bi-en,.inst-ministry .bi-ar{font-size:13pt;font-weight:800}
+    .inst-agency .bi-en,.inst-agency .bi-ar{font-size:11pt;font-weight:700}
+    .inst-custom .bi-en,.inst-custom .bi-ar{font-size:10pt;font-weight:700;color:#65717d}
+    .head-rule{height:2px;background:#c84b31;margin:4mm 0 3.5mm}
+    .doc-title{font-size:16pt;line-height:1.05;margin:0;text-align:center;color:#173f67;letter-spacing:1.4pt;font-weight:900}
+    .doc-date{font-size:8pt;margin:1.5mm 0 0;text-align:center;color:#65717d}
   </style></head><body>
-    <header${ministryIdentity?` class="branded"`:``}><div class="brand">${resolvedLogo?`<img src="${resolvedLogo}"/>`:`<div class="brand-name">${e(company.name)}</div>`}<div class="company-line">${[company.address,company.phone,company.email].filter(Boolean).map(e).join(' &middot; ')}</div></div>${headerRight}</header>
-    ${titleStrip}${agencyLine}
-    <div class="project-line"><div><span class="label">Project</span><span class="value">${e(project.name)}</span></div><div><span class="label">Contractor</span><span class="value">${e(company.name)}</span></div><div><span class="label">Location</span>${e(project.location)}</div><div><span class="label">Work date</span>${e(report.workDate)}</div></div>
+    <div class="doc-head">
+      <div class="logo-row"><div class="company-slot">${companyMark}</div>${ministryLogoHtml}</div>
+      ${institutional}
+      <div class="head-rule"></div>
+      <h1 class="doc-title">DAILY PROJECT REPORT</h1>
+      <p class="doc-date">${e(report.workDate)}</p>
+    </div>
+    <div class="company-line">${[company.address,company.phone,company.email].filter(Boolean).map(e).join(' &middot; ')}</div>
+    <div class="project-line"><div><span class="label">Project</span><span class="value">${e(project.name)}</span></div><div><span class="label">Contractor</span><span class="${contractorClass}">${e(company.name)}</span></div><div><span class="label">Location</span>${e(project.location)}</div><div><span class="label">Work date</span>${e(report.workDate)}</div></div>
     <div class="cards"><div class="card"><strong>${e(timeValue)}</strong><b>NET WORKING TIME</b><small>${timeNote}</small></div><div class="card"><strong>${loads.length+quarry.length}</strong><b>LOADS DELIVERED</b><small>${loads.length} company &middot; ${quarry.length} supplier</small></div><div class="card"><strong>${fmt(fuelLitres)} L</strong><b>FUEL USED</b><small>${includePrices?`$${fuelCost.toFixed(2)}${unpricedFuel?` &middot; ${fmt(unpricedFuel)} L unpriced`:''}`:'Operational quantities only'}</small></div><div class="card"><strong>${photos.filter(Boolean).length}</strong><b>PHOTOS</b><small>Saved with this report</small></div></div>
     <section class="section"><h2>Work performed today</h2><div class="panel"><h3>Daily work description</h3><p>${display(report.workDescription)}</p></div></section>
     <section class="section"><h2>Time and site conditions</h2><div class="two"><div class="panel"><h3>Working time</h3><p>Start ${display(report.workStartTime)} &middot; End ${display(report.workEndTime)} &middot; Break ${report.breakMinutes?`${e(report.breakMinutes)} minutes`:'&mdash;'}<br/><b>Net ${e(timeValue)}</b></p></div><div class="panel"><h3>Weather and site</h3><p>${display(report.weatherSiteConditions)}</p></div></div></section>
