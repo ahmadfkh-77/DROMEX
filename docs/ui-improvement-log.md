@@ -1882,3 +1882,197 @@ this machine.
 
 Implemented, typechecked, and tested. Not committed, not built, not
 device-verified.
+
+## 2026-09-06/07 — PDF Settings and bilingual document headers, phase complete
+
+Released in Android build 17 (DROMEX 0.14.0). Decisions DEC-397 to DEC-403.
+
+### Original problems found (audit)
+
+1. **Company & VAT had grown two unrelated jobs**: who the business is, and
+   how its reports are decorated for an outside authority. The header values
+   were about to triple with Arabic and Custom Header fields.
+2. **The consulting agency rode on the Consultant Sign-off toggle**
+   (`projectReportWasteTemplate.ts:47`), so it could not be shown without a
+   sign-off. DEC-391 had established that coupling deliberately; the two
+   answer different questions and needed separating.
+3. **No bilingual support existed anywhere.** No `dir`, no `lang`, no
+   `I18nManager`, no bundled font, and `font-family: Arial` in the PDF.
+4. **The page-one header could not extend to three headers.** The ministry sat
+   opposite the company in the header row with the title in a strip; two more
+   text lines there would have crowded the logos.
+
+### What changed
+
+**Data (database version 34).** `ministry_name_ar`,
+`consulting_agency_name_ar`, `custom_header_en` and `custom_header_ar` on
+`company_settings`; `show_consulting_agency` and `show_custom_header` on
+`daily_project_reports`. The existing `ministry_name` and
+`consulting_agency_name` were kept as the English values so no row and no
+backup needed rewriting.
+
+**The agency column is backfilled, not defaulted** (DEC-399). Every existing
+report with Consultant Sign-off enabled was set to show the agency. A plain
+`DEFAULT 0` would have silently stopped already-issued documents printing
+their agency line on regeneration. The backfill is tested against genuinely
+rewound version-33 rows, not against a database that was never old.
+
+**Write ownership is split.** `saveCompanySettings` had been a full upsert of
+every `company_settings` column, so simply removing the moved controls from
+Company & VAT would have written `NULL` over the ministry and agency values on
+its next save. Each method now names only its own columns, and
+`CompanySettingsDraft` no longer has fields for the header values, making the
+mistake a type error rather than a silent wipe. Both directions are pinned by
+regression tests.
+
+**New PDF Settings screen** under More, Setup, at row 05. Three numbered
+sections reusing the Ledger Folder composition, each header showing
+`English · Set` / `Arabic · Not set` / `Logo · Set` pills so configuration
+state is legible before opening anything. English fields are LTR and
+left-aligned, Arabic fields RTL and right-aligned with Arabic placeholders, so
+what is typed matches what prints.
+
+**Page one recomposed** (DEC-401): logo row with the company left and the
+ministry right, then the institutional text block in the order Ministry,
+Agency, Custom, then one divider, then the centred title. Switching Ministry
+off removes only the ministry logo and name and never the company logo.
+
+**Bilingual pairs** (DEC-400): English left with `dir="ltr"`, Arabic right
+with `dir="rtl" lang="ar"`, facing each other. A header with one configured
+language takes the full width via a `bi-solo` class rather than leaving an
+empty facing column. Arabic uses the system stack
+`'Noto Naskh Arabic', 'Geeza Pro', Arial`; no font asset and no dependency
+were added, and the body stack falls through per glyph so mixed lines shape
+without a per-element override.
+
+**One `PDF Headers` editor section** (DEC-402) replacing `Ministry Header`,
+keeping the editor at twelve sections. Three separate numbered sections were
+explicitly rejected: they would have made the common case, all headers off,
+longer to scroll past rather than shorter. Each control offers **Open PDF
+Settings** when its configuration is missing, because the values live on a
+different screen and naming a problem without a route to fix it is the failure
+the rule exists to prevent.
+
+### Two alignment corrections after physical review
+
+The centred title changed the balance of everything beneath it, which the
+first implementation did not re-tune. The owner's screenshots caught both:
+
+- The logo row and the institutional names sat 3mm apart and read as one
+  four-row grid whose columns appeared to correspond, so the English ministry
+  name looked like a caption for the company logo. Widened to 6mm. **No second
+  divider was added**: a rule between the logo row and the names would
+  separate the ministry from its own name.
+- `.project-line` used `grid-template-columns: 45% 55%` plus a 5mm gap, which
+  overflows the row by exactly the gap and pushed the second column past the
+  right edge. Corrected to `minmax(0,45fr) minmax(0,55fr)` with explicit
+  `text-align:left` on the second and fourth cells, so Contractor and Work
+  date share one left edge in a contained grid. An intermediate attempt that
+  right-aligned that column was wrong and was reverted.
+
+Contractor stays on one line via a graded step-down: normal size to 30
+characters, a compact 8.5pt class to 60, and wrapping beyond that, since past
+~60 characters even the compact size cannot fit 94mm and wrapping is the only
+option that never overlaps the neighbouring column. Nothing is ever clipped,
+truncated, or hidden.
+
+### Not changed
+
+Consultant Sign-off completeness (DEC-388) still depends only on the personal
+name and signature. The signature still sits at the end of page two before
+Photo Evidence (DEC-390). No approval or endorsement wording exists anywhere.
+Page two never repeats a header. A report with every switch off produces a
+page-one byte-identical to one with nothing configured. The backup media
+allow-list needed no change: the new columns are all text, the ministry logo
+was already listed, and the archive serialises the whole database anyway.
+
+### Verification
+
+`npm run typecheck` clean; **415 tests across 43 files**.
+`ministryHeaderPdf.test.ts` was rewritten from 24 to 28 tests, because two of
+its cases existed to pin behaviour this work deliberately reverses: that the
+agency renders only with the sign-off enabled, and that the unbranded header
+stays byte-identical through the old header-row arrangement.
+
+**Physically verified on Android, build 17.** Arabic renders as correctly
+shaped, connected, right-to-left script in a generated PDF using the system
+font stack. This could not be established by any automated test in this
+repository, which is why DEC-400 carried an explicit physical-verification
+condition; the font-bundling fallback it named was never needed.
+
+### Status
+
+Implemented, released in build 17, and accepted after device verification.
+
+## 2026-09-06/07 — Project Financial Review supplier blocks and Edit Project Information
+
+Released in Android build 17. Decisions DEC-404 and DEC-405.
+
+### Supplier blocks (DEC-405)
+
+The first implementation grouped suppliers correctly but presented them as one
+dense run of rows inside a single disclosure, so comparing two suppliers meant
+re-reading run-on text. Each supplier is now a separated block leading with
+**billed, paid and outstanding in three fixed columns**, then each material
+with its quantity, unit and trip count, then that supplier's delivery records
+behind a disclosure closed by default. The disclosure is a flat ruled row
+rather than another bordered card: card-in-card nesting is prohibited here and
+was verified absent, only the block itself carrying a border and radius.
+
+**This phase was not presentation-only, and the decision anticipated why.**
+`SupplierPayableGroup` had no `paid` field, and the obvious derivation is
+wrong: the repository clamps both `remaining` and `overpaid` at zero, so a
+supplier billed $1,000 who has been paid $1,200 has `outstanding` of zero and
+`billed - outstanding` reports $1,000 — understating the payment by the full
+overpayment, on exactly the records where being wrong matters most.
+`groupSupplierTargets` now accumulates `paid` and `overpaid`. No calculation
+changed; two more running sums over values the function already iterated.
+
+Four tests were added, including one that asserts `paid` is **not** equal to
+`billed - outstanding` for an overpaid supplier — the test that would have
+caught the bug had the figure been derived.
+
+### Edit Project Information (DEC-404)
+
+Projects were creatable but not editable beyond status and start date, so a
+typo could only be fixed by creating a second project and splitting its
+history. The editor is reachable from the Project Command Center's Records and
+Documents group and from each card in the Projects list, and edits **name,
+location and notes only**. Customer reassignment is excluded because it moves
+financial attribution; the start date keeps its own protected workflow. A
+*Not editable here* card names all three exclusions with their reasons.
+
+A name or location change asks for confirmation; a notes-only edit does not,
+and `projectIdentityChanged` normalises whitespace so re-typing the same name
+differently spaced is not treated as a rename.
+
+The safety guarantee is structural rather than careful. The repository method
+is one statement over three columns of one row:
+
+```sql
+UPDATE projects SET name = ?, location = ?, notes = ?, updated_at = ? WHERE id = ?
+```
+
+No other column and no other table, so transaction numbers, stored snapshots,
+payments, calculations, generated documents and project relationships cannot
+be affected — there is no statement that could affect them. Thirteen tests
+assert this against the database, including that a renamed project's confirmed
+load still shows the project name it was confirmed with, and that exactly one
+`sync_outbox` row of type `project` is queued.
+
+### Not changed
+
+Project scoping, exclusions, cancelled/unpriced handling, all rounding,
+repository behaviour, payment behaviour, the read-only rule of the Financial
+Review, and DEC-395's prohibition on any combined total, net figure, margin or
+profit. No migration: `projects.name/location/notes` already existed.
+
+### Verification
+
+Typecheck clean; 415 tests across 43 files. **Physically verified on Android,
+build 17**, including the snapshot boundary: after renaming a project, a load
+confirmed before the rename still displays its original project name.
+
+### Status
+
+Implemented, released in build 17, and accepted after device verification.

@@ -423,6 +423,37 @@ Build 13 shipped a `recordGauge` defect (nine columns bound to ten value
 slots) that no test called; it was found and fixed later by reading, not by
 running.
 
+## Releases — DROMEX 0.13.0/0.14.0, Android builds 16/17 (2026-09-06/07)
+
+- **Build 16 — 0.13.0, commits `c984fe2` and `84179e7`.** The Units &
+  Conversions rename and redesign (DEC-394), the Project Financial Review
+  extraction and refinement (DEC-395), the Fuel Ledger fuel-type and
+  correction UI, and a documentation pass that backfilled the missing
+  Business Directory, Financials, and Ministry/Consultant improvement-log
+  entries. `output/*.apk` was ignored from this point (DEC-396) and the local
+  copies of builds 6 through 12 were deleted to reclaim disk space; their
+  committed blobs remain in history.
+- **Build 17 — 0.14.0, commits `7aa9d48` and `8e4d65d`.** PDF Settings and
+  the three independent bilingual document headers (DEC-397 to DEC-403,
+  database version 34), the Project Financial Review supplier blocks
+  (DEC-405), and Edit Project Information (DEC-404).
+
+**Build 17 is the first release in this sequence verified on a physical
+device**, and the verification mattered: DEC-400 deliberately carried a
+condition that Arabic shaping be confirmed on Android before the header
+feature could be accepted, because no test in this repository can establish
+it. It was confirmed — the system font stack shapes Arabic correctly and the
+font-bundling fallback was never needed. Builds 13, 14, 15 and 16 remain
+unverified on hardware.
+
+Two things from build 17 worth carrying forward. The version-34 migration
+**backfills** `show_consulting_agency` rather than defaulting it, so existing
+reports keep printing their agency line; a plain `DEFAULT 0` would have
+silently changed already-issued documents. And `saveCompanySettings` was
+narrowed to the company columns when PDF Settings took ownership of the header
+columns, because it had been a full upsert that would have blanked the moved
+values on its next save.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:

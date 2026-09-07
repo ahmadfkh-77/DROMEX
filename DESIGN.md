@@ -156,8 +156,8 @@ The 2026-09-06 pass added three more to the same family, all in Project Financia
 ### Contrast-driven variants
 Two values exist purely because a documented color does not clear WCAG AA in a specific placement. They are variants of existing roles, not new roles, and neither may be used outside the case that produced it.
 
-- **Muted Dark** (`#6B7681`): the placeholder color in Units & Conversions. The app-wide placeholder `#89939B` computes to **3.05:1** against the `#FCFBF8` input fill and fails AA; `#6B7681` computes to **4.53:1**. `#89939B` still ships in sixteen other files including `AppPrimitives.tsx`, `SearchableSelect.tsx`, and `GroupedSearchableSelect.tsx` — see the gap list.
-- **Success Light** (`#8FD6B4`): the Active status dot on Project Financial Review's Structural Navy hero. Status Success (`#287A55`) is unreadable as a small mark on navy; this is that hue lifted for the dark surface only. On any light surface the dot stays `#287A55`.
+- **Muted Dark** (`#6B7681`): the placeholder color in Units & Conversions, and as of 2026-09-07 in PDF Settings and Edit Project Information. The app-wide placeholder `#89939B` computes to **3.05:1** against the `#FCFBF8` input fill and fails AA; `#6B7681` computes to **4.53:1**. `#89939B` still ships in sixteen other files including `AppPrimitives.tsx`, `SearchableSelect.tsx`, and `GroupedSearchableSelect.tsx` — see the gap list.
+- **Success Light** (`#8FD6B4`): the Active status dot on Project Financial Review's Structural Navy hero, and as of 2026-09-07 the "set" dot on PDF Settings' Configuration State Pills, which sit on the same navy ground. Status Success (`#287A55`) is unreadable as a small mark on navy; this is that hue lifted for the dark surface only. On any light surface — including the same pill inside the Daily Report editor — the dot stays `#287A55`.
 
 Three measured failures are recorded rather than fixed, because each belongs to a pattern that ships identically on several screens and wants one coordinated pass rather than a divergence introduced here: the Collapsible Status Band hint (`muted` on `creamSoft`, **4.46:1**, six screens), the Status Pill's warning text (`warning` on `#FFF3D8`, **4.49:1**, app-wide), and `helper` text placed directly on the page background (`muted` on `#F5F2EC`, **4.46:1**). Both 2026-09-06 screens work around the last of these by placing every helper sentence on a surface rather than on the bare page or the cream folder ground.
 
@@ -330,8 +330,8 @@ A 56dp-minimum bordered header inside a Ledger Folder body carrying a title, a s
 ### Financial Record Row (`ProjectFinancialReviewScreen.tsx`, screen-local)
 Extends Daily Reports' two-hue company-versus-supplier device to money direction: a 3px left accent in Signal Orange for customer revenue, Structural Navy for supplier payables, Status Danger for a cancelled payment. Reading order is reference, then date and material, then quantity-and-unit as one value, then a right-aligned billed amount above a `BILLED` micro-label, then a status pill beside `Paid $X of $Y`, then an outstanding or overpaid line in warning tone only when non-zero. A cancelled payment strikes its amount through and states "Not counted in any total" with its reason.
 
-### Supplier Payable Summary Block (`ProjectFinancialReviewScreen.tsx`, screen-local)
-One supplier per block: a `colors.surface` header with a 3px Structural Navy left rule, the supplier name, and **Billed and Outstanding as two fixed columns** rather than a run-on sentence, so several suppliers can be compared by scanning straight down. Outstanding switches to Status Warning only when above zero. The header is white rather than tinted specifically because the warning-colored figure only clears AA on a surface. Beneath it, one material row per material-and-unit pair, quantity in Structural Navy and billed amount in muted beneath it, with unlike units never merged — the same rule the Supplier Delivery Summary follows.
+### Supplier Payable Summary Block (superseded 2026-09-07)
+**Superseded by Supplier Payable Block below**, which adds the per-supplier paid figure and moves record detail behind a per-supplier disclosure. Retained because it describes what shipped in Android build 15 and 16. As it shipped then: one supplier per block: a `colors.surface` header with a 3px Structural Navy left rule, the supplier name, and **Billed and Outstanding as two fixed columns** rather than a run-on sentence, so several suppliers can be compared by scanning straight down. Outstanding switches to Status Warning only when above zero. The header is white rather than tinted specifically because the warning-colored figure only clears AA on a surface. Beneath it, one material row per material-and-unit pair, quantity in Structural Navy and billed amount in muted beneath it, with unlike units never merged — the same rule the Supplier Delivery Summary follows.
 
 ### Unit Symbol Tile and Conversion Equation Strip (`ReceiptSetupScreen.tsx`, screen-local)
 As of 2026-09-06, the device that makes a unit and a conversion structurally impossible to confuse, replacing an earlier layout in which both used the same generic row.
@@ -342,6 +342,19 @@ A **Conversion Equation Strip** is full width on Ledger Cream behind a 1px `#E8D
 
 ### Focused Record Sheet (`ReceiptSetupScreen.tsx`, screen-local)
 A full-screen `Modal` (`presentationStyle="pageSheet"`, `animationType` dropped to `none` under reduced motion) holding an eyebrow, a title, a Close pill, a scrolling body, and a sticky footer bearing Cancel and one Signal Orange primary action with the "Sticky action bar" shadow. It replaces an inline form rendered below a long list, where tapping Edit produced no visible change because the form was off-screen. Errors render inside the sheet so the sheet stays open and the user's typing survives. Unit selection inside a sheet uses chips rather than `SearchableSelect`, since that component opens its own `Modal` and nesting modals on Android is unreliable — consistent with the existing rule that small fixed choices use chips.
+
+### Configuration State Pill (`PdfSettingsScreen.tsx`, `ReportsScreen.tsx`, screen-local)
+As of 2026-09-07: a pill stating whether one part of a configurable value exists, reading `English · Set` or `Arabic · Not set` rather than relying on presence or colour alone. A 6px dot carries the state as well as the words, so it survives greyscale and sunlight. On the Structural Navy section headers of PDF Settings the set state fills with `rgba(255,255,255,0.16)` and the dot uses **Success Light**; on the white surface of the Daily Report editor it fills with the Status Success tint. It exists because both screens describe values configured on a *different* screen, where "is this actually going to print" cannot be inferred from what is on screen.
+
+### Bilingual Document Header (Daily Report PDF, `projectReportWasteTemplate.ts`)
+As of 2026-09-07 (DEC-398 to DEC-401). Three independent optional headers — Ministry, Consulting Agency, Custom Header — each a `bi-line` pairing an English element (`dir="ltr"`, left, flush left) against an Arabic one (`dir="rtl" lang="ar"`, right, flush right), so the two languages face each other across the page. A header with only one configured language takes the full width through a `bi-solo` class rather than leaving an empty facing column, which is the difference between a balanced document and one that looks broken.
+
+Arabic resolves from a **system font stack** (`'Noto Naskh Arabic', 'Geeza Pro', 'Segoe UI', Arial`) with no bundled font file; the body stack is ordered `Arial, 'Noto Naskh Arabic', 'Geeza Pro'` so a mixed line falls through per glyph without a per-element override. This was physically verified to shape correctly on Android in build 17; the alternative, embedding a licensed face, would have added roughly 150 to 400 KB to every generated PDF.
+
+Page one composes in a fixed order: a **logo row** (company left, ministry right, both `object-fit: contain` and never stretched or recoloured), the institutional text block, one 2px Signal Orange divider, then the centred title. The ministry logo belongs to the ministry option alone — switching it off never removes the company logo, which is not part of any optional header.
+
+### Supplier Payable Block (`ProjectFinancialReviewScreen.tsx`, screen-local)
+As of 2026-09-07 (DEC-405), replacing a continuous run of supplier rows inside one disclosure. One separated block per supplier: name, then **billed, paid and outstanding in three fixed `flex: 1` columns** so several suppliers compare by scanning straight down, then one row per material carrying quantity, unit and trip count with unlike units never merged, then that supplier's delivery records behind a disclosure closed by default. Paid is Status Success; outstanding turns Status Warning only above zero; an overpaid supplier gets an extra warning line. The inner disclosure is a **flat ruled row, not a bordered card** — only the block itself carries a border and radius, because card-in-card nesting is prohibited in this section.
 
 ## Do's and Don'ts
 
@@ -462,6 +475,24 @@ Extracted from `FinancialsScreen.tsx` into `src/ui/screens/ProjectFinancialRevie
 - **Motion**: a 280ms opacity-and-lift entrance matching the three sibling Financials views, `LayoutAnimation` collapse, and a 180ms 45° glyph rotation, all gated on `useReducedMotion()`. **No numeric value animates anywhere on this screen**, deliberately: an animated money figure would suggest the amount itself is moving.
 - Presentation logic lives in `projectFinancialReviewPresentation.ts` rather than the `.tsx`, because this project has no React Native renderer in `devDependencies` and importing the screen into a test would pull in `react-native`. That module has 17 tests in `tests/project-financial-review-presentation.test.ts`.
 - Money is grouped for legibility (`$1,240.00`); a test asserts grouping never moves a cent. The three-section, no-combined-total contract is DEC-395.
+
+## Implemented on PDF Settings and the Daily Report PDF (2026-09-07)
+
+`src/ui/screens/PdfSettingsScreen.tsx` (new), `ReportsScreen.tsx`'s section `12`, and `projectReportWasteTemplate.ts`. Released in Android build 17 and physically verified, including Arabic shaping.
+
+- **PDF Settings** reuses the Ledger Folder composition from Project Financial Review — numbered cream tab, Structural Navy header, Signal Orange seam, Ledger Cream body — for its three sections, plus the new **Configuration State Pill**. It owns the Ministry, Consulting Agency and Custom Header values and never the company logo, which stays in Company & VAT (DEC-397).
+- **Bilingual Document Header** and the recomposed page one are documented under Components above.
+- The Daily Report editor keeps **twelve** sections: `12 Ministry Header` became `12 PDF Headers` holding three independent controls, rather than growing to fourteen. The "Daily Report Ledger Section" entry's section count above still reads twelve and remains accurate.
+- **Typography weight hierarchy — partial.** Section titles `800`, values `900`, metadata `500`. These screens do not close gap 1.
+- **Motion**: none was added to PDF Settings at all, so there is nothing there for reduced motion to gate. The editor section keeps the existing gated `LedgerSection` disclosure.
+
+## Implemented on Project Financial Review, second pass (2026-09-07)
+
+The **Supplier Payable Block** documented under Components replaces the continuous supplier list from the 2026-09-06 pass. `groupSupplierTargets` gained accumulated `paid` and `overpaid` fields, which is a data change rather than a presentation one: `billed - outstanding` understates an overpaid supplier because the repository clamps both figures at zero. Motion is unchanged — the existing gated disclosure only.
+
+## Implemented on Edit Project Information (2026-09-07)
+
+`src/ui/screens/EditProjectInformationScreen.tsx` (new), reachable from Project Command Center and the Projects list. It reuses the navy hero, the standard field treatment, and the Quiet Inline Action for its Projects-list entry point. Its one novel element is a **Not editable here** card naming customer, start date and status with the reason each is excluded — a deliberate choice to explain an absence rather than let the owner hunt for a control that does not exist. No motion was added.
 
 ## Current-vs-Target Gap List
 
