@@ -45,6 +45,44 @@ flowchart LR
   A -->|private bridge network| P
 ```
 
+### First-time setup
+
+Before the first run, create the local environment file:
+
+```
+cp .env.example .env
+```
+
+Then set `POSTGRES_PASSWORD` to a local-only value and use that same value in
+`DATABASE_URL`. `web/.env` is git-ignored and must never be committed. Compose
+fails without it, because that file supplies the `POSTGRES_*` substitutions.
+
+**Two connection targets, deliberately different.** `DATABASE_URL` in
+`web/.env` is the **host-side** value and must point at `127.0.0.1:5433`, the
+published loopback port. Compose never reads it: the compose file builds its
+own **container-side** URL from the `POSTGRES_*` values, reaching
+`postgres:5432` on the private Docker network. The hostname `postgres`
+resolves only inside that network, so a host-side process using it cannot
+connect.
+
+If you created `web/.env` before this rule was documented, check that its
+`DATABASE_URL` uses `127.0.0.1:5433` and not `postgres:5432`.
+
+### Running the API directly on the host
+
+Useful for a fast edit-and-restart loop without rebuilding a container. Start
+the database first, then from `web`:
+
+```
+docker compose --env-file .env -f docker/docker-compose.dev.yml up -d --wait postgres
+npm run dev --workspace apps/api
+```
+
+The `dev` script loads `web/.env` through Node's own `--env-file` flag, so no
+extra dependency is involved. It fails immediately and by design if
+`web/.env` is missing, rather than starting with an empty connection string
+and reporting a confusing readiness failure.
+
 Run from the `web` directory:
 
 ```

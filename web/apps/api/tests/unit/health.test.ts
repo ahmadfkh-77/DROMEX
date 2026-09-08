@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { buildServer } from '../src/server.ts';
+import { buildServer } from '../../src/server.ts';
 
 // A closed, reserved port. Liveness must not depend on the database being up.
 const UNREACHABLE_DATABASE_URL = 'postgresql://unused:unused@127.0.0.1:1/unused';

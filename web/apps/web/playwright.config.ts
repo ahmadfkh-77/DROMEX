@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const BASE_URL = 'http://127.0.0.1:5173';
+// Port 5174, not the 5173 the development container publishes. A dedicated
+// port means Playwright can never collide with, or silently reuse, a server
+// running someone else's build.
+const BASE_URL = 'http://127.0.0.1:5174';
 
 export default defineConfig({
   testDir: './e2e',
@@ -27,9 +30,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 5173',
+    command: 'npm run dev -- --host 127.0.0.1 --port 5174 --strictPort',
     url: BASE_URL,
-    reuseExistingServer: true,
+    // Always start a fresh server against current source. Reusing an
+    // existing one can silently test a stale build and report a false pass.
+    reuseExistingServer: false,
     timeout: 180_000,
   },
 });
