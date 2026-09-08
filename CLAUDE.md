@@ -236,6 +236,39 @@ pack. Its implementation phases are:
 Each phase must be independently testable and must integrate with existing daily
 records rather than create a second disconnected data-entry system.
 
+## Web platform (approved, in progress)
+
+A private DROMEX web application, secure API, and self-hosted PostgreSQL on a
+business-controlled VPS are now the **approved future production architecture**
+(DEC-406). This supersedes the Firebase-first production synchronisation
+decision (DEC-231) and the owner-only account decision (DEC-038) wherever they
+conflict. Operating rule 5 above should be read with that in mind: the VPS and
+PostgreSQL direction **has** been explicitly approved; web support and
+multi-user access are approved for the web application only.
+
+What that does **not** change:
+
+- The Android application stays offline-first on local SQLite and is unchanged.
+- `src/data/database/migrations.ts` stays untouched; server migrations are a
+  separate, independently versioned sequence.
+- The Firebase implementation stays present and dormant, and is removed only
+  after the PostgreSQL API and Android synchronisation are implemented,
+  migrated, tested, and explicitly accepted (DEC-407).
+- No synchronisation exists yet, and none may be built before the central
+  schema and API rules are approved and stable.
+
+All web work lives in `web/`, a **self-contained npm workspace** that does not
+modify the repository root `package.json`. Its documentation is in
+`docs/web/`, starting with [docs/web/README.md](docs/web/README.md), which
+carries a per-document implementation-status table. Read that before making any
+change to the web system.
+
+Current state: a local development foundation only. There is no authentication,
+no business table, no shared domain package, no deployment, and no production
+data. Open questions **OQ-157** (authentication solution), **OQ-158** (whether
+real infrastructure meets the recovery objectives), and **OQ-159** (how domain
+rules are shared without a forked copy) gate the phases that follow.
+
 ## Commands and quality gates
 
 ```powershell
