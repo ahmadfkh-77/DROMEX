@@ -13,7 +13,7 @@ const baseReport: DailyProjectReport = {
   id: 'r', projectId: 'p', workDate: '2026-08-11', workDescription: 'Excavation', workers: [], drivers: [], truckPlates: [], machines: [],
   materials: [], workerSafety: [], photos: [], notes: '', problemsDelaysIncidents: '', weatherSiteConditions: '', workStartTime: '', workEndTime: '',
   breakMinutes: '', nextWorkPlanned: '', consultantSignoffEnabled: false, consultantName: '', consultantSignaturePaths: [],
-  showMinistryHeader: false, showConsultingAgency: false, showCustomHeader: false, createdAt: '', updatedAt: '',
+  showMinistryHeader: false, showConsultingAgency: false, showCustomHeader: false, consultingAgencyId: null, consultingAgencyNameEn: null, consultingAgencyNameAr: null, createdAt: '', updatedAt: '',
 };
 
 function render(report: Partial<DailyProjectReport>, company = ministryCompany, ministryLogo: string | null = LOGO) {
@@ -42,33 +42,33 @@ describe('three independent optional headers (DEC-398)', () => {
     expect(ministryOnly).not.toContain('inst-agency');
     expect(ministryOnly).not.toContain('inst-custom');
 
-    const agencyOnly = pageOne(render({ showConsultingAgency: true }, company, null));
+    const agencyOnly = pageOne(render({ showConsultingAgency: true, consultingAgencyNameEn: 'Cedar Engineering' }, company, null));
     expect(agencyOnly).toContain('inst-agency');
     expect(agencyOnly).not.toContain('inst-ministry');
     expect(agencyOnly).not.toContain('inst-custom');
 
-    const customOnly = pageOne(render({ showCustomHeader: true }, company, null));
+    const customOnly = pageOne(render({ showCustomHeader: true, consultingAgencyId: null, consultingAgencyNameEn: null, consultingAgencyNameAr: null }, company, null));
     expect(customOnly).toContain('inst-custom');
     expect(customOnly).not.toContain('inst-ministry');
     expect(customOnly).not.toContain('inst-agency');
   });
 
   it('renders all three together, in the order ministry, agency, custom (DEC-401)', () => {
-    const html = pageOne(render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true },
-      { ...ministryCompany, consultingAgencyName: 'Cedar Engineering', customHeaderEn: 'Contract 114' }));
+    const html = pageOne(render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true, consultingAgencyId: null, consultingAgencyNameEn: 'Cedar Engineering', consultingAgencyNameAr: null },
+      { ...ministryCompany, customHeaderEn: 'Contract 114' }));
     expect(html.indexOf('inst-ministry')).toBeLessThan(html.indexOf('inst-agency'));
     expect(html.indexOf('inst-agency')).toBeLessThan(html.indexOf('inst-custom'));
   });
 
   it('renders a header switched on but never configured as nothing at all', () => {
-    const html = render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true }, plainCompany, null);
+    const html = render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true, consultingAgencyId: null, consultingAgencyNameEn: null, consultingAgencyNameAr: null }, plainCompany, null);
     expect(body(html)).not.toContain('institutional');
     expect(body(html)).toContain('<div class="page-two">');
   });
 
   it('never repeats any header on page two', () => {
-    const html = render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true },
-      { ...ministryCompany, consultingAgencyName: 'Cedar Engineering', customHeaderEn: 'Contract 114' });
+    const html = render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true, consultingAgencyId: null, consultingAgencyNameEn: 'Cedar Engineering', consultingAgencyNameAr: null },
+      { ...ministryCompany, customHeaderEn: 'Contract 114' });
     expect(pageTwo(html)).not.toContain('institutional');
     expect(pageTwo(html)).not.toContain('Ministry of Works');
     expect(pageTwo(html)).not.toContain('Cedar Engineering');
@@ -76,33 +76,52 @@ describe('three independent optional headers (DEC-398)', () => {
   });
 
   it('escapes markup in every header value', () => {
-    const html = render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true },
-      { ...ministryCompany, ministryName: '<script>a</script>', consultingAgencyName: '<script>b</script>', customHeaderEn: '<script>c</script>' }, null);
+    const html = render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true, consultingAgencyId: null, consultingAgencyNameEn: '<script>b</script>', consultingAgencyNameAr: null },
+      { ...ministryCompany, ministryName: '<script>a</script>', customHeaderEn: '<script>c</script>' }, null);
     expect(body(html)).not.toContain('<script>');
     expect(body(html)).toContain('&lt;script&gt;');
   });
+
+  it('ignores the legacy company-level agency value entirely -- the report snapshot is the only source (DEC-416)', () => {
+    const html = pageOne(render({ showConsultingAgency: true, consultingAgencyNameEn: 'Cedar Engineering' }, { ...plainCompany, consultingAgencyName: 'Old Global Agency Name' }, null));
+    expect(html).toContain('Cedar Engineering');
+    expect(html).not.toContain('Old Global Agency Name');
+  });
 });
 
-describe('consulting agency is independent of consultant sign-off (DEC-399)', () => {
-  const agencyCompany: ProjectReportSetup['company'] = { ...plainCompany, consultingAgencyName: 'Cedar Engineering Consultants' };
+describe('consulting agency is independent of consultant sign-off (DEC-399, DEC-417)', () => {
+  const agencyReport = { consultingAgencyNameEn: 'Cedar Engineering Consultants', consultingAgencyNameAr: null };
   const complete = { consultantSignoffEnabled: true, consultantName: 'Jad Khoury', consultantSignaturePaths: ['M10 10 L20 20'] };
 
   // This is the behaviour DEC-399 exists to create, and it is the exact inverse of what the previous
-  // implementation guaranteed. It is asserted in both directions on purpose.
+  // implementation guaranteed. It is asserted in both directions on purpose. Selecting an agency
+  // must never enable sign-off, and enabling sign-off must never select or display an agency.
   it('shows the agency with sign-off OFF when its own switch is on', () => {
-    const html = render({ showConsultingAgency: true, consultantSignoffEnabled: false }, agencyCompany, null);
+    const html = render({ ...agencyReport, showConsultingAgency: true, consultantSignoffEnabled: false }, plainCompany, null);
     expect(pageOne(html)).toContain('Cedar Engineering Consultants');
     expect(body(html)).not.toContain('consultant-section');
   });
 
   it('hides the agency with sign-off ON when its own switch is off', () => {
-    const html = render({ ...complete, showConsultingAgency: false }, agencyCompany, null);
+    const html = render({ ...agencyReport, ...complete, showConsultingAgency: false }, plainCompany, null);
     expect(body(html)).not.toContain('Cedar Engineering Consultants');
     expect(pageTwo(html)).toContain('Jad Khoury');
   });
 
+  it('enabling sign-off never selects or displays an agency by itself', () => {
+    // No consultingAgencyNameEn/Ar at all -- sign-off alone must not conjure an agency header.
+    const html = render({ ...complete, showConsultingAgency: false }, plainCompany, null);
+    expect(body(html)).not.toContain('inst-agency');
+  });
+
+  it('selecting an agency never enables sign-off by itself', () => {
+    const html = render({ ...agencyReport, showConsultingAgency: true, consultantSignoffEnabled: false }, plainCompany, null);
+    expect(body(html)).not.toContain('consultant-section');
+    expect(pageTwo(html)).not.toContain('Jad Khoury');
+  });
+
   it('keeps the personal name and signature at the end of page two, before Photo Evidence', () => {
-    const html = render({ ...complete, showConsultingAgency: true }, agencyCompany, null);
+    const html = render({ ...agencyReport, ...complete, showConsultingAgency: true }, plainCompany, null);
     expect(pageOne(html)).not.toContain('Jad Khoury');
     expect(pageOne(html)).not.toContain('consultant-signature-box');
     const two = pageTwo(html);
@@ -112,14 +131,14 @@ describe('consulting agency is independent of consultant sign-off (DEC-399)', ()
   });
 
   it('shows the agency header alongside an incomplete sign-off, with no signature image', () => {
-    const html = render({ showConsultingAgency: true, consultantSignoffEnabled: true, consultantName: 'Jad Khoury', consultantSignaturePaths: [] }, agencyCompany, null);
+    const html = render({ ...agencyReport, showConsultingAgency: true, consultantSignoffEnabled: true, consultantName: 'Jad Khoury', consultantSignaturePaths: [] }, plainCompany, null);
     expect(pageOne(html)).toContain('Cedar Engineering Consultants');
     expect(pageTwo(html)).toContain('Consultant sign-off incomplete.');
     expect(body(html)).not.toContain('consultant-signature-box');
   });
 
   it('leaves a report with every switch off byte-identical whether or not an agency is configured', () => {
-    expect(render({ consultantSignoffEnabled: false }, agencyCompany, null)).toBe(render({ consultantSignoffEnabled: false }, plainCompany, null));
+    expect(render({ ...agencyReport, consultantSignoffEnabled: false }, plainCompany, null)).toBe(render({ consultantSignoffEnabled: false }, plainCompany, null));
   });
 });
 
@@ -143,12 +162,18 @@ describe('bilingual direction and balance (DEC-400)', () => {
   });
 
   it('supports Arabic on every one of the three headers', () => {
-    const html = pageOne(render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true },
-      { ...ministryCompany, ministryNameAr: MINISTRY_AR, consultingAgencyNameAr: AGENCY_AR, customHeaderAr: 'عقد ٢٠٢٦/١١٤' }));
+    const html = pageOne(render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true, consultingAgencyId: null, consultingAgencyNameEn: 'Cedar Engineering', consultingAgencyNameAr: AGENCY_AR },
+      { ...ministryCompany, ministryNameAr: MINISTRY_AR, customHeaderAr: 'عقد ٢٠٢٦/١١٤' }));
     expect(html).toContain(MINISTRY_AR);
     expect(html).toContain(AGENCY_AR);
     expect(html).toContain('عقد ٢٠٢٦/١١٤');
     expect((html.match(/dir="rtl"/g) ?? [])).toHaveLength(3);
+  });
+
+  it('renders an Arabic-only agency name correctly, right-to-left, with no empty facing column (DEC-416 legacy preservation)', () => {
+    const html = pageOne(render({ showConsultingAgency: true, consultingAgencyNameEn: '', consultingAgencyNameAr: AGENCY_AR }, plainCompany, null));
+    expect(html).toContain(`<div class="bi-ar bi-solo" dir="rtl" lang="ar">${AGENCY_AR}</div>`);
+    expect(html).not.toContain('class="bi-en"');
   });
 
   it('declares an Arabic-capable font stack without bundling a font file', () => {
@@ -219,14 +244,14 @@ describe('page-one composition and logo ownership (DEC-401)', () => {
   });
 
   it('keeps page one identical whether or not headers are configured, when every switch is off', () => {
-    const configured = render({}, { ...ministryCompany, ministryNameAr: MINISTRY_AR, consultingAgencyName: 'Cedar', customHeaderEn: 'Contract' }, LOGO);
+    const configured = render({}, { ...ministryCompany, ministryNameAr: MINISTRY_AR, customHeaderEn: 'Contract' }, LOGO);
     const unconfigured = render({}, plainCompany, null);
     expect(configured).toBe(unconfigured);
   });
 
   it('keeps both page structures intact on a dense report with all three headers', () => {
     const dense = {
-      showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true,
+      showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true, consultingAgencyId: null, consultingAgencyNameEn: 'Cedar Engineering Consultants', consultingAgencyNameAr: AGENCY_AR,
       consultantSignoffEnabled: true, consultantName: 'Jad Khoury', consultantSignaturePaths: ['M10 10 L20 20'],
       workers: Array.from({ length: 25 }, (_, i) => `Worker ${i + 1}`),
       drivers: Array.from({ length: 8 }, (_, i) => `Driver ${i + 1}`),
@@ -237,7 +262,7 @@ describe('page-one composition and logo ownership (DEC-401)', () => {
       notes: 'x'.repeat(2000), problemsDelaysIncidents: 'y'.repeat(2000),
     };
     const html = buildProjectReportHtmlWithWaste({ ...baseReport, ...dense }, project, [], [], [], [],
-      { ...ministryCompany, ministryNameAr: MINISTRY_AR, consultingAgencyName: 'Cedar Engineering Consultants', consultingAgencyNameAr: AGENCY_AR, customHeaderEn: 'Contract 2026/114' }, null,
+      { ...ministryCompany, ministryNameAr: MINISTRY_AR, customHeaderEn: 'Contract 2026/114' }, null,
       dense.photos.map(() => 'data:image/jpeg;base64,AAAA'), false, LOGO);
     const one = pageOne(html); const two = pageTwo(html);
     expect(one).toContain('inst-ministry');
@@ -254,18 +279,18 @@ describe('approval safety (DEC-390 / DEC-032)', () => {
   const forbidden = ['Approved by', 'approved by', 'Certified by', 'certified by', 'Authorised by', 'Authorized by', 'Endorsed by', 'endorsement'];
 
   it('uses no approval or endorsement wording in any header or consultant state', () => {
-    const company = { ...ministryCompany, ministryNameAr: MINISTRY_AR, consultingAgencyName: 'Cedar Engineering', consultingAgencyNameAr: AGENCY_AR, customHeaderEn: 'Contract 114' };
+    const company = { ...ministryCompany, ministryNameAr: MINISTRY_AR, customHeaderEn: 'Contract 114' };
     const variants = [
-      render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true, consultantSignoffEnabled: true, consultantName: 'Jad Khoury', consultantSignaturePaths: ['M10 10'] }, company),
-      render({ showMinistryHeader: true, showConsultingAgency: true, consultantSignoffEnabled: true, consultantName: '', consultantSignaturePaths: [] }, company),
-      render({ showConsultingAgency: true }, company, null),
+      render({ showMinistryHeader: true, showConsultingAgency: true, showCustomHeader: true, consultingAgencyId: null, consultingAgencyNameEn: 'Cedar Engineering', consultingAgencyNameAr: AGENCY_AR, consultantSignoffEnabled: true, consultantName: 'Jad Khoury', consultantSignaturePaths: ['M10 10'] }, company),
+      render({ showMinistryHeader: true, showConsultingAgency: true, consultingAgencyNameEn: 'Cedar Engineering', consultantSignoffEnabled: true, consultantName: '', consultantSignaturePaths: [] }, company),
+      render({ showConsultingAgency: true, consultingAgencyNameEn: 'Cedar Engineering' }, company, null),
       render({}, company, null),
     ];
     for (const html of variants) for (const phrase of forbidden) expect(body(html)).not.toContain(phrase);
   });
 
   it('carries no verb on the agency header line', () => {
-    const one = pageOne(render({ showConsultingAgency: true }, { ...plainCompany, consultingAgencyName: 'Cedar Engineering Consultants' }, null));
+    const one = pageOne(render({ showConsultingAgency: true, consultingAgencyNameEn: 'Cedar Engineering Consultants' }, plainCompany, null));
     expect(one).toContain('Cedar Engineering Consultants');
     // The old implementation printed a "Consultant" label beside it; the header is now the name alone.
     expect(one).not.toContain('agency-label');

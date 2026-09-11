@@ -2,6 +2,7 @@ import type {
   ConfirmedLoad, ConversionDraft, ConversionOption, DriverDraft, DriverProfile, LoadCorrectionDraft, LoadDraft, LoadSetupOptions,
   MachineDraft, MachineProfile, MeasurementUnit, Project, ProjectDraft, ProjectInformationDraft, TruckDraft, TruckProfile, UnitDraft, WorkerDraft, WorkerProfile,
 } from '../../domain/loads';
+import type { ConsultingAgencyOption } from '../../domain/profiles';
 
 export type DirectoryProfiles = {
   workers: WorkerProfile[];
@@ -26,8 +27,11 @@ export interface LoadRepository {
   listProjects(): Promise<Project[]>;
   updateProjectStatus(projectId: string, status: Project['status']): Promise<void>;
   updateProjectStartDate(projectId: string, startDate: string): Promise<Project>;
-  /** DEC-404. Descriptive fields only: never the customer, the dates, the status, or any record. */
+  /** DEC-404, extended by DEC-417 for the optional agency field. Never the customer, dates, status, or any record. */
   updateProjectInformation(projectId: string, draft: ProjectInformationDraft): Promise<Project>;
+  /** DEC-417. Read-only: every active agency, plus the calling project's own current agency even
+   * if it has since been deactivated, resolved via resolveConsultingAgencySelectorOptions. */
+  listConsultingAgencyOptions(currentAgencyId?: string | null): Promise<ConsultingAgencyOption[]>;
   createDriver(draft: DriverDraft): Promise<DriverProfile>;
   updateDriver(id:string,draft:DriverDraft):Promise<DriverProfile>;
   createTruck(draft: TruckDraft): Promise<TruckProfile>;

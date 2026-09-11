@@ -1,4 +1,5 @@
 import type {FuelType} from './fuel';
+import type {ConsultingAgencyOption} from './profiles';
 export type ReportProjectStatus = 'active' | 'completed';
 export type MaterialMovement = 'used' | 'transported';
 export type WorkerSafetyStatus = 'compliant' | 'missing' | 'not_checked';
@@ -14,6 +15,13 @@ export type ReportProject = {
   status: ReportProjectStatus;
   startDate?:string|null;
   endDate?:string|null;
+  // DEC-417. The project's current consulting-agency assignment, resolved live (not a snapshot).
+  // consultingAgencyIsActive is null when there is no assignment at all, so "assigned but the agency
+  // was later deactivated" (false) can be told apart from "never assigned" (null).
+  consultingAgencyId?: string | null;
+  consultingAgencyNameEn?: string | null;
+  consultingAgencyNameAr?: string | null;
+  consultingAgencyIsActive?: boolean | null;
 };
 
 export type ReportItemOption = { id: string; name: string; categoryName: string };
@@ -58,6 +66,14 @@ export type DailyProjectReportDraft = {
   showMinistryHeader: boolean;
   showConsultingAgency: boolean;
   showCustomHeader: boolean;
+  // DEC-417, superseding DEC-403/DEC-416 for agency values only. A historical snapshot: the agency
+  // this report is linked to, and the exact English/Arabic names captured when that link was made.
+  // These change only through an explicit selection on THIS report (inheriting the project's agency
+  // when the report is first created, or a deliberate override afterward) -- never by re-reading the
+  // agency's current name, and never as a side effect of saving an unrelated field.
+  consultingAgencyId: string | null;
+  consultingAgencyNameEn: string | null;
+  consultingAgencyNameAr: string | null;
 };
 
 export type DailyProjectReport = Omit<DailyProjectReportDraft, 'id'> & {
@@ -94,8 +110,15 @@ export type ProjectReportSetup = {
   };
   company: { name: string; logoUri: string | null; address: string | null; phone: string | null; email: string | null; taxVatNumber: string | null;
     ministryName: string | null; ministryNameAr: string | null; ministryLogoUri: string | null;
+    // Legacy global columns (DEC-391/DEC-398), kept in storage but no longer editable or read by
+    // the report editor (DEC-417): agency identity now comes from consultingAgencies below plus
+    // each project's and report's own resolved/snapshotted values.
     consultingAgencyName: string | null; consultingAgencyNameAr: string | null;
     customHeaderEn: string | null; customHeaderAr: string | null };
+  // DEC-417. Active saved agencies only, for building a project's or report's override picker. A
+  // record's own currently-assigned-but-inactive agency is not in this list; combine with
+  // resolveConsultingAgencySelectorOptions (domain/profiles.ts) to include it.
+  consultingAgencies: ConsultingAgencyOption[];
 };
 
 export function splitPresence(value: string): string[] {
@@ -118,13 +141,28 @@ function minutesFromTime(value: string): number {
   return Number(parts[0] ?? 0) * 60 + Number(parts[1] ?? 0);
 }
 
-export function emptyDailyReport(projectId: string): DailyProjectReportDraft {
+/**
+ * @param agency The project's currently assigned consulting agency, resolved by the caller, or
+ * null/undefined for "No consulting agency." A new report inherits this once, as a snapshot, at
+ * the moment it is created (DEC-417) -- passing null (the project has no agency, or the caller
+ * omits the argument) correctly produces a report with no agency by default, which the user may
+ * still deliberately override afterward from the saved list. showConsultingAgency itself always
+ * starts Off regardless (DEC-398 is unchanged): inheriting a name never turns the header on by
+ * itself, exactly as enabling the header never selects a name by itself.
+ */
+export function emptyDailyReport(
+  projectId: string,
+  agency?: { id: string; nameEn: string; nameAr: string | null } | null,
+): DailyProjectReportDraft {
   return {
     id: null, projectId, workDate: localDateString(), workDescription: '', workers: [], workerSafety:[], drivers: [],
     truckPlates: [], machines: [], materials: [], photos: [], notes: '', problemsDelaysIncidents: '',
     weatherSiteConditions: '', workStartTime: '', workEndTime: '', breakMinutes: '', nextWorkPlanned: '',
     consultantSignoffEnabled: false, consultantName: '', consultantSignaturePaths: [],
     showMinistryHeader: false, showConsultingAgency: false, showCustomHeader: false,
+    consultingAgencyId: agency?.id ?? null,
+    consultingAgencyNameEn: agency?.nameEn ?? null,
+    consultingAgencyNameAr: agency?.nameAr ?? null,
   };
 }
 

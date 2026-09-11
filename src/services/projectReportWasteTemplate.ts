@@ -32,8 +32,13 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
   const ministryLogo=report.showMinistryHeader?(ministryLogoArg??null):null;
   const ministryEn=value(company.ministryName,report.showMinistryHeader);
   const ministryAr=value(company.ministryNameAr,report.showMinistryHeader);
-  const agencyEn=value(company.consultingAgencyName,report.showConsultingAgency);
-  const agencyAr=value(company.consultingAgencyNameAr,report.showConsultingAgency);
+  // DEC-417, superseding DEC-403/DEC-391 for agency values only: the report's own captured
+  // snapshot renders, never the current (possibly since-renamed) global or saved agency value. When
+  // the header is on but no agency was ever selected, both names are empty and biLine() below
+  // already omits the row cleanly with no blank spacing -- the same mechanism ministry and custom
+  // header already rely on.
+  const agencyEn=value(report.consultingAgencyNameEn,report.showConsultingAgency);
+  const agencyAr=value(report.consultingAgencyNameAr,report.showConsultingAgency);
   const customEn=value(company.customHeaderEn,report.showCustomHeader);
   const customAr=value(company.customHeaderAr,report.showCustomHeader);
   // DEC-400. English left and LTR, Arabic right and RTL, facing each other. A header with only one

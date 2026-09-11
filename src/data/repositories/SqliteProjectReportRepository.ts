@@ -17,6 +17,9 @@ type ReportRow = {
   show_ministry_header: number | null;
   show_consulting_agency: number | null;
   show_custom_header: number | null;
+  consulting_agency_id: string | null;
+  consulting_agency_name_en: string | null;
+  consulting_agency_name_ar: string | null;
 };
 
 function makeId(prefix: string): string { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`; }
@@ -47,6 +50,11 @@ function fromRow(row: ReportRow): DailyProjectReport {
     showMinistryHeader: row.show_ministry_header === 1,
     showConsultingAgency: row.show_consulting_agency === 1,
     showCustomHeader: row.show_custom_header === 1,
+    // DEC-417 snapshot: written only by saveReport() from whatever the caller's draft carries, and
+    // never re-derived here or anywhere else from the agency's current name.
+    consultingAgencyId: row.consulting_agency_id,
+    consultingAgencyNameEn: row.consulting_agency_name_en,
+    consultingAgencyNameAr: row.consulting_agency_name_ar,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -55,8 +63,10 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   constructor(private readonly db: SQLiteDatabase) {}
 
   async getSetup(): Promise<ProjectReportSetup> {
-    const [projects, items, units, company, drivers, trucks, workers, machines, priorReports] = await Promise.all([
-      this.db.getAllAsync<{ id: string; name: string; customer_name: string; location: string; status: 'active' | 'completed';start_date:string|null;end_date:string|null }>(`SELECT p.id, p.name, c.name customer_name, p.location, p.status,p.start_date,p.end_date FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.is_archived=0 ORDER BY p.status, p.name COLLATE NOCASE`),
+    const [projects, items, units, company, drivers, trucks, workers, machines, priorReports, agencies] = await Promise.all([
+      // LEFT JOIN, not filtered to active agencies: a project's own current assignment must stay
+      // resolvable and visible even after that agency is later deactivated (DEC-417).
+      this.db.getAllAsync<{ id: string; name: string; customer_name: string; location: string; status: 'active' | 'completed';start_date:string|null;end_date:string|null;consulting_agency_id:string|null;agency_name_en:string|null;agency_name_ar:string|null;agency_is_active:number|null }>(`SELECT p.id, p.name, c.name customer_name, p.location, p.status,p.start_date,p.end_date, p.consulting_agency_id, ca.name_en agency_name_en, ca.name_ar agency_name_ar, ca.is_active agency_is_active FROM projects p JOIN customers c ON c.id = p.customer_id LEFT JOIN consulting_agencies ca ON ca.id = p.consulting_agency_id WHERE p.is_archived=0 ORDER BY p.status, p.name COLLATE NOCASE`),
       this.db.getAllAsync<{ id: string; name: string; category_name: string }>(`SELECT i.id, i.name, c.name category_name FROM catalog_items i JOIN categories c ON c.id = i.category_id WHERE i.is_active = 1 AND i.daily_reports_enabled = 1 ORDER BY i.name COLLATE NOCASE`),
       this.db.getAllAsync<{ id: string; name: string; symbol: string }>('SELECT id, name, symbol FROM measurement_units WHERE is_active = 1 ORDER BY name COLLATE NOCASE'),
       this.db.getFirstAsync<{ company_name:string;logo_uri:string|null;address:string|null;phone:string|null;email:string|null;tax_vat_number:string|null;ministry_name:string|null;ministry_name_ar:string|null;ministry_logo_uri:string|null;consulting_agency_name:string|null;consulting_agency_name_ar:string|null;custom_header_en:string|null;custom_header_ar:string|null }>("SELECT company_name,logo_uri,address,phone,email,tax_vat_number,ministry_name,ministry_name_ar,ministry_logo_uri,consulting_agency_name,consulting_agency_name_ar,custom_header_en,custom_header_ar FROM company_settings WHERE id='company'"),
@@ -65,6 +75,9 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
       this.db.getAllAsync<{ id:string;name:string;role:string|null;phone:string|null }>('SELECT id,name,role,phone FROM worker_profiles WHERE is_active = 1 ORDER BY name COLLATE NOCASE'),
       this.db.getAllAsync<{ id:string;name:string;machine_type:string|null;identifier:string|null }>('SELECT id,name,machine_type,identifier FROM machine_profiles WHERE is_active = 1 ORDER BY name COLLATE NOCASE'),
       this.db.getAllAsync<{ workers_json:string;drivers_json:string;truck_plates_json:string;machines_json:string }>('SELECT workers_json,drivers_json,truck_plates_json,machines_json FROM daily_project_reports'),
+      // Active only: the pool an override picker offers for a NEW selection (DEC-417). A record's
+      // own already-assigned-but-inactive agency is added separately by resolveConsultingAgencySelectorOptions.
+      this.db.getAllAsync<{ id:string;name_en:string;name_ar:string|null }>("SELECT id,name_en,name_ar FROM consulting_agencies WHERE is_active=1 ORDER BY name_en_key"),
     ]);
     const historical = {
       workers: priorReports.flatMap((row) => parseArray<string>(row.workers_json)),
@@ -73,7 +86,13 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
       machines: priorReports.flatMap((row) => parseArray<string>(row.machines_json)),
     };
     return {
-      projects: projects.map((row) => ({ id: row.id, name: row.name, customerName: row.customer_name, location: row.location, status: row.status,startDate:row.start_date,endDate:row.end_date })),
+      projects: projects.map((row) => ({
+        id: row.id, name: row.name, customerName: row.customer_name, location: row.location, status: row.status,startDate:row.start_date,endDate:row.end_date,
+        consultingAgencyId: row.consulting_agency_id,
+        consultingAgencyNameEn: row.agency_name_en,
+        consultingAgencyNameAr: row.agency_name_ar,
+        consultingAgencyIsActive: row.consulting_agency_id ? row.agency_is_active === 1 : null,
+      })),
       items: items.map((row) => ({ id: row.id, name: row.name, categoryName: row.category_name })), units,
       presenceOptions: {
         workers: mergePresenceOptions(workers.map((row) => ({ id: `worker_${row.id}`, label: row.name, detail: [row.role, row.phone].filter(Boolean).join(' · ') || undefined })), historical.workers, 'worker_history'),
@@ -85,6 +104,7 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
         ministryName: company?.ministry_name ?? null, ministryNameAr: company?.ministry_name_ar ?? null, ministryLogoUri: company?.ministry_logo_uri ?? null,
         consultingAgencyName: company?.consulting_agency_name ?? null, consultingAgencyNameAr: company?.consulting_agency_name_ar ?? null,
         customHeaderEn: company?.custom_header_en ?? null, customHeaderAr: company?.custom_header_ar ?? null },
+      consultingAgencies: agencies.map((row) => ({ id: row.id, nameEn: row.name_en, nameAr: row.name_ar, isActive: true })),
     };
   }
 
@@ -141,10 +161,10 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
         ...draft.workers.map(worker=>(draft.workerSafety??[]).find(value=>value.workerName===worker&&(value.participantType??'worker')==='worker')??{workerName:worker,participantType:'worker' as const,status:'not_checked' as const,missingItems:[],notes:''}),
         ...draft.drivers.map(driver=>(draft.workerSafety??[]).find(value=>value.workerName===driver&&value.participantType==='driver')??{workerName:driver,participantType:'driver' as const,status:'not_checked' as const,missingItems:[],notes:''}),
       ];
-      await this.db.runAsync(`INSERT INTO daily_project_reports (id, project_id, work_date, work_description, workers_json, safety_json, drivers_json, truck_plates_json, machines_json, materials_json, photos_json, notes, problems_delays_incidents, weather_site_conditions, work_start_time, work_end_time, break_minutes, next_work_planned, consultant_signoff_enabled, consultant_name, consultant_signature_json, show_ministry_header, show_consulting_agency, show_custom_header, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET work_date=excluded.work_date, work_description=excluded.work_description, workers_json=excluded.workers_json, safety_json=excluded.safety_json, drivers_json=excluded.drivers_json, truck_plates_json=excluded.truck_plates_json, machines_json=excluded.machines_json, materials_json=excluded.materials_json, photos_json=excluded.photos_json, notes=excluded.notes, problems_delays_incidents=excluded.problems_delays_incidents, weather_site_conditions=excluded.weather_site_conditions, work_start_time=excluded.work_start_time, work_end_time=excluded.work_end_time, break_minutes=excluded.break_minutes, next_work_planned=excluded.next_work_planned, consultant_signoff_enabled=excluded.consultant_signoff_enabled, consultant_name=excluded.consultant_name, consultant_signature_json=excluded.consultant_signature_json, show_ministry_header=excluded.show_ministry_header, show_consulting_agency=excluded.show_consulting_agency, show_custom_header=excluded.show_custom_header, updated_at=excluded.updated_at`,
-        id, draft.projectId, draft.workDate, draft.workDescription.trim(), JSON.stringify(draft.workers),JSON.stringify(safety), JSON.stringify(draft.drivers), JSON.stringify(draft.truckPlates), JSON.stringify(draft.machines), JSON.stringify(draft.materials), JSON.stringify(draft.photos), clean(draft.notes), clean(draft.problemsDelaysIncidents), clean(draft.weatherSiteConditions), clean(draft.workStartTime), clean(draft.workEndTime), draft.breakMinutes ? Number(draft.breakMinutes) : null, clean(draft.nextWorkPlanned), draft.consultantSignoffEnabled?1:0, clean(draft.consultantName), JSON.stringify(draft.consultantSignaturePaths), draft.showMinistryHeader?1:0, draft.showConsultingAgency?1:0, draft.showCustomHeader?1:0, existing?.createdAt ?? now, now);
+      await this.db.runAsync(`INSERT INTO daily_project_reports (id, project_id, work_date, work_description, workers_json, safety_json, drivers_json, truck_plates_json, machines_json, materials_json, photos_json, notes, problems_delays_incidents, weather_site_conditions, work_start_time, work_end_time, break_minutes, next_work_planned, consultant_signoff_enabled, consultant_name, consultant_signature_json, show_ministry_header, show_consulting_agency, show_custom_header, consulting_agency_id, consulting_agency_name_en, consulting_agency_name_ar, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET work_date=excluded.work_date, work_description=excluded.work_description, workers_json=excluded.workers_json, safety_json=excluded.safety_json, drivers_json=excluded.drivers_json, truck_plates_json=excluded.truck_plates_json, machines_json=excluded.machines_json, materials_json=excluded.materials_json, photos_json=excluded.photos_json, notes=excluded.notes, problems_delays_incidents=excluded.problems_delays_incidents, weather_site_conditions=excluded.weather_site_conditions, work_start_time=excluded.work_start_time, work_end_time=excluded.work_end_time, break_minutes=excluded.break_minutes, next_work_planned=excluded.next_work_planned, consultant_signoff_enabled=excluded.consultant_signoff_enabled, consultant_name=excluded.consultant_name, consultant_signature_json=excluded.consultant_signature_json, show_ministry_header=excluded.show_ministry_header, show_consulting_agency=excluded.show_consulting_agency, show_custom_header=excluded.show_custom_header, consulting_agency_id=excluded.consulting_agency_id, consulting_agency_name_en=excluded.consulting_agency_name_en, consulting_agency_name_ar=excluded.consulting_agency_name_ar, updated_at=excluded.updated_at`,
+        id, draft.projectId, draft.workDate, draft.workDescription.trim(), JSON.stringify(draft.workers),JSON.stringify(safety), JSON.stringify(draft.drivers), JSON.stringify(draft.truckPlates), JSON.stringify(draft.machines), JSON.stringify(draft.materials), JSON.stringify(draft.photos), clean(draft.notes), clean(draft.problemsDelaysIncidents), clean(draft.weatherSiteConditions), clean(draft.workStartTime), clean(draft.workEndTime), draft.breakMinutes ? Number(draft.breakMinutes) : null, clean(draft.nextWorkPlanned), draft.consultantSignoffEnabled?1:0, clean(draft.consultantName), JSON.stringify(draft.consultantSignaturePaths), draft.showMinistryHeader?1:0, draft.showConsultingAgency?1:0, draft.showCustomHeader?1:0, draft.consultingAgencyId, draft.consultingAgencyNameEn, draft.consultingAgencyNameAr, existing?.createdAt ?? now, now);
       const payload = { ...draft, id, updatedAt: now };
       await this.db.runAsync(`INSERT INTO sync_outbox (entity_type, entity_id, operation, payload_json, created_at) VALUES ('dailyProjectReport', ?, 'upsert', ?, ?)`, id, JSON.stringify(payload), now);
     });

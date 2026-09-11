@@ -32,6 +32,10 @@ export type Project = {
   notes: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  // DEC-417. The saved consulting agency currently assigned to this project, or null for "No
+  // consulting agency." Read live -- unlike a report's snapshot, this is current organisational
+  // assignment, not history, so it is corrected in place when it changes.
+  consultingAgencyId?: string | null;
 };
 
 export type LoadItemOption = {
@@ -122,7 +126,9 @@ function localLoadDate(date=new Date()){return`${date.getFullYear()}-${String(da
  * feature. Start and end dates are absent too, keeping the existing protected start-date workflow
  * as the only way they change.
  */
-export type ProjectInformationDraft = {name: string; location: string; notes?: string};
+// consultingAgencyId is intentionally outside projectIdentityChanged's inputs below: assigning an
+// agency is not an identity change and never triggers the rename confirmation dialog.
+export type ProjectInformationDraft = {name: string; location: string; notes?: string; consultingAgencyId?: string | null};
 
 export function validateProjectInformation(draft: ProjectInformationDraft): string[] {
   const issues: string[] = [];

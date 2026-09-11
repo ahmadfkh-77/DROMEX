@@ -30,6 +30,14 @@ describe('large linked demo backup generator',()=>{
         expect(db.prepare('SELECT COUNT(*) count FROM loads l JOIN projects p ON p.id=l.project_id JOIN customers c ON c.id=p.customer_id').get()).toMatchObject({count:40});
         expect(db.prepare("SELECT COUNT(*) count FROM loads WHERE quantity_method='direct'").get()).toMatchObject({count:15});
         expect(db.prepare('SELECT COUNT(*) count FROM wall_consumptions wc JOIN walls w ON w.id=wc.wall_id JOIN projects p ON p.id=w.project_id').get()).toMatchObject({count:180});
+        // DEC-417: the consulting_agencies table and the new columns on projects and
+        // daily_project_reports are ordinary database content, so the whole-database backup format
+        // needs no change to carry them -- confirmed here by restoring a real backup and reading them.
+        expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='consulting_agencies'").get()).toMatchObject({name:'consulting_agencies'});
+        const projectColumns=(db.prepare('PRAGMA table_info(projects)').all() as {name:string}[]).map(c=>c.name);
+        expect(projectColumns).toContain('consulting_agency_id');
+        const reportColumns=(db.prepare('PRAGMA table_info(daily_project_reports)').all() as {name:string}[]).map(c=>c.name);
+        expect(reportColumns).toEqual(expect.arrayContaining(['consulting_agency_id','consulting_agency_name_en','consulting_agency_name_ar']));
       }finally{db.close();}
     }finally{rmSync(directory,{recursive:true,force:true});}
   },20_000);
