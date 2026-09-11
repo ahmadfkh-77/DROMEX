@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Animated, Image, LayoutAnimation, ScrollView,
 
 import type { ProjectReportRepository } from '../../data/repositories/ProjectReportRepository';
 import type { BusinessReportRepository } from '../../data/repositories/BusinessReportRepository';
-import {documentHeaderConfigured,type DocumentHeaderConfigured} from '../../domain/profiles';
+import {consultingAgencyDisplayLabel,documentHeaderConfigured,resolveConsultingAgencySelectorOptions,type DocumentHeaderConfigured} from '../../domain/profiles';
 import {activeBusinessFilterCount,businessReportLabels,emptyBusinessReportFilters,filterBusinessReportData,type BusinessReportFilters,type BusinessReportKind} from '../../domain/businessReports';
 import type {WorkbookLocale,WorkbookProgress} from '../../services/businessWorkbook';
 import {exportAndShareDailyReportWorkbook} from '../../services/dailyReportWorkbook';
@@ -102,7 +102,13 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
 
   async function openNewReport(selectedProject: ReportProject) {
     setError(null); setMessage(null);
-    const empty = emptyDailyReport(selectedProject.id);
+    // DEC-417: a new report inherits the project's current agency as a snapshot, taken once, right
+    // now. Not gated on showConsultingAgency -- the switch itself still defaults to Off; inheriting
+    // a name never turns the header on by itself.
+    const empty = emptyDailyReport(
+      selectedProject.id,
+      selectedProject.consultingAgencyId ? { id: selectedProject.consultingAgencyId, nameEn: selectedProject.consultingAgencyNameEn ?? '', nameAr: selectedProject.consultingAgencyNameAr ?? null } : null,
+    );
     try {
       const stored = await Storage.getItem(`dromex.draft.daily-report.${selectedProject.id}.v1`);
       if (!stored) { setDraft(empty); return; }
@@ -299,9 +305,10 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
   // those cannot actually draw anything yet.
   const headerStates=useMemo(()=>({
     ministry:{on:draft.showMinistryHeader,state:documentHeaderConfigured(setup.company,'ministry')},
-    consultingAgency:{on:draft.showConsultingAgency,state:documentHeaderConfigured(setup.company,'consultingAgency')},
+    // DEC-417: this report's own snapshot, not the (now-retired) global company value.
+    consultingAgency:{on:draft.showConsultingAgency,state:{english:Boolean(draft.consultingAgencyNameEn?.trim()),arabic:Boolean(draft.consultingAgencyNameAr?.trim()),logo:false}},
     customHeader:{on:draft.showCustomHeader,state:documentHeaderConfigured(setup.company,'customHeader')},
-  }),[draft.showMinistryHeader,draft.showConsultingAgency,draft.showCustomHeader,setup.company]);
+  }),[draft.showMinistryHeader,draft.showConsultingAgency,draft.consultingAgencyNameEn,draft.consultingAgencyNameAr,draft.showCustomHeader,setup.company]);
   const headersOn=Object.values(headerStates).filter(value=>value.on);
   const headersOnButUnconfigured=headersOn.some(value=>!value.state.english&&!value.state.arabic&&!value.state.logo);
   const headerBadge=headersOn.length===0?'All off':headersOnButUnconfigured?`${headersOn.length} on · needs setup`:`${headersOn.length} on`;
@@ -409,13 +416,15 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
           hasLogoSlot
           onOpenPdfSettings={onOpenPdfSettings}
         />
-        <HeaderControl
-          label="Show Consulting Agency"
-          hint="The supervising organisation. Independent of Consultant Sign-off: turning that off never hides this."
+        <ConsultingAgencyHeaderControl
           on={draft.showConsultingAgency}
           onChange={(value)=>update('showConsultingAgency',value)}
-          state={documentHeaderConfigured(setup.company,'consultingAgency')}
-          onOpenPdfSettings={onOpenPdfSettings}
+          nameEn={draft.consultingAgencyNameEn}
+          nameAr={draft.consultingAgencyNameAr}
+          agencyId={draft.consultingAgencyId}
+          project={project}
+          savedAgencies={setup.consultingAgencies}
+          onSelectAgency={(agency)=>onChange({...draft,consultingAgencyId:agency?.id??null,consultingAgencyNameEn:agency?.nameEn??null,consultingAgencyNameAr:agency?.nameAr??null})}
         />
         <HeaderControl
           label="Show Custom Header"
@@ -513,6 +522,65 @@ function HeaderControl({label,hint,on,onChange,state,hasLogoSlot=false,onOpenPdf
         </>
         :<Text style={styles.sectionHint} accessibilityRole="text">{summary}</Text>)
         :null}
+    </View>
+  );
+}
+
+/**
+ * DEC-417. Unlike Ministry and Custom Header, this control's value is per-report history, not a
+ * shared global value: a new report inherits the project's current agency once at creation, and a
+ * deliberate override here changes only this report. Selecting an agency never enables Consultant
+ * Sign-off, and enabling that sign-off never selects or displays an agency (DEC-399, unchanged).
+ */
+function ConsultingAgencyHeaderControl({ on, onChange, nameEn, nameAr, agencyId, project, savedAgencies, onSelectAgency }: {
+  on: boolean; onChange: (value: boolean) => void;
+  nameEn: string | null; nameAr: string | null; agencyId: string | null;
+  project: ReportProject; savedAgencies: { id: string; nameEn: string; nameAr: string | null; isActive: boolean }[];
+  onSelectAgency: (agency: { id: string; nameEn: string; nameAr: string | null } | null) => void;
+}) {
+  const state: DocumentHeaderConfigured = { english: Boolean(nameEn?.trim()), arabic: Boolean(nameAr?.trim()), logo: false };
+  const nothingSelected = !state.english && !state.arabic;
+  const isInherited = agencyId === (project.consultingAgencyId ?? null);
+  const currentOption = agencyId
+    ? (agencyId === project.consultingAgencyId
+      ? { id: project.consultingAgencyId!, nameEn: project.consultingAgencyNameEn ?? '', nameAr: project.consultingAgencyNameAr ?? null, isActive: project.consultingAgencyIsActive ?? true }
+      // Any id that differs from the project's own current agency was chosen from savedAgencies
+      // this session, which lists active agencies only.
+      : { id: agencyId, nameEn: nameEn ?? '', nameAr: nameAr ?? null, isActive: true })
+    : null;
+  const pickerOptions = resolveConsultingAgencySelectorOptions(savedAgencies, currentOption);
+  const provenance = agencyId
+    ? `${isInherited ? 'Inherited from project' : 'Overridden for this report'}: ${consultingAgencyDisplayLabel({ nameEn: nameEn ?? '', nameAr })}${currentOption && !currentOption.isActive ? ' (inactive)' : ''}`
+    : `${isInherited ? 'Inherited from project' : 'Overridden for this report'}: No consulting agency`;
+
+  return (
+    <View style={styles.headerControl}>
+      <Text style={styles.headerControlLabel}>Show Consulting Agency</Text>
+      <Text style={styles.sectionHint}>The supervising organisation. Independent of Consultant Sign-off: turning that off never hides this.</Text>
+      <View style={styles.chipWrap} accessibilityRole="radiogroup" accessibilityLabel="Show Consulting Agency on this report">
+        <Choice label="Off" selected={!on} onPress={() => onChange(false)} />
+        <Choice label="On" selected={on} onPress={() => onChange(true)} />
+      </View>
+      <View style={styles.headerStateRow}>
+        <HeaderStatePill label="English" set={state.english} />
+        <HeaderStatePill label="Arabic" set={state.arabic} />
+      </View>
+      <Text style={styles.sectionHint} accessibilityRole="text">{provenance}</Text>
+      {on && nothingSelected ? (
+        <Text style={styles.notice} accessibilityRole="text">This header is on, but no consulting agency is selected for this report, so the PDF will not show it. Choose one below, or leave it as "No consulting agency."</Text>
+      ) : null}
+      <SearchableSelect
+        label="Agency for this report"
+        options={pickerOptions.map((option) => ({ id: option.id, label: consultingAgencyDisplayLabel(option) + (option.isActive ? '' : ' (Inactive)') }))}
+        selectedId={agencyId ?? ''}
+        onSelect={(id) => {
+          if (!id) { onSelectAgency(null); return; }
+          const chosen = pickerOptions.find((option) => option.id === id);
+          if (chosen) onSelectAgency({ id: chosen.id, nameEn: chosen.nameEn, nameAr: chosen.nameAr });
+        }}
+        placeholder="No consulting agency"
+        allowClear
+      />
     </View>
   );
 }

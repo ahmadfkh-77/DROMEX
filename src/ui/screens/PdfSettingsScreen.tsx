@@ -1,10 +1,30 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { ProfileRepository } from '../../data/repositories/ProfileRepository';
-import { documentHeaderConfigured, type CompanySettings, type DocumentHeaderKind } from '../../domain/profiles';
+import {
+  consultingAgencyDisplayLabel,
+  consultingAgencyNeedsEnglishName,
+  documentHeaderConfigured,
+  validateConsultingAgencyDraft,
+  type CompanySettings,
+  type ConsultingAgency,
+  type DocumentHeaderKind,
+} from '../../domain/profiles';
 import { pickPersistentImage } from '../../services/media';
 import { colors } from '../theme';
+
+const AGENCY_SEARCH_THRESHOLD = 8;
+
+/** consulting_agencies.name_en_key is the DB-enforced unique column (SQLite-level, not merely
+ * client-side); this only rewrites the raw constraint text into a sentence the owner can act on. */
+function readableAgencyError(cause: unknown, fallback: string): string {
+  const message = cause instanceof Error ? cause.message : '';
+  if (message.includes('consulting_agencies.name_en_key') || message.includes('idx_consulting_agencies_name_en_key')) {
+    return 'Another consulting agency already uses that English name. Choose a different name.';
+  }
+  return message || fallback;
+}
 
 type Draft = {
   ministryName: string; ministryNameAr: string; ministryLogoUri: string | null;
@@ -50,11 +70,26 @@ export function PdfSettingsScreen({ repository, onBack }: { repository: ProfileR
   const [busy, setBusy] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
+  // Saved Consulting Agencies manager state (DEC-417). Independent of the ministry/custom-header
+  // draft above and saved immediately per action, not deferred to the page's Save button -- matching
+  // Units & Conversions' Focused Record Sheet precedent (ReceiptSetupScreen.tsx).
+  const [agencies, setAgencies] = useState<ConsultingAgency[]>([]);
+  const [agencySearch, setAgencySearch] = useState('');
+  const [inactiveAgenciesOpen, setInactiveAgenciesOpen] = useState(false);
+  const [agencySheet, setAgencySheet] = useState<'closed' | 'add' | 'edit'>('closed');
+  const [editingAgencyId, setEditingAgencyId] = useState<string | null>(null);
+  const [agencyNameEn, setAgencyNameEn] = useState('');
+  const [agencyNameAr, setAgencyNameAr] = useState('');
+  const [agencyError, setAgencyError] = useState<string | null>(null);
+  const [agencyBusy, setAgencyBusy] = useState(false);
+
   const load = useCallback(async () => {
     setPhase('loading');
     setFailure(null);
     try {
-      setDraft(draftFrom(await repository.getCompanySettings()));
+      const [settings, agencyList] = await Promise.all([repository.getCompanySettings(), repository.listConsultingAgencies()]);
+      setDraft(draftFrom(settings));
+      setAgencies(agencyList);
       setPhase('ready');
     } catch (cause) {
       setFailure(cause instanceof Error ? cause.message : 'Could not load PDF settings.');
@@ -63,6 +98,53 @@ export function PdfSettingsScreen({ repository, onBack }: { repository: ProfileR
   }, [repository]);
 
   useEffect(() => { void load(); }, [load, reloadToken]);
+
+  const activeAgencies = useMemo(() => agencies.filter((agency) => agency.isActive), [agencies]);
+  const inactiveAgencies = useMemo(() => agencies.filter((agency) => !agency.isActive), [agencies]);
+  const visibleActiveAgencies = useMemo(() => {
+    const query = agencySearch.trim().toLocaleLowerCase('en-US');
+    if (!query) return activeAgencies;
+    return activeAgencies.filter((agency) => consultingAgencyDisplayLabel(agency).toLocaleLowerCase('en-US').includes(query));
+  }, [activeAgencies, agencySearch]);
+
+  function openAddAgency() { setEditingAgencyId(null); setAgencyNameEn(''); setAgencyNameAr(''); setAgencyError(null); setAgencySheet('add'); }
+  function openEditAgency(agency: ConsultingAgency) { setEditingAgencyId(agency.id); setAgencyNameEn(agency.nameEn); setAgencyNameAr(agency.nameAr ?? ''); setAgencyError(null); setAgencySheet('edit'); }
+  function closeAgencySheet() { setAgencySheet('closed'); setAgencyError(null); }
+
+  async function saveAgency() {
+    const issues = validateConsultingAgencyDraft({ nameEn: agencyNameEn });
+    if (issues[0]) { setAgencyError(issues[0]); return; }
+    setAgencyBusy(true);
+    setAgencyError(null);
+    try {
+      const draftAgency = { nameEn: agencyNameEn, nameAr: agencyNameAr };
+      const saved2 = editingAgencyId
+        ? await repository.updateConsultingAgency(editingAgencyId, draftAgency)
+        : await repository.createConsultingAgency(draftAgency);
+      setAgencies((current) => {
+        const withoutSaved = current.filter((agency) => agency.id !== saved2.id);
+        return [...withoutSaved, saved2];
+      });
+      setAgencySheet('closed');
+    } catch (cause) {
+      setAgencyError(readableAgencyError(cause, 'Could not save the consulting agency.'));
+    } finally {
+      setAgencyBusy(false);
+    }
+  }
+
+  async function setAgencyActive(agency: ConsultingAgency, isActive: boolean) {
+    setAgencyBusy(true);
+    setAgencyError(null);
+    try {
+      const updated = await repository.setConsultingAgencyActive(agency.id, isActive);
+      setAgencies((current) => current.map((value) => (value.id === updated.id ? updated : value)));
+    } catch (cause) {
+      setAgencyError(cause instanceof Error ? cause.message : 'Could not update the consulting agency.');
+    } finally {
+      setAgencyBusy(false);
+    }
+  }
 
   function set<K extends keyof Draft>(key: K, value: Draft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -109,7 +191,6 @@ export function PdfSettingsScreen({ repository, onBack }: { repository: ProfileR
   }
 
   const ministry = configuredFrom(draft, 'ministry');
-  const agency = configuredFrom(draft, 'consultingAgency');
   const custom = configuredFrom(draft, 'customHeader');
 
   return (
@@ -142,15 +223,73 @@ export function PdfSettingsScreen({ repository, onBack }: { repository: ProfileR
         />
       </Section>
 
-      <Section
-        number="02"
-        title="Consulting Agency"
-        purpose="The organisation supervising the work. It is independent of Consultant Sign-off: turning the sign-off off never hides this."
-        state={agency}
-      >
-        <EnglishField label="Agency name (English)" value={draft.consultingAgencyName} onChangeText={(value) => set('consultingAgencyName', value)} placeholder="Cedar Engineering Consultants" />
-        <ArabicField label="Agency name (Arabic)" value={draft.consultingAgencyNameAr} onChangeText={(value) => set('consultingAgencyNameAr', value)} placeholder="سيدار للاستشارات الهندسية" />
-      </Section>
+      <View style={styles.section}>
+        <View style={styles.sectionTab}><Text style={styles.sectionTabText}>02</Text></View>
+        <View style={styles.sectionHeader} accessibilityRole="header" accessibilityLabel={`Section 02. Saved Consulting Agencies. ${activeAgencies.length} active, ${inactiveAgencies.length} inactive.`}>
+          <Text style={styles.sectionTitle}>Saved Consulting Agencies</Text>
+          <Text style={styles.sectionPurpose}>Save each agency once, then select the right one per project. Independent of Consultant Sign-off: turning the sign-off off never hides an agency header.</Text>
+        </View>
+        <View style={styles.sectionSeam} />
+        <View style={styles.sectionBody}>
+          <TouchableOpacity style={styles.primaryButton} onPress={openAddAgency} accessibilityRole="button" accessibilityLabel="Add a consulting agency">
+            <Text style={styles.primaryButtonText}>Add Consulting Agency</Text>
+          </TouchableOpacity>
+
+          {agencyError ? <Text style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="polite">{agencyError}</Text> : null}
+
+          {activeAgencies.length > AGENCY_SEARCH_THRESHOLD ? (
+            <TextInput
+              style={[styles.input, styles.inputLtr]}
+              placeholder="Search saved agencies"
+              placeholderTextColor="#6B7681"
+              value={agencySearch}
+              onChangeText={setAgencySearch}
+              accessibilityLabel="Search saved consulting agencies"
+            />
+          ) : null}
+
+          {activeAgencies.length === 0 ? (
+            <Text style={styles.helper}>No agencies saved yet. Add one above, or leave this empty if none of your projects need one.</Text>
+          ) : visibleActiveAgencies.length === 0 ? (
+            <Text style={styles.helper}>No saved agency matches that search.</Text>
+          ) : (
+            visibleActiveAgencies.map((item) => <AgencyRow key={item.id} agency={item} busy={agencyBusy} onEdit={() => openEditAgency(item)} onDeactivate={() => void setAgencyActive(item, false)} />)
+          )}
+
+          {inactiveAgencies.length > 0 ? (
+            <View style={styles.inactiveBand}>
+              <TouchableOpacity
+                style={styles.inactiveBandHeader}
+                onPress={() => setInactiveAgenciesOpen((value) => !value)}
+                accessibilityRole="button"
+                accessibilityLabel={`${inactiveAgencies.length} inactive agencies. ${inactiveAgenciesOpen ? 'Tap to hide' : 'Tap to view'}.`}
+              >
+                <Text style={styles.inactiveBandText}>{inactiveAgencies.length} inactive · {inactiveAgenciesOpen ? 'Tap to hide' : 'Tap to view'}</Text>
+                <View style={styles.inactiveBandCount}><Text style={styles.inactiveBandCountText}>{inactiveAgencies.length}</Text></View>
+              </TouchableOpacity>
+              {inactiveAgenciesOpen ? inactiveAgencies.map((item) => (
+                <AgencyRow key={item.id} agency={item} busy={agencyBusy} inactive onEdit={() => openEditAgency(item)} onReactivate={() => void setAgencyActive(item, true)} />
+              )) : null}
+            </View>
+          ) : null}
+
+          <Text style={styles.helper}>A saved agency is never deleted. Deactivating one removes it from new selections; the projects and reports that already reference it keep working.</Text>
+        </View>
+      </View>
+
+      <AgencySheet
+        visible={agencySheet !== 'closed'}
+        editing={agencySheet === 'edit'}
+        nameEn={agencyNameEn}
+        nameAr={agencyNameAr}
+        onChangeNameEn={setAgencyNameEn}
+        onChangeNameAr={setAgencyNameAr}
+        error={agencyError}
+        busy={agencyBusy}
+        onClose={closeAgencySheet}
+        onSave={() => void saveAgency()}
+        needsEnglishName={editingAgencyId != null && consultingAgencyNeedsEnglishName({ nameEn: agencyNameEn })}
+      />
 
       <Section
         number="03"
@@ -295,6 +434,78 @@ function LogoPanel({ uri, onPick, onRemove }: { uri: string | null; onPick: () =
   );
 }
 
+/** One saved agency, active or inactive. Never a delete action -- DEC-417 forbids physically
+ * removing a saved agency, so the row offers only Edit plus Deactivate/Reactivate. */
+function AgencyRow({ agency, busy, inactive = false, onEdit, onDeactivate, onReactivate }: {
+  agency: ConsultingAgency; busy: boolean; inactive?: boolean;
+  onEdit: () => void; onDeactivate?: () => void; onReactivate?: () => void;
+}) {
+  const needsEnglish = consultingAgencyNeedsEnglishName(agency);
+  return (
+    <View style={[styles.agencyRow, inactive && styles.agencyRowInactive]}>
+      <View style={styles.flex}>
+        <Text style={styles.agencyRowName} numberOfLines={1}>{consultingAgencyDisplayLabel(agency)}</Text>
+        {agency.nameAr && agency.nameEn ? <Text style={[styles.agencyRowNameAr]} numberOfLines={1}>{agency.nameAr}</Text> : null}
+        {needsEnglish ? <Text style={styles.agencyRowWarning}>Needs an English name — edit to add one.</Text> : null}
+      </View>
+      <View style={styles.agencyRowActions}>
+        <TouchableOpacity style={styles.quietAction} onPress={onEdit} disabled={busy} accessibilityRole="button" accessibilityLabel={`Edit ${consultingAgencyDisplayLabel(agency)}`}>
+          <Text style={styles.quietActionText}>Edit</Text>
+        </TouchableOpacity>
+        {inactive
+          ? <TouchableOpacity style={styles.quietAction} onPress={onReactivate} disabled={busy} accessibilityRole="button" accessibilityLabel={`Reactivate ${consultingAgencyDisplayLabel(agency)}`}><Text style={styles.quietActionText}>Reactivate</Text></TouchableOpacity>
+          : <TouchableOpacity style={styles.quietActionDanger} onPress={onDeactivate} disabled={busy} accessibilityRole="button" accessibilityLabel={`Deactivate ${consultingAgencyDisplayLabel(agency)}`}><Text style={styles.quietActionDangerText}>Deactivate</Text></TouchableOpacity>}
+      </View>
+    </View>
+  );
+}
+
+function AgencySheet({ visible, editing, nameEn, nameAr, onChangeNameEn, onChangeNameAr, error, busy, onClose, onSave, needsEnglishName }: {
+  visible: boolean; editing: boolean; nameEn: string; nameAr: string;
+  onChangeNameEn: (value: string) => void; onChangeNameAr: (value: string) => void;
+  error: string | null; busy: boolean; onClose: () => void; onSave: () => void; needsEnglishName: boolean;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={styles.sheet}>
+        <View style={styles.sheetHeader}>
+          <View style={styles.flex}>
+            <Text style={styles.sheetEyebrow}>{editing ? 'EDIT AGENCY' : 'ADD AGENCY'}</Text>
+            <Text style={styles.sheetTitle}>{editing ? 'Edit Consulting Agency' : 'Add Consulting Agency'}</Text>
+          </View>
+          <TouchableOpacity style={styles.sheetClose} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close without saving">
+            <Text style={styles.sheetCloseText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
+            {needsEnglishName ? (
+              <Text style={styles.legacyNotice}>
+                This agency was carried over from an earlier single-agency setup and has no English name yet. Add one so it can be found and selected reliably.
+              </Text>
+            ) : null}
+            {error ? <Text style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text> : null}
+            <EnglishField label="English name *" value={nameEn} onChangeText={onChangeNameEn} placeholder="Cedar Engineering Consultants" />
+            <ArabicField label="Arabic name (optional)" value={nameAr} onChangeText={onChangeNameAr} placeholder="سيدار للاستشارات الهندسية" />
+          </ScrollView>
+          <View style={styles.sheetFooter}>
+            <TouchableOpacity
+              style={[styles.primaryButton, busy && styles.buttonDisabled]}
+              onPress={onSave}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel={editing ? 'Save changes to this agency' : 'Save new agency'}
+              accessibilityState={{ disabled: busy, busy }}
+            >
+              {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>{editing ? 'Save Changes' : 'Save Agency'}</Text>}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 44, gap: 14 },
   flex: { flex: 1, minWidth: 0 },
@@ -361,4 +572,32 @@ const styles = StyleSheet.create({
   dangerButton: { flexGrow: 1, minWidth: 135, minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: colors.danger, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   dangerButtonText: { color: colors.danger, fontWeight: '800', fontSize: 15 },
   buttonDisabled: { opacity: .4 },
+
+  agencyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.line, padding: 12, minHeight: 56 },
+  agencyRowInactive: { backgroundColor: colors.creamSoft, borderStyle: 'dashed' },
+  agencyRowName: { color: colors.ink, fontSize: 15, fontWeight: '800' },
+  agencyRowNameAr: { color: colors.muted, fontSize: 12, marginTop: 2, textAlign: 'right', writingDirection: 'rtl' },
+  agencyRowWarning: { color: colors.warning, fontSize: 11, fontWeight: '700', marginTop: 3 },
+  agencyRowActions: { flexDirection: 'row', gap: 4 },
+  quietAction: { minHeight: 44, minWidth: 44, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+  quietActionText: { color: colors.brandDark, fontWeight: '800', fontSize: 13 },
+  quietActionDanger: { minHeight: 44, minWidth: 44, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+  quietActionDangerText: { color: colors.danger, fontWeight: '800', fontSize: 13 },
+
+  inactiveBand: { backgroundColor: colors.creamSoft, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 4, gap: 8 },
+  inactiveBandHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 },
+  inactiveBandText: { color: colors.ink, fontSize: 13, fontWeight: '700' },
+  inactiveBandCount: { minWidth: 24, height: 24, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  inactiveBandCountText: { color: colors.ink, fontSize: 12, fontWeight: '800' },
+
+  legacyNotice: { color: colors.warning, backgroundColor: '#FFF3D8', borderRadius: 10, padding: 12, fontWeight: '700', lineHeight: 19, fontSize: 12 },
+
+  sheet: { flex: 1, backgroundColor: colors.background },
+  sheetHeader: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sheetEyebrow: { color: colors.brand, fontSize: 10, letterSpacing: 1.2, fontWeight: '900' },
+  sheetTitle: { color: colors.ink, fontSize: 24, fontWeight: '900' },
+  sheetClose: { padding: 10, backgroundColor: colors.surface, borderRadius: 10 },
+  sheetCloseText: { color: colors.ink, fontWeight: '800' },
+  sheetBody: { padding: 20, gap: 14 },
+  sheetFooter: { padding: 20, paddingTop: 0 },
 });

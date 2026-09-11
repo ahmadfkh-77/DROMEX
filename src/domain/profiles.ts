@@ -161,3 +161,87 @@ export function validateCompanySettings(draft: CompanySettingsDraft): string[] {
   }
   return issues;
 }
+
+/**
+ * A consulting agency saved once and reused across projects and reports (DEC-417). `nameEn` is
+ * required for every newly created agency; it may be empty only for one legacy case: a global
+ * `consulting_agency_name`/`_ar` value that existed before this feature and had no English name at
+ * all (DEC-416). That empty state is preserved honestly rather than filled with an invented
+ * placeholder or a copy of the Arabic text.
+ */
+export type ConsultingAgency = {
+  id: string;
+  nameEn: string;
+  nameAr: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ConsultingAgencyDraft = { nameEn: string; nameAr?: string | null };
+
+/**
+ * The normalized duplicate-detection key (DEC-417). Trims, collapses repeated internal
+ * whitespace, and case-folds — the same rule `normalizeText` already applies for customer
+ * duplicate detection, reused rather than reimplemented so the two never silently diverge.
+ *
+ * This is the value SQLite's UNIQUE index actually enforces uniqueness on. The repository is the
+ * only place that may compute it and write it to storage; a create/update draft must never carry
+ * a `name_en_key` in from UI input, and the migration that seeds the initial legacy agency must
+ * compute the key through this same function so a later manual entry of the same name is caught
+ * as a duplicate rather than silently diverging from the seeded row.
+ */
+export function normalizeAgencyKey(nameEn: string): string {
+  return normalizeText(nameEn);
+}
+
+/** The stored display form of an English agency name: trimmed and internally collapsed, but not
+ * case-folded — case is part of how the name reads, and is preserved for display even though the
+ * uniqueness key ignores it. */
+export function normalizeAgencyName(nameEn: string): string {
+  return nameEn.trim().replace(/\s+/g, ' ');
+}
+
+export function validateConsultingAgencyDraft(draft: ConsultingAgencyDraft): string[] {
+  const issues: string[] = [];
+  if (!normalizeAgencyName(draft.nameEn)) issues.push('English agency name is required.');
+  return issues;
+}
+
+/**
+ * Presentation-only fallback (DEC-416): when an agency's English name is empty — the one legacy
+ * case a migration can produce — its Arabic name is shown instead so the agency is still
+ * identifiable in every picker and list. This never changes what is stored; `nameEn` stays `''`.
+ */
+export function consultingAgencyDisplayLabel(agency: Pick<ConsultingAgency, 'nameEn' | 'nameAr'>): string {
+  const en = agency.nameEn.trim();
+  if (en) return en;
+  const ar = (agency.nameAr ?? '').trim();
+  if (ar) return ar;
+  return 'Unnamed agency';
+}
+
+/** True for the one legacy case where an agency has no English name yet and should be flagged for
+ * completion when edited. Newly created agencies can never reach this state (DEC-417): creation
+ * requires a non-empty English name. */
+export function consultingAgencyNeedsEnglishName(agency: Pick<ConsultingAgency, 'nameEn'>): boolean {
+  return !agency.nameEn.trim();
+}
+
+/** A resolved agency reference, as carried by a project's or report's current assignment. `isActive`
+ * reflects the agency's own state, independent of whether that assignment is still selectable. */
+export type ConsultingAgencyOption = { id: string; nameEn: string; nameAr: string | null; isActive: boolean };
+
+/**
+ * Builds the set of agencies a picker may offer (DEC-417): every active agency, plus the record's
+ * currently assigned agency even when that one has since been deactivated — so an inactive agency
+ * already on a project or report stays visible and selectable as "keep this," never silently
+ * dropped from its own field. No other inactive agency is offered for a new selection.
+ */
+export function resolveConsultingAgencySelectorOptions(
+  active: ConsultingAgencyOption[],
+  current: ConsultingAgencyOption | null,
+): ConsultingAgencyOption[] {
+  if (!current || current.isActive || active.some((option) => option.id === current.id)) return active;
+  return [...active, current];
+}

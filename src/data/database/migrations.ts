@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 34;
+export const DATABASE_VERSION = 35;
 
 type TableColumn = { name: string };
 
@@ -15,6 +15,26 @@ async function addColumnIfMissing(db: SQLiteDatabase, table: string, column: str
 
 function sqlText(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Frozen, migration-local normalization for the version 34 -> 35 consulting-agencies seed step
+ * (DEC-417). This is a deliberate, intentional duplicate of the logic in
+ * domain/profiles.ts's normalizeAgencyName/normalizeAgencyKey, not a shared import: a migration
+ * must keep producing the exact same result every time it ever runs, against a database captured
+ * at any point in the app's history, regardless of how the live domain logic is later refactored.
+ * If normalizeAgencyName/normalizeAgencyKey ever change, this pair must NOT be changed to match --
+ * doing so would silently alter what migration 35 does to an old version-34 database. The runtime
+ * repository (SqliteProfileRepository) uses the real domain helpers for every agency it creates or
+ * edits after this migration has run; only this one historical seeding step uses the frozen copy.
+ */
+// Exported so a test can assert this frozen copy currently agrees with the live domain
+// normalization, without the migration module itself importing or depending on that domain code.
+export function migration35NormalizeAgencyName(nameEn: string): string {
+  return nameEn.trim().replace(/\s+/g, ' ');
+}
+export function migration35NormalizeAgencyKey(nameEn: string): string {
+  return migration35NormalizeAgencyName(nameEn).toLocaleLowerCase('en-US');
 }
 
 export const RESERVED_TEST_DATA_DEACTIVATION_SQL = `
@@ -938,6 +958,78 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     // regeneration. Backfilling reproduces today's output exactly. New reports still default to off.
     await db.execAsync('UPDATE daily_project_reports SET show_consulting_agency = 1 WHERE consultant_signoff_enabled = 1;');
     currentVersion = 34;
+  }
+
+  if (currentVersion === 34) {
+    // DEC-416/DEC-417. Consulting agencies become a reusable, per-project list instead of one
+    // global free-text pair. The legacy global value is preserved by seeding it as the first saved
+    // agency, and every project is backfilled to reference it, so the app's existing behaviour is
+    // unchanged the moment this migration finishes: every project still prints the same agency it
+    // would have printed before, until an owner deliberately assigns a different one.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS consulting_agencies (
+        id TEXT PRIMARY KEY NOT NULL,
+        name_en TEXT NOT NULL,
+        name_ar TEXT,
+        -- Application-computed duplicate-detection key (trim, collapse internal whitespace,
+        -- case-fold). SQLite enforces uniqueness of this stored key via the index below; only the
+        -- repository ever computes and writes it at runtime (domain/profiles.ts's
+        -- normalizeAgencyKey), never a caller/UI draft, so "Cedar", " Cedar ", and "CEDAR" all
+        -- collide as one row. This migration's own one-time seed uses a frozen local copy of that
+        -- same rule (migration35NormalizeAgencyKey above), not the live domain function.
+        name_en_key TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_consulting_agencies_name_en_key ON consulting_agencies(name_en_key);
+    `);
+    await addColumnIfMissing(db, 'projects', 'consulting_agency_id', 'TEXT REFERENCES consulting_agencies(id)');
+    await addColumnIfMissing(db, 'daily_project_reports', 'consulting_agency_id', 'TEXT REFERENCES consulting_agencies(id)');
+    await addColumnIfMissing(db, 'daily_project_reports', 'consulting_agency_name_en', 'TEXT');
+    await addColumnIfMissing(db, 'daily_project_reports', 'consulting_agency_name_ar', 'TEXT');
+
+    const legacy = await db.getFirstAsync<{ consulting_agency_name: string | null; consulting_agency_name_ar: string | null }>(
+      "SELECT consulting_agency_name, consulting_agency_name_ar FROM company_settings WHERE id = 'company'",
+    );
+    const legacyEnglish = (legacy?.consulting_agency_name ?? '').trim();
+    const legacyArabic = (legacy?.consulting_agency_name_ar ?? '').trim();
+
+    if (legacyEnglish || legacyArabic) {
+      // Honest preservation of an Arabic-only legacy value (DEC-416): nameEn stays '' rather than
+      // being invented from a placeholder or copied from the Arabic text. This is the one case a
+      // newly created agency can never reach, since creation requires a non-empty English name.
+      const nameEn = migration35NormalizeAgencyName(legacyEnglish);
+      const nameAr = legacyArabic || null;
+      const key = migration35NormalizeAgencyKey(nameEn);
+
+      let agencyId = (await db.getFirstAsync<{ id: string }>(
+        'SELECT id FROM consulting_agencies WHERE name_en_key = ?', key,
+      ))?.id ?? null;
+
+      if (!agencyId) {
+        agencyId = `consulting_agency_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+        const seededAt = new Date().toISOString();
+        await db.runAsync(
+          'INSERT INTO consulting_agencies (id, name_en, name_ar, name_en_key, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)',
+          agencyId, nameEn, nameAr, key, seededAt, seededAt,
+        );
+      }
+
+      // Idempotency guard: only fills a still-NULL reference, so re-running this step never
+      // overwrites a choice made after the first run.
+      await db.runAsync('UPDATE projects SET consulting_agency_id = ? WHERE consulting_agency_id IS NULL', agencyId);
+
+      // Only the reports that were actually printing the header today get a snapshot — an existing
+      // report whose switch is off printed no agency before this migration and prints none after.
+      await db.runAsync(
+        `UPDATE daily_project_reports
+         SET consulting_agency_id = ?, consulting_agency_name_en = ?, consulting_agency_name_ar = ?
+         WHERE show_consulting_agency = 1 AND consulting_agency_id IS NULL`,
+        agencyId, nameEn, nameAr,
+      );
+    }
+    currentVersion = 35;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

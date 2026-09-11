@@ -33,10 +33,10 @@ async function setup(){
 const columns=(database:TestDatabase,table:string)=>(database.raw.prepare(`PRAGMA table_info(${table})`).all() as {name:string}[]).map(row=>row.name);
 
 describe('PDF settings migration (DEC-397 to DEC-399)',()=>{
-  it('adds every new column at database version 34',async()=>{
+  it('adds every new column at the current database version',async()=>{
     const {database}=await setup();
-    expect(DATABASE_VERSION).toBe(34);
-    expect((database.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(34);
+    expect(DATABASE_VERSION).toBeGreaterThanOrEqual(34);
+    expect((database.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(DATABASE_VERSION);
     const settings=columns(database,'company_settings');
     for(const column of ['ministry_name','ministry_name_ar','ministry_logo_uri','consulting_agency_name','consulting_agency_name_ar','custom_header_en','custom_header_ar']) expect(settings).toContain(column);
     const reports=columns(database,'daily_project_reports');
@@ -49,7 +49,7 @@ describe('PDF settings migration (DEC-397 to DEC-399)',()=>{
     await migrateDatabase(database as never);
     await migrateDatabase(database as never);
     expect(columns(database,'company_settings').join(',')).toBe(before);
-    expect((database.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(34);
+    expect((database.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(DATABASE_VERSION);
   });
 
   it('defaults both new report switches to off for a newly inserted report',async()=>{

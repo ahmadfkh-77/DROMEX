@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { LoadRepository } from '../../data/repositories/LoadRepository';
 import { projectIdentityChanged, validateProjectInformation, type Project } from '../../domain/loads';
+import { consultingAgencyDisplayLabel } from '../../domain/profiles';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { colors } from '../theme';
 
 /**
@@ -17,12 +19,26 @@ export function EditProjectInformationScreen({ repository, project, onBack, onSa
   const [name, setName] = useState(project.name);
   const [location, setLocation] = useState(project.location);
   const [notes, setNotes] = useState(project.notes ?? '');
+  // '' is the SearchableSelect convention for "no selection," matching its allowClear "None" row.
+  const [consultingAgencyId, setConsultingAgencyId] = useState(project.consultingAgencyId ?? '');
+  const [agencyOptions, setAgencyOptions] = useState<{ id: string; label: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const draft = { name, location, notes };
+  useEffect(() => {
+    let cancelled = false;
+    // DEC-417: active agencies plus this project's own currently assigned agency even if it has
+    // since been deactivated, so an already-assigned inactive agency stays visible and selectable
+    // as "keep this" rather than silently disappearing from the field.
+    void repository.listConsultingAgencyOptions(project.consultingAgencyId ?? null).then((options) => {
+      if (!cancelled) setAgencyOptions(options.map((option) => ({ id: option.id, label: consultingAgencyDisplayLabel(option) + (option.isActive ? '' : ' (Inactive)') })));
+    });
+    return () => { cancelled = true; };
+  }, [repository, project.consultingAgencyId]);
+
+  const draft = { name, location, notes, consultingAgencyId: consultingAgencyId || null };
   const identityChanged = projectIdentityChanged(project, draft);
-  const dirty = identityChanged || (notes.trim() !== (project.notes ?? '').trim());
+  const dirty = identityChanged || (notes.trim() !== (project.notes ?? '').trim()) || (consultingAgencyId || null) !== (project.consultingAgencyId ?? null);
 
   async function persist() {
     setBusy(true);
@@ -73,6 +89,15 @@ export function EditProjectInformationScreen({ repository, project, onBack, onSa
         <Field label="Project name *" value={name} onChangeText={setName} placeholder="Airport Road Rehabilitation" />
         <Field label="Location *" value={location} onChangeText={setLocation} placeholder="Beirut" />
         <Field label="Notes" value={notes} onChangeText={setNotes} multiline placeholder="Anything worth recording about this project" />
+        <SearchableSelect
+          label="Consulting agency"
+          options={agencyOptions.map((option) => ({ id: option.id, label: option.label }))}
+          selectedId={consultingAgencyId}
+          onSelect={setConsultingAgencyId}
+          placeholder="No consulting agency"
+          allowClear
+        />
+        <Text style={styles.helper}>Used automatically on new Daily Reports for this project. Existing reports keep the agency they already recorded.</Text>
       </View>
 
       <View style={styles.lockedCard} accessibilityRole="text" accessibilityLabel="Not editable here: customer, start date, and project status.">
