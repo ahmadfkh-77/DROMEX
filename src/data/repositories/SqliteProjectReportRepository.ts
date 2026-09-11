@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import type { FuelType } from '../../domain/fuel';
 import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedFuelFill, LinkedProjectLoad, LinkedQuarryLoad, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption, WorkerSafetyEntry } from '../../domain/projectReports';
 import { validateDailyReport } from '../../domain/projectReports';
 import type { ProjectReportRepository } from './ProjectReportRepository';
@@ -107,8 +108,8 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   }
 
   async listLinkedFuelFills(projectId:string,workDate:string):Promise<LinkedFuelFill[]> {
-    const rows=await this.db.getAllAsync<{id:string;confirmed_at:string;equipment_name:string;litres:number;price_per_litre_usd_cents:number|null;consumption_cost_usd_cents:number|null;odometer_reading:string|null;notes:string|null}>(`SELECT id,confirmed_at,equipment_name,litres,price_per_litre_usd_cents,consumption_cost_usd_cents,odometer_reading,notes FROM fuel_movements WHERE project_id=? AND movement_type='fill' AND status='Active' AND date(confirmed_at,'localtime')=? ORDER BY confirmed_at`,projectId,workDate);
-    return rows.map(row=>({id:row.id,confirmedAt:row.confirmed_at,equipmentName:row.equipment_name??'Unknown equipment',litres:row.litres,pricePerLitreUsd:row.price_per_litre_usd_cents==null?null:row.price_per_litre_usd_cents/100,consumptionCostUsd:row.consumption_cost_usd_cents==null?null:row.consumption_cost_usd_cents/100,odometerReading:row.odometer_reading,notes:row.notes}));
+    const rows=await this.db.getAllAsync<{id:string;confirmed_at:string;equipment_name:string;fuel_type:FuelType;litres:number;price_per_litre_usd_cents:number|null;consumption_cost_usd_cents:number|null;odometer_reading:string|null;notes:string|null}>(`SELECT id,confirmed_at,equipment_name,fuel_type,litres,price_per_litre_usd_cents,consumption_cost_usd_cents,odometer_reading,notes FROM fuel_movements WHERE project_id=? AND movement_type='fill' AND status='Active' AND date(confirmed_at,'localtime')=? ORDER BY confirmed_at`,projectId,workDate);
+    return rows.map(row=>({id:row.id,confirmedAt:row.confirmed_at,equipmentName:row.equipment_name??'Unknown equipment',fuelType:row.fuel_type,litres:row.litres,pricePerLitreUsd:row.price_per_litre_usd_cents==null?null:row.price_per_litre_usd_cents/100,consumptionCostUsd:row.consumption_cost_usd_cents==null?null:row.consumption_cost_usd_cents/100,odometerReading:row.odometer_reading,notes:row.notes}));
   }
 
   async listLinkedWasteDumps(projectId: string, workDate: string): Promise<LinkedWasteDump[]> {
