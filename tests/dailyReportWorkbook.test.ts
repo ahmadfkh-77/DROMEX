@@ -10,7 +10,7 @@ const company:ProjectReportSetup['company']={name:'DROMEX',logoUri:null,address:
 const loads:LinkedProjectLoad[]=[{id:'load-1',transactionNumber:'L-100',itemName:'Sand',quantity:20.5,unitSymbol:'t',driverName:'Ali',truckPlate:'B123'}];
 const quarry:LinkedQuarryLoad[]=[{id:'quarry-1',purchaseNumber:'QP-100',confirmedAt:'2026-08-14T10:00:00Z',supplierName:'Main Quarry',itemName:'Base course',quantity:20,unitSymbol:'m³',deliveryMethod:'supplier',deliveryLabel:'Supplier Delivering',truckPlate:null,supplierTicketNumber:'T-7',notes:null}];
 const waste:LinkedWasteDump[]=[{id:'waste-1',dumpedAt:'2026-08-14T12:00:00Z',materialType:'Soil',dumpLocation:'Zone B',truckPlate:'B123',driverName:'Ali'}];
-const fuel:LinkedFuelFill[]=[{id:'fuel-1',confirmedAt:'2026-08-14T13:00:00Z',equipmentName:'Excavator',litres:50,pricePerLitreUsd:.9,consumptionCostUsd:45,odometerReading:null,notes:null}];
+const fuel:LinkedFuelFill[]=[{id:'fuel-1',confirmedAt:'2026-08-14T13:00:00Z',equipmentName:'Excavator',fuelType:'diesel',litres:50,pricePerLitreUsd:.9,consumptionCostUsd:45,odometerReading:null,notes:null}];
 
 describe('daily report workbook',()=>{
   it('contains structured work, presence, material, load, quarry, fuel, waste, and photo sheets',()=>{expect(dailyReportWorkbookSheets(report,project,loads,quarry,waste,fuel,company).map(sheet=>sheet.name)).toEqual(['Report Overview','Work Details','Presence','Worker Safety','Materials','Linked Loads','Supplier Loads','Fuel Used','Waste Dumps','Photos']);});
