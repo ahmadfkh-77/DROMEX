@@ -7,7 +7,7 @@ const company:ProjectReportSetup['company']={name:'DROMEX',logoUri:null,address:
 const baseReport:DailyProjectReport={
   id:'r',projectId:'p',workDate:'2026-08-11',workDescription:'Excavation',workers:[],drivers:[],truckPlates:[],machines:[],
   materials:[],workerSafety:[],photos:[],notes:'',problemsDelaysIncidents:'',weatherSiteConditions:'',workStartTime:'',workEndTime:'',
-  breakMinutes:'',nextWorkPlanned:'',consultantSignoffEnabled:false,consultantName:'',consultantSignaturePaths:[],showMinistryHeader:false,showConsultingAgency:false,showCustomHeader:false,createdAt:'',updatedAt:'',
+  breakMinutes:'',nextWorkPlanned:'',consultantSignoffEnabled:false,consultantName:'',consultantSignaturePaths:[],showMinistryHeader:false,showConsultingAgency:false,showCustomHeader:false,consultingAgencyId:null,consultingAgencyNameEn:null,consultingAgencyNameAr:null,createdAt:'',updatedAt:'',
 };
 function render(report:DailyProjectReport){return buildProjectReportHtmlWithWaste(report,project,[],[],company,null,[]);}
 

@@ -141,3 +141,77 @@ describe('updateProjectInformation',()=>{
     expect(rows).toEqual([{entity_type:'project',entity_id:'project_1'}]);
   });
 });
+
+describe('consulting agency assignment on a project (DEC-417)',()=>{
+  it('assigns different agencies to different projects independently',async()=>{
+    const {database,repository}=await setup();
+    database.raw.exec(`INSERT INTO projects (id,customer_id,name,location,notes,status,start_date,created_at,updated_at,is_archived)
+      VALUES ('project_2','cust_2','Coastal Highway','Tyre',NULL,'active','2026-07-01','${NOW}','${NOW}',0);`);
+    database.raw.exec(`INSERT INTO consulting_agencies (id,name_en,name_ar,name_en_key,is_active,created_at,updated_at) VALUES
+      ('agency_cedar','Cedar Engineering',NULL,'cedar engineering',1,'${NOW}','${NOW}'),
+      ('agency_oak','Oakridge Partners',NULL,'oakridge partners',1,'${NOW}','${NOW}');`);
+
+    await repository.updateProjectInformation('project_1',{name:'Airport Road',location:'Beirut',consultingAgencyId:'agency_cedar'});
+    await repository.updateProjectInformation('project_2',{name:'Coastal Highway',location:'Tyre',consultingAgencyId:'agency_oak'});
+
+    const projects=await repository.listProjects();
+    expect(projects.find(p=>p.id==='project_1')).toMatchObject({consultingAgencyId:'agency_cedar'});
+    expect(projects.find(p=>p.id==='project_2')).toMatchObject({consultingAgencyId:'agency_oak'});
+  });
+
+  it('editing one project does not affect the agency assigned to another',async()=>{
+    const {database,repository}=await setup();
+    database.raw.exec(`INSERT INTO projects (id,customer_id,name,location,notes,status,start_date,created_at,updated_at,is_archived)
+      VALUES ('project_2','cust_2','Coastal Highway','Tyre',NULL,'active','2026-07-01','${NOW}','${NOW}',0);`);
+    database.raw.exec(`INSERT INTO consulting_agencies (id,name_en,name_ar,name_en_key,is_active,created_at,updated_at) VALUES
+      ('agency_cedar','Cedar Engineering',NULL,'cedar engineering',1,'${NOW}','${NOW}');`);
+    await repository.updateProjectInformation('project_2',{name:'Coastal Highway',location:'Tyre',consultingAgencyId:'agency_cedar'});
+
+    await repository.updateProjectInformation('project_1',{name:'Airport Road',location:'Beirut',notes:'unrelated edit'});
+
+    const project2=(await repository.listProjects()).find(p=>p.id==='project_2');
+    expect(project2).toMatchObject({consultingAgencyId:'agency_cedar'});
+  });
+
+  it('supports "No consulting agency" explicitly, and an omitted field leaves the existing assignment untouched',async()=>{
+    const {database,repository}=await setup();
+    database.raw.exec(`INSERT INTO consulting_agencies (id,name_en,name_ar,name_en_key,is_active,created_at,updated_at) VALUES
+      ('agency_cedar','Cedar Engineering',NULL,'cedar engineering',1,'${NOW}','${NOW}');`);
+    await repository.updateProjectInformation('project_1',{name:'Airport Road',location:'Beirut',consultingAgencyId:'agency_cedar'});
+
+    // Omitting the field (an unrelated edit) leaves the assignment as it was.
+    await repository.updateProjectInformation('project_1',{name:'Airport Road',location:'Beirut',notes:'unrelated'});
+    expect((await repository.listProjects()).find(p=>p.id==='project_1')).toMatchObject({consultingAgencyId:'agency_cedar'});
+
+    // Explicit null clears it to "No consulting agency."
+    await repository.updateProjectInformation('project_1',{name:'Airport Road',location:'Beirut',consultingAgencyId:null});
+    expect((await repository.listProjects()).find(p=>p.id==='project_1')).toMatchObject({consultingAgencyId:null});
+  });
+
+  it('a project with no consulting agency starts with none, by default',async()=>{
+    const {repository}=await setup();
+    const project=(await repository.listProjects()).find(p=>p.id==='project_1');
+    expect(project?.consultingAgencyId).toBeFalsy();
+  });
+});
+
+describe('listConsultingAgencyOptions (DEC-417 selector construction)',()=>{
+  it('offers only active agencies when the project has none currently assigned',async()=>{
+    const {database,repository}=await setup();
+    database.raw.exec(`INSERT INTO consulting_agencies (id,name_en,name_ar,name_en_key,is_active,created_at,updated_at) VALUES
+      ('agency_cedar','Cedar Engineering',NULL,'cedar engineering',1,'${NOW}','${NOW}'),
+      ('agency_inactive','Retired Agency',NULL,'retired agency',0,'${NOW}','${NOW}');`);
+    const options=await repository.listConsultingAgencyOptions(null);
+    expect(options.map(o=>o.id)).toEqual(['agency_cedar']);
+  });
+
+  it('includes the project\'s own currently assigned agency even when it has since been deactivated, without offering other inactive agencies',async()=>{
+    const {database,repository}=await setup();
+    database.raw.exec(`INSERT INTO consulting_agencies (id,name_en,name_ar,name_en_key,is_active,created_at,updated_at) VALUES
+      ('agency_active','Cedar Engineering',NULL,'cedar engineering',1,'${NOW}','${NOW}'),
+      ('agency_mine_inactive','Retired Agency Of Mine',NULL,'retired agency of mine',0,'${NOW}','${NOW}'),
+      ('agency_other_inactive','Some Other Retired Agency',NULL,'some other retired agency',0,'${NOW}','${NOW}');`);
+    const options=await repository.listConsultingAgencyOptions('agency_mine_inactive');
+    expect(options.map(o=>o.id).sort()).toEqual(['agency_active','agency_mine_inactive']);
+  });
+});

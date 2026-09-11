@@ -3,12 +3,20 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type {
   CompanySettings,
   CompanySettingsDraft,
+  ConsultingAgency,
+  ConsultingAgencyDraft,
   Customer,
   CustomerDraft,
   CustomerType,
   PdfSettingsDraft,
 } from '../../domain/profiles';
-import { validateCompanySettings, validateCustomerDraft } from '../../domain/profiles';
+import {
+  normalizeAgencyKey,
+  normalizeAgencyName,
+  validateCompanySettings,
+  validateConsultingAgencyDraft,
+  validateCustomerDraft,
+} from '../../domain/profiles';
 import type { DemoArchiveStatus, ProfileRepository } from './ProfileRepository';
 
 const demoProjectWhere = "id LIKE 'slice8_test_%' OR id LIKE 'slice11_test_%' OR id LIKE 'demo_linked_%' OR id LIKE 'test_report_project_%'";
@@ -48,6 +56,18 @@ type SettingsRow = {
   updated_at: string;
   vat_rate_basis_points: number | null;
 };
+
+type AgencyRow = {
+  id: string;
+  name_en: string;
+  name_ar: string | null;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+};
+function agencyFromRow(row: AgencyRow): ConsultingAgency {
+  return { id: row.id, nameEn: row.name_en, nameAr: row.name_ar, isActive: row.is_active === 1, createdAt: row.created_at, updatedAt: row.updated_at };
+}
 
 function makeId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -385,6 +405,68 @@ export class SqliteProfileRepository implements ProfileRepository {
       customer.createdAt,
       customer.updatedAt,
     );
+  }
+
+  // DEC-417. name_en_key is computed here and only here (trim, collapse internal whitespace,
+  // case-fold via normalizeAgencyKey), so a create/update draft can never bypass duplicate
+  // protection by supplying its own key — the type ConsultingAgencyDraft has no such field, and
+  // this repository is the sole writer of consulting_agencies. The UNIQUE index on that stored key
+  // is what SQLite actually enforces; this function's job is only to keep the key correct.
+  async listConsultingAgencies(): Promise<ConsultingAgency[]> {
+    return (
+      await this.db.getAllAsync<AgencyRow>(
+        'SELECT * FROM consulting_agencies ORDER BY is_active DESC, name_en_key',
+      )
+    ).map(agencyFromRow);
+  }
+
+  async createConsultingAgency(draft: ConsultingAgencyDraft): Promise<ConsultingAgency> {
+    const issues = validateConsultingAgencyDraft(draft);
+    if (issues.length) throw new Error(issues.join('\n'));
+    const nameEn = normalizeAgencyName(draft.nameEn);
+    const nameAr = clean(draft.nameAr ?? undefined);
+    const key = normalizeAgencyKey(nameEn);
+    const now = new Date().toISOString();
+    const id = makeId('consulting_agency');
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync(
+        'INSERT INTO consulting_agencies (id, name_en, name_ar, name_en_key, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)',
+        id, nameEn, nameAr, key, now, now,
+      );
+      await this.enqueue('consultingAgency', id, { id, nameEn, nameAr, isActive: true });
+    });
+    return { id, nameEn, nameAr, isActive: true, createdAt: now, updatedAt: now };
+  }
+
+  async updateConsultingAgency(id: string, draft: ConsultingAgencyDraft): Promise<ConsultingAgency> {
+    const issues = validateConsultingAgencyDraft(draft);
+    if (issues.length) throw new Error(issues.join('\n'));
+    const nameEn = normalizeAgencyName(draft.nameEn);
+    const nameAr = clean(draft.nameAr ?? undefined);
+    const key = normalizeAgencyKey(nameEn);
+    const now = new Date().toISOString();
+    const result = await this.db.runAsync(
+      'UPDATE consulting_agencies SET name_en = ?, name_ar = ?, name_en_key = ?, updated_at = ? WHERE id = ?',
+      nameEn, nameAr, key, now, id,
+    );
+    if (!result.changes) throw new Error('Consulting agency was not found.');
+    await this.enqueue('consultingAgency', id, { id, nameEn, nameAr, updatedAt: now });
+    const row = await this.db.getFirstAsync<AgencyRow>('SELECT * FROM consulting_agencies WHERE id = ?', id);
+    if (!row) throw new Error('Consulting agency could not be reloaded.');
+    return agencyFromRow(row);
+  }
+
+  async setConsultingAgencyActive(id: string, isActive: boolean): Promise<ConsultingAgency> {
+    const now = new Date().toISOString();
+    const result = await this.db.runAsync(
+      'UPDATE consulting_agencies SET is_active = ?, updated_at = ? WHERE id = ?',
+      isActive ? 1 : 0, now, id,
+    );
+    if (!result.changes) throw new Error('Consulting agency was not found.');
+    await this.enqueue('consultingAgency', id, { id, isActive });
+    const row = await this.db.getFirstAsync<AgencyRow>('SELECT * FROM consulting_agencies WHERE id = ?', id);
+    if (!row) throw new Error('Consulting agency could not be reloaded.');
+    return agencyFromRow(row);
   }
 
   private async enqueue(entityType: string, entityId: string, payload: unknown): Promise<void> {

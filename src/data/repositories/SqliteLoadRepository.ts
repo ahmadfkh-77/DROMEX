@@ -29,6 +29,7 @@ import {
 } from '../../domain/loads';
 import type { DirectoryProfiles, LoadRepository } from './LoadRepository';
 import {paymentStatus} from '../../domain/financials';
+import { resolveConsultingAgencySelectorOptions, type ConsultingAgencyOption } from '../../domain/profiles';
 import { SqliteProfileRepository } from './SqliteProfileRepository';
 
 type UnitRow = { id: string; name: string; symbol: string; is_active: number };
@@ -41,6 +42,7 @@ type ConversionRow = {
 type ProjectRow = {
   id: string; customer_id: string; customer_name: string; name: string; location: string;
   status: 'active' | 'completed'; notes: string | null;start_date:string|null;end_date:string|null;created_at:string;updated_at:string;
+  consulting_agency_id: string | null;
 };
 type ItemRow = {
   id: string; name: string; internal_code: string | null; category_name: string;
@@ -92,7 +94,7 @@ function safeCorrectionHistory(value: string | null): LoadCorrectionEntry[] {
   try { return JSON.parse(value || '[]') as LoadCorrectionEntry[]; } catch { return []; }
 }
 function projectFromRow(row: ProjectRow): Project {
-  return { id: row.id, customerId: row.customer_id, customerName: row.customer_name, name: row.name, location: row.location, status: row.status, notes: row.notes,startDate:row.start_date??row.created_at.slice(0,10),endDate:row.end_date??(row.status==='completed'?row.updated_at.slice(0,10):null) };
+  return { id: row.id, customerId: row.customer_id, customerName: row.customer_name, name: row.name, location: row.location, status: row.status, notes: row.notes,startDate:row.start_date??row.created_at.slice(0,10),endDate:row.end_date??(row.status==='completed'?row.updated_at.slice(0,10):null),consultingAgencyId:row.consulting_agency_id };
 }
 function loadFromRow(row: LoadRow): ConfirmedLoad {
   const quantityMethod = row.quantity_method ?? 'weighbridge';
@@ -258,14 +260,26 @@ export class SqliteLoadRepository implements LoadRepository {
     const name = draft.name.trim().replace(/\s+/g, ' ');
     const location = draft.location.trim().replace(/\s+/g, ' ');
     const notes = clean(draft.notes ?? '');
+    // Absent from the draft leaves the current assignment untouched; an explicit null clears it to
+    // "No consulting agency." Either way this is a live, corrected-in-place assignment (DEC-417),
+    // never a historical snapshot -- unlike a report's captured agency name.
+    const consultingAgencyId = 'consultingAgencyId' in draft ? (draft.consultingAgencyId ?? null) : row.consulting_agency_id;
     const now = new Date().toISOString();
     await this.db.withTransactionAsync(async () => {
-      await this.db.runAsync('UPDATE projects SET name = ?, location = ?, notes = ?, updated_at = ? WHERE id = ?', name, location, notes, now, projectId);
-      await this.enqueue('project', projectId, { ...projectFromRow(row), name, location, notes, updatedAt: now });
+      await this.db.runAsync('UPDATE projects SET name = ?, location = ?, notes = ?, consulting_agency_id = ?, updated_at = ? WHERE id = ?', name, location, notes, consultingAgencyId, now, projectId);
+      await this.enqueue('project', projectId, { ...projectFromRow(row), name, location, notes, consultingAgencyId, updatedAt: now });
     });
     const updated = await this.db.getFirstAsync<ProjectRow>(`SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.id = ?`, projectId);
     if (!updated) throw new Error('Project was not found after saving.');
     return projectFromRow(updated);
+  }
+
+  async listConsultingAgencyOptions(currentAgencyId?: string | null): Promise<ConsultingAgencyOption[]> {
+    const all = await this.profiles.listConsultingAgencies();
+    const options: ConsultingAgencyOption[] = all.map(agency => ({ id: agency.id, nameEn: agency.nameEn, nameAr: agency.nameAr, isActive: agency.isActive }));
+    const active = options.filter(option => option.isActive);
+    const current = currentAgencyId ? options.find(option => option.id === currentAgencyId) ?? null : null;
+    return resolveConsultingAgencySelectorOptions(active, current);
   }
 
   private async earliestLinkedRecordBefore(projectId: string, newStartDate: string): Promise<{ label: string; date: string } | null> {

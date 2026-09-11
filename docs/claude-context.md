@@ -454,6 +454,37 @@ narrowed to the company columns when PDF Settings took ownership of the header
 columns, because it had been a full upsert that would have blanked the moved
 values on its next save.
 
+## Release — DROMEX 0.15.0, Android build 18 (2026-09-11)
+
+- **Build 18 — 0.15.0, merge commit `9c06dd6` (feature branch tip `bdc0d55`)
+  plus the docs-only follow-up `9598138`.** Saved Consulting Agencies
+  (DEC-416, DEC-417, database version 35), the camera-photo blank-PDF fix,
+  and the Daily Report fuel table's Fuel Type column (from the earlier
+  merge `52ba1f6`). Package identity (`com.dromex.management`) and the
+  existing EAS Android signing credentials were reused unchanged, so this
+  installs in place over build 17.
+- **EAS build**: `eca4a4fe-7b10-4d5a-81c1-bd0e38d50252`, submitted and
+  monitored with `eas-cli@24.3.0` invoked through `npx` (not installed as a
+  project dependency or globally). Finished successfully; profile
+  `preview`, distribution `INTERNAL`.
+- **Artifact**: downloaded once to `output/DROMEX-0.15.0-build18.apk`,
+  83,052,782 bytes (~79 MB). SHA-256:
+  `cba6604af88a816ad34aa169e206e49b3feeac11e0fce145e5c8e9c69acb2adc`.
+  Verified as a structurally valid ZIP (correct local file header and
+  end-of-central-directory signature, `AndroidManifest.xml` and
+  `classes.dex` both present) before the owner installed it. All five
+  prior APKs (builds 13 through 17) were confirmed untouched.
+- **Physically verified.** The owner installed build 18 over the existing
+  app after confirming an in-app encrypted backup, applying forward
+  migration 35, and reported it working correctly — existing projects,
+  reports, agencies, loads, payments, fuel records, and PDF settings all
+  preserved.
+- **Not done as part of this build**: the version bump
+  (`package.json`/`app.json`/`CLAUDE.md`, `0.14.0`→`0.15.0`,
+  `versionCode` `17`→`18`) and this documentation were prepared before the
+  release and were not yet committed at build time; the commit recording
+  them follows this entry once the owner approves it.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:
