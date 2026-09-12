@@ -214,9 +214,33 @@ repository, and the npm registry), 2026-09-11
   CORS via `@fastify/cors`; `trustedOrigins` configured on the `betterAuth()`
   instance.
 - **PostgreSQL**: via the Kysely adapter over a standard `pg` `Pool`.
-  **Better Auth generates and owns its own tables** through its own CLI
-  (`npx auth@latest generate`, `npx auth@latest migrate`); it can be pointed
-  at an existing database.
+  **Better Auth generates and owns its own tables** through its own CLI,
+  invoked as the repository-local pinned binary — `auth@1.7.4`, run as
+  `node node_modules/auth/dist/index.mjs generate` (or `migrate`) — never as
+  a floating `npx auth@latest`, which would resolve an unpinned version at
+  run time. It can be pointed at an existing database. Note that with the
+  Kysely/PostgreSQL adapter, `generate` **introspects a live database** to
+  compute what is missing, so it requires a reachable server; schema
+  generation is therefore run against a disposable database, never against
+  the development or production one.
+- **No migration ledger exists.** Verified against a disposable PostgreSQL
+  18.6 database on 2026-09-12: after `migrate`, the only tables present are
+  Better Auth's own five. The CLI tracks what has been applied by
+  introspecting the live schema, so re-running `migrate` reports
+  `No migrations needed` and a second `generate` reports
+  `Your schema is already up to date`. Replaying the generated `.sql` file
+  **by hand** is a different matter and fails with `already exists`, so any
+  tooling that applies that file directly needs its own tracking.
+- **Open follow-up — `rateLimit.lastRequest` type warning.** Better Auth's
+  own generated SQL declares `lastRequest bigint`, and its runtime schema
+  check then warns: `Field lastRequest in table rateLimit has a different
+  type in the database. Expected number but got int8.` This is Better Auth
+  warning about a schema it generated itself. It appears benign — `bigint`
+  is the correct type for a millisecond timestamp, and the CLI still reports
+  the schema as up to date — but it is **not yet confirmed harmless at
+  runtime**, and it will surface in logs once the instance is wired to a
+  real database. To be verified when database-backed rate limiting is first
+  exercised; recorded here rather than silently ignored.
 - **Two-factor plugin (`twoFactor`)**: TOTP enrolment returns `{ method,
   totpURI, backupCodes }`; verification accepts one period before and after
   the current code. `skipVerificationOnEnable` defaults to `false`.
