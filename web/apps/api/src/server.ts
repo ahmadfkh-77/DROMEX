@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { checkDatabase, createPool } from './db.ts';
+import { registerRouteAccessGuard } from './routeAccess.ts';
 
 export interface BuildServerOptions {
   /** PostgreSQL connection string. Falls back to DATABASE_URL. */
@@ -17,13 +18,21 @@ export async function buildServer(
   const app = Fastify({ logger: options.logger ?? false });
   const pool = createPool(options.databaseUrl ?? process.env.DATABASE_URL ?? '');
 
+  // Installed before any route, so no route can be registered unclassified.
+  registerRouteAccessGuard(app);
+
   // Liveness only: answers "is this process up". It must never consult a
   // dependency, or an orchestrator would restart a healthy process whenever
   // the database blips.
-  app.get('/health', async () => ({ status: 'ok' }));
+  //
+  // Explicitly public: an orchestrator probes this before any session can
+  // exist. "Public" here is a recorded decision, not an omission.
+  app.get('/health', { config: { access: 'public' } }, async () => ({ status: 'ok' }));
 
-  // Readiness: answers "can this process serve traffic".
-  app.get('/ready', async (_request, reply) => {
+  // Readiness: answers "can this process serve traffic". Public for the same
+  // reason as /health, and it already returns a generic body that leaks no
+  // infrastructure detail to an unauthenticated caller.
+  app.get('/ready', { config: { access: 'public' } }, async (_request, reply) => {
     try {
       await checkDatabase(pool);
       return { status: 'ready' };
