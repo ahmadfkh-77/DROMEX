@@ -65,11 +65,19 @@ The production model separates two roles:
 | Role | Purpose | Privileges |
 | --- | --- | --- |
 | migration owner | owns schema objects, runs migrations | DDL on the application schema |
-| application runtime | serves API requests | `SELECT`, `INSERT`, `UPDATE` on specific tables; **no DDL**; **no `DELETE`** on audited business tables |
+| application runtime | serves API requests | `SELECT`, `INSERT`, `UPDATE` on specific tables; **no DDL**; **no `DELETE`** on audited business tables; **`INSERT`/`SELECT` only** (no `UPDATE`, no `DELETE`) on the `audit_event` table (DEC-430) |
 
 Withholding `DELETE` at the database level is deliberate. "Never physically
-delete an audited business record" is an existing product rule, and enforcing it
-in the database means an application bug cannot violate it.
+delete an audited business record" is an existing product rule, and restricting
+the application's own runtime credential in the database means an **ordinary
+application defect cannot violate it** — the credential the running code holds
+is simply not granted that power. This is an independent safeguard, not an
+absolute one: a privileged database administrator, or anyone who obtains
+superuser access to PostgreSQL, can still alter or delete rows directly, which
+is why the application runtime role must never be the migration owner and must
+never hold schema-altering (DDL) privileges. Restricting the `audit_event`
+table to `INSERT`/`SELECT` only, by the same mechanism, makes the audit trail
+append-only **to that runtime role** — not append-only in an absolute sense.
 
 **This is not implemented yet, by decision.** There is no schema for roles to
 protect, so bootstrapping them now would mean inventing credential handling
@@ -77,6 +85,23 @@ before there is anything to secure. It is implemented at the first real server
 migration. The development container uses the default superuser from a
 git-ignored `web/.env`; that is a development convenience and is explicitly not
 the production model.
+
+## Row-level security: not used in the first release (DEC-429)
+
+Considered and deliberately deferred, not overlooked. The application will
+connect to PostgreSQL as a single runtime role, so row-level security would
+require correctly setting the acting user's identity on every transaction —
+a mechanism that fails silently (either open or closed) if ever missed — and
+it would duplicate the effective-permission computation of
+`authentication-and-authorization-architecture.md` §9 in SQL policy
+alongside its TypeScript implementation, risking drift between the two.
+Today there is exactly one data path to PostgreSQL: DEC-406's architecture
+means neither the web client nor the Android client ever connects directly.
+**Revisit this decision immediately if a second data path to the database is
+ever introduced** — a reporting user, a BI tool, or any service connecting
+with its own credentials. See
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#12-postgresql-security-and-the-row-level-security-decision)
+for the full reasoning.
 
 ## Development and test databases are fully separated
 

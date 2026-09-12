@@ -1391,6 +1391,50 @@ The proposed product is an asphalt-plant management application intended to cent
 - Version-one access model: One owner account has all application capabilities. No staff accounts or role-based permissions are included. (Source: Turn 46; status: Confirmed.)
 - Future access model: Staff accounts and permissions are deferred.
 
+**This section describes the Android application, and remains accurate for
+it.** For the private web application, DEC-408 deliberately supersedes the
+single-owner framing above and reopens the question closed as OQ-052, with
+the opposite outcome, **for the web application only**; the Android
+application's single-device, single-owner operating model above is
+unchanged by that decision. See §14a below for the web application's
+confirmed account and permission requirements.
+
+### 14a. Web Application Account and Permission Model
+
+Governed by DEC-408 and DEC-418 through DEC-433. Full detail, including the
+threat model, the permission-block matrix, and the per-user-override
+computation, is in
+`docs/web/authentication-and-authorization-architecture.md`; this
+subsection records the confirmed requirements only.
+
+- The web application shall support exactly one protected Owner and, at
+  launch, two individually named Admins, with no public registration and no
+  shared credential (DEC-408, DEC-426).
+- Every web account shall require mandatory multi-factor authentication
+  (TOTP) with no exception, enforced as DROMEX application policy
+  (DEC-421).
+- Authorization shall follow account → role template → Owner-controlled
+  per-user overrides → optional project scope → effective permissions, deny
+  by default. A permission newly introduced by a future module shall never
+  be granted automatically to an existing user or template (DEC-424,
+  DEC-425).
+- Every protected API request shall be authorised server-side; a hidden or
+  disabled interface control is never the authorisation boundary (DEC-409,
+  DEC-428).
+- Disabling a user shall revoke their sessions immediately and shall never
+  delete their account row, so historical business records continue to
+  display their name correctly (DEC-427).
+- Owner recovery from total MFA loss shall combine securely stored offline
+  recovery codes with a version-controlled, tested, narrowly scoped
+  break-glass administrative procedure — never ad hoc manual database
+  queries — and shall never create a second Owner-equivalent account,
+  permanent or temporary. Claude is not authorized to execute that
+  procedure against production under any circumstance (DEC-423, DEC-426).
+- Authentication, authorisation, the permission model, and the Owner
+  recovery procedure are **not implemented**. This subsection records
+  confirmed requirements for a later, separately approved implementation
+  phase, not current behaviour.
+
 ## 15. Constraints
 
 ### CON-001

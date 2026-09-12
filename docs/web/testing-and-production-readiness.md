@@ -74,10 +74,29 @@ Real interface work will follow the existing DROMEX identity in `DESIGN.md` and
 The system is **not** production ready until every line below is verified with
 evidence. Today, none of them are.
 
-- [ ] Authentication implemented and its solution chosen (OQ-157)
+- [x] Authentication solution chosen (OQ-157, closed by DEC-418) — **not yet implemented**
+- [ ] Authentication implemented: Better Auth configured per DEC-419 through
+      DEC-422; Argon2id in place; session cookie cache confirmed disabled
+- [ ] Mandatory MFA enforced for every account with no exception, including the
+      Owner (DEC-421)
+- [ ] Owner break-glass recovery procedure built as version-controlled,
+      tested tooling (never ad hoc manual queries), rehearsed only against
+      a disposable/test database, confirmed to invalidate all Owner
+      sessions, force MFA re-enrolment, print no secret, and write its own
+      distinct audit event (DEC-423) — production execution is an
+      Owner-only action, never Claude's
 - [ ] Authorisation proven: unauthorised API access, Owner and Admin
-      boundaries, expired sessions, revoked sessions
-- [ ] CSRF, injection, and private-file access tested
+      boundaries, expired sessions, revoked sessions, per-user permission
+      overrides, project scope, horizontal and vertical privilege escalation,
+      IDOR
+- [ ] A route with no declared permission confirmed to fail server startup
+      (DEC-428's default-deny registration)
+- [ ] CSRF, CORS, injection, rate limiting, account-enumeration, and
+      private-file access tested
+- [ ] Cookie flags and security headers verified in a real browser; no auth
+      value found in `localStorage`/`sessionStorage`
+- [ ] `audit_event` table confirmed append-only at the database-grant level
+      (DEC-430); secret redaction confirmed across the full auth test suite
 - [ ] Business schema migrated and tested at realistic volumes
 - [ ] Existing-data migration reconciled: record counts, identifiers, financial
       totals, payment statuses
@@ -85,10 +104,17 @@ evidence. Today, none of them are.
       conflict rejection
 - [ ] HTTPS working with a valid certificate
 - [ ] Monitoring and structured logging in place
-- [ ] Backups running, stored off the VPS, with failure alerting
-- [ ] **A real restore performed successfully** (DEC-414, OQ-158)
-- [ ] Deployment and rollback both rehearsed
+- [ ] Backups running, stored off the VPS, with failure alerting, and now
+      confirmed to include authentication material under encryption
+- [ ] **A real restore performed successfully** (DEC-414, OQ-158) — the
+      restore runbook confirmed to end with revoking all sessions and Owner
+      verification of effective access
+- [ ] Deployment and rollback both rehearsed, including a rollback crossing an
+      authentication-schema migration
 - [ ] Android application verified unaffected
 
 A passing unit-test suite is not proof of production readiness, and a hidden
-button is not an authorisation test.
+button is not an authorisation test. The full test-area breakdown (what
+needs real PostgreSQL, a real browser, captured email, or controlled time) is
+in
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#19-complete-testing-strategy).

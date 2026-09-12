@@ -3,6 +3,14 @@
 Status: **planned. Nothing in this document is implemented.** Phase 1 ships no
 authentication and no users, sessions, MFA, or recovery tables.
 
+The full authentication and authorization architecture — candidate research,
+the selected system and why, the threat model, session and MFA design, the
+Owner-recovery procedure, the permission-block and per-user-override model,
+API enforcement, and the testing strategy — is recorded in
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md).
+This document remains the short statement of the private-application
+boundary and the account model; it does not repeat that detail.
+
 ## The private-application boundary
 
 Governed by DEC-409. The web application at `https://app.fakihbrothers.com` is
@@ -31,25 +39,28 @@ single-Owner constraint will be enforced by a database constraint, not only by
 application logic, following the singleton pattern the SQLite schema already
 uses for the company record.
 
-## Authentication solution: deliberately unresolved
+## Authentication solution: selected, not yet implemented
 
-**OQ-157 is open and gates this work.**
+**OQ-157 is closed.** DEC-418 selects **Better Auth** (MIT license), embedded
+in the existing Fastify process and sharing the existing PostgreSQL database,
+subject to the mandatory conditions recorded in DEC-419 through DEC-423 and
+DEC-431. The full comparison against Ory Kratos, Keycloak, Authentik,
+Zitadel, Logto, SuperTokens, Auth.js, and the assemble-from-primitives
+approach — including why each was not selected — is in
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#4-authentication-candidate-comparison).
 
 An earlier proposal to assemble password hashing, sessions, MFA, recovery, and
-CSRF from individually maintained libraries was withdrawn. The reasoning is
-worth recording: each library can be well maintained while the *assembly* is
-still custom authentication, and the assembly is where authentication systems
-usually fail.
+CSRF from individually maintained libraries was withdrawn before this
+research began. The reasoning is worth preserving here: each library can be
+well maintained while the *assembly* is still custom authentication, and the
+assembly is where authentication systems usually fail. That reasoning held up
+through the Phase 2 research and is part of why Better Auth — a library that
+does not require assembling separate pieces for sessions, MFA, and recovery —
+was selected over rolling the equivalent by hand.
 
-Phase 2 compares maintained self-hosted options (Ory Kratos, Keycloak,
-Authentik, Zitadel, Logto, SuperTokens, Better Auth, Auth.js, and the
-assemble-from-primitives approach as one clearly labelled candidate) against
-the concrete requirements above: one protected Owner, two named Admins,
-mandatory MFA, per-device session revocation, Owner-managed recovery, no public
-registration, no shared credentials.
-
-No users, sessions, MFA, or recovery schema may be created until that question
-closes.
+**No users, sessions, MFA, or recovery schema has been created.** Selecting a
+system is not implementing it; that remains a separate, later, separately
+approved phase.
 
 ## Requirements the chosen solution must satisfy
 

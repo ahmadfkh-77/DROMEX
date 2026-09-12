@@ -4,6 +4,24 @@ Short, living handoff for whichever Claude Code session picks this project up ne
 `CLAUDE.md` at the repo root is still the primary operating contract — read that
 first. This file is a pointer to current state, not a replacement for it.
 
+## Web Phase 2 Gate A/B — authentication and authorization design (2026-09-12)
+
+**Research and documentation only. Nothing is implemented.** Better Auth is
+the selected authentication foundation (DEC-418, closing OQ-157), subject to
+mandatory conditions recorded in DEC-419 through DEC-423 and DEC-431. The
+full design — threat model, session architecture, mandatory-MFA policy, the
+Owner-recovery procedure, the permission-block and per-user-override model,
+API enforcement, PostgreSQL row-level-security decision, audit model, and
+testing strategy — is in
+`docs/web/authentication-and-authorization-architecture.md`. Six related
+questions remain deliberately open: OQ-160 (session lifetime), OQ-161 (email
+delivery), OQ-162 (Android authentication model), OQ-163 (offline-revocation
+policy), OQ-164 (Daily Report finalization boundary), OQ-165 (CI security
+tooling). Do not answer any of these without a fresh Owner directive. Before
+starting the next web implementation phase, read that document in full,
+`docs/web/security-and-accounts.md`, and the relevant `requirements/`
+decisions and open questions — do not rely on this paragraph alone.
+
 ## Design context (Impeccable)
 
 - `PRODUCT.md` (repo root) — product truth captured via `/impeccable init`:
