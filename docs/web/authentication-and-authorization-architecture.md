@@ -223,14 +223,26 @@ repository, and the npm registry), 2026-09-11
   compute what is missing, so it requires a reachable server; schema
   generation is therefore run against a disposable database, never against
   the development or production one.
-- **No migration ledger exists.** Verified against a disposable PostgreSQL
-  18.6 database on 2026-09-12: after `migrate`, the only tables present are
-  Better Auth's own five. The CLI tracks what has been applied by
+- **Better Auth keeps no migration ledger.** Verified against a disposable
+  PostgreSQL 18.6 database on 2026-09-12: after `migrate`, the only tables
+  present are Better Auth's own five. The CLI tracks what has been applied by
   introspecting the live schema, so re-running `migrate` reports
   `No migrations needed` and a second `generate` reports
   `Your schema is already up to date`. Replaying the generated `.sql` file
   **by hand** is a different matter and fails with `already exists`, so any
   tooling that applies that file directly needs its own tracking.
+- **DROMEX keeps its own ledger, and the two mechanisms never meet.** Better
+  Auth discovers its state by introspection; DROMEX records what it applied
+  in a `dromex_migration` table (identifier, name, SHA-256 checksum, applied
+  timestamp). The DROMEX migrator never reads, applies, or reasons about
+  Better Auth's SQL, and Better Auth never sees DROMEX's ledger. Keeping them
+  apart is what stops a DROMEX change from being credited to Better Auth's
+  schema state, or the reverse (DEC-431). The migrator holds a PostgreSQL
+  advisory lock for the whole run so two API instances starting at once
+  cannot both apply the same migration — proven by a test that fails when the
+  lock is removed — runs each migration in its own transaction alongside its
+  ledger row, and fails closed on a changed checksum, a duplicate identifier,
+  or a migration recorded as applied but absent from the set.
 - **Open follow-up — `rateLimit.lastRequest` type warning.** Better Auth's
   own generated SQL declares `lastRequest bigint`, and its runtime schema
   check then warns: `Field lastRequest in table rateLimit has a different
@@ -364,9 +376,23 @@ enforcement, required by the decisions cited inline below and recorded in
 
 Implements DEC-408 without change.
 
-- Exactly one Owner, enforced by a **database constraint** — a partial
-  unique index on `is_owner WHERE is_owner = true` — mirroring the existing
-  SQLite singleton pattern for the company record (DEC-426).
+- Exactly one Owner **once the system is initialised** — but that rule is
+  assembled from three mechanisms, and it is worth being precise about which
+  one does what, because the imprecise version invites a false sense of
+  safety:
+
+  | Mechanism | Guarantees | Status |
+  |---|---|---|
+  | Partial unique index on `is_owner WHERE is_owner` (DEC-426) | **At most** one Owner. A second is impossible | **Implemented** (`dromex_principal`, migration `dromex/0001`) |
+  | Bootstrap transaction | Creates the first and only Owner | Not implemented |
+  | Runtime readiness + service rules | Refuse an initialised system with no Owner; refuse to remove or demote the Owner | **Not implemented** |
+
+  A unique index can only forbid a second row; it cannot require a first.
+  **Zero Owners is therefore a legitimate, expected state before bootstrap**,
+  and the schema deliberately permits it — a test asserts this. No trigger or
+  placeholder Owner row is used to force existence, because a fabricated
+  Owner would be worse than an absent one. Until the readiness check exists,
+  nothing detects an initialised system that has lost its Owner.
 - Two individually named Admins at launch, identical initial permissions,
   each with their own credentials. No shared credential ever exists.
 - No public registration. The only way an account comes into being is the
@@ -740,11 +766,11 @@ has no one above them to perform an admin-side reset.
    reached for casually.
 
 3. **The single-Owner rule is untouched.** Nothing in this design creates a
-   second Owner-equivalent account, permanently or temporarily. The
-   database constraint from DEC-426 continues to guarantee exactly one row
-   with `is_owner = true` throughout, and the break-glass procedure above
-   never creates, promotes, or substitutes a second account to work around
-   that constraint.
+   second Owner-equivalent account, permanently or temporarily. The database
+   constraint from DEC-426 continues to guarantee **at most** one row with
+   `is_owner = true` throughout (see §6 for why "at most" is the precise
+   word), and the break-glass procedure above never creates, promotes, or
+   substitutes a second account to work around that constraint.
 
 ### What this deliberately does not decide
 
