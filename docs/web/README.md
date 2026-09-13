@@ -12,8 +12,8 @@ describes a rule, it cites the decision that established it.
 | Document | Covers | Implementation status |
 | --- | --- | --- |
 | [architecture.md](architecture.md) | Service boundaries, technology baseline, how the web system relates to the existing Android application | **Partly implemented** (Phase 1 skeleton only) |
-| [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Partly implemented** (local development only: sign-in, sign-out, sanitized session endpoint, active-principal enforcement; no public registration, MFA, or account management) |
-| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, and the minimal sign-in, sign-out, and session transport. No MFA, Owner bootstrap, permissions, UI, or deployment) |
+| [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Partly implemented** (local development only: sign-in, sign-out, sanitized session endpoint, active-principal enforcement; Owner provisioning tooling tested on disposable databases but not approved for real use before MFA, and no Owner exists; no public registration, MFA, or account management) |
+| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, the minimal sign-in, sign-out, and session transport, and resumable pre-MFA Owner provisioning tooling whose command refuses every run. No Owner, MFA, Owner readiness enforcement, permissions, UI, or deployment) |
 | [postgresql-strategy.md](postgresql-strategy.md) | Schema approach, identifier preservation, roles, the PostgreSQL 18 volume rule | **Partly implemented** (development service only, no schema) |
 | [synchronization-strategy.md](synchronization-strategy.md) | Android synchronisation protocol and conflict rules | **Planned** (not implemented) |
 | [docker-vps-strategy.md](docker-vps-strategy.md) | Local Docker topology, port exposure rules, production deployment plan | **Partly implemented** (local development only) |
@@ -37,8 +37,10 @@ What does **not** exist, and must not be assumed to exist:
 
 - authentication beyond the Phase 2C local transport (email/password sign-in,
   sign-out, and a sanitized session endpoint, verified only against disposable
-  test databases): no MFA, recovery, Owner bootstrap, permissions, or real
-  account,
+  test databases): no MFA, recovery, permissions, or real account,
+- a real Owner: provisioning tooling exists and is tested against disposable
+  databases, but its command refuses every run until MFA and recovery are
+  implemented and approved,
 - any business table or business rule,
 - any Android synchronisation,
 - any deployment, any VPS configuration, and any production data.

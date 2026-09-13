@@ -429,7 +429,7 @@ describe('authentication flow against PostgreSQL 18.6', () => {
       expect(await countRows('account')).toBe(1);
       expect(await countRows('verification')).toBe(0);
       expect(await countRows('dromex_principal')).toBe(1);
-      expect(await countRows('dromex_migration')).toBe(2);
+      expect(await countRows('dromex_migration')).toBe(3);
     });
   });
 

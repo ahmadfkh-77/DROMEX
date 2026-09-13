@@ -72,12 +72,20 @@ separate decision with its own testing (DEC-415).
 
 ### Known deviation: host tooling runs a different Node
 
-The container runtime is Node 24.20.0 as approved. The **development host**
-currently runs Node 22.17.1. Every pinned package's `engines` constraint is
-satisfied by both, so nothing is incompatible, but local test runs execute on
-22.17.1 while the API in Docker executes on 24.20.0. The Docker health
-verification is what exercises the approved runtime. This is recorded as a
-known gap rather than left implicit.
+Node 24.20.0 (`node:24.20.0-trixie-slim`) remains the approved production
+runtime. The **Windows development host** currently runs Node 22.17.1. Every
+pinned package's `engines` constraint is satisfied by both, so nothing is
+incompatible, but a test run on the host executes on 22.17.1, not on the
+runtime production will use.
+
+Phase 2C checkpoint 3D was therefore also verified on exact Node 24.20.0, in a
+disposable `node:24.20.0-trixie-slim` container using the committed lockfile
+and `npm ci` (2026-09-13): API unit tests 137/137, API integration tests 80/80
+against disposable PostgreSQL 18.6, and a clean workspace typecheck.
+Checkpoint 3E was developed and verified the same way.
+
+The host deviation does not replace production-runtime verification. A result
+obtained only on the host's Node 22.17.1 is not evidence for Node 24.20.0.
 
 ## Health and readiness
 

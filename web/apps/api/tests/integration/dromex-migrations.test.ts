@@ -17,7 +17,7 @@ const BETTER_AUTH_MIGRATION = fileURLToPath(
 );
 
 const BETTER_AUTH_TABLES = ['user', 'session', 'account', 'verification', 'rateLimit'];
-const ALL_DROMEX_MIGRATIONS = ['0001', '0002'];
+const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003'];
 
 describe('DROMEX migration mechanism', () => {
   let database: EphemeralDatabase;
@@ -200,6 +200,94 @@ describe('DROMEX migration mechanism', () => {
     expect(Number(rows[0]?.count)).toBe(3);
   });
 
+  describe('Owner bootstrap intent (0003)', () => {
+    async function insertIntent(values: Record<string, unknown>) {
+      const columns = Object.keys(values);
+      return pool.query(
+        `INSERT INTO dromex_owner_bootstrap (${columns.join(', ')})
+         VALUES (${columns.map((_, index) => `$${index + 1}`).join(', ')})`,
+        Object.values(values),
+      );
+    }
+
+    beforeEach(async () => {
+      await applyMigrations(pool, await loadDromexMigrations());
+    });
+
+    it('holds no column for a password, hash, token, or cookie', async () => {
+      const { rows } = await pool.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'dromex_owner_bootstrap'
+          ORDER BY column_name`,
+      );
+
+      expect(rows.map((row) => row.column_name)).toEqual([
+        'created_at',
+        'email',
+        'singleton',
+        'state',
+        'updated_at',
+        'user_id',
+      ]);
+    });
+
+    it('permits at most one intent', async () => {
+      await insertIntent({ state: 'pending_identity', email: 'one@synthetic.invalid' });
+
+      await expect(
+        insertIntent({ state: 'pending_identity', email: 'two@synthetic.invalid' }),
+      ).rejects.toThrow(/duplicate key|unique/i);
+      await expect(
+        insertIntent({ singleton: false, state: 'pending_identity', email: 'two@synthetic.invalid' }),
+      ).rejects.toThrow(/check constraint/i);
+    });
+
+    it('rejects a state outside the approved values', async () => {
+      await expect(
+        insertIntent({ state: 'completed', email: 'one@synthetic.invalid' }),
+      ).rejects.toThrow(/check constraint/i);
+    });
+
+    it('ties the state to the presence of the identity', async () => {
+      await seedUser(pool, 'intent_user');
+
+      await expect(
+        insertIntent({ state: 'pending_identity', email: 'one@synthetic.invalid', user_id: 'intent_user' }),
+      ).rejects.toThrow(/check constraint/i);
+      await expect(
+        insertIntent({ state: 'identity_created', email: 'one@synthetic.invalid' }),
+      ).rejects.toThrow(/check constraint/i);
+
+      await insertIntent({
+        state: 'identity_created',
+        email: 'one@synthetic.invalid',
+        user_id: 'intent_user',
+      });
+    });
+
+    it('stores only a normalised email', async () => {
+      await expect(
+        insertIntent({ state: 'pending_identity', email: 'Owner@Synthetic.invalid' }),
+      ).rejects.toThrow(/check constraint/i);
+      await expect(insertIntent({ state: 'pending_identity', email: '' })).rejects.toThrow(
+        /check constraint/i,
+      );
+    });
+
+    it('prevents deleting the Better Auth identity an intent refers to', async () => {
+      await seedUser(pool, 'intent_restrict');
+      await insertIntent({
+        state: 'identity_created',
+        email: 'intent_restrict@synthetic.invalid',
+        user_id: 'intent_restrict',
+      });
+
+      await expect(
+        pool.query(`DELETE FROM "user" WHERE id = $1`, ['intent_restrict']),
+      ).rejects.toThrow(/violates RESTRICT setting of foreign key constraint/i);
+    });
+  });
+
   it('does not replay an unchanged migration', async () => {
     const migrations = await loadDromexMigrations();
 
@@ -329,7 +417,12 @@ describe('DROMEX migration mechanism', () => {
 
     // Only the DROMEX-owned objects are added.
     const dromexTables = tables.filter((name) => name.startsWith('dromex_')).sort();
-    expect(dromexTables).toEqual(['dromex_migration', 'dromex_principal', 'dromex_rate_limit']);
+    expect(dromexTables).toEqual([
+      'dromex_migration',
+      'dromex_owner_bootstrap',
+      'dromex_principal',
+      'dromex_rate_limit',
+    ]);
 
     for (const table of tables.map((name) => name.toLowerCase())) {
       for (const forbidden of ['project', 'load', 'fuel', 'payment', 'waste', 'wall']) {

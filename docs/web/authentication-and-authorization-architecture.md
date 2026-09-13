@@ -3,10 +3,12 @@
 Status: **partly implemented, local development only; not production-ready.**
 Implemented and tested against disposable databases: route classification,
 Argon2id hashing, the Better Auth configuration and schema, the DROMEX
-principal and its migrations, and the minimal sign-in, sign-out, and session
-transport (see §11, "Implemented transport"). Everything else here — MFA,
-Owner bootstrap and recovery, permissions, account management, audit events,
-the frontend, and any deployment — remains **design only**. Nothing is
+principal and its migrations, the minimal sign-in, sign-out, and session
+transport (see §11, "Implemented transport"), and Owner provisioning tooling
+that is **not approved for real use** before MFA (see §11, "Owner provisioning
+tooling"). No Owner exists. Everything else here — MFA, recovery, Owner
+readiness enforcement, permissions, account management, audit events, the
+frontend, and any deployment — remains **design only**. Nothing is
 merged, released, or deployed. This document records the approved design so
 that no future session has to reconstruct it from chat history.
 
@@ -418,7 +420,7 @@ Implements DEC-408 without change.
   | Mechanism | Guarantees | Status |
   |---|---|---|
   | Partial unique index on `is_owner WHERE is_owner` (DEC-426) | **At most** one Owner. A second is impossible | **Implemented** (`dromex_principal`, migration `dromex/0001`) |
-  | Bootstrap transaction | Creates the first and only Owner | Not implemented |
+  | Bootstrap workflow (DEC-426's "bootstrap transaction") | Creates the first and only Owner | **Tooling implemented and tested on disposable databases only; not approved for real use before MFA; no Owner exists.** It is *not* one transaction: Better Auth's identity commit and DROMEX's Owner commit are separate, bridged by a resumable intent under an advisory lock (§11, "Owner provisioning tooling") |
   | Runtime readiness + service rules | Refuse an initialised system with no Owner; refuse to remove or demote the Owner | **Not implemented** |
 
   A unique index can only forbid a second row; it cannot require a first.
@@ -711,6 +713,156 @@ missing, already revoked, or belonged to a disabled or missing principal. A
 failed revocation is reported as `500`, never as success. `GET` is `404`.
 This does **not** widen access anywhere else: a missing or disabled principal
 still receives `401` from `/api/session` and from every `authenticated` route.
+
+### Owner provisioning tooling (Phase 2C checkpoint 3E, disposable databases only)
+
+Status: **implemented and tested against disposable PostgreSQL 18.6 databases
+only. Not approved for real use.** No Owner exists, and none may be created
+until mandatory MFA and recovery are implemented and separately approved
+(DEC-421, DEC-423). Owner readiness enforcement — refusing an initialised
+system that has no Owner, and refusing removal or demotion of the Owner —
+remains **unimplemented**.
+
+**A local, interactive command; never HTTP.** The Owner is created only by
+`apps/api/src/provisioning/owner-command.ts`, run by a person at a terminal.
+There is no setup route, no temporary bootstrap website, no public
+registration, no default Owner, and no shared credential. A test walks the
+server's import graph and proves no provisioning module is reachable from
+`server.ts`, and the complete route table is asserted unchanged.
+
+- The only accepted input is `--database-url-file <path>` (and `--help`). A
+  password or connection string given as an argument is refused and never
+  echoed; the environment is never read, so it cannot supply either.
+- **Pre-MFA gate.** Every run except `--help` is refused with "Production
+  Owner provisioning is unavailable until mandatory MFA and recovery are
+  implemented and approved", exit status 1, before any file is read, any
+  prompt is shown, or any connection is opened. No flag, environment variable,
+  or hidden switch enables it: enabling it is a reviewed code change in a
+  later, separately approved checkpoint. The service below is exercised only
+  by automated tests against disposable databases.
+- **Hidden prompt** (`terminal-prompt.ts`, Node's own raw-mode TTY only, no
+  dependency). The password and its confirmation echo nothing at all, not
+  even a mask character, so neither the password nor its length reaches the
+  screen. Password-manager paste works, including bracketed-paste markers;
+  backspace and delete work; terminal escape sequences are discarded; Ctrl+C
+  or Ctrl+D cancels, empties the per-character buffer, and restores the
+  terminal. It refuses when input or output is not a terminal, and there is
+  no piped-input fallback. *Honest limit:* a JavaScript string cannot be
+  zeroed, so the completed entry lives until garbage collection.
+
+**Provisioning-only Better Auth instance** (`owner-identity.ts`). It lives
+outside `src/auth/`, reads no environment value, is mounted on no route, and
+is constructed from exactly the runtime options with three differences, each
+required to create the first Owner and nothing else:
+
+1. `disableSignUp: false`, because `signUpEmail` is Better Auth's documented
+   way to create an email/password identity. `autoSignIn` stays `false`, so
+   creation issues no session.
+2. Its session hook admits exactly one kind of session: the one requested to
+   verify an orphaned identity (below), for that identity only, and only
+   while it has no principal. Every other session is refused.
+3. Better Auth's logger is disabled, so a database error carrying row data is
+   never printed to the operator's terminal.
+
+The runtime `createAuthOptions` keeps `disableSignUp: true` in every
+environment and cookie setting, which is asserted.
+
+**The transaction boundary, stated honestly.** Better Auth identity creation
+and the DROMEX Owner principal insert are **not one transaction**. Verified
+2026-09-13 against the installed 1.7.4 source: `signUpEmail` creates the
+`user` and `account` rows inside `runWithTransaction(ctx.context.adapter, …)`;
+the Kysely adapter opens that transaction on a connection it takes from the
+pool it was configured with; and the AsyncLocalStorage store that carries it
+is marked internal in `@better-auth/core`. Better Auth's official
+email/password, server-API, and database documentation (accessed 2026-09-13)
+describes no way to hand `auth.api` a caller-controlled transaction. DEC-426
+and the table in §6 call this mechanism the "bootstrap transaction"; the
+honest description is two commits — Better Auth's, then DROMEX's — made
+recoverable by the workflow below. That is a precision correction of wording,
+not a change of policy.
+
+**Workflow** (`owner-provisioning.ts`):
+
+1. The name, email, password length (15 to 128, measured as Better Auth
+   measures it), and confirmation are validated before any connection opens.
+   The email is trimmed and lower-cased; the password is used exactly as
+   entered, consistent with the existing hashing policy.
+2. `pg_try_advisory_lock` on a fixed key (distinct from the migrator's) is
+   taken on one dedicated connection and held for the whole run. If another
+   run holds it, provisioning refuses immediately and changes nothing.
+3. An existing Owner refuses the run before Better Auth is asked anything.
+4. An existing Better Auth identity with that email that this workflow did
+   not start is refused, so no foreign identity can be adopted. This matters
+   because, with `autoSignIn: false`, Better Auth answers a duplicate
+   sign-up with a synthetic success rather than an error; after creation the
+   returned id is also confirmed against a real row.
+5. A singleton intent row (`dromex_owner_bootstrap`, DROMEX migration `0003`)
+   is written as `pending_identity` before `signUpEmail` is called, then
+   moved to `identity_created` with the new user id.
+6. One DROMEX transaction confirms the identity has no session, inserts the
+   active `is_owner` principal — under the unchanged partial unique index —
+   and deletes the intent. That commit alone makes an Owner.
+
+The intent table stores only state, the normalised email, the user id, and
+timestamps. A `CHECK` allows only the value `TRUE` as its key, another allows
+only the two states, a third ties each state to the presence or absence of
+the user id, and the email must be lower-case. Its foreign key to `user` is
+`RESTRICT`.
+
+**Interruption and orphan reconciliation.**
+
+| Interrupted | Left behind | Retry, same email and password | Retry, different email | Retry, wrong password |
+|---|---|---|---|---|
+| Before Better Auth creation | `pending_identity` intent, no identity | Creates the identity and completes | Refused, nothing changes | Nothing to verify; creates the identity with the password given |
+| After Better Auth creation, before the user id is recorded | `pending_identity` intent and an orphaned identity with no principal | Better Auth verifies the password, then completes | Refused, nothing changes | Refused, nothing claimed |
+| After the user id is recorded, including a failed principal insert (rolled back) | `identity_created` intent and an orphaned identity | Better Auth verifies the password, then completes | Refused, nothing changes | Refused, nothing claimed |
+| After the Owner commit | An Owner; no intent | Refused: an Owner exists | Refused | Refused |
+
+An orphan is claimed only after `auth.api.signInEmail` succeeds for that
+identity. The session that sign-in issues is revoked immediately with
+`auth.api.signOut` using Better Auth's own signed cookie, and the Owner commit
+refuses to proceed if any session for the identity remains. A second Better
+Auth identity is never created to work around an orphan, and an orphan is
+never deleted.
+
+**No DROMEX SQL mutates a Better Auth-owned row.** Provisioning only *reads*
+`user` (by email) and `session` (a count). Identity creation, sign-in, and
+revocation go exclusively through Better Auth's documented server API. This
+is asserted twice: by scanning every provisioning module for mutating SQL
+against Better Auth tables, and by recording every statement sent on
+provisioning's own connections during a real run.
+
+**Email delivery.** Initial Owner creation needs none. OQ-161 remains open and
+still gates Admin invitations and self-service password recovery, neither of
+which exists.
+
+**Known limits, not yet addressed:**
+
+- Verifying an orphan's password calls `auth.api.signInEmail` directly, which
+  Better Auth's HTTP rate limiter does not cover. Reaching it requires local
+  execution and database access, which already exceed what the check
+  protects; it is recorded rather than assumed away.
+- The advisory lock is session-scoped to one connection, while Better Auth
+  works on others. If that connection were lost mid-run, a second run could
+  begin while a Better Auth call was still in flight. Better Auth's unique
+  email, the singleton intent, the post-creation identity confirmation, and
+  the single-Owner index still bound the outcome to at most one identity per
+  email and at most one Owner, but that scenario is not covered by a test.
+- The interactive prompt and the service are each tested, but the command is
+  not yet wired to them; that wiring belongs to the checkpoint that enables
+  real use after MFA.
+- The comment in the already-applied migration `0001` still describes the
+  bootstrap as unimplemented. Applied migrations are never edited (their
+  checksum is enforced); this section supersedes that comment.
+
+Sources, accessed 2026-09-13: Better Auth documentation
+<https://www.better-auth.com/docs/authentication/email-password>,
+<https://www.better-auth.com/docs/concepts/api>, and
+<https://www.better-auth.com/docs/concepts/database>; installed package
+source `better-auth@1.7.4` (`dist/api/routes/sign-up.mjs`, `sign-in.mjs`,
+`sign-out.mjs`, `dist/api/index.mjs`), `@better-auth/core@1.7.4`
+(`dist/context/transaction.mjs`), and `@better-auth/kysely-adapter@1.7.4`
+(`dist/index.mjs`).
 
 ## 12. PostgreSQL security and the row-level-security decision
 

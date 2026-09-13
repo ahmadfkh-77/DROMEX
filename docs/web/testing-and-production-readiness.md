@@ -117,8 +117,61 @@ Not verified, and still required before production:
   sign-out has its own DROMEX Origin check.
 - Expired `dromex_rate_limit` rows are not pruned yet; rows accumulate per
   distinct client address and path.
-- MFA, Owner provisioning, frontend authentication, permissions, deployment,
-  and production readiness remain incomplete.
+- MFA, real Owner provisioning, frontend authentication, permissions,
+  deployment, and production readiness remain incomplete.
+
+## Phase 2C Owner provisioning tooling: local verification
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases only, on exact Node 24.20.0.** The command is not approved for real
+use before MFA, and no Owner exists. This is not production verification and
+satisfies no item in the gate below.
+
+Proven locally, with synthetic identities in disposable databases:
+
+- A first bootstrap creates exactly one Better Auth identity, one active Owner
+  principal, an Argon2id password (`m=19456,t=2,p=1`), and no session; the
+  intent row is removed.
+- A second bootstrap, and a re-run with the same identity, are refused
+  without creating another identity. An existing Owner refuses the run before
+  Better Auth is called. Existing non-Owner principals do not block it.
+- Invalid name, email, password, or confirmation is refused before any
+  connection opens or Better Auth is called.
+- A held provisioning advisory lock refuses a run immediately and changes
+  nothing; two concurrent runs create exactly one Owner and one identity; the
+  lock is released afterwards.
+- A pre-existing Better Auth identity with the same email is refused rather
+  than adopted.
+- Interruption before Better Auth creation leaves no identity and retries
+  cleanly. Interruption after it leaves a `pending_identity` intent and an
+  orphaned identity with no principal, never a partial Owner. A retry with the
+  same email and password completes it with no second identity; a wrong
+  password or a different email cannot claim it. The verification session
+  Better Auth issues is inserted once and deleted once, leaving none.
+- A failing principal insert rolls back, leaves an `identity_created` intent,
+  and remains resumable.
+- No password, password hash, or session token appears in results, errors,
+  console output, or process output. No statement sent on provisioning's own
+  connections mutates a Better Auth-owned table.
+- The normal runtime instance still refuses `signUpEmail`, the route table is
+  unchanged, and the provisioned Owner signs in through the unchanged
+  transport with `isOwner: true`.
+- The command refuses every real run with the pre-MFA message and a non-zero
+  exit, opens no connection, refuses password and connection-string
+  arguments without echoing them, ignores the environment, and prints no
+  stack when run as a real process. The hidden prompt echoes nothing, handles
+  paste, backspace, and escape sequences, cancels on Ctrl+C or Ctrl+D with
+  its buffer emptied and the terminal restored, and refuses a non-terminal.
+- Mutation checks: removing the advisory lock, the session revocation, the
+  password verification, the foreign-identity refusal, or the existing-Owner
+  check each makes at least one test fail.
+
+Not verified:
+
+- A lost lock connection while a Better Auth call is in flight.
+- The command wired end to end to the prompt and service, which is
+  deliberately not done before MFA.
+- Any run against a persistent database, which is prohibited.
 
 ## Production-readiness gate
 

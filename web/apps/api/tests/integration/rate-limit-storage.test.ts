@@ -40,6 +40,7 @@ describe('DROMEX rate-limit storage on PostgreSQL 18.6', () => {
     expect(ledger.rows).toEqual([
       { id: '0001', name: 'dromex_principal' },
       { id: '0002', name: 'dromex_rate_limit' },
+      { id: '0003', name: 'dromex_owner_bootstrap' },
     ]);
 
     const { rows } = await pool.query<{ column_name: string; data_type: string }>(

@@ -54,6 +54,14 @@ export interface AuthConfigInput {
   allowInsecureCookies?: boolean;
 }
 
+/**
+ * Password length policy, measured the way Better Auth measures it (UTF-16
+ * code units). Exported so the Owner provisioning validation refuses exactly
+ * what Better Auth would, before anything is written.
+ */
+export const PASSWORD_MIN_LENGTH = 15;
+export const PASSWORD_MAX_LENGTH = 128;
+
 /** 12 hours. A working day, not a working week. */
 const SESSION_EXPIRES_IN_SECONDS = 12 * 60 * 60;
 /** 1 hour. How often an active session's expiry is extended. */
@@ -276,8 +284,8 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
       // (OQ-161) and no public registration ever.
       disableSignUp: true,
       autoSignIn: false,
-      minPasswordLength: 15,
-      maxPasswordLength: 128,
+      minPasswordLength: PASSWORD_MIN_LENGTH,
+      maxPasswordLength: PASSWORD_MAX_LENGTH,
       password: {
         hash: hashPassword,
         // Better Auth passes { password, hash }; the DROMEX wrapper takes
