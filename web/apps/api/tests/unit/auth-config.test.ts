@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { hashPassword } from '../../src/auth/hashing.ts';
 import * as authConfigModule from '../../src/auth/config.ts';
-import { createAuthOptions } from '../../src/auth/config.ts';
+import { DROMEX_CLIENT_IP_HEADER, createAuthOptions } from '../../src/auth/config.ts';
 
 // Synthetic, generated in memory, never printed. This is not a credential:
 // nothing consumes it, because no Better Auth instance is constructed here.
@@ -132,6 +132,12 @@ describe('authentication configuration', () => {
       const options = createAuthOptions(baseInput());
 
       expect(options.rateLimit?.storage).toBe('database');
+    });
+
+    it('keeps rate-limit state in DROMEX-owned PostgreSQL storage, not Better Auth\'s table', () => {
+      const options = createAuthOptions(baseInput());
+
+      expect(typeof options.rateLimit?.customStorage?.consume).toBe('function');
     });
 
     it('limits /sign-in/email to 5 attempts per 60 seconds', () => {
@@ -520,5 +526,64 @@ describe('authentication configuration', () => {
     for (const spy of Object.values(spies)) {
       expect(spy).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe('principal gate at session issuance', () => {
+  function poolReturning(result: unknown[] | Error): Pool {
+    return {
+      query: vi.fn(async () => {
+        if (result instanceof Error) throw result;
+        return { rows: result };
+      }),
+    } as unknown as Pool;
+  }
+
+  function sessionCreateHook(database: Pool) {
+    const before = createAuthOptions(baseInput({ database })).databaseHooks?.session?.create
+      ?.before;
+    expect(before).toBeTypeOf('function');
+    return before!;
+  }
+
+  // Better Auth runs this hook before inserting the session row, and aborts
+  // the insert when it returns false. Denying here means no session exists
+  // at all, rather than one that is created and then hidden.
+
+  it('allows session creation for an active principal', async () => {
+    const hook = sessionCreateHook(
+      poolReturning([{ user_id: 'user_active', status: 'active', is_owner: false }]),
+    );
+
+    await expect(hook({ userId: 'user_active' } as never, null as never)).resolves.not.toBe(false);
+  });
+
+  it('aborts session creation when the principal is missing', async () => {
+    const hook = sessionCreateHook(poolReturning([]));
+
+    await expect(hook({ userId: 'user_missing' } as never, null as never)).resolves.toBe(false);
+  });
+
+  it('aborts session creation when the principal is disabled', async () => {
+    const hook = sessionCreateHook(
+      poolReturning([{ user_id: 'user_disabled', status: 'disabled', is_owner: false }]),
+    );
+
+    await expect(hook({ userId: 'user_disabled' } as never, null as never)).resolves.toBe(false);
+  });
+
+  it('fails closed when the principal lookup throws', async () => {
+    const hook = sessionCreateHook(poolReturning(new Error('lookup failed')));
+
+    await expect(hook({ userId: 'user_any' } as never, null as never)).rejects.toThrow();
+  });
+});
+
+describe('client address resolution', () => {
+  it('reads the client address only from the DROMEX-internal header, trusting no proxy', () => {
+    const options = createAuthOptions(baseInput());
+
+    expect(options.advanced?.ipAddress?.ipAddressHeaders).toEqual([DROMEX_CLIENT_IP_HEADER]);
+    expect(options.advanced?.ipAddress?.trustedProxies ?? []).toEqual([]);
   });
 });

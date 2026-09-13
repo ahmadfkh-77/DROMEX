@@ -2,6 +2,23 @@ import type { BetterAuthOptions } from 'better-auth';
 import type { Pool } from 'pg';
 
 import { hashPassword, verifyPassword } from './hashing.ts';
+import { createPrincipalRepository } from './principal.ts';
+import { createRateLimitStorage } from './rate-limit-storage.ts';
+
+/**
+ * The header through which the HTTP transport hands Better Auth the
+ * server-observed client address.
+ *
+ * Better Auth reads the client address from request headers only, and by
+ * default from `x-forwarded-for`, which any caller can forge. Configuring it
+ * to read this header alone, and having the transport strip every
+ * client-supplied forwarding header before setting this one from the socket,
+ * means a caller cannot choose the address its rate limit is keyed on.
+ */
+export const DROMEX_CLIENT_IP_HEADER = 'x-dromex-client-ip';
+
+/** Everything a caller supplies except the database, which the server owns. */
+export type AuthSettings = Omit<AuthConfigInput, 'database'>;
 
 /**
  * Better Auth configuration for the DROMEX web application.
@@ -283,7 +300,13 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
       // Better Auth disables rate limiting in development by default, which
       // would leave the limit unexercised by local tests.
       enabled: true,
+      // Kept so Better Auth's generated schema stays exactly as generated.
+      // At runtime `customStorage` takes precedence and this is unused.
       storage: 'database',
+      // DROMEX-owned PostgreSQL storage. Better Auth's own database storage
+      // reads its BIGINT timestamp as text and computes a corrupt retry time;
+      // this storage converts explicitly without a global parser change.
+      customStorage: createRateLimitStorage(input.database),
       window: 60,
       max: 100,
       customRules: {
@@ -293,6 +316,35 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
 
     advanced: {
       useSecureCookies,
+      // Better Auth otherwise trusts `x-forwarded-for`, which any caller can
+      // forge. The HTTP transport sets this header from the socket address
+      // after stripping every client-supplied forwarding header. No proxy is
+      // trusted: that waits until a real reverse proxy exists and can be
+      // configured to overwrite forwarded headers rather than append to them.
+      ipAddress: {
+        ipAddressHeaders: [DROMEX_CLIENT_IP_HEADER],
+      },
+    },
+
+    databaseHooks: {
+      session: {
+        create: {
+          // A Better Auth identity is never enough to enter DROMEX. Better
+          // Auth runs this before inserting the session row and aborts the
+          // insert when it returns false, so a user without an active
+          // principal is never issued a session at all, rather than issued
+          // one that is then hidden. A failed lookup throws, which also
+          // aborts the insert: an error must never become an allow.
+          before: async (session) => {
+            const principal = await createPrincipalRepository(input.database).findByUserId(
+              session.userId,
+            );
+            if (principal === null || principal.status !== 'active') {
+              return false;
+            }
+          },
+        },
+      },
     },
 
     // Only explicitly approved plugins and authentication methods are

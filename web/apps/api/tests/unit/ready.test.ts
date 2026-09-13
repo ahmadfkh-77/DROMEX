@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildServer } from '../../src/server.ts';
+import { settle, syntheticAuthSettings } from '../helpers/auth-settings.ts';
 
 // Port 1 is reserved and closed, so the connection fails fast and
 // deterministically. No container, and therefore no Docker, is required:
@@ -12,11 +13,15 @@ describe('GET /ready when PostgreSQL is unreachable', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildServer({ databaseUrl: UNREACHABLE_DATABASE_URL });
+    app = await buildServer({
+      databaseUrl: UNREACHABLE_DATABASE_URL,
+      auth: syntheticAuthSettings(),
+    });
     await app.ready();
   });
 
   afterAll(async () => {
+    await settle();
     await app.close();
   });
 

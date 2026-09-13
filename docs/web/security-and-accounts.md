@@ -1,7 +1,9 @@
 # Security and Account Model
 
-Status: **planned. Nothing in this document is implemented.** Phase 1 ships no
-authentication and no users, sessions, MFA, or recovery tables.
+Status: **partly implemented, local development only.** Sign-in, sign-out, and
+a sanitized session endpoint exist, with no public registration, and every
+authenticated request requires an active DROMEX principal. No MFA, Owner
+bootstrap, account management, recovery, permissions, or deployment exists.
 
 The full authentication and authorization architecture — candidate research,
 the selected system and why, the threat model, session and MFA design, the
@@ -39,7 +41,7 @@ single-Owner constraint will be enforced by a database constraint, not only by
 application logic, following the singleton pattern the SQLite schema already
 uses for the company record.
 
-## Authentication solution: selected, not yet implemented
+## Authentication solution: selected, partly implemented
 
 **OQ-157 is closed.** DEC-418 selects **Better Auth** (MIT license), embedded
 in the existing Fastify process and sharing the existing PostgreSQL database,
@@ -58,9 +60,11 @@ through the Phase 2 research and is part of why Better Auth — a library that
 does not require assembling separate pieces for sessions, MFA, and recovery —
 was selected over rolling the equivalent by hand.
 
-**No users, sessions, MFA, or recovery schema has been created.** Selecting a
-system is not implementing it; that remains a separate, later, separately
-approved phase.
+**Phase 2C has implemented part of it, for local development only:** the
+Better Auth user, session, account, verification, and rate-limit schema, the
+DROMEX principal table, and the sign-in, sign-out, and session transport. No
+MFA or recovery schema exists, no real account has been created, and nothing
+is deployed.
 
 ## Requirements the chosen solution must satisfy
 

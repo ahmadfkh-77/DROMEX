@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildServer } from '../../src/server.ts';
+import { settle, syntheticAuthSettings } from '../helpers/auth-settings.ts';
 import { createEphemeralDatabase, type EphemeralDatabase } from '../helpers/db.ts';
 
 // Requires Docker: runs against a real postgres:18.6-trixie container started
@@ -12,11 +13,12 @@ describe('GET /ready when PostgreSQL is reachable', () => {
 
   beforeAll(async () => {
     database = await createEphemeralDatabase();
-    app = await buildServer({ databaseUrl: database.uri });
+    app = await buildServer({ databaseUrl: database.uri, auth: syntheticAuthSettings() });
     await app.ready();
   });
 
   afterAll(async () => {
+    await settle();
     await app.close();
     await database.drop();
   });

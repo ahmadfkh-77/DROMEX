@@ -12,8 +12,8 @@ describes a rule, it cites the decision that established it.
 | Document | Covers | Implementation status |
 | --- | --- | --- |
 | [architecture.md](architecture.md) | Service boundaries, technology baseline, how the web system relates to the existing Android application | **Partly implemented** (Phase 1 skeleton only) |
-| [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Planned** (no authentication exists) |
-| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Planned** (research and design only; no authentication code, schema, or UI exists) |
+| [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Partly implemented** (local development only: sign-in, sign-out, sanitized session endpoint, active-principal enforcement; no public registration, MFA, or account management) |
+| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, and the minimal sign-in, sign-out, and session transport. No MFA, Owner bootstrap, permissions, UI, or deployment) |
 | [postgresql-strategy.md](postgresql-strategy.md) | Schema approach, identifier preservation, roles, the PostgreSQL 18 volume rule | **Partly implemented** (development service only, no schema) |
 | [synchronization-strategy.md](synchronization-strategy.md) | Android synchronisation protocol and conflict rules | **Planned** (not implemented) |
 | [docker-vps-strategy.md](docker-vps-strategy.md) | Local Docker topology, port exposure rules, production deployment plan | **Partly implemented** (local development only) |
@@ -35,7 +35,10 @@ What exists:
 
 What does **not** exist, and must not be assumed to exist:
 
-- authentication of any kind, and no users, sessions, MFA, or recovery tables,
+- authentication beyond the Phase 2C local transport (email/password sign-in,
+  sign-out, and a sanitized session endpoint, verified only against disposable
+  test databases): no MFA, recovery, Owner bootstrap, permissions, or real
+  account,
 - any business table or business rule,
 - any Android synchronisation,
 - any deployment, any VPS configuration, and any production data.

@@ -1,25 +1,89 @@
+import type { Writable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
 import Fastify, { type FastifyInstance } from 'fastify';
 
+import type { AuthSettings } from './auth/config.ts';
+import {
+  registerAuthenticationGuard,
+  registerAuthRoutes,
+  type AuthRoutesDependencies,
+} from './auth/http.ts';
+import { createAuth } from './auth/instance.ts';
+import { createPrincipalRepository } from './auth/principal.ts';
+import { loadRuntimeConfig, type RuntimeConfig } from './config/runtime.ts';
 import { checkDatabase, createPool } from './db.ts';
 import { registerRouteAccessGuard } from './routeAccess.ts';
 
 export interface BuildServerOptions {
-  /** PostgreSQL connection string. Falls back to DATABASE_URL. */
-  databaseUrl?: string;
+  /** PostgreSQL connection string. Required; there is no ambient fallback. */
+  databaseUrl: string;
+  /** Authentication settings. Required now that authentication routes exist. */
+  auth: AuthSettings;
   /** Structured request logging. Off in tests, on for the running server. */
   logger?: boolean;
+  /** Captures structured logs, so tests can prove what is never written. */
+  logStream?: Writable;
 }
 
-export async function buildServer(
-  options: BuildServerOptions = {},
-): Promise<FastifyInstance> {
-  const app = Fastify({ logger: options.logger ?? false });
-  const pool = createPool(options.databaseUrl ?? process.env.DATABASE_URL ?? '');
+/**
+ * Defence in depth. Fastify's default serializers already record only the
+ * method, URL, host, and socket address of a request, never its headers or
+ * body; these paths keep that true if a log call ever adds headers.
+ */
+const LOG_REDACTIONS = [
+  'req.headers.cookie',
+  'req.headers.authorization',
+  'res.headers["set-cookie"]',
+  'headers.cookie',
+  'headers.authorization',
+];
 
-  // Installed before any route, so no route can be registered unclassified.
+export async function buildServer(options: BuildServerOptions): Promise<FastifyInstance> {
+  if (!options?.auth) {
+    throw new Error('Authentication configuration is required to build the API server.');
+  }
+  if (!options.databaseUrl) {
+    throw new Error('A database URL is required to build the API server.');
+  }
+
+  const logging = options.logStream !== undefined || options.logger === true;
+  const app = Fastify({
+    logger: logging
+      ? {
+          level: options.logStream ? 'trace' : 'info',
+          redact: LOG_REDACTIONS,
+          ...(options.logStream ? { stream: options.logStream } : {}),
+        }
+      : false,
+  });
+
+  // One pool serves readiness, Better Auth, and principal lookups alike.
+  const pool = createPool(options.databaseUrl);
+
+  let auth: ReturnType<typeof createAuth>;
+  try {
+    auth = createAuth({ ...options.auth, database: pool });
+  } catch (cause) {
+    await pool.end().catch(() => undefined);
+    throw cause;
+  }
+
+  const authDependencies: AuthRoutesDependencies = {
+    backend: {
+      handle: (request) => auth.handler(request),
+      getSession: (headers) => auth.api.getSession({ headers, asResponse: true }),
+    },
+    principals: createPrincipalRepository(pool),
+    // Already validated and normalised by createAuth, which would have thrown.
+    baseURL: new URL(options.auth.baseURL).origin,
+    trustedOrigins: options.auth.trustedOrigins,
+  };
+
+  // Both guards are installed before any route: registration-time
+  // classification, then request-time enforcement of it.
   registerRouteAccessGuard(app);
+  registerAuthenticationGuard(app, authDependencies);
 
   // Liveness only: answers "is this process up". It must never consult a
   // dependency, or an orchestrator would restart a healthy process whenever
@@ -46,6 +110,8 @@ export async function buildServer(
     }
   });
 
+  registerAuthRoutes(app, authDependencies);
+
   app.addHook('onClose', async () => {
     await pool.end().catch(() => undefined);
   });
@@ -53,17 +119,31 @@ export async function buildServer(
   return app;
 }
 
+function exitWithConfigurationError(cause: unknown): never {
+  // Messages from configuration validation name variables, never values.
+  const message = cause instanceof Error ? cause.message : 'Unknown configuration error.';
+  process.stderr.write(`The API cannot start: ${message}\n`);
+  process.exit(1);
+}
+
 // Runs only when this file is the process entry point, so importing
-// buildServer from a test never binds a port. The container's CMD runs this
-// file directly, which is what makes the service actually listen. Without
-// this the container starts, does nothing, and exits 0.
+// buildServer from a test never binds a port or reads the environment. The
+// container's CMD runs this file directly, which is what makes the service
+// actually listen. Without this the container starts, does nothing, and
+// exits 0.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const app = await buildServer({ logger: true });
-  const port = Number(process.env.API_PORT ?? 3000);
-  const host = process.env.API_HOST ?? '0.0.0.0';
+  let config: RuntimeConfig;
+  let app: FastifyInstance;
 
   try {
-    await app.listen({ port, host });
+    config = loadRuntimeConfig(process.env);
+    app = await buildServer({ databaseUrl: config.databaseUrl, auth: config.auth, logger: true });
+  } catch (cause) {
+    exitWithConfigurationError(cause);
+  }
+
+  try {
+    await app.listen({ port: config.port, host: config.host });
   } catch (cause) {
     app.log.error({ err: cause }, 'the API failed to start');
     process.exit(1);

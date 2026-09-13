@@ -1,10 +1,14 @@
 # Authentication and Authorization Architecture
 
-Status: **planned. Nothing in this document is implemented, tested, merged,
-released, or deployed.** No authentication code, schema, migration, UI, or
-test exists anywhere in this repository as of this writing. This document
-records the approved *design* so that no future session has to reconstruct it
-from chat history.
+Status: **partly implemented, local development only; not production-ready.**
+Implemented and tested against disposable databases: route classification,
+Argon2id hashing, the Better Auth configuration and schema, the DROMEX
+principal and its migrations, and the minimal sign-in, sign-out, and session
+transport (see §11, "Implemented transport"). Everything else here — MFA,
+Owner bootstrap and recovery, permissions, account management, audit events,
+the frontend, and any deployment — remains **design only**. Nothing is
+merged, released, or deployed. This document records the approved design so
+that no future session has to reconstruct it from chat history.
 
 This document is the detailed companion to
 [security-and-accounts.md](security-and-accounts.md), which remains the short
@@ -243,16 +247,46 @@ repository, and the npm registry), 2026-09-11
   lock is removed — runs each migration in its own transaction alongside its
   ledger row, and fails closed on a changed checksum, a duplicate identifier,
   or a migration recorded as applied but absent from the set.
-- **Open follow-up — `rateLimit.lastRequest` type warning.** Better Auth's
-  own generated SQL declares `lastRequest bigint`, and its runtime schema
-  check then warns: `Field lastRequest in table rateLimit has a different
-  type in the database. Expected number but got int8.` This is Better Auth
-  warning about a schema it generated itself. It appears benign — `bigint`
-  is the correct type for a millisecond timestamp, and the CLI still reports
-  the schema as up to date — but it is **not yet confirmed harmless at
-  runtime**, and it will surface in logs once the instance is wired to a
-  real database. To be verified when database-backed rate limiting is first
-  exercised; recorded here rather than silently ignored.
+- **`rateLimit.lastRequest` type — verified 2026-09-13; defect resolved by
+  DROMEX-owned storage (Owner decision, Option C).**
+  Better Auth's generated SQL declares `lastRequest bigint`, and its runtime
+  schema check warns `Expected number but got int8`. Tested through the real
+  sign-in route against disposable PostgreSQL 18.6 databases: node-postgres
+  returns `int8` to JavaScript as a **string**, and Better Auth's database
+  rate limiter converts only a JavaScript `bigint`, so it receives the string
+  unchanged.
+  - **Enforcement is correct.** Comparisons subtract, which coerces the string
+    to a number. The five-attempt, 60-second rule blocks the sixth attempt —
+    even with the right password — persists in PostgreSQL across a freshly
+    constructed application, resets once the window has elapsed, cannot be
+    bypassed with forged forwarding headers, and gives a genuinely different
+    socket address its own bucket.
+  - **The retry-after value is wrong.** Better Auth computes it as
+    `lastRequest + windowInMs`, which concatenates the string; testing
+    observed `X-Retry-After: 178928925868309` seconds.
+  - **Resolution.** Better Auth 1.7.4 officially supports
+    `rateLimit.customStorage` with an atomic `consume(key, { window, max })`
+    operation. DROMEX supplies one (`src/auth/rate-limit-storage.ts`) backed
+    by its own `dromex_rate_limit` table, created by DROMEX migration `0002`
+    through the DROMEX ledger. Its `last_request_ms` column is `BIGINT`,
+    converted explicitly: only canonical non-negative integer text within
+    `Number.MAX_SAFE_INTEGER` is accepted, and anything else fails closed
+    without changing the row. Each decision runs in one transaction under a
+    `SELECT … FOR UPDATE` row lock, so concurrent requests can neither lose
+    an increment nor be over-granted. The retry time is
+    `ceil((last + window − now) / 1000)`, clamped to `1…window`.
+  - **Rejected alternatives.** A global node-postgres `int8` parser would
+    silently change every `BIGINT` read in the process, including future
+    business columns where exact 64-bit values matter. Editing Better Auth's
+    generated schema would break the separation of the two migration
+    sequences (DEC-431) and be overwritten by the next generation. Better
+    Auth's generated `rateLimit` table is left exactly as generated
+    (`storage: 'database'` is kept for that reason) and is no longer written.
+  - **Verified:** the sixth attempt is blocked with `Retry-After` between 1
+    and 60; state survives a fresh server instance; 12 concurrent sign-ins
+    yield exactly five 401s and seven 429s; forged forwarding headers create
+    no new bucket; the global `BIGINT` parser is unchanged. Removing the row
+    lock makes the concurrency test fail.
 - **Two-factor plugin (`twoFactor`)**: TOTP enrolment returns `{ method,
   totpURI, backupCodes }`; verification accepts one period before and after
   the current code. `skipVerificationOnEnable` defaults to `false`.
@@ -586,6 +620,97 @@ Errors are generic to the user, detailed to the log, with a correlation ID
 — the pattern already implemented and tested on `/ready`. 403 and 404 are
 deliberately indistinguishable for records outside a user's scope, so scope
 cannot be used to enumerate what exists.
+
+### Implemented transport (Phase 2C checkpoint 3D, local development only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases; not production-ready.** MFA, Owner bootstrap, permissions, account
+management, and the frontend are not implemented.
+
+**Exact route surface.** Three authentication routes exist, and nothing else:
+
+| Method | Path | Classification |
+|---|---|---|
+| `POST` | `/api/auth/sign-in/email` | `guest-only` |
+| `POST` | `/api/auth/sign-out` | `session-cleanup` |
+| `GET` | `/api/session` | `authenticated` |
+
+There is **no catch-all route**. Better Auth's documented Fastify integration
+mounts a handler at `/api/auth/*`; DROMEX deliberately does not. Each approved
+route forwards to one fixed Better Auth path, so a client query string or path
+suffix never reaches Better Auth. Any other path — sign-up, raw `get-session`,
+password reset, account updates, provider or plugin routes — is answered by a
+generic 404 that never touches Better Auth. `/health` and `/ready` remain
+explicitly `public`.
+
+**The active principal is enforced twice.**
+
+1. *At issuance.* A `session.create.before` database hook, built into
+   `createAuthOptions` so that no construction path can omit it, returns
+   `false` unless the user has an active principal. Better Auth then aborts
+   the insert, so a user with a missing or disabled principal is never issued
+   a session: the row is never written, rather than written and hidden. A
+   failed lookup throws, which also aborts.
+2. *On every request.* The request-time guard resolves the session and then
+   requires an active principal from PostgreSQL. Missing, malformed, expired,
+   revoked, orphaned, and disabled-principal sessions all receive one
+   identical `401`.
+
+**Session resolution bypasses Better Auth's router.** Sessions are resolved
+with `auth.api.getSession({ headers, asResponse: true })` rather than through
+the HTTP router, so an authenticated request neither consumes a rate-limit
+bucket nor writes a rate-limit row, while refresh and expiry `Set-Cookie`
+headers are still forwarded.
+
+**Raw Better Auth output is never returned.** `/api/session` returns exactly
+`{ "user": { "id", "name", "email" }, "isOwner" }`. The sign-in body is
+replaced with `{ "authenticated": true }`, because Better Auth's own body
+carries the session token.
+
+**Sign-in failures are normalised.** Unknown email, wrong password, missing
+principal, disabled principal, malformed input, and a refused Origin all
+return `401 { "error": "invalid_credentials" }` with no cookie. A rate-limited
+attempt returns `429 { "error": "too_many_requests" }` with a standard
+`Retry-After` header; the transport forwards it only when it is an integer
+from 1 to 3600 and never forwards Better Auth's `X-Retry-After`. Timing
+equivalence has **not** been measured.
+
+**Client address.** The transport discards every client-supplied address
+header (`x-forwarded-for`, `x-real-ip`, `forwarded`, `cf-connecting-ip`,
+`true-client-ip`, and similar) and sets `x-dromex-client-ip` from Fastify's
+socket address, with `trustProxy` disabled. Better Auth is configured to read
+only that header. Trusting a reverse proxy is deferred until one exists and
+can be configured to overwrite forwarded headers.
+
+**CSRF boundary.** Better Auth's Origin checks protect sign-in whenever an
+Origin, Referer, Fetch Metadata header, or cookie is present. Sign-out has its
+own DROMEX exact-match Origin check against the trusted origins, because
+Better Auth skips its check when no cookie is sent; a missing, opaque
+(`null`), or untrusted Origin receives `403` before Better Auth is reached. No
+general DROMEX Fastify-level Origin policy exists yet; one is required before
+the first state-changing DROMEX business route.
+
+**Configuration fails closed.** `buildServer` requires explicit
+authentication settings and a database URL. The executable entry point reads
+them once from the environment through a validated boundary whose errors name
+variables, never values. `web/.env.example` leaves the secret empty, so the
+API refuses to start until a real one is set. The local Docker Compose `api`
+service does not yet supply these variables and will not start until it does;
+that file is unchanged.
+
+**Sign-out is security cleanup (Owner decision, 2026-09-13).** It is
+classified `session-cleanup`, a fourth route classification that the
+request-time guard lets through without resolving a session or principal.
+This is deliberate: sign-out only destroys the caller's own authentication
+state and reveals nothing, so a user whose principal is disabled or missing
+must still be able to revoke their session. Better Auth revokes the session
+named by the caller's own signed cookie (never another user's) and expires the
+session cookies. The response is one generic `200 { "signedOut": true }` with
+cookie-clearing headers whether the session was valid, expired, malformed,
+missing, already revoked, or belonged to a disabled or missing principal. A
+failed revocation is reported as `500`, never as success. `GET` is `404`.
+This does **not** widen access anywhere else: a missing or disabled principal
+still receives `401` from `/api/session` and from every `authenticated` route.
 
 ## 12. PostgreSQL security and the row-level-security decision
 

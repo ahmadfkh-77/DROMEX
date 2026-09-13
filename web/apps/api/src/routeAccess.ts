@@ -5,14 +5,17 @@ import type { FastifyInstance, RouteOptions } from 'fastify';
  *
  * - `public`        reachable without a session, deliberately and by decision
  * - `guest-only`    reachable only without a session
- * - `authenticated` requires a valid session
+ * - `authenticated` requires a valid session and an active DROMEX principal
+ * - `session-cleanup` reachable with or without a valid session or principal,
+ *   for endpoints that only destroy the caller's own authentication state
+ *   and reveal nothing (sign-out). Such a route must enforce its own trusted
+ *   Origin check.
  *
- * The classification is metadata only. It does not itself authenticate or
- * authorise anything; the guards that enforce `guest-only` and
- * `authenticated` arrive in a later checkpoint. What this buys now is that a
- * route which nobody classified cannot reach production silently.
+ * The classification itself does not authenticate anything; the
+ * authentication guard in `auth/http.ts` enforces it per request. What this
+ * registration check buys is that a route nobody classified cannot exist.
  */
-export const ROUTE_ACCESS = ['public', 'guest-only', 'authenticated'] as const;
+export const ROUTE_ACCESS = ['public', 'guest-only', 'authenticated', 'session-cleanup'] as const;
 
 export type RouteAccess = (typeof ROUTE_ACCESS)[number];
 

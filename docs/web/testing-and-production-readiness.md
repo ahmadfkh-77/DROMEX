@@ -69,6 +69,57 @@ rather than being retrofitted:
 Real interface work will follow the existing DROMEX identity in `DESIGN.md` and
 `docs/design-system.md` rather than inventing a second visual language.
 
+## Phase 2C authentication transport: local verification
+
+Status: **implemented and verified locally only.** This is evidence from
+automated tests against disposable PostgreSQL 18.6 databases. It is not
+production verification and does not satisfy any item in the gate below.
+
+Proven locally:
+
+- Exactly three authentication routes exist: `POST /api/auth/sign-in/email`,
+  `POST /api/auth/sign-out`, and `GET /api/session`. Every other
+  `/api/auth/*` path, including sign-up and raw `get-session`, returns a
+  generic 404 without reaching Better Auth.
+- A user without an active DROMEX principal is never issued a session: no
+  session row is written.
+- Unknown email, wrong password, missing principal, and disabled principal
+  produce one identical sign-in response.
+- `/api/session` returns a fixed sanitized shape and rejects missing,
+  malformed, expired, revoked, orphaned, and disabled-principal sessions with
+  one identical response.
+- Sign-out deletes the session and clears the cookie for active, disabled, and
+  missing principals; the old cookie can no longer reach `/api/session`.
+  Valid, missing, malformed, expired, and already-revoked sessions receive one
+  identical result. Another user's session is untouched. `GET` is `404`, and
+  a missing, `null`, or untrusted Origin is refused with `403`.
+- Sign-in rate limiting uses DROMEX-owned PostgreSQL storage
+  (`dromex_rate_limit`, migration `0002`): five attempts per 60 seconds, a
+  `Retry-After` from 1 to 60, state that survives a freshly constructed
+  application, reset after the window, no lost or over-granted increments
+  under concurrency, no new bucket from forged forwarding headers, fail-closed
+  parsing of malformed or unsafe `BIGINT` values, and an unchanged global
+  node-postgres parser. Better Auth's generated `rateLimit` table stays
+  unchanged and unused.
+- Session cookies are `__Secure-` prefixed, `Secure`, `HttpOnly`,
+  `SameSite=Lax`, and `Path=/`.
+- No password, session cookie, or session token appears in the structured log
+  or the console during the tested flows.
+
+Not verified, and still required before production:
+
+- **Timing equivalence of sign-in failures has not been measured.** The four
+  failure cases are identical in status and body only.
+- Cookie attributes were verified through Fastify injected requests, not a
+  real browser.
+- No general DROMEX Fastify-level Origin policy exists yet for future
+  state-changing DROMEX routes. Sign-in relies on Better Auth's Origin checks;
+  sign-out has its own DROMEX Origin check.
+- Expired `dromex_rate_limit` rows are not pruned yet; rows accumulate per
+  distinct client address and path.
+- MFA, Owner provisioning, frontend authentication, permissions, deployment,
+  and production readiness remain incomplete.
+
 ## Production-readiness gate
 
 The system is **not** production ready until every line below is verified with

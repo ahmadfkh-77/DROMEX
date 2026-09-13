@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { loadDromexMigrations } from '../../src/db/dromex-migrations.ts';
 import {
   ADVISORY_LOCK_KEY,
   applyMigrations,
@@ -14,21 +15,9 @@ import { createEphemeralDatabase, type EphemeralDatabase } from '../helpers/db.t
 const BETTER_AUTH_MIGRATION = fileURLToPath(
   new URL('../../migrations/better-auth/0001_better_auth_init.sql', import.meta.url),
 );
-const DROMEX_MIGRATION = fileURLToPath(
-  new URL('../../migrations/dromex/0001_dromex_principal.sql', import.meta.url),
-);
 
 const BETTER_AUTH_TABLES = ['user', 'session', 'account', 'verification', 'rateLimit'];
-
-async function loadDromexMigrations(): Promise<DromexMigration[]> {
-  return [
-    {
-      id: '0001',
-      name: 'dromex_principal',
-      sql: await readFile(DROMEX_MIGRATION, 'utf8'),
-    },
-  ];
-}
+const ALL_DROMEX_MIGRATIONS = ['0001', '0002'];
 
 describe('DROMEX migration mechanism', () => {
   let database: EphemeralDatabase;
@@ -217,14 +206,14 @@ describe('DROMEX migration mechanism', () => {
     const first = await applyMigrations(pool, migrations);
     const second = await applyMigrations(pool, migrations);
 
-    expect(first.applied).toEqual(['0001']);
+    expect(first.applied).toEqual(ALL_DROMEX_MIGRATIONS);
     expect(second.applied).toEqual([]);
-    expect(second.skipped).toEqual(['0001']);
+    expect(second.skipped).toEqual(ALL_DROMEX_MIGRATIONS);
 
     const { rows } = await pool.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM dromex_migration`,
     );
-    expect(Number(rows[0]?.count)).toBe(1);
+    expect(Number(rows[0]?.count)).toBe(ALL_DROMEX_MIGRATIONS.length);
   });
 
   it('refuses an applied migration whose checksum changed', async () => {
@@ -233,6 +222,7 @@ describe('DROMEX migration mechanism', () => {
 
     const tampered: DromexMigration[] = [
       { ...migrations[0]!, sql: `${migrations[0]!.sql}\n-- edited after the fact\n` },
+      ...migrations.slice(1),
     ];
 
     await expect(applyMigrations(pool, tampered)).rejects.toThrow(/checksum/i);
@@ -266,7 +256,7 @@ describe('DROMEX migration mechanism', () => {
     // Node process interleave at await points rather than truly racing. The
     // test below is the one that actually proves mutual exclusion.
     const appliedCount = a.applied.length + b.applied.length;
-    expect(appliedCount).toBe(1);
+    expect(appliedCount).toBe(ALL_DROMEX_MIGRATIONS.length);
 
     const { rows } = await pool.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM dromex_migration WHERE id = '0001'`,
@@ -297,7 +287,7 @@ describe('DROMEX migration mechanism', () => {
 
     const result = await run;
     expect(settled).toBe(true);
-    expect(result.applied).toEqual(['0001']);
+    expect(result.applied).toEqual(ALL_DROMEX_MIGRATIONS);
   });
 
   it('rolls a failed migration back completely', async () => {
@@ -337,9 +327,9 @@ describe('DROMEX migration mechanism', () => {
       expect(tables).toContain(expected);
     }
 
-    // Only the two DROMEX-owned objects are added.
+    // Only the DROMEX-owned objects are added.
     const dromexTables = tables.filter((name) => name.startsWith('dromex_')).sort();
-    expect(dromexTables).toEqual(['dromex_migration', 'dromex_principal']);
+    expect(dromexTables).toEqual(['dromex_migration', 'dromex_principal', 'dromex_rate_limit']);
 
     for (const table of tables.map((name) => name.toLowerCase())) {
       for (const forbidden of ['project', 'load', 'fuel', 'payment', 'waste', 'wall']) {
