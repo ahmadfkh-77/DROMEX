@@ -373,6 +373,8 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
       customRules: {
         '/sign-in/email': { window: 60, max: 5 },
         '/two-factor/verify-totp': { window: 60, max: 5 },
+        // DEC-436: recovery codes share this limit and the account lockout.
+        '/two-factor/verify-backup-code': { window: 60, max: 5 },
       },
     },
 

@@ -8,9 +8,13 @@ Owner activation — identity, TOTP enrolment, recovery codes, and the Owner
 principal — exists as a local, interactive, non-HTTP service, tested only
 against disposable databases; it is **not approved for real use** until
 checkpoints 3F-B, 3F-C, and 3F-D are accepted and OQ-161 is resolved
-(DEC-435), its command refuses every run, and **no Owner exists**. No
-recovery-code use, break-glass recovery, password recovery, account
-management, Owner readiness enforcement, permissions, or deployment exists.
+(DEC-435), its command refuses every run, and **no Owner exists**. An Owner
+who has lost the authenticator can sign in with the password and one unused
+recovery code into a short-lived recovery state that reaches no business
+route and permits only replacing the authenticator, and every recovery step
+is recorded in a DROMEX-owned security audit (DEC-436). No terminal
+break-glass recovery, password recovery, account management, Owner
+readiness enforcement, permissions, or deployment exists.
 
 The full authentication and authorization architecture — candidate research,
 the selected system and why, the threat model, session and MFA design, the
@@ -71,9 +75,10 @@ was selected over rolling the equivalent by hand.
 Better Auth user, session, account, verification, and rate-limit schema, the
 DROMEX principal table, the sign-in, TOTP verification, sign-out, and session
 transport, mandatory MFA with TOTP replay protection and versioned secrets,
-Better Auth's two-factor schema, recovery-code issuance, and terminal Owner
-activation. Recovery-code use and break-glass recovery are not implemented,
-no real account has been created, and nothing is deployed.
+Better Auth's two-factor schema, recovery-code issuance, terminal Owner
+activation, recovery-code sign-in with restricted authenticator replacement,
+and the security audit foundation. Terminal break-glass recovery is not
+implemented, no real account has been created, and nothing is deployed.
 
 **The Owner is created only by a local interactive command, never over HTTP.**
 There is no setup route, no bootstrap website, no public registration, no

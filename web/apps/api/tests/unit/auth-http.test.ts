@@ -9,6 +9,7 @@ import {
   registerAuthRoutes,
   type AuthBackend,
   type AuthRoutesDependencies,
+  type RecoverySessionGate,
 } from '../../src/auth/http.ts';
 import type { Principal, PrincipalRepository } from '../../src/auth/principal.ts';
 import type { TotpReplayGuard } from '../../src/auth/totp-replay.ts';
@@ -28,11 +29,11 @@ const NEW_SESSION_SET_COOKIE = `${COOKIES.sessionToken}=new-signed-session; Max-
 const TRUST_SET_COOKIE = `${COOKIES.trustDevice}=forged-trust; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax`;
 
 function sessionBody(
-  overrides: { createdAt?: unknown; twoFactorEnabled?: unknown } = {},
+  overrides: { id?: unknown; createdAt?: unknown; twoFactorEnabled?: unknown } = {},
 ): Record<string, unknown> {
   return {
     session: {
-      id: 'session_internal_id',
+      id: 'id' in overrides ? overrides.id : 'session_internal_id',
       token: 'raw-session-token-value',
       createdAt: 'createdAt' in overrides ? overrides.createdAt : SESSION_CREATED_AT,
     },
@@ -120,15 +121,22 @@ async function buildApp(deps: AuthRoutesDependencies, logStream?: Writable): Pro
   return app;
 }
 
+/** A recovery-session lookup that answers the same for every session. */
+function recoveryGate(isRecovery: boolean) {
+  return { isRecoverySession: vi.fn(async (_sessionId: string) => isRecovery) } satisfies RecoverySessionGate;
+}
+
 function deps(
   backend: AuthBackend,
   principals: PrincipalRepository = principalRepository(ACTIVE),
   replay: TotpReplayGuard = replayGuard(),
+  recoverySessions: RecoverySessionGate = recoveryGate(false),
 ): AuthRoutesDependencies {
   return {
     backend,
     principals,
     replay,
+    recoverySessions,
     cookies: COOKIES,
     baseURL: TEST_BASE_URL,
     trustedOrigins: [TEST_TRUSTED_ORIGIN],
@@ -784,6 +792,48 @@ describe('authentication transport', () => {
       expect(response.statusCode).toBe(401);
     });
 
+    it('denies a session ever bound to an Owner recovery, even when every MFA condition passes (DEC-436)', async () => {
+      const recoverySessions = recoveryGate(true);
+      const app = await buildApp(
+        deps(
+          fakeBackend({ getSession: vi.fn(async () => jsonResponse(200, sessionBody())) }),
+          principalRepository({ ...ACTIVE, isOwner: true }),
+          replayGuard(),
+          recoverySessions,
+        ),
+      );
+
+      const response = await app.inject({ method: 'GET', url: '/api/session' });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({ error: 'unauthorized' });
+      expect(recoverySessions.isRecoverySession).toHaveBeenCalledWith('session_internal_id');
+    });
+
+    it('denies a session without a session id, and fails closed when the recovery lookup throws', async () => {
+      const missingId = await buildApp(
+        deps(fakeBackend({ getSession: vi.fn(async () => jsonResponse(200, sessionBody({ id: undefined }))) })),
+      );
+      const emptyId = await buildApp(
+        deps(fakeBackend({ getSession: vi.fn(async () => jsonResponse(200, sessionBody({ id: '' }))) })),
+      );
+      const throwingLookup = await buildApp(
+        deps(
+          fakeBackend({ getSession: vi.fn(async () => jsonResponse(200, sessionBody())) }),
+          principalRepository(ACTIVE),
+          replayGuard(),
+          { isRecoverySession: vi.fn(async () => { throw new Error('recovery lookup failure detail'); }) },
+        ),
+      );
+
+      for (const app of [missingId, emptyId, throwingLookup]) {
+        const response = await app.inject({ method: 'GET', url: '/api/session' });
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toEqual({ error: 'unauthorized' });
+        expect(response.body).not.toContain('detail');
+      }
+    });
+
     it('fails closed when session resolution or the principal lookup throws', async () => {
       const throwingSession = await buildApp(
         deps(fakeBackend({ getSession: vi.fn(async () => { throw new Error('database detail that must not leak'); }) })),
@@ -840,6 +890,9 @@ describe('authentication transport', () => {
     expect(() => registerAuthRoutes(app, { ...deps(fakeBackend()), trustedOrigins: [] })).toThrow(/origin/i);
     expect(() => registerAuthRoutes(app, { ...deps(fakeBackend()), replay: undefined as never })).toThrow(/replay/i);
     expect(() => registerAuthRoutes(app, { ...deps(fakeBackend()), cookies: undefined as never })).toThrow(/cookie/i);
+    expect(() =>
+      registerAuthenticationGuard(app, { ...deps(fakeBackend()), recoverySessions: undefined as never }),
+    ).toThrow(/recovery/i);
   });
 
   it('writes no password, TOTP code, cookie, or session token to the log', async () => {

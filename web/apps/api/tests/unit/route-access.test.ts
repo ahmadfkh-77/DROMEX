@@ -43,7 +43,7 @@ describe('route access classification (default-deny registration)', () => {
     }).toThrow(/access/i);
   });
 
-  it('accepts each of the five recognised classifications', async () => {
+  it('accepts each of the six recognised classifications', async () => {
     app = await build();
 
     expect(() => {
@@ -52,7 +52,19 @@ describe('route access classification (default-deny registration)', () => {
       app!.get('/c', { config: { access: 'authenticated' } }, async () => ({ ok: true }));
       app!.post('/d', { config: { access: 'session-cleanup' } }, async () => ({ ok: true }));
       app!.post('/e', { config: { access: 'mfa-challenge' } }, async () => ({ ok: true }));
+      app!.post('/f', { config: { access: 'recovery' } }, async () => ({ ok: true }));
     }).not.toThrow();
+  });
+
+  it('refuses a recovery-classified route that brings no recovery gate of its own', async () => {
+    app = await build();
+    app.post('/unguarded-recovery', { config: { access: 'recovery' } }, async () => ({ reached: true }));
+    await app.ready();
+
+    const response = await app.inject({ method: 'POST', url: '/unguarded-recovery', payload: {} });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: 'unauthorized' });
   });
 
   it('records /health and /ready as explicitly public', async () => {
@@ -87,6 +99,9 @@ describe('route access classification (default-deny registration)', () => {
       ['HEAD /api/session', 'authenticated'],
       ['HEAD /health', 'public'],
       ['HEAD /ready', 'public'],
+      ['POST /api/auth/recovery/authenticator/start', 'recovery'],
+      ['POST /api/auth/recovery/authenticator/verify', 'recovery'],
+      ['POST /api/auth/recovery/verify-code', 'mfa-challenge'],
       ['POST /api/auth/sign-in/email', 'guest-only'],
       ['POST /api/auth/sign-out', 'session-cleanup'],
       ['POST /api/auth/two-factor/verify-totp', 'mfa-challenge'],

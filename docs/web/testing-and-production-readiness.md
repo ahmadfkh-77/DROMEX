@@ -269,6 +269,155 @@ Not verified:
   done before real activation is approved.
 - Any run against a persistent database, which is prohibited.
 
+## Phase 2C Owner recovery and security audit: local verification
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases only, on exact Node 24.20.0.** This is not production verification
+and satisfies no item in the gate below. No Owner exists and the Owner
+command still refuses every run (DEC-435, DEC-436).
+
+Proven locally, with synthetic identities in disposable databases (tests
+written first; the RED runs failed with 404s, missing tables, a missing
+module, unrecognised classifications, and admitted sessions before any
+implementation existed):
+
+- A valid password plus an unused recovery code yields only a restricted
+  recovery state: a `Secure`, `HttpOnly`, `SameSite=Lax` session, no
+  trusted-device cookie, `mfa_completed_at` cleared, one recovery row bound
+  to that session with a lifetime of exactly 300 seconds, the session
+  recorded as a recovery session, and the used code gone from the stored
+  set.
+- That session is refused by `/api/session` and by `authenticated` stand-in
+  routes for projects, reports, finance, settings, backups, and accounts
+  (GET and POST), including while replacement requests run concurrently. It
+  reaches only the replacement steps, in order, and sign-out.
+- Unknown, malformed, and already used recovery codes are refused with no
+  session. Five attempts per 60 seconds per address are allowed and the
+  sixth is refused with `Retry-After`; recovery-code and TOTP failures share
+  the ten-failure, 900-second account lockout, which then refuses even a
+  valid code.
+- Rate-limit correction (written RED first; all six new tests failed against
+  the provisionally accepted code): malformed-length, invalid-character,
+  non-string, empty, incorrect, and reused codes, and requests without a
+  challenge, all share one Better Auth bucket per address before any audit
+  row is written. A sixth attempt is refused with `429` and `Retry-After`
+  and writes no row, even when valid; 24 concurrent mixed attempts admit
+  exactly five and audit exactly five; the bucket stays closed 58 seconds
+  after the fifth attempt and reopens for exactly five more once 60 seconds
+  have passed; malformed codes never count toward the account lockout or the
+  challenge's attempt budget; a failing limiter returns `500` with no row and
+  no session; no submitted value appears in audit rows or logs.
+- Every other Owner session is revoked, and the count is audited.
+- A non-Owner principal and a disabled Owner get no recovery state and no
+  session; two concurrent recoveries for one Owner produce exactly one.
+- An expired recovery fails closed, ends, and revokes its session; the
+  database refuses any lifetime over five minutes. Missing, malformed,
+  ordinary, unbound, and disabled-principal sessions are all refused, and a
+  concurrent or repeated start is accepted once.
+- A wrong password ends the recovery with the old factor intact and ordinary
+  access still closed.
+- Replacement uses Better Auth's `disableTwoFactor` then `enableTwoFactor`:
+  the old secret and every old code are replaced, `twoFactorEnabled` is false
+  until the new code verifies, and the rotated session is still a recovery
+  session.
+- Completion requires a valid new code; returns ten new canonical codes once
+  with `Cache-Control: no-store`; sets `mfa_completed_at`; revokes every
+  Owner session; and requires a fresh sign-in, which succeeds with the new
+  authenticator. The old TOTP, old recovery codes, and a replay of the code
+  used to complete are all refused; a new code works once.
+- Five wrong new codes, an abandonment by sign-out, and an expiry after the
+  old factor is disabled each leave business access blocked and record
+  `terminal_recovery_required`.
+- A failure recording the recovery releases no session and changes nothing;
+  a failure recording completion never restores ordinary access; a factor
+  Better Auth removed before failing is treated as disabled.
+- Every step of a completed recovery produces its audit event in order, with
+  the Owner's id and name snapshot, the recovery reference, and the client
+  address. A rejected code is recorded with no actor. No password, TOTP
+  secret or value, recovery code, cookie, or session token appears in audit
+  rows or logs.
+- `dromex_audit_event` rejects `UPDATE`, `DELETE`, and `TRUNCATE`, PUBLIC
+  holds none of those privileges, it has no free-form column, and its checks
+  refuse unknown types, outcomes, unstructured reasons, negative counts, and
+  malformed addresses. The audit writer refuses any extra, missing, or
+  malformed property before touching the database.
+- No API source module writes a Better Auth-owned table with its own SQL.
+  The route surface is exactly the seven approved authentication routes, and
+  a `recovery` route without its own gate is refused.
+- Every earlier sign-in, sign-out, session, MFA, principal, replay, rate-limit,
+  provisioning, and migration test still passes.
+
+**Mutation testing (26/26 killed).** Each of 26 targeted mutations was
+applied alone to a disposable copy of the sources and migrations and
+required to make at least one test fail. They covered:
+
+- the ordinary gate and recovery classification;
+- the trusted-device refusal;
+- the owner-wide MFA lockdown and recovery-session list;
+- non-Owner and disabled-principal refusal;
+- session revocation on entry, on failure, and at completion;
+- the recovery-code rate limit;
+- expiry;
+- the atomic step claim;
+- factor-state re-reading;
+- the five-attempt limit;
+- replay recording;
+- completion;
+- abandonment and terminal-recovery flagging;
+- the audit writer's validation;
+- the append-only trigger;
+- the five-minute and one-recovery database constraints.
+
+Sources and migrations were confirmed byte-identical after the run.
+
+The first passes exposed three weak tests, all fixed by strengthening tests,
+never production code:
+
+- *Start claim (two mutations).* The concurrent `start` test never forced
+  both requests past the gate, so removing the atomic claim, or its step
+  check, survived. A new test holds the recovery row locked until PostgreSQL
+  shows both requests queued at the claim, then releases it.
+- *One open recovery per Owner.* The concurrent entry test was only killed
+  by timing, because Better Auth's own compare-and-swap on the code list
+  often rejects a truly concurrent second code first. A new test submits a
+  second valid code sequentially while the first recovery is open.
+
+**Rate-limit correction mutation run (35/36 killed, 1 equivalent).** After
+the rate-limit correction, 36 targeted mutations were rerun against
+disposable copies on Node 24.20.0. There were eight new mutations and 28
+covering the areas above:
+
+- The eight new mutations audit a malformed code before the limiter, audit a
+  limited attempt, let a missing challenge bypass the limiter, audit a
+  missing challenge, forward a malformed code as a code, audit a server
+  fault, loosen the limit to six, and shorten the window. All are killed
+  except the server-fault mutation, which is covered below.
+- The first pass left five survivors. Four were weak tests, fixed by new
+  tests with no production change:
+  - A server fault Better Auth returns during recovery-code verification
+    must stay a `500` with no audit row.
+  - A recovery that expires after the gate admits `start` must refuse the
+    claim.
+  - A new code the replay guard has already seen must never complete
+    recovery.
+  - An Owner disabled after the gate admits the final code must not complete
+    recovery.
+- Each new test kills its mutation on the rerun.
+- The fifth survivor, removing the attempt guard from
+  `reserveVerifyAttempt`, is equivalent. The transport's five-attempt check
+  and the database's `CHECK (verify_attempts BETWEEN 0 AND 5)` still
+  enforce the limit, so no request can observe the difference.
+- Sources, tests, and migrations were confirmed byte-identical after each
+  run.
+
+Not verified:
+
+- Terminal recovery for an existing Owner (checkpoint 3F-D), which an
+  abandoned replacement requires and which does not exist.
+- An expiry event for a recovery nobody touches again.
+- Timing equivalence of failures, and cookie behaviour in a real browser.
+- Any run against a persistent database, which is prohibited.
+
 ## Production-readiness gate
 
 The system is **not** production ready until every line below is verified with
@@ -298,6 +447,11 @@ evidence. Today, none of them are.
       value found in `localStorage`/`sessionStorage`
 - [ ] `audit_event` table confirmed append-only at the database-grant level
       (DEC-430); secret redaction confirmed across the full auth test suite
+      — partly addressed locally in checkpoint 3F-C (DEC-436):
+      `dromex_audit_event` rejects `UPDATE`, `DELETE`, and `TRUNCATE` by
+      trigger and PUBLIC holds none of those privileges, but the
+      least-privilege runtime role and its grant are not provisioned, and
+      only recovery events are recorded
 - [ ] Business schema migrated and tested at realistic volumes
 - [ ] Existing-data migration reconciled: record counts, identifiers, financial
       totals, payment statuses

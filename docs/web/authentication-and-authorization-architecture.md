@@ -921,6 +921,10 @@ for real use.** The Owner command is unchanged and still refuses every run
 break-glass retrieval (3F-D), and password recovery (OQ-161) are not
 implemented. Governing decisions: DEC-434 and DEC-435.
 
+*Extended by checkpoint 3F-C, below: recovery-code sign-in, authenticator
+replacement, three further routes, and the security audit foundation. This
+section remains the record of the 3F-B transport.*
+
 **Exact route surface.** Four authentication routes exist, superseding the
 three-route table of checkpoint 3D:
 
@@ -1081,6 +1085,181 @@ Sources, inspected 2026-09-14: installed `better-auth@1.7.4`
 `@better-auth/kysely-adapter@1.7.4` (`dist/index.mjs`, `incrementOne`), and
 the output of `auth@1.7.4 generate` against a disposable database.
 
+### Owner recovery-code sign-in and authenticator replacement (Phase 2C checkpoint 3F-C, disposable databases only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases on exact Node 24.20.0 only. Not production-ready and not approved
+for real use.** No Owner exists and the Owner command is unchanged and still
+refuses every run (DEC-435 (6)). Terminal recovery for an existing Owner
+(checkpoint 3F-D), password recovery, and every web screen are not
+implemented. Governing decisions: DEC-435 (precision correction) and
+DEC-436.
+
+**Route surface.** Seven routes now exist, superseding the four-route table
+of checkpoint 3F-B:
+
+| Method | Path | Classification |
+|---|---|---|
+| `POST` | `/api/auth/sign-in/email` | `guest-only` |
+| `POST` | `/api/auth/two-factor/verify-totp` | `mfa-challenge` |
+| `POST` | `/api/auth/recovery/verify-code` | `mfa-challenge` |
+| `POST` | `/api/auth/recovery/authenticator/start` | `recovery` |
+| `POST` | `/api/auth/recovery/authenticator/verify` | `recovery` |
+| `POST` | `/api/auth/sign-out` | `session-cleanup` |
+| `GET` | `/api/session` | `authenticated` |
+
+`recovery` is a sixth route classification. A `recovery` route must carry
+its own `recoveryGate`; the authentication guard runs that gate and refuses
+the request unless it admits, and refuses a `recovery` route that has no
+gate at all. Better Auth's own `verify-backup-code`, `disable`, `enable`,
+`get-totp-uri`, `generate-backup-codes`, and `view-backup-codes` paths
+remain the generic 404: DROMEX calls those APIs only from inside its own
+routes.
+
+**1. Entering recovery.** The Owner completes the ordinary password step and
+receives the signed challenge cookie. `verify-code` then requires an exact
+trusted Origin, that cookie, and a body of exactly `{ "code": "…" }`; the
+code is normalised with the Crockford rules and forwarded through Better
+Auth's router to `verify-backup-code` with `trustDevice: false`. That router
+applies DROMEX's 5-per-60-second limit for the path, and Better Auth applies
+the same account lockout it applies to TOTP (10 consecutive failures across
+both, 900 seconds) and consumes the code under its compare-and-swap.
+
+If Better Auth accepts the code, it creates a session. **That session exists
+only on the server until DROMEX has contained it.** In one transaction,
+DROMEX locks the principal, refuses anyone but an active Owner, ends any
+expired recovery, clears `dromex_principal.mfa_completed_at`, inserts the
+recovery state (`dromex_owner_recovery`, DROMEX migration `0006`) bound to
+that session's Better Auth identifier with an expiry of 300 seconds, records
+the session in `dromex_recovery_session`, and writes the audit events. If
+anything fails, the session is revoked and `500 { "error": "internal_error" }`
+is returned without its cookie. Only after that commit does DROMEX revoke
+every other Owner session and return `200 { "recovery":
+"authenticator_replacement_required", "expiresInSeconds": 300 }` with the
+session cookie. A non-Owner's session is revoked and the response is the
+same `401 { "error": "invalid_code" }` as an invalid code.
+
+**2. Why no temporary window reaches a business route.** Three independent
+controls, each sufficient on its own:
+
+1. The session token is held only by the server until the containment
+   transaction commits.
+2. The ordinary gate refuses every session while `mfa_completed_at` is null,
+   and recovery clears it for the Owner before releasing anything.
+3. The ordinary gate refuses every session listed in
+   `dromex_recovery_session`, permanently, including after MFA is complete
+   again.
+
+Business routes do not exist yet, so the tests register stand-in routes for
+projects, reports, finance, settings, backups, and accounts with the
+`authenticated` classification every real one will carry, and prove the
+recovery session is refused on each, including while replacement requests
+run concurrently.
+
+**3. The recovery state** allows at most one open recovery per Owner and per
+session (partial unique indexes), a lifetime of at most five minutes
+(a database check constraint), and only these steps: `code_accepted` →
+`replacement_started` → `enrolment_started` → `completed`, or `failed`,
+`expired`, or `abandoned`. Every step re-reads the Better Auth session, the
+recovery bound to exactly that session, its step and expiry on the
+database's own clock, and the principal (active, Owner, `mfa_completed_at`
+null). An expired recovery is ended and its session revoked on the next
+request that touches it. A disabled or non-Owner principal ends it. An
+out-of-order request is refused without side effects.
+
+**4. Replacement.** `start` requires `{ "password": "…" }`, claims
+`code_accepted` → `replacement_started` atomically (so concurrent starts
+cannot both proceed), and calls Better Auth's `disableTwoFactor`, which
+removes the old secret and every old recovery code and rotates the session,
+then immediately `enableTwoFactor`. It binds the recovery to the rotated
+session, records that session as a recovery session, and returns `200 {
+"totpUri", "manualEntrySecret" }` with `Cache-Control: no-store`. The
+recovery codes `enableTwoFactor` returns are never shown. A wrong password
+ends the recovery with the old factor intact (`401 { "error":
+"recovery_failed" }`). Because Better Auth does not disable a factor
+atomically, any other failure re-reads `twoFactorEnabled` from the database
+and treats a factor that is gone as disabled, whatever the response said.
+
+`verify` requires `{ "code": "<six digits>" }`, reserves one of five attempts
+atomically, and forwards the code through Better Auth's router to
+`verify-totp`, which applies the 5-per-60-second limit. The fifth wrong code
+ends the recovery. On success Better Auth enables the factor and rotates the
+session; DROMEX records the accepted code in `dromex_totp_replay`, reads the
+new codes through Better Auth's server-only `viewBackupCodes`, and only then,
+in one transaction, sets `mfa_completed_at`, ends the recovery as completed,
+and records the final session as a recovery session. It then revokes every
+Owner session and returns `200 { "recoveryCodes": [ten codes],
+"signInRequired": true }` with `Cache-Control: no-store` and expired session
+cookies. Ordinary access returns only through a fresh password-and-TOTP
+sign-in.
+
+**5. Containing the disabled period.** Between `disableTwoFactor` and a
+verified new factor, the Owner has no verified factor. Ordinary access is
+refused throughout by `mfa_completed_at` being null, by the recovery-session
+list, and by Better Auth reporting `twoFactorEnabled` false. If the
+replacement is abandoned (sign-out), expires, fails five times, or fails at
+any later step, nothing is restored or re-enabled: the recovery ends,
+`terminal_recovery_required` is audited, and business access stays blocked.
+With no verified factor the password step issues no challenge, so no web
+path remains; the Owner needs terminal recovery, which is checkpoint 3F-D and
+**does not exist yet**.
+
+**6. Security audit foundation** (`dromex_audit_event`, DROMEX migration
+`0005`; `src/auth/security-audit.ts`). Events: recovery code accepted and
+rejected, recovery session created, other sessions revoked, replacement
+started, old factor disabled, new TOTP rejected and verified, replacement
+completed and failed, recovery expired and abandoned, recovery sessions
+revoked, and terminal recovery required. Columns: event type from a closed
+list, outcome, actor user id and a name snapshot, recovery reference, a
+reason matching `^[a-z][a-z_]{0,63}$`, a revoked-session count, and a client
+address matching `^[0-9A-Fa-f:.]{1,45}$`. There is no free-text or JSON
+column. The writer refuses any event with an unknown type, a missing or
+extra property, or a value outside those shapes before a statement is sent,
+and its errors never repeat a value. A rejected code is recorded with no
+actor, because the transport cannot prove whose challenge it was.
+
+Protection, stated plainly: PUBLIC holds no UPDATE, DELETE, or TRUNCATE
+privilege, and triggers reject all three. That stops an ordinary application
+defect. It does **not** stop the table owner or a database administrator,
+who can disable the triggers or alter the table, and the least-privilege
+runtime role DEC-429 and DEC-430 require is not provisioned yet, so the
+application currently connects as the table owner.
+
+**Known limits, not yet addressed:**
+
+- Terminal recovery for an existing Owner (3F-D) does not exist, so an
+  abandoned replacement after the old factor is disabled cannot yet be
+  recovered at all.
+- An expired recovery is ended when a request next touches it (the recovery
+  session, a new recovery for the same Owner, or sign-out). An Owner who
+  simply walks away produces no expiry event until then.
+- If the final response is lost after completion, the new recovery codes
+  were never seen; the new authenticator still works for ordinary sign-in.
+- Every recovery-code attempt, including a malformed or non-string code and
+  a request with no challenge, passes Better Auth's rate limiter (same key,
+  rule, and PostgreSQL storage) before any rejection is audited. A malformed
+  code is never forwarded: the request carries no code, is counted, and fails
+  Better Auth's body schema without reaching verification, so it does not
+  count toward the account lockout. A rate-limited or locked-out attempt is
+  never audited, and a request without a challenge is limited but not
+  audited, so at most five `recovery_code_rejected` rows can be written per
+  client address per 60 seconds. A distributed caller with many addresses
+  can still add five rows per address.
+- The ordinary gate now performs one additional indexed lookup per request.
+- Better Auth's official documentation says `verifyBackupCode`'s
+  `trustDevice` defaults to true; the installed 1.7.4 source trusts a device
+  only when it is explicitly true. DROMEX always sends `false`, so neither
+  reading applies.
+
+Sources, inspected 2026-09-14: installed `better-auth@1.7.4`
+(`dist/plugins/two-factor/index.mjs` — `enableTwoFactor`,
+`disableTwoFactor`; `backup-codes/index.mjs` — `verifyBackupCode`,
+`viewBackupCodes`; `totp/index.mjs` — `verifyTOTP`; `verify-two-factor.mjs`;
+`dist/api/routes/session.mjs` — `sensitiveSessionMiddleware`,
+`revokeSessions`, `revokeOtherSessions`, `getSession`;
+`dist/api/rate-limiter/index.mjs`), and
+<https://www.better-auth.com/docs/plugins/2fa>.
+
 ## 12. PostgreSQL security and the row-level-security decision
 
 **Row-level security will not be used in the first release (DEC-429).**
@@ -1159,6 +1338,29 @@ and `DELETE` by database grant for the application's own runtime role
 (§12) — an independent safeguard against an application defect, not a
 guarantee against a privileged database administrator.
 
+*Implemented foundation, 2026-09-14 (checkpoint 3F-C, DEC-436).* What exists
+is deliberately narrower than the full design above, and differs from it in
+four stated ways:
+
+- The table is `dromex_audit_event` (DROMEX migration `0005`), carrying only
+  the columns recovery needs: `id` (`bigint` identity rather than
+  `uuidv7`), `occurred_at`, `event_type` from a closed list, `outcome`,
+  `actor_user_id`, `actor_name` (the snapshot), `recovery_id`, a constrained
+  `reason`, `revoked_session_count`, and `client_address`.
+- There is **no `detail_json`, `user_agent`, or any other free-form column**,
+  on purpose: a free-form column is exactly where a secret could be written.
+  Target, project, permission, and correlation columns will be added by
+  forward migrations when the events that need them exist.
+- Only the recovery events listed in §11, checkpoint 3F-C, are recorded so
+  far. Sign-in, ordinary TOTP challenges, sign-out, and every account,
+  permission, and business event are not audited yet.
+- The least-privilege runtime role is not provisioned, so the grant-level
+  protection described above does not exist yet. In its place, PUBLIC holds
+  no `UPDATE`, `DELETE`, or `TRUNCATE` privilege and triggers reject all
+  three. That stops an ordinary application defect; the table owner — which
+  the application currently is — or any database administrator can disable
+  the triggers.
+
 ## 14. Owner recovery: the verified design
 
 **This section records an approved decision (DEC-423), not an open
@@ -1223,8 +1425,24 @@ the Owner has no one above them to perform an admin-side reset.
    API to display **one unused recovery code**. The Owner then signs in
    normally with password, challenge, and that code, and immediately
    replaces the authenticator, which issues a new code set and invalidates
-   every code the database copy could reveal. MFA is never disabled, and
-   no Better Auth-owned row is written by DROMEX SQL. It works only while an
+   every code the database copy could reveal. No Better Auth-owned row is
+   written by DROMEX SQL.
+
+   *Precision correction, 2026-09-14 (DEC-435, DEC-436).* This paragraph
+   previously said that MFA is never disabled. That is not achievable
+   through Better Auth 1.7.4's supported APIs: `enableTwoFactor` refuses an
+   account that already has a verified factor, so replacing an
+   authenticator requires `disableTwoFactor` — which removes the old secret
+   and every old recovery code — before `enableTwoFactor` can enrol the new
+   one. **Better Auth therefore temporarily disables the old factor during a
+   supported replacement.** What holds instead is that **ordinary business
+   access is never available while the Owner lacks a verified factor**, and
+   that a replacement abandoned, expired, or failed after the old factor is
+   disabled restores and re-enables nothing, keeps business access blocked,
+   and requires terminal recovery. The restricted web recovery flow that
+   contains this period is described in §11, checkpoint 3F-C.
+
+   It works only while an
    unused code exists and the secret version that encrypted it is still
    configured. A **version-controlled direct database reset** of the
    Owner's factor remains only an **unimplemented, conditional last

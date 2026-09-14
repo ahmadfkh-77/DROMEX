@@ -15,7 +15,13 @@ import type { FastifyInstance, RouteOptions } from 'fastify';
  *                     challenge: no ordinary session is consulted. Such a
  *                     route must itself require the signed challenge cookie
  *                     and a trusted Origin, and must refuse to return a
- *                     session unless the full mandatory-MFA gate passes.
+ *                     session unless the full mandatory-MFA gate passes —
+ *                     or, for the recovery-code route, unless the session is
+ *                     first recorded as a recovery session (DEC-436).
+ * - `recovery`        reachable only by a session bound to an in-progress
+ *                     Owner recovery (DEC-436). Such a route must carry its
+ *                     own `recoveryGate`, which the authentication guard
+ *                     runs; a recovery route without one is refused.
  *
  * The classification itself does not authenticate anything; the
  * authentication guard in `auth/http.ts` enforces it per request. What this
@@ -27,6 +33,7 @@ export const ROUTE_ACCESS = [
   'authenticated',
   'session-cleanup',
   'mfa-challenge',
+  'recovery',
 ] as const;
 
 export type RouteAccess = (typeof ROUTE_ACCESS)[number];

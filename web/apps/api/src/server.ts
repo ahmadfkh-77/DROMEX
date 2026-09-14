@@ -10,7 +10,10 @@ import {
   type AuthRoutesDependencies,
 } from './auth/http.ts';
 import { createAuth } from './auth/instance.ts';
+import { createOwnerRecovery } from './auth/owner-recovery.ts';
 import { createPrincipalRepository } from './auth/principal.ts';
+import { registerRecoveryRoutes, type RecoveryBackend } from './auth/recovery-http.ts';
+import { createSecurityAudit } from './auth/security-audit.ts';
 import { createTotpReplayGuard } from './auth/totp-replay.ts';
 import { loadRuntimeConfig, type RuntimeConfig } from './config/runtime.ts';
 import { checkDatabase, createPool } from './db.ts';
@@ -32,6 +35,42 @@ export interface BuildServerOptions {
  * method, URL, host, and socket address of a request, never its headers or
  * body; these paths keep that true if a log call ever adds headers.
  */
+/**
+ * The Better Auth server API calls Owner recovery needs (DEC-436). The
+ * runtime options are typed as plain `BetterAuthOptions`, so the two-factor
+ * plugin's endpoints are not visible on `auth.api` to the type system; their
+ * presence is checked at startup instead, and a missing one refuses to build.
+ */
+interface RecoveryServerApi {
+  revokeSessions(input: { headers: Headers; asResponse: true }): Promise<Response>;
+  revokeOtherSessions(input: { headers: Headers; asResponse: true }): Promise<Response>;
+  disableTwoFactor(input: { headers: Headers; body: { password: string }; asResponse: true }): Promise<Response>;
+  enableTwoFactor(input: {
+    headers: Headers;
+    body: { password: string; method: 'totp' };
+    asResponse: true;
+  }): Promise<Response>;
+  viewBackupCodes(input: { body: { userId: string } }): Promise<{ backupCodes: string[] }>;
+}
+
+function recoveryBackendOf(api: unknown): RecoveryBackend {
+  const recoveryApi = api as RecoveryServerApi;
+  for (const name of ['revokeSessions', 'revokeOtherSessions', 'disableTwoFactor', 'enableTwoFactor', 'viewBackupCodes'] as const) {
+    if (typeof (recoveryApi as unknown as Record<string, unknown>)[name] !== 'function') {
+      throw new Error('The configured authentication system lacks the Owner recovery API.');
+    }
+  }
+  return {
+    revokeSessions: (headers) => recoveryApi.revokeSessions({ headers, asResponse: true }),
+    revokeOtherSessions: (headers) => recoveryApi.revokeOtherSessions({ headers, asResponse: true }),
+    disableTwoFactor: (headers, password) =>
+      recoveryApi.disableTwoFactor({ headers, body: { password }, asResponse: true }),
+    enableTwoFactor: (headers, password) =>
+      recoveryApi.enableTwoFactor({ headers, body: { password, method: 'totp' }, asResponse: true }),
+    viewRecoveryCodes: async (userId) => (await recoveryApi.viewBackupCodes({ body: { userId } })).backupCodes,
+  };
+}
+
 const LOG_REDACTIONS = [
   'req.headers.cookie',
   'req.headers.authorization',
@@ -70,6 +109,16 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
     throw cause;
   }
 
+  let recoveryBackend: RecoveryBackend;
+  try {
+    recoveryBackend = recoveryBackendOf(auth.api);
+  } catch (cause) {
+    await pool.end().catch(() => undefined);
+    throw cause;
+  }
+  const audit = createSecurityAudit(pool);
+  const recovery = createOwnerRecovery(pool, audit);
+
   const authDependencies: AuthRoutesDependencies = {
     backend: {
       handle: (request) => auth.handler(request),
@@ -78,6 +127,7 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
     },
     principals: createPrincipalRepository(pool),
     replay: createTotpReplayGuard(pool),
+    recoverySessions: recovery,
     cookies: authCookieNames(auth.options),
     // Already validated and normalised by createAuth, which would have thrown.
     baseURL: new URL(options.auth.baseURL).origin,
@@ -114,6 +164,9 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
     }
   });
 
+  // Owner recovery (DEC-436). Registered before the authentication routes so
+  // its sign-out hooks are in place for them.
+  registerRecoveryRoutes(app, { ...authDependencies, recovery, audit, recoveryBackend });
   registerAuthRoutes(app, authDependencies);
 
   app.addHook('onClose', async () => {

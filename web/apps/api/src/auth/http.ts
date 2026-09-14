@@ -43,10 +43,21 @@ export interface AuthBackend {
   signOut(headers: Headers): Promise<Response>;
 }
 
+/**
+ * The ordinary gate's view of Owner recovery (DEC-436): whether a Better Auth
+ * session was ever bound to a recovery. Such a session never becomes an
+ * ordinary session, whatever else is true of it. Throws on any failure.
+ */
+export interface RecoverySessionGate {
+  isRecoverySession(sessionId: string): Promise<boolean>;
+}
+
 export interface AuthRoutesDependencies {
   backend: AuthBackend;
   principals: PrincipalRepository;
   replay: TotpReplayGuard;
+  /** Denies every session ever bound to an Owner recovery. */
+  recoverySessions: RecoverySessionGate;
   cookies: AuthCookieNames;
   /** Canonical origin used to build the internal request URL. */
   baseURL: string;
@@ -62,6 +73,14 @@ export interface AuthenticatedIdentity {
 declare module 'fastify' {
   interface FastifyRequest {
     dromexIdentity: AuthenticatedIdentity | null;
+  }
+  interface FastifyContextConfig {
+    /**
+     * Required on every `recovery` route (DEC-436): the route's own recovery
+     * gate. The authentication guard runs it and refuses the request unless
+     * it resolves to exactly `true`; a recovery route without one is refused.
+     */
+    recoveryGate?: (request: FastifyRequest) => Promise<boolean>;
   }
 }
 
@@ -130,6 +149,9 @@ function assertDependencies(deps: AuthRoutesDependencies | undefined): asserts d
   }
   if (typeof deps.replay?.record !== 'function') {
     throw new Error('Authentication requires a TOTP replay guard.');
+  }
+  if (typeof deps.recoverySessions?.isRecoverySession !== 'function') {
+    throw new Error('Authentication requires a recovery-session gate.');
   }
   if (!deps.cookies?.sessionToken || !deps.cookies.twoFactor || !deps.cookies.trustDevice) {
     throw new Error('Authentication requires the authentication cookie names.');
@@ -274,7 +296,9 @@ async function revokeSession(deps: AuthRoutesDependencies, sessionPair: string):
 // Sessions and the mandatory MFA gate
 // ---------------------------------------------------------------------------
 
-interface SessionView {
+export interface SessionView {
+  /** Better Auth's internal session identifier, never the session token. */
+  sessionId: string;
   user: AuthenticatedIdentity['user'];
   twoFactorEnabled: boolean;
   createdAt: Date | null;
@@ -291,10 +315,14 @@ function readSession(body: unknown): SessionView | null {
     return null;
   }
 
-  const rawCreatedAt = (session as Record<string, unknown>).createdAt;
+  const { id: sessionId, createdAt: rawCreatedAt } = session as Record<string, unknown>;
+  // Without Better Auth's own session identifier no recovery binding can be
+  // checked (DEC-436), so the session is not admitted.
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return null;
   const createdAt = typeof rawCreatedAt === 'string' ? new Date(rawCreatedAt) : null;
 
   return {
+    sessionId,
     user: { id, name, email },
     // Only a literal boolean true counts. Anything else is not MFA.
     twoFactorEnabled: twoFactorEnabled === true,
@@ -319,6 +347,9 @@ async function gateIdentity(view: SessionView, deps: AuthRoutesDependencies): Pr
   if (!view.twoFactorEnabled) return null;
   if (!(principal.mfaCompletedAt instanceof Date)) return null;
   if (view.createdAt === null || view.createdAt.getTime() < principal.mfaCompletedAt.getTime()) return null;
+  // DEC-436: a session ever bound to an Owner recovery never becomes an
+  // ordinary session, even after MFA is complete again.
+  if (await deps.recoverySessions.isRecoverySession(view.sessionId)) return null;
 
   return { user: view.user, principal };
 }
@@ -386,6 +417,19 @@ export function registerAuthenticationGuard(app: FastifyInstance, deps: AuthRout
 
     // Cleanup and challenge routes enforce their own Origin and state checks.
     if (access === 'public' || access === 'session-cleanup' || access === 'mfa-challenge') return;
+
+    // Recovery routes carry their own gate (DEC-436). The guard runs it and
+    // refuses a recovery route that has none, or whose gate does not admit.
+    if (access === 'recovery') {
+      const gate = request.routeOptions.config?.recoveryGate;
+      if (typeof gate !== 'function') return reply.code(401).send(UNAUTHORIZED);
+      try {
+        if ((await gate(request)) === true) return;
+      } catch (error) {
+        request.log.warn({ errorName: errorName(error) }, 'recovery gate failed');
+      }
+      return reply.code(401).send(UNAUTHORIZED);
+    }
 
     if (access === 'guest-only') {
       try {
@@ -596,3 +640,26 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDepende
   // nothing about which authentication endpoints exist.
   app.setNotFoundHandler((_request, reply) => reply.code(404).send(NOT_FOUND));
 }
+
+/** Transport pieces shared with the Owner recovery routes (DEC-436). */
+export {
+  AUTH_BODY_LIMIT,
+  FORBIDDEN,
+  INTERNAL_ERROR,
+  INVALID_CODE,
+  UNAUTHORIZED,
+  backendRequest,
+  cookiePair,
+  errorCode,
+  errorName,
+  expiredCookie,
+  hasTrustedOrigin,
+  isExpiring,
+  readSession,
+  readTotpCode,
+  requestCookie,
+  revokeSession,
+  sendTooManyRequests,
+  setCookiesNamed,
+  toBackendHeaders,
+};

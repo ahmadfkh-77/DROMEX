@@ -17,7 +17,7 @@ const BETTER_AUTH_MIGRATION = fileURLToPath(
 );
 
 const BETTER_AUTH_TABLES = ['user', 'session', 'account', 'verification', 'rateLimit'];
-const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004'];
+const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006'];
 
 describe('DROMEX migration mechanism', () => {
   let database: EphemeralDatabase;
@@ -487,10 +487,13 @@ describe('DROMEX migration mechanism', () => {
     // Only the DROMEX-owned objects are added.
     const dromexTables = tables.filter((name) => name.startsWith('dromex_')).sort();
     expect(dromexTables).toEqual([
+      'dromex_audit_event',
       'dromex_migration',
       'dromex_owner_bootstrap',
+      'dromex_owner_recovery',
       'dromex_principal',
       'dromex_rate_limit',
+      'dromex_recovery_session',
       'dromex_totp_replay',
     ]);
 

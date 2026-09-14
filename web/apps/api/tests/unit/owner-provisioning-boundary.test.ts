@@ -89,6 +89,17 @@ describe('Owner provisioning isolation from the running server', () => {
     }
   });
 
+  it('leaves every Better Auth-owned table to Better Auth: no API source module writes one with its own SQL (DEC-431)', async () => {
+    const write =
+      /\b(insert\s+into|update|delete\s+from|truncate|alter\s+table|drop\s+table|copy)\s+"?(user|account|session|verification|rateLimit|twoFactor)"?(\s|$|\(|;)/i;
+    const files = await sourceFiles(SRC);
+    expect(files.some((file) => file.endsWith('owner-recovery.ts'))).toBe(true);
+
+    for (const file of files) {
+      expect(await readFile(file, 'utf8'), file).not.toMatch(write);
+    }
+  });
+
   it('leaves every twoFactor write to Better Auth: no API source module writes that table with its own SQL', async () => {
     // The generated table has no database defaults, so a row written outside
     // Better Auth's adapter could carry a NULL counter that never locks.
@@ -144,6 +155,9 @@ describe('Owner provisioning isolation from the running server', () => {
         ['HEAD /api/session', 'authenticated'],
         ['HEAD /health', 'public'],
         ['HEAD /ready', 'public'],
+        ['POST /api/auth/recovery/authenticator/start', 'recovery'],
+        ['POST /api/auth/recovery/authenticator/verify', 'recovery'],
+        ['POST /api/auth/recovery/verify-code', 'mfa-challenge'],
         ['POST /api/auth/sign-in/email', 'guest-only'],
         ['POST /api/auth/sign-out', 'session-cleanup'],
         ['POST /api/auth/two-factor/verify-totp', 'mfa-challenge'],

@@ -118,12 +118,13 @@ describe('authentication configuration', () => {
       );
     });
 
-    it('limits password sign-in and TOTP verification to 5 attempts per 60 seconds', () => {
+    it('limits password sign-in, TOTP verification, and recovery-code verification to 5 attempts per 60 seconds', () => {
       const rules = createAuthOptions(baseInput()).rateLimit?.customRules;
 
       expect(rules).toEqual({
         '/sign-in/email': { window: 60, max: 5 },
         '/two-factor/verify-totp': { window: 60, max: 5 },
+        '/two-factor/verify-backup-code': { window: 60, max: 5 },
       });
     });
   });
