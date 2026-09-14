@@ -291,26 +291,41 @@ repository, and the npm registry), 2026-09-11
     lock makes the concurrency test fail.
 - **Two-factor plugin (`twoFactor`)**: TOTP enrolment returns `{ method,
   totpURI, backupCodes }`; verification accepts one period before and after
-  the current code. `skipVerificationOnEnable` defaults to `false`.
-  `trustDevice`, when used, trusts a device for 30 days.
-- **Backup codes**: `backupCodeOptions` defaults to `amount: 10`,
-  `length: 10`. **`storeBackupCodes` defaults to `"plain"`** — codes are
-  stored **unhashed** in the database unless explicitly configured to
-  `"encrypted"`. The documentation states this option accepts `"plain"`,
-  `"encrypted"`, or a custom encryptor function — **all three are
-  reversible encryption or no encryption at all; none is a one-way hash.**
-  `customBackupCodesGenerate` was checked separately and controls only how
-  codes are *generated*, not how they are *stored* or *verified*. The
-  `verify-backup-code` endpoint accepts a plain code string, implying an
-  exact-match (or decrypt-and-compare) lookup rather than a hash
-  comparison. **Conclusion, checked directly against the current official
-  documentation: one-way hashed storage of backup codes is not a
-  documented or supported option in Better Auth, in any configuration.**
-  This is recorded as a limitation of the library, not worked around by
-  DROMEX — see DEC-423 and §14 for what closes the resulting gap instead.
-  `generateBackupCodes()` deletes the previous set and issues a new one.
-  `viewBackupCodes()` is server-side and documented as requiring a fresh
-  session. A used code is removed from the database and cannot be reused.
+  the current code — about 90 seconds in all, with no replay protection of
+  its own. `skipVerificationOnEnable` defaults to `false`. `trustDevice`,
+  when used, trusts a device for 30 days, and **1.7.4 has no option that
+  disables it**. *Corrected 2026-09-14 against the installed 1.7.4 source.*
+- **Backup codes** *(corrected 2026-09-14 against the installed 1.7.4
+  source)*: `backupCodeOptions` defaults to `amount: 10`, `length: 10`
+  (10 characters from 62 symbols, about 59.5 bits). **`storeBackupCodes`
+  defaults to `"encrypted"` in 1.7.4**, not `"plain"` as this section
+  previously stated; it accepts `"plain"`, `"encrypted"`, or a custom
+  `{ encrypt, decrypt }` pair, which encrypts the whole code list as one
+  blob. **All three are reversible; none is a one-way hash**, and
+  verification decrypts the list and compares the submitted code by exact
+  string match. `customBackupCodesGenerate` controls only generation.
+  **One-way hashed storage of backup codes is not supported in any
+  configuration.** `generateBackupCodes()` overwrites the previous set. A
+  used code is removed under a compare-and-swap and cannot be reused.
+  **`viewBackupCodes()` is server-only** — created with
+  `createAuthEndpoint.serverOnly`, which the router never mounts — and in
+  the installed source it **enforces no session, freshness, or password
+  check**: it takes a bare `userId`. The official documentation calls it
+  server-only yet also lists an HTTP path and advises a fresh session; the
+  source is authoritative. DROMEX's hardened configuration is recorded in
+  DEC-435.
+- **Schema versus documentation** *(verified 2026-09-14)*: the generated
+  `twoFactor` table has **no `createdAt`** although the documentation lists
+  one; `userId` is indexed but **not unique**; and the encrypted `secret`
+  column is indexed. The plugin schema declares `verified` defaulting to
+  `true` and `failedVerificationCount` to `0`, but **the generated PostgreSQL
+  columns carry no default for either**: Better Auth's adapter supplies both
+  at runtime (verified 2026-09-14; see checkpoint 3F-B in §11).
+- **Ambient secret override** *(verified 2026-09-14)*: when `secrets` is not
+  set explicitly, Better Auth reads `BETTER_AUTH_SECRETS` from the process
+  environment on its own, and `BETTER_AUTH_SECRET` or `AUTH_SECRET` as a
+  legacy fallback. DROMEX sets `secrets` explicitly and refuses to start if
+  any of the three is present (DEC-434).
 - **Mandatory MFA is not a built-in policy.** The documentation states only
   that "2FA sign-in enforcement applies to the credential-based sign-in
   endpoints"; other methods need custom hooks. Enforcing MFA for every
@@ -357,20 +372,33 @@ repository, and the npm registry), 2026-09-11
   only for APIs that don't support cookies" and that "improper
   implementation could easily lead to security vulnerabilities," without
   elaborating on the specific XSS/CSRF trade-off.
-- **Security advisories**: 10 published on the repository's advisories page,
-  including one Critical (`GHSA-rjg6-39jm-rgg4`, account takeover via SCIM
-  provider-id collision) and several High (including
-  `GHSA-qq9h-g4jm-xgf3`, account takeover via magic-link/email-OTP
-  hijacking). **Every published advisory found sits in SSO, SCIM,
-  OIDC-provider, Stripe, magic-link, or email-OTP** — features this design
-  does not enable. **This is time-bounded evidence of where past
-  vulnerabilities were found, not a guarantee about the code this design
-  does use.** Not enabling those features removes them as an attack
-  surface; it does not and cannot prove the enabled password-plus-TOTP
-  core is free of undiscovered issues. Ongoing version upgrades (DEC-431),
-  the testing strategy in §19, and advisory monitoring remain required
-  regardless. The repository states it supports only the latest version;
-  there are no backported patches.
+- **Security advisories** *(corrected 2026-09-14)*: **32 are published**
+  across four pages of the repository's advisories page, not the 10 first
+  recorded here; the newest verified on 2026-09-14 is dated 2026-08-11. The
+  earlier statement that every advisory sits in SSO, SCIM, OIDC-provider,
+  Stripe, magic-link, or email-OTP was **false**. Advisories in areas this
+  design does use include:
+  - `GHSA-xg6x-h9c9-2m83` (High): two-factor authentication bypass through
+    premature session caching, when both 2FA and `session.cookieCache` are
+    enabled; affected 1.4.5, **fixed in 1.4.9**. DROMEX disables the cookie
+    cache (DEC-420).
+  - `GHSA-vp58-j275-797x` (High): bypass of `trustedOrigins` protection
+    leading to account takeover (2025-02-24).
+  - `GHSA-x732-6j76-qmhm` (High): double-slash path normalisation bypassing
+    `disabledPaths` and rate limits; **fixed in 1.4.6**.
+  - `GHSA-p6v2-xcpg-h6xw` (High): rate limiter keying IPv6 addresses
+    individually, bypassable by prefix rotation; **fixed in 1.4.17**.
+  - `GHSA-2vg6-77g8-24mp` (Low): stale sessions after user deletion with
+    secondary storage; **fixed in 1.6.11**.
+
+  **Better Auth 1.7.4 is not affected by any of them.** Others concern
+  SSO, SCIM, OIDC-provider, OAuth, Stripe, magic-link, email-OTP, passkeys,
+  API keys, organization invitations, multi-session, open redirects, and
+  reflected XSS. This remains time-bounded evidence, not a guarantee about
+  the code DROMEX uses. Ongoing version upgrades (DEC-431), the testing
+  strategy in §19, and advisory monitoring remain required. The repository
+  states it supports only the latest version; there are no backported
+  patches.
 - **Not stated in official documentation, checked directly and confirmed
   absent**: whether one account can hold more than one enrolled TOTP
   authenticator at a time; an automatic low-backup-code warning; a
@@ -386,22 +414,34 @@ enforcement, required by the decisions cited inline below and recorded in
   acceptable but not OWASP's first choice.
 - Disabling `session.cookieCache` entirely (DEC-420), because its documented
   behaviour is incompatible with immediate revocation.
-- Disabling `trustDevice` (DEC-421), because a 30-day MFA bypass contradicts
-  mandatory MFA.
+- Neutralising `trustDevice` (DEC-421, DEC-434), because a 30-day MFA bypass
+  contradicts mandatory MFA and 1.7.4 cannot switch it off: DROMEX forces
+  `trustDevice: false`, drops any incoming trusted-device cookie, never
+  forwards one, and pins its lifetime to one second.
 - Enforcing mandatory MFA for every account at a single authorization gate
-  that rejects any authenticated request from a user without an enrolled
-  TOTP, allowing only the enrolment endpoints (DEC-421).
+  (DEC-421, DEC-434): Better Auth session, active principal,
+  `twoFactorEnabled`, `mfa_completed_at`, and a session no older than MFA
+  completion must all agree. There are no web enrolment endpoints; the
+  Owner enrols in the terminal.
+- Recording every accepted TOTP code in `dromex_totp_replay` (DEC-434),
+  because Better Auth accepts a code repeatedly within its window.
+- Explicit versioned `secrets`, refusing ambient Better Auth secret
+  variables (DEC-434).
 - Enabling no feature DROMEX does not need — no SSO, SCIM, OIDC-provider,
   Stripe, magic-link, or email-OTP (DEC-422). Every published advisory
   found lives in those, so not enabling them is a deliberate reduction of
   attack surface — **it reduces exposure to known past issues; it is not
   proof that the remaining, enabled surface is safe.**
-- Configuring `storeBackupCodes: "encrypted"` rather than accepting the
-  default `"plain"` (DEC-423) — the strongest built-in option available,
-  **explicitly still reversible encryption, not a one-way hash, which
-  Better Auth does not support for backup codes in any configuration** —
-  paired with the Owner-specific emergency-recovery design in §14, because
-  Better Auth's own protection for backup codes stops there.
+- Pinning `storeBackupCodes: "encrypted"` explicitly (DEC-423, DEC-435) —
+  1.7.4's default is already `"encrypted"`, and it is pinned so a future
+  default change cannot silently weaken it — and replacing the 59.5-bit
+  default codes with 10 generated 24-symbol Crockford Base32 codes of
+  exactly 120 bits each. This is **explicitly still reversible encryption,
+  not a one-way hash**, which Better Auth does not support for backup codes
+  in any configuration: an **accepted deviation from NIST SP 800-63B Rev. 4
+  §3.1.2.2** (DEC-435). At 120 bits the codes are outside ASVS 5.0.0 6.5.2,
+  which requires hashing only below 112 bits. The Owner-specific recovery
+  design in §14 closes what storage alone cannot.
 - Every part of authorization: role templates, per-user overrides, project
   scope, effective-permission computation, the business audit trail, and
   invitation onboarding (§6 through §11) — Better Auth provides none of
@@ -629,6 +669,10 @@ Status: **implemented and verified against disposable PostgreSQL 18.6
 databases; not production-ready.** MFA, Owner bootstrap, permissions, account
 management, and the frontend are not implemented.
 
+*Superseded in part by checkpoint 3F-B, below: mandatory TOTP MFA is now
+enforced, a fourth route exists, and a correct password alone no longer
+yields a session. This section remains the record of the 3D transport.*
+
 **Exact route surface.** Three authentication routes exist, and nothing else:
 
 | Method | Path | Classification |
@@ -722,6 +766,10 @@ until mandatory MFA and recovery are implemented and separately approved
 (DEC-421, DEC-423). Owner readiness enforcement — refusing an initialised
 system that has no Owner, and refusing removal or demotion of the Owner —
 remains **unimplemented**.
+
+*Extended by checkpoint 3F-B, below: the workflow now enrols and verifies
+TOTP, issues recovery codes, requires typed acknowledgements, and records
+`mfa_completed_at`. The command is unchanged and still refuses every run.*
 
 **A local, interactive command; never HTTP.** The Owner is created only by
 `apps/api/src/provisioning/owner-command.ts`, run by a person at a terminal.
@@ -864,6 +912,175 @@ source `better-auth@1.7.4` (`dist/api/routes/sign-up.mjs`, `sign-in.mjs`,
 (`dist/context/transaction.mjs`), and `@better-auth/kysely-adapter@1.7.4`
 (`dist/index.mjs`).
 
+### Mandatory MFA and terminal Owner activation (Phase 2C checkpoint 3F-B, disposable databases only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases on exact Node 24.20.0 only. Not production-ready and not approved
+for real use.** The Owner command is unchanged and still refuses every run
+(DEC-435 (6)); no Owner exists. Recovery-code *use* (checkpoint 3F-C),
+break-glass retrieval (3F-D), and password recovery (OQ-161) are not
+implemented. Governing decisions: DEC-434 and DEC-435.
+
+**Exact route surface.** Four authentication routes exist, superseding the
+three-route table of checkpoint 3D:
+
+| Method | Path | Classification |
+|---|---|---|
+| `POST` | `/api/auth/sign-in/email` | `guest-only` |
+| `POST` | `/api/auth/two-factor/verify-totp` | `mfa-challenge` |
+| `POST` | `/api/auth/sign-out` | `session-cleanup` |
+| `GET` | `/api/session` | `authenticated` |
+
+`mfa-challenge` is a fifth route classification: the route consults no
+ordinary session, and must itself require the signed challenge cookie and a
+trusted Origin and refuse to return a session unless the full gate passes.
+Every other Better Auth two-factor path — enable, disable, get-TOTP-URI,
+verify-backup-code, generate-backup-codes, view-backup-codes, send-OTP,
+verify-OTP — and `revoke-sessions` answer the generic 404 without reaching
+Better Auth.
+
+**Two-step sign-in.** For an account with a verified factor, a correct
+password returns `200 { "mfaRequired": true }` and only Better Auth's signed
+challenge cookie (`__Secure-better-auth.two_factor`, `HttpOnly`,
+`SameSite=Lax`, `Max-Age=300`). If Better Auth issues a session instead —
+which it does for an account with no verified factor — the transport revokes
+that session and answers exactly as for a wrong password. The verify route
+requires an exact trusted Origin, a body of exactly `{ "code": "<six
+digits>" }`, and the challenge cookie; it forwards only that cookie, with
+`trustDevice: false`. Before any session reaches the browser, the accepted
+code is recorded against replay and the full gate below runs; a refusal
+revokes the new session and returns `401 { "error": "invalid_code" }`.
+
+**The mandatory MFA gate** runs on every `authenticated` request and at the
+end of every challenge. All five facts are read from the database each time:
+a valid Better Auth session; an active DROMEX principal; Better Auth
+reporting `twoFactorEnabled === true`; a non-null
+`dromex_principal.mfa_completed_at` (DROMEX migration `0004`, no default and
+no backfill); and a session created at or after that moment. Any
+disagreement is the generic `401`.
+
+**No trusted-device bypass.** Better Auth 1.7.4 cannot disable trusted
+devices, so the transport drops any incoming trusted-device cookie, never
+forwards one, always sends `trustDevice: false`, and the plugin's lifetime
+is pinned to one second. A test mints a genuine trusted-device cookie through
+Better Auth's own API, proves it skips TOTP when sent straight to Better
+Auth, and proves the transport still demands the challenge.
+
+**Attempt limits.** `/two-factor/verify-totp` is limited to 5 requests per
+60 seconds per client address in DROMEX-owned storage; Better Auth allows 5
+attempts per challenge; and its account lockout is pinned to 10 consecutive
+failures for 900 seconds, across challenges and addresses. Both limits
+surface as `429 { "error": "too_many_requests" }`.
+
+**Replay protection.** `dromex_totp_replay` (DROMEX migration `0004`) holds
+one row per accepted code per user for 180 seconds, keyed on a SHA-256 marker
+of a fixed label, the user id, and the code — a recognition marker, not
+secret storage, since six digits are enumerable. The primary key makes
+concurrent acceptance of one code impossible, and markers past retention are
+pruned when a code is accepted. It does **not** shorten Better Auth's
+acceptance window of about 90 seconds: an accepted deviation from ASVS 5.0.0
+6.5.5 (DEC-434 (6)).
+
+**Versioned secrets.** `DROMEX_AUTH_SECRETS` holds comma-separated
+`<version>:<secret>` entries. `createAuthOptions` always sets Better Auth's
+`secrets` explicitly, newest version first, and never sets `secret`. Startup
+refuses the retired `DROMEX_AUTH_SECRET` and any of `BETTER_AUTH_SECRETS`,
+`BETTER_AUTH_SECRET`, or `AUTH_SECRET`, which Better Auth would otherwise
+read from the environment itself. New TOTP secrets and recovery codes carry
+the newest version in their `$ba$<version>$` envelope, and data encrypted
+under an older configured version still decrypts.
+
+**Recovery codes.** Ten codes of 24 Crockford Base32 symbols (exactly 120
+bits each) are generated through `customBackupCodesGenerate` and stored
+through `storeBackupCodes: "encrypted"` — reversible encryption, an accepted
+deviation from NIST SP 800-63B Rev. 4 §3.1.2.2 (DEC-435 (2)). No HTTP route
+accepts, shows, or regenerates them in this checkpoint.
+
+**Terminal activation** (`owner-provisioning.ts`, `terminal-prompt.ts`)
+extends checkpoint 3E's workflow after Better Auth proves the password:
+
+1. *No verified factor yet:* TOTP is enabled, which replaces any unverified
+   secret and code set left by an interrupted run. The terminal shows the
+   Base32 secret grouped in fours and the `otpauth://` URI, with a scrollback
+   warning and an instruction to enrol **two** authenticator devices.
+2. *Factor already verified by an interrupted run:* the Owner must pass a
+   TOTP challenge, and the recovery codes are regenerated so that no code an
+   interrupted run displayed stays valid.
+3. At most five TOTP attempts per run; a lockout stops the run.
+4. The operator types `TWO DEVICES ENROLLED`; only then are the ten codes
+   shown, once; the operator types `CODES RECORDED`; the screen is cleared.
+5. Every provisioning session is revoked, then the DROMEX transaction inserts
+   the Owner principal with `mfa_completed_at`.
+
+An interruption at any step leaves no principal, so the runtime session hook
+refuses every web session for that identity. The command is **not** wired to
+this service, by design, until real activation is separately approved.
+
+**Better Auth's `twoFactor` defaults are runtime defaults, not database
+defaults** *(verified 2026-09-14 against the installed source and the
+generated migration)*. The pinned `auth@1.7.4` CLI generated `verified` and
+`failedVerificationCount` as nullable columns with **no PostgreSQL default**.
+Better Auth migration `0002` is committed exactly as generated — a test pins
+its SHA-256 — and DROMEX adds no default, constraint, or trigger to the table,
+because Better Auth owns its tables and their migrations (DEC-431).
+
+The authoritative values are Better Auth's own. Its plugin schema declares
+`verified` defaulting to `true` and `failedVerificationCount` to `0`, both
+with `input: false`; its adapter factory applies those values to every row it
+inserts; and enrolment writes `verified: false` explicitly. That is
+sufficient because Better Auth's adapter is the **only writer** of the table:
+no DROMEX source module writes `twoFactor` with its own SQL (asserted
+statically), and every supported flow — enrolment, re-enrolment, sign-in
+failure, success, lockout, lock expiry, recovery-code regeneration and
+retrieval, and every Owner activation path including interruption and
+resumption — is asserted to leave both columns non-null.
+
+The invariant is security-relevant. The pinned Kysely adapter increments the
+counter as `"failedVerificationCount" + 1`. On PostgreSQL a NULL counter stays
+NULL, the plugin reads it as 0, and the ten-failure lockout **never
+triggers** — even though Better Auth's own source comment says the unguarded
+increment still applies to a null counter. A negative-control test
+demonstrates this on a deliberately corrupted row in a disposable database.
+Consequences:
+
+- Any future break-glass or repair tooling (checkpoint 3F-D) must never
+  insert or rewrite a `twoFactor` row outside Better Auth's API.
+- Every Better Auth upgrade must re-run these tests, because both the
+  declared defaults and the increment behaviour belong to the library.
+- The protection is an enforced invariant, not a database constraint.
+
+**Mutation testing.** 25 targeted mutations, one against each
+security-relevant line described above, were each applied alone to a
+disposable copy of the sources and required to make at least one test fail;
+**25 of 25 were killed**, with sources restored and confirmed unchanged
+after every mutation (`docs/web/testing-and-production-readiness.md`
+records the full result). One genuine gap surfaced during the first pass: a
+mutation making Owner activation request `trustDevice: true` while resuming
+through a TOTP challenge survived, because `owner-identity.ts` discards
+Better Auth's trusted-device cookie and no test inspected the database for
+one. The fix was an added invariant — the Owner activation suite now asserts
+after every test, not only the ones that exercise the challenge-resume path,
+that Better Auth's `verification` table holds no `trust-device-*` row —
+rather than any change to production code, which was already correct.
+
+**Known limits, not yet addressed:**
+
+- The ASVS 6.5.5 and NIST SP 800-63B §3.1.2.2 deviations above.
+- Better Auth's server-only `viewBackupCodes` enforces no session check; it
+  is not mounted on any route and no DROMEX code calls it yet.
+- `dromex_rate_limit` rows are still never pruned.
+- Timing equivalence of failures is not measured, and cookie attributes are
+  verified through Fastify injection rather than a real browser.
+- A lost provisioning lock connection during a Better Auth call (checkpoint
+  3E) remains untested.
+
+Sources, inspected 2026-09-14: installed `better-auth@1.7.4`
+(`dist/plugins/two-factor/index.mjs`, `schema.mjs`, `totp/index.mjs`,
+`backup-codes/index.mjs`, `verify-two-factor.mjs`),
+`@better-auth/core@1.7.4` (`dist/db/adapter/factory.mjs`, `utils.mjs`),
+`@better-auth/kysely-adapter@1.7.4` (`dist/index.mjs`, `incrementOne`), and
+the output of `auth@1.7.4 generate` against a disposable database.
+
 ## 12. PostgreSQL security and the row-level-security decision
 
 **Row-level security will not be used in the first release (DEC-429).**
@@ -962,30 +1179,33 @@ phase; *running* it against production is an Owner action.
 
 ### What is verified capability (§5) versus what DROMEX must build
 
-Better Auth's `twoFactor` plugin generates 10 single-use backup codes at
-enrolment, deletes and reissues them on regeneration, and requires a fresh
-session to view them — all verified. It does **not** provide: hashed
-storage of those codes (the default is plaintext; the strongest built-in
-option is reversible encryption in every configuration, including a custom
-encryptor — never a one-way hash, confirmed by checking the documented
-`storeBackupCodes` values directly, since no `"hashed"` value or hash-based
-verification path exists), any admin-side function to reset another user's
-TOTP enrolment, or any concept of a protected super-admin role. Those gaps
-are exactly what the Owner recovery design has to close, because the Owner
-has no one above them to perform an admin-side reset.
+Better Auth's `twoFactor` plugin generates single-use backup codes at
+enrolment and overwrites them on regeneration — verified. *Corrected
+2026-09-14 against the installed 1.7.4 source:* storage **defaults to
+encrypted**, not plaintext, and the server-only `viewBackupCodes` API
+**enforces no session or freshness check** — it returns a user's unused
+codes for a bare user ID, so its authority is whatever authority the calling
+server code has. Better Auth does **not** provide: hashed storage of those
+codes (every configuration, including a custom encryptor, is reversible,
+and verification decrypts and compares), any admin-side function to reset
+another user's TOTP enrolment, or any concept of a protected super-admin
+role. Those gaps are what the Owner recovery design has to close, because
+the Owner has no one above them to perform an admin-side reset.
 
 ### The design
 
-1. **Recovery codes, stored outside the application.** At Owner setup, the
-   ten Better Auth backup codes are displayed once, with an explicit
-   acknowledgement step, and the Owner prints or writes them and stores
-   them in a sealed physical location outside any computer system — a
-   safe or an equivalent the Owner controls. `storeBackupCodes` is
-   configured to `"encrypted"` rather than the default `"plain"` (DEC-423).
-   This is recorded honestly as **encryption, not hashing** — reversible
-   with the Better Auth secret, which is a real limitation Better Auth
-   does not offer a way around, not a claim that it is equivalent to a
-   one-way hash. The design does not depend on the database copy for
+1. **Recovery codes, stored outside the application, with redundancy.** At
+   terminal Owner activation, ten recovery codes of 24 Crockford Base32
+   symbols (exactly 120 bits each) are displayed once, only after TOTP
+   verification and a typed acknowledgement, followed by a second typed
+   acknowledgement (DEC-435). The Owner enrols **two authenticator devices**
+   and keeps **two sealed paper copies** of the codes in **separate physical
+   locations**, outside any computer system. `storeBackupCodes` is pinned to
+   `"encrypted"` under versioned secrets. This is recorded honestly as
+   **encryption, not hashing** — reversible with the Better Auth secret, an
+   accepted deviation from NIST SP 800-63B Rev. 4 §3.1.2.2 that Better Auth
+   offers no way around, not a claim that it is equivalent to a one-way
+   hash. The design does not depend on the database copy for
    Owner recovery in any case, because a database compromise should not
    also be a recovery-path compromise: the codes' *authoritative* copy,
    for Owner-recovery purposes, is the sealed physical copy, never the
@@ -993,14 +1213,28 @@ has no one above them to perform an admin-side reset.
 
 2. **A documented, tested, narrowly scoped break-glass administrative
    procedure** — not ad hoc manual SQL run by hand at the moment of need —
-   for the case where the Owner has lost both the authenticator device and
-   the sealed codes. Because Better Auth provides no admin-side TOTP-reset
-   function and `twoFactor.disable()` requires an existing valid session
-   the Owner would not have, closing this gap requires direct
-   administrative action against the database. The production
-   implementation of that action must be a **version-controlled
-   administrative command or runbook**, reviewed and stored in this
-   repository like any other operational tooling, that:
+   for the case where the Owner has lost both authenticator devices and
+   both sealed copies of the codes.
+
+   *Refined 2026-09-14 (DEC-435), following read-only research Checkpoint
+   3F-A3.* The **primary** break-glass method is **supported retrieval, not
+   clearing MFA**: a version-controlled local command selects the single
+   Owner and calls Better Auth's documented, server-only `viewBackupCodes`
+   API to display **one unused recovery code**. The Owner then signs in
+   normally with password, challenge, and that code, and immediately
+   replaces the authenticator, which issues a new code set and invalidates
+   every code the database copy could reveal. MFA is never disabled, and
+   no Better Auth-owned row is written by DROMEX SQL. It works only while an
+   unused code exists and the secret version that encrypted it is still
+   configured. A **version-controlled direct database reset** of the
+   Owner's factor remains only an **unimplemented, conditional last
+   resort** for when retrieval cannot work, requiring **separate explicit
+   Owner approval** as an exception to the rule against mutating Better
+   Auth-owned rows; where a property below refers to clearing MFA, it
+   applies only to that fallback. Neither is implemented; both belong to
+   Checkpoint 3F-D. The production implementation must be a
+   **version-controlled administrative command or runbook**, reviewed and
+   stored in this repository like any other operational tooling, that:
 
    - **targets exactly one protected Owner account** — it must not accept
      an arbitrary user ID as a parameter, or otherwise be usable against
@@ -1163,7 +1397,7 @@ replicate that pairing.
 | Screen | Design intent |
 |---|---|
 | Sign-in | Cream page, navy header, two fields, one orange action. Identical response and timing for a wrong password and a non-existent account. `autocomplete` set for password managers. No sign-up link. |
-| First-time Owner setup | One-time bootstrap: set password, enrol MFA, acknowledge and store recovery codes. Not skippable; the route no longer exists afterward. |
+| First-time Owner setup | **Not a web screen** (DEC-434, superseding the earlier web design). The Owner is activated only through the local terminal command: name, email, hidden password with confirmation; the TOTP secret for manual entry and the `otpauth://` URI, with a scrollback warning and an instruction to enrol **two** authenticator devices; at most five TOTP attempts; a typed acknowledgement of two devices and two sealed code copies; the ten recovery codes shown once; a second typed acknowledgement; then a screen clear. There is no setup route before, during, or after. |
 | Admin invitation | Owner creates the account and chooses a template; the invited user receives a single-use, short-lived link to set their own password. The Owner never sees or sets another person's password. |
 | MFA enrolment | QR code plus the secret as selectable text; a verification field proving the authenticator works before enrolment completes. |
 | MFA verification | One six-digit field, `autocomplete="one-time-code"`; a quiet secondary link to use a recovery code instead. |

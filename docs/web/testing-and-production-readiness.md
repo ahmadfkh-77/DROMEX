@@ -118,7 +118,8 @@ Not verified, and still required before production:
 - Expired `dromex_rate_limit` rows are not pruned yet; rows accumulate per
   distinct client address and path.
 - MFA, real Owner provisioning, frontend authentication, permissions,
-  deployment, and production readiness remain incomplete.
+  deployment, and production readiness remain incomplete. *(Mandatory MFA was
+  since added locally by checkpoint 3F-B, below; the rest still stands.)*
 
 ## Phase 2C Owner provisioning tooling: local verification
 
@@ -173,6 +174,101 @@ Not verified:
   deliberately not done before MFA.
 - Any run against a persistent database, which is prohibited.
 
+## Phase 2C mandatory MFA and terminal Owner activation: local verification
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases only, on exact Node 24.20.0.** This is not production verification
+and satisfies no item in the gate below. The Owner command still refuses
+every run, and no Owner exists (DEC-435).
+
+Proven locally, with synthetic identities in disposable databases:
+
+- Exactly four authentication routes exist. Every other Better Auth
+  two-factor path and `revoke-sessions` returns a generic 404 and changes no
+  data.
+- A correct password yields only `{ "mfaRequired": true }` and a `Secure`,
+  `HttpOnly`, `SameSite=Lax`, five-minute challenge cookie, with no session
+  row. Unknown email, wrong password, missing principal, disabled principal,
+  and an account without completed MFA are indistinguishable, and no
+  password-only session survives.
+- A valid code completes sign-in with a session cookie and no token or
+  trusted-device cookie. Wrong codes and codes two steps in the past or future
+  are refused. A replayed code is refused, and of concurrent submissions of
+  one code exactly one succeeds.
+- The sixth TOTP request per address within 60 seconds is refused with a
+  `Retry-After` from 1 to 60. Ten consecutive failures lock the account for
+  900 seconds, even against a correct code, and the test proves the refusal
+  is the lockout rather than either rate limit.
+- A challenge completed after the principal was disabled, or while DROMEX MFA
+  is incomplete, issues no session. `/api/session` rejects missing, malformed,
+  expired, revoked, orphaned, disabled, MFA-reset, older-than-MFA, and
+  factor-removed sessions with one identical response.
+- A genuine trusted-device cookie minted by Better Auth skips TOTP when sent
+  straight to Better Auth, and does not through the transport.
+- TOTP secrets and recovery codes are encrypted under the newest secret
+  version; an ambient `BETTER_AUTH_SECRETS` is ignored by the instance and,
+  with `BETTER_AUTH_SECRET`, `AUTH_SECRET`, and the retired
+  `DROMEX_AUTH_SECRET`, refused at startup; a factor enrolled under an older
+  version still verifies after rotation.
+- Recovery codes are ten distinct 24-symbol Crockford Base32 codes of 120
+  bits, shown once, only after TOTP verification and the typed device
+  acknowledgement, and identical to what Better Auth stores. Every resumed run
+  rotates them, so no code shown by an interrupted run stays valid.
+- Terminal activation allows at most five TOTP attempts per run. Refusing
+  either typed acknowledgement activates nothing. Interruption before or
+  after identity creation, after enabling TOTP, after verification, after
+  showing codes, during session revocation, and during the final DROMEX
+  transaction grants no web access and resumes cleanly. The activated Owner
+  signs in through the unchanged transport. The terminal echoes no code,
+  accepts each acknowledgement only as its exact phrase, clears the screen and
+  scrollback where honoured, and refuses a non-interactive terminal.
+- No scenario in the Owner activation suite — including a run resumed through
+  a TOTP challenge, the one path where a trusted-device request could take
+  effect — ever leaves a `trust-device-*` row in Better Auth's `verification`
+  table: an explicit invariant checked after every test in that suite, not
+  only the ones that exercise it, because `owner-identity.ts` discards
+  Better Auth's trusted-device cookie and would not otherwise surface one
+  being requested.
+- Better Auth migration `0002` matches the pinned CLI output byte for byte,
+  and neither `verified` nor `failedVerificationCount` has a database default.
+  Enrolment, re-enrolment, sign-in failure, success, lockout, lock expiry,
+  recovery-code regeneration and retrieval, and every activation scenario
+  leave both columns non-null, and no API source writes `twoFactor` with its
+  own SQL. A negative control shows that a NULL counter never locks on
+  PostgreSQL, which is why that invariant is enforced.
+- No password, TOTP code or secret, challenge, cookie, session token, or
+  recovery code appears in structured logs, console output, process output,
+  results, or errors.
+- The Android application's typecheck and test suites, and the web preview's
+  Playwright suite, still pass.
+
+**Mutation testing (25/25 killed).** Each of 25 targeted mutations against
+the mandatory-MFA gate, trusted-device refusal, TOTP replay protection, rate
+limiting and lockout, factor and recovery-code configuration, versioned
+secrets, terminal activation ordering and acknowledgements, and the
+Better-Auth-default invariant above was applied one at a time to a disposable
+copy of the sources, and every one made at least one of the suites above
+fail; production sources were restored after each mutation and confirmed
+byte-identical to the working tree afterward. Two findings from the first
+pass were corrected rather than accepted: a mutation that made Owner
+activation request `trustDevice: true` during a resumed TOTP challenge
+initially **survived**, because `owner-identity.ts` discards Better Auth's
+trusted-device cookie and nothing asserted on the resulting database state —
+closed by the invariant above, not by weakening the mutation or the
+production code; and a second mutation targeting `skipVerificationOnEnable`
+was initially **invalid** because its search pattern also matched the option
+name inside a doc comment — corrected to target the executable line only.
+Both were re-verified as killed, individually and in a full clean re-run of
+all 25.
+
+Not verified:
+
+- Timing equivalence of failures, and cookie behaviour in a real browser.
+- Recovery-code use (checkpoint 3F-C) and break-glass retrieval (3F-D).
+- The command wired end to end to the terminal and service, deliberately not
+  done before real activation is approved.
+- Any run against a persistent database, which is prohibited.
+
 ## Production-readiness gate
 
 The system is **not** production ready until every line below is verified with
@@ -182,7 +278,8 @@ evidence. Today, none of them are.
 - [ ] Authentication implemented: Better Auth configured per DEC-419 through
       DEC-422; Argon2id in place; session cookie cache confirmed disabled
 - [ ] Mandatory MFA enforced for every account with no exception, including the
-      Owner (DEC-421)
+      Owner (DEC-421) — implemented and verified locally against disposable
+      databases in checkpoint 3F-B (DEC-434); not production-verified
 - [ ] Owner break-glass recovery procedure built as version-controlled,
       tested tooling (never ad hoc manual queries), rehearsed only against
       a disposable/test database, confirmed to invalidate all Owner

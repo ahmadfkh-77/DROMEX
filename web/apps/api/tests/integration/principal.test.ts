@@ -10,14 +10,12 @@ import {
   requireActivePrincipal,
   type PrincipalRepository,
 } from '../../src/auth/principal.ts';
+import { loadDromexMigrations } from '../../src/db/dromex-migrations.ts';
 import { applyMigrations } from '../../src/db/migrator.ts';
 import { createEphemeralDatabase, type EphemeralDatabase } from '../helpers/db.ts';
 
 const BETTER_AUTH_MIGRATION = fileURLToPath(
   new URL('../../migrations/better-auth/0001_better_auth_init.sql', import.meta.url),
-);
-const DROMEX_MIGRATION = fileURLToPath(
-  new URL('../../migrations/dromex/0001_dromex_principal.sql', import.meta.url),
 );
 
 describe('principal lookup', () => {
@@ -30,9 +28,7 @@ describe('principal lookup', () => {
     pool = new Pool({ connectionString: database.uri });
 
     await pool.query(await readFile(BETTER_AUTH_MIGRATION, 'utf8'));
-    await applyMigrations(pool, [
-      { id: '0001', name: 'dromex_principal', sql: await readFile(DROMEX_MIGRATION, 'utf8') },
-    ]);
+    await applyMigrations(pool, await loadDromexMigrations());
 
     // Synthetic identities only; they vanish with the disposable database.
     await seedPrincipal(pool, 'synthetic_active', 'active', false);
@@ -48,14 +44,25 @@ describe('principal lookup', () => {
     await database?.drop().catch(() => undefined);
   });
 
-  it('finds an active principal', async () => {
-    const principal = await repository.findByUserId('synthetic_active');
-
-    expect(principal).toEqual({
+  it('finds an active principal whose MFA activation is incomplete', async () => {
+    await expect(repository.findByUserId('synthetic_active')).resolves.toEqual({
       userId: 'synthetic_active',
       status: 'active',
       isOwner: false,
+      mfaCompletedAt: null,
     });
+  });
+
+  it('reads MFA completion as an authoritative timestamp from the database', async () => {
+    await pool.query(
+      `UPDATE dromex_principal SET mfa_completed_at = '2026-09-13T09:00:00.123Z' WHERE user_id = $1`,
+      ['synthetic_owner'],
+    );
+
+    const principal = await repository.findByUserId('synthetic_owner');
+
+    expect(principal?.mfaCompletedAt).toBeInstanceOf(Date);
+    expect(principal?.mfaCompletedAt?.toISOString()).toBe('2026-09-13T09:00:00.123Z');
   });
 
   it('returns null for a user with no principal', async () => {
@@ -70,9 +77,7 @@ describe('principal lookup', () => {
   });
 
   it('reports a disabled principal as disabled rather than hiding it', async () => {
-    const principal = await repository.findByUserId('synthetic_disabled');
-
-    expect(principal?.status).toBe('disabled');
+    expect((await repository.findByUserId('synthetic_disabled'))?.status).toBe('disabled');
   });
 
   it('uses parameterised SQL, never interpolation', async () => {
@@ -80,91 +85,51 @@ describe('principal lookup', () => {
 
     await repository.findByUserId("bobby'; DROP TABLE dromex_principal; --");
 
-    // pool.query is overloaded (it also accepts a callback), so the recorded
-    // arguments are read through `unknown` rather than asserted into a shape
-    // the overload set does not actually guarantee.
-    const call = spy.mock.calls[0] as unknown as [string, unknown[]];
-    const [text, values] = call;
+    const [text, values] = spy.mock.calls[0] as unknown as [string, unknown[]];
     expect(text).toContain('$1');
     expect(text).not.toContain('bobby');
     expect(values).toEqual(["bobby'; DROP TABLE dromex_principal; --"]);
 
-    // The table is still there, which is the point.
-    const { rows } = await pool.query<{ count: string }>(
-      `SELECT count(*)::text AS count FROM dromex_principal`,
-    );
+    const { rows } = await pool.query<{ count: string }>(`SELECT count(*)::text AS count FROM dromex_principal`);
     expect(Number(rows[0]?.count)).toBe(3);
   });
 
   describe('requireActivePrincipal (fail closed)', () => {
     it('returns the principal when active', async () => {
-      const principal = await requireActivePrincipal(repository, 'synthetic_active');
-
-      expect(principal.userId).toBe('synthetic_active');
+      expect((await requireActivePrincipal(repository, 'synthetic_active')).userId).toBe('synthetic_active');
     });
 
-    it('denies a disabled principal', async () => {
-      await expect(
-        requireActivePrincipal(repository, 'synthetic_disabled'),
-      ).rejects.toBeInstanceOf(PrincipalAccessDeniedError);
-    });
+    it('denies disabled and missing principals identically', async () => {
+      const missing = await requireActivePrincipal(repository, 'synthetic_absent').catch((error: Error) => error);
+      const disabled = await requireActivePrincipal(repository, 'synthetic_disabled').catch((error: Error) => error);
 
-    it('denies a missing principal', async () => {
-      await expect(
-        requireActivePrincipal(repository, 'synthetic_absent'),
-      ).rejects.toBeInstanceOf(PrincipalAccessDeniedError);
-    });
-
-    it('denies missing and disabled identically, so neither can be probed', async () => {
-      // If the two cases produced different errors, an attacker could learn
-      // whether an account exists by reading the difference.
-      const missing = await requireActivePrincipal(repository, 'synthetic_absent').catch(
-        (error: Error) => error,
-      );
-      const disabled = await requireActivePrincipal(
-        repository,
-        'synthetic_disabled',
-      ).catch((error: Error) => error);
-
+      expect(missing).toBeInstanceOf(PrincipalAccessDeniedError);
+      expect(disabled).toBeInstanceOf(PrincipalAccessDeniedError);
       expect((missing as Error).message).toBe((disabled as Error).message);
-      expect((missing as Error).name).toBe((disabled as Error).name);
     });
 
     it('leaks no identity, credential, database, or SQL detail', async () => {
-      const error = (await requireActivePrincipal(
-        repository,
-        'synthetic_disabled',
-      ).catch((caught: Error) => caught)) as Error;
+      const error = (await requireActivePrincipal(repository, 'synthetic_disabled').catch(
+        (caught: Error) => caught,
+      )) as Error;
 
       const text = `${error.name}\n${error.message}\n${error.stack ?? ''}`;
-      for (const leak of [
-        'synthetic_disabled',
-        'synthetic.invalid',
-        'dromex_principal',
-        'SELECT',
-        'postgres',
-        'password',
-        'disabled',
-      ]) {
+      for (const leak of ['synthetic_disabled', 'synthetic.invalid', 'dromex_principal', 'SELECT', 'postgres', 'password', 'disabled']) {
         expect(text).not.toContain(leak);
       }
     });
   });
 });
 
-async function seedPrincipal(
-  pool: Pool,
-  id: string,
-  status: string,
-  isOwner: boolean,
-): Promise<void> {
+async function seedPrincipal(pool: Pool, id: string, status: string, isOwner: boolean): Promise<void> {
   await pool.query(
     `INSERT INTO "user" ("id", "name", "email", "emailVerified", "updatedAt")
      VALUES ($1, $2, $3, FALSE, CURRENT_TIMESTAMP)`,
     [id, `synthetic ${id}`, `${id}@synthetic.invalid`],
   );
-  await pool.query(
-    `INSERT INTO dromex_principal (user_id, status, is_owner) VALUES ($1, $2, $3)`,
-    [id, status, isOwner],
-  );
+  await pool.query(`INSERT INTO dromex_principal (user_id, status, is_owner) VALUES ($1, $2, $3)`, [
+    id,
+    status,
+    isOwner,
+  ]);
 }

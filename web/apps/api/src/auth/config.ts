@@ -1,9 +1,11 @@
 import type { BetterAuthOptions } from 'better-auth';
+import { twoFactor } from 'better-auth/plugins';
 import type { Pool } from 'pg';
 
 import { hashPassword, verifyPassword } from './hashing.ts';
 import { createPrincipalRepository } from './principal.ts';
 import { createRateLimitStorage } from './rate-limit-storage.ts';
+import { generateRecoveryCodes } from './recovery-codes.ts';
 
 /**
  * The header through which the HTTP transport hands Better Auth the
@@ -26,7 +28,7 @@ export type AuthSettings = Omit<AuthConfigInput, 'database'>;
  * This module builds and validates the options object. It deliberately does
  * **not** construct a Better Auth instance, mount a route, or touch the
  * database: that keeps it a pure, fully testable function and keeps these
- * tests Docker-free. Wiring belongs to a later checkpoint.
+ * tests Docker-free.
  *
  * Every value arrives through explicit parameters. This module never reads
  * `process.env` and never loads a `.env` file, so a test can exercise every
@@ -36,11 +38,22 @@ export type AuthSettings = Omit<AuthConfigInput, 'database'>;
 
 export type AuthEnvironment = 'development' | 'test' | 'production';
 
+/** One version of the authentication secret (DEC-434). */
+export interface AuthSecret {
+  /** Positive whole number. The highest version is the current one. */
+  version: number;
+  value: string;
+}
+
 export interface AuthConfigInput {
   /** Chooses the security posture. Never inferred from the environment. */
   environment: AuthEnvironment;
-  /** Better Auth signing secret, supplied by validated runtime config. */
-  secret: string;
+  /**
+   * Versioned secrets. The newest version signs cookies and encrypts new TOTP
+   * and recovery-code data; older versions stay available to decrypt data
+   * written under them, which is what makes rotation non-destructive.
+   */
+  secrets: readonly AuthSecret[];
   /** The API's own base URL. */
   baseURL: string;
   /** Explicit allowlist. Wildcards are refused (see validateTrustedOrigins). */
@@ -54,6 +67,13 @@ export interface AuthConfigInput {
   allowInsecureCookies?: boolean;
 }
 
+/** The cookie names Better Auth issues under this configuration. */
+export interface AuthCookieNames {
+  sessionToken: string;
+  twoFactor: string;
+  trustDevice: string;
+}
+
 /**
  * Password length policy, measured the way Better Auth measures it (UTF-16
  * code units). Exported so the Owner provisioning validation refuses exactly
@@ -61,6 +81,9 @@ export interface AuthConfigInput {
  */
 export const PASSWORD_MIN_LENGTH = 15;
 export const PASSWORD_MAX_LENGTH = 128;
+
+/** Shown by authenticator apps and used as the TOTP issuer. */
+export const MFA_ISSUER = 'DROMEX';
 
 /** 12 hours. A working day, not a working week. */
 const SESSION_EXPIRES_IN_SECONDS = 12 * 60 * 60;
@@ -72,9 +95,7 @@ const SESSION_UPDATE_AGE_SECONDS = 60 * 60;
  *
  * This is a **shape** check, not an entropy check: a length threshold cannot
  * distinguish 32 random bytes from 32 repetitions of the same character, and
- * nothing here claims otherwise. It catches an empty value, a placeholder, or
- * a hand-typed string. Producing a genuinely random secret remains an
- * operational secret-generation requirement outside this module.
+ * nothing here claims otherwise.
  */
 const MINIMUM_SECRET_LENGTH = 32;
 
@@ -87,69 +108,80 @@ const MINIMUM_SECRET_LENGTH = 32;
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 /**
- * Throws when the secret is absent or malformed.
+ * Throws when one secret value is absent or malformed.
  *
  * The offending value is never included in the message, the stack, or
- * anywhere else. A validation error that echoes the secret writes it into
- * logs, terminal scrollback, and CI output — exactly where it must not be.
- *
- * Surrounding whitespace is rejected rather than trimmed. Trimming for the
- * check and then returning the untrimmed value would validate one string and
- * use a different one, so a secret that passes validation could still fail to
- * match the value an operator believes they configured.
+ * anywhere else; only its version is named. Surrounding whitespace is
+ * rejected rather than trimmed, so the value validated is the value used.
  */
-function validateSecret(secret: unknown): string {
-  if (typeof secret !== 'string' || secret.length === 0) {
+function validateSecretValue(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`Better Auth secret ${label} is missing. There is no fallback.`);
+  }
+
+  if (value !== value.trim()) {
     throw new Error(
-      'Better Auth secret is missing. Supply it through validated runtime configuration; there is no fallback.',
+      `Better Auth secret ${label} is invalid: it must not begin or end with whitespace. The value itself is not shown.`,
     );
   }
 
-  if (secret !== secret.trim()) {
+  if (value.length < MINIMUM_SECRET_LENGTH) {
     throw new Error(
-      'Better Auth secret is invalid: it must not begin or end with whitespace. The value itself is not shown.',
+      `Better Auth secret ${label} is invalid: it must be at least ${MINIMUM_SECRET_LENGTH} characters. The value itself is not shown.`,
     );
   }
 
-  if (secret.length < MINIMUM_SECRET_LENGTH) {
+  return value;
+}
+
+/**
+ * Validates every versioned secret and returns them newest first, which is
+ * the order Better Auth treats as "current, then older".
+ */
+function validateSecrets(secrets: unknown): AuthSecret[] {
+  if (!Array.isArray(secrets) || secrets.length === 0) {
     throw new Error(
-      `Better Auth secret is invalid: it must be at least ${MINIMUM_SECRET_LENGTH} characters. The value itself is not shown.`,
+      'Better Auth secrets are missing. Supply at least one versioned secret through validated runtime configuration; there is no fallback.',
     );
   }
 
-  return secret;
+  const seen = new Set<number>();
+  const validated = secrets.map((entry: unknown, index) => {
+    const version = (entry as { version?: unknown } | null)?.version;
+    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) {
+      throw new Error(
+        `Better Auth secret at position ${index + 1} has an invalid version: a version must be a positive whole number. The value itself is not shown.`,
+      );
+    }
+    if (seen.has(version)) {
+      throw new Error(`Better Auth secret version ${version} is a duplicate: each version must be unique.`);
+    }
+    seen.add(version);
+
+    return {
+      version,
+      value: validateSecretValue((entry as { value?: unknown }).value, `version ${version}`),
+    };
+  });
+
+  return validated.sort((a, b) => b.version - a.version);
 }
 
 /**
  * Validates one origin and returns it in canonical `URL.origin` form: scheme,
  * host, and port only, lower-cased, with no trailing slash.
  *
- * Shared by `baseURL` and every trusted origin so the two can never drift
- * apart — a `baseURL` accepted under looser rules than the origins it is
- * compared against is precisely the kind of mismatch that produces a
- * CSRF check which passes when it should not.
- *
  * Anything carrying more than an origin is refused rather than silently
- * discarded: a path, query, fragment, or embedded credential in a value that
- * is only ever used as an origin means the caller believes it configured
- * something this module would quietly ignore.
- *
- * `label` names the field for the error message. The supplied value is never
- * echoed, because a rejected origin can carry credentials.
+ * discarded. The supplied value is never echoed, because a rejected origin
+ * can carry credentials.
  */
-function normalizeOrigin(
-  value: unknown,
-  environment: AuthEnvironment,
-  label: string,
-): string {
+function normalizeOrigin(value: unknown, environment: AuthEnvironment, label: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`${label} is missing: an absolute http or https URL is required.`);
   }
 
   if (value.includes('*')) {
-    throw new Error(
-      `${label} contains a wildcard. Wildcards are refused: list each origin explicitly.`,
-    );
+    throw new Error(`${label} contains a wildcard. Wildcards are refused: list each origin explicitly.`);
   }
 
   let parsed: URL;
@@ -162,19 +194,15 @@ function normalizeOrigin(
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error(`${label} must use the http or https scheme.`);
   }
-
   if (parsed.username !== '' || parsed.password !== '') {
     throw new Error(`${label} must not embed a username or password.`);
   }
-
   if (parsed.search !== '') {
     throw new Error(`${label} must not include a query string.`);
   }
-
   if (parsed.hash !== '') {
     throw new Error(`${label} must not include a fragment.`);
   }
-
   if (parsed.pathname !== '/') {
     throw new Error(`${label} must not include a path.`);
   }
@@ -183,7 +211,6 @@ function normalizeOrigin(
     if (environment === 'production') {
       throw new Error(`${label} must use https in production.`);
     }
-
     if (!LOOPBACK_HOSTS.has(parsed.hostname)) {
       throw new Error(
         `${label} may use plain http outside production only for a loopback host (localhost, 127.0.0.1, ::1).`,
@@ -195,28 +222,13 @@ function normalizeOrigin(
 }
 
 /**
- * Validates every trusted origin through {@link normalizeOrigin} and returns
- * the canonical list.
- *
- * Duplicates are **removed** after normalisation rather than rejected: two
- * spellings of one origin (a trailing slash, a mixed-case host) are the same
- * origin, and refusing the list over a harmless restatement would be a
- * configuration failure with no security benefit. Distinct origins are of
- * course preserved.
- *
- * Wildcards are refused in every environment, not only production: a wildcard
- * turns the Origin check that Better Auth's CSRF defence rests on into one
- * that passes for any subdomain, including one an attacker controls after a
- * subdomain takeover.
+ * Validates every trusted origin and returns the canonical list, removing
+ * entries that are equal only after normalisation. Wildcards are refused in
+ * every environment.
  */
-function validateTrustedOrigins(
-  origins: readonly string[],
-  environment: AuthEnvironment,
-): string[] {
+function validateTrustedOrigins(origins: readonly string[], environment: AuthEnvironment): string[] {
   if (origins.length === 0) {
-    throw new Error(
-      'At least one trusted origin is required. The allowlist must be explicit.',
-    );
+    throw new Error('At least one trusted origin is required. The allowlist must be explicit.');
   }
 
   const normalized = origins.map((origin, index) =>
@@ -229,16 +241,8 @@ function validateTrustedOrigins(
 /**
  * Decides the `Secure` cookie flag, and refuses to build a configuration that
  * would ship insecure cookies anywhere but a developer's machine.
- *
- * Production does not merely default to secure — it cannot be talked out of
- * it. Asking for insecure cookies outside development throws rather than
- * being ignored, so the mistake surfaces at startup instead of silently
- * producing a weaker cookie than the operator believes they configured.
  */
-function resolveUseSecureCookies(
-  environment: AuthEnvironment,
-  allowInsecureCookies: boolean,
-): boolean {
+function resolveUseSecureCookies(environment: AuthEnvironment, allowInsecureCookies: boolean): boolean {
   if (!allowInsecureCookies) {
     return true;
   }
@@ -253,23 +257,74 @@ function resolveUseSecureCookies(
 }
 
 /**
+ * Better Auth's two-factor plugin with every security-relevant option pinned
+ * (DEC-434, DEC-435), rather than inherited from defaults that a future
+ * release could change.
+ *
+ * - `skipVerificationOnEnable: false`: a factor counts only once a code from
+ *   it has been verified.
+ * - `allowPasswordless: false`: enabling, disabling, and regenerating always
+ *   require the account password.
+ * - A five-minute challenge cookie between the password and the code.
+ * - Account lockout after 10 consecutive failed verifications, for 900 s.
+ * - `trustDeviceMaxAge: 1`: Better Auth 1.7.4 has no option that disables
+ *   trusted devices. DROMEX never lets `trustDevice` reach it and never
+ *   forwards the cookie; the one-second lifetime is defence in depth only.
+ * - Ten 120-bit Crockford recovery codes, stored through Better Auth's
+ *   explicit encrypted storage. That storage is reversible, not a hash.
+ * - No `otpOptions`: no code is ever sent by email or text message.
+ */
+export function createTwoFactorPlugin() {
+  return twoFactor({
+    issuer: MFA_ISSUER,
+    skipVerificationOnEnable: false,
+    allowPasswordless: false,
+    twoFactorCookieMaxAge: 300,
+    trustDeviceMaxAge: 1,
+    accountLockout: { enabled: true, maxFailedAttempts: 10, durationSeconds: 900 },
+    totpOptions: { digits: 6, period: 30 },
+    backupCodeOptions: {
+      amount: 10,
+      customBackupCodesGenerate: generateRecoveryCodes,
+      storeBackupCodes: 'encrypted',
+      allowPasswordless: false,
+    },
+  });
+}
+
+/**
+ * The names Better Auth gives its session, two-factor challenge, and
+ * trusted-device cookies: its default `better-auth.` prefix, with the
+ * `__Secure-` prefix whenever Secure cookies are in force.
+ */
+export function authCookieNames(options: Pick<BetterAuthOptions, 'advanced'>): AuthCookieNames {
+  const prefix = options.advanced?.useSecureCookies === false ? '' : '__Secure-';
+  return {
+    sessionToken: `${prefix}better-auth.session_token`,
+    twoFactor: `${prefix}better-auth.two_factor`,
+    trustDevice: `${prefix}better-auth.trust_device`,
+  };
+}
+
+/**
  * Builds the validated Better Auth options.
  *
  * Throws on any invalid input rather than falling back to a weaker default:
  * a configuration error must stop the process, not quietly degrade it.
  */
 export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
-  const secret = validateSecret(input.secret);
+  const secrets = validateSecrets(input.secrets);
   const baseURL = normalizeOrigin(input.baseURL, input.environment, 'baseURL');
   const trustedOrigins = validateTrustedOrigins(input.trustedOrigins, input.environment);
-  const useSecureCookies = resolveUseSecureCookies(
-    input.environment,
-    input.allowInsecureCookies ?? false,
-  );
+  const useSecureCookies = resolveUseSecureCookies(input.environment, input.allowInsecureCookies ?? false);
 
   return {
+    appName: MFA_ISSUER,
     database: input.database,
-    secret,
+    // `secrets` is always set explicitly and `secret` never is. Better Auth
+    // would otherwise read BETTER_AUTH_SECRETS (or, as a legacy fallback,
+    // BETTER_AUTH_SECRET or AUTH_SECRET) from the process environment itself.
+    secrets,
     baseURL,
     trustedOrigins,
 
@@ -279,8 +334,8 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
 
     emailAndPassword: {
       enabled: true,
-      // Better Auth's own default is false. The only account Phase 2C may
-      // have is the CLI-provisioned Owner; there is no invitation flow yet
+      // Better Auth's own default is false. Accounts are created only by the
+      // local Owner activation command; there is no invitation flow yet
       // (OQ-161) and no public registration ever.
       disableSignUp: true,
       autoSignIn: false,
@@ -299,8 +354,8 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
       updateAge: SESSION_UPDATE_AGE_SECONDS,
       // DEC-420. With the cache enabled, a revoked session can stay usable on
       // another device until the cache expires, which defeats immediate
-      // revocation. `freshAge` is deliberately absent: its support in this
-      // version is unverified, and the 5-minute threshold stays deferred.
+      // revocation — and GHSA-xg6x-h9c9-2m83 showed it can also let a session
+      // outlive a pending two-factor challenge.
       cookieCache: { enabled: false },
     },
 
@@ -311,14 +366,13 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
       // Kept so Better Auth's generated schema stays exactly as generated.
       // At runtime `customStorage` takes precedence and this is unused.
       storage: 'database',
-      // DROMEX-owned PostgreSQL storage. Better Auth's own database storage
-      // reads its BIGINT timestamp as text and computes a corrupt retry time;
-      // this storage converts explicitly without a global parser change.
+      // DROMEX-owned PostgreSQL storage, keyed by client address and path.
       customStorage: createRateLimitStorage(input.database),
       window: 60,
       max: 100,
       customRules: {
         '/sign-in/email': { window: 60, max: 5 },
+        '/two-factor/verify-totp': { window: 60, max: 5 },
       },
     },
 
@@ -326,9 +380,7 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
       useSecureCookies,
       // Better Auth otherwise trusts `x-forwarded-for`, which any caller can
       // forge. The HTTP transport sets this header from the socket address
-      // after stripping every client-supplied forwarding header. No proxy is
-      // trusted: that waits until a real reverse proxy exists and can be
-      // configured to overwrite forwarded headers rather than append to them.
+      // after stripping every client-supplied forwarding header.
       ipAddress: {
         ipAddressHeaders: [DROMEX_CLIENT_IP_HEADER],
       },
@@ -340,13 +392,10 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
           // A Better Auth identity is never enough to enter DROMEX. Better
           // Auth runs this before inserting the session row and aborts the
           // insert when it returns false, so a user without an active
-          // principal is never issued a session at all, rather than issued
-          // one that is then hidden. A failed lookup throws, which also
-          // aborts the insert: an error must never become an allow.
+          // principal is never issued a session at all. A failed lookup
+          // throws, which also aborts the insert.
           before: async (session) => {
-            const principal = await createPrincipalRepository(input.database).findByUserId(
-              session.userId,
-            );
+            const principal = await createPrincipalRepository(input.database).findByUserId(session.userId);
             if (principal === null || principal.status !== 'active') {
               return false;
             }
@@ -355,11 +404,9 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
       },
     },
 
-    // Only explicitly approved plugins and authentication methods are
-    // enabled, to keep the attack surface as small as the product allows.
-    // Nothing is switched on until a checkpoint deliberately opens it: no
-    // admin, MFA, social, bearer, JWT, Expo, invitation, email verification,
-    // or password reset.
-    plugins: [],
+    // Only explicitly approved plugins: two-factor, and nothing else — no
+    // admin, social, bearer, JWT, Expo, invitation, email verification,
+    // password reset, magic link, or email OTP.
+    plugins: [createTwoFactorPlugin()],
   };
 }

@@ -22,9 +22,6 @@ describe('route access classification (default-deny registration)', () => {
   });
 
   it('refuses to register a route that declares no access classification', async () => {
-    // DEC-428: "undeclared" and "intentionally public" must never be the same
-    // state. A forgotten classification has to stop the server, not silently
-    // produce an unguarded route that looks fine until it is exploited.
     app = await build();
 
     expect(() => {
@@ -40,13 +37,13 @@ describe('route access classification (default-deny registration)', () => {
         '/typo',
         // @ts-expect-error deliberately invalid: the guard must reject
         // unknown values at runtime, not just in the type system.
-        { config: { access: 'authenticatd' } },
+        { config: { access: 'mfa-challange' } },
         async () => ({ ok: true }),
       );
     }).toThrow(/access/i);
   });
 
-  it('accepts each of the four recognised classifications', async () => {
+  it('accepts each of the five recognised classifications', async () => {
     app = await build();
 
     expect(() => {
@@ -54,13 +51,11 @@ describe('route access classification (default-deny registration)', () => {
       app!.get('/b', { config: { access: 'guest-only' } }, async () => ({ ok: true }));
       app!.get('/c', { config: { access: 'authenticated' } }, async () => ({ ok: true }));
       app!.post('/d', { config: { access: 'session-cleanup' } }, async () => ({ ok: true }));
+      app!.post('/e', { config: { access: 'mfa-challenge' } }, async () => ({ ok: true }));
     }).not.toThrow();
   });
 
   it('records /health and /ready as explicitly public', async () => {
-    // Asserted against the mechanism's own record, not against a printed
-    // route table: a string-parsed table is exactly the fragile post-hoc
-    // inspection this design replaced.
     app = await build();
     await app.ready();
 
@@ -69,8 +64,6 @@ describe('route access classification (default-deny registration)', () => {
   });
 
   it('keeps /health and /ready serving their existing responses', async () => {
-    // Classification is metadata. It must not change behaviour that Phase 1
-    // already proved and shipped.
     app = await build();
     await app.ready();
 
@@ -96,14 +89,13 @@ describe('route access classification (default-deny registration)', () => {
       ['HEAD /ready', 'public'],
       ['POST /api/auth/sign-in/email', 'guest-only'],
       ['POST /api/auth/sign-out', 'session-cleanup'],
+      ['POST /api/auth/two-factor/verify-totp', 'mfa-challenge'],
     ]);
   });
 
   it('refuses to build without authentication configuration', async () => {
-    // Once authentication routes exist, starting without their configuration
-    // would mean a server that looks healthy but cannot authenticate anyone.
-    await expect(
-      buildServer({ databaseUrl: UNREACHABLE_DATABASE_URL } as never),
-    ).rejects.toThrow(/authentication configuration/i);
+    await expect(buildServer({ databaseUrl: UNREACHABLE_DATABASE_URL } as never)).rejects.toThrow(
+      /authentication configuration/i,
+    );
   });
 });

@@ -12,8 +12,8 @@ describes a rule, it cites the decision that established it.
 | Document | Covers | Implementation status |
 | --- | --- | --- |
 | [architecture.md](architecture.md) | Service boundaries, technology baseline, how the web system relates to the existing Android application | **Partly implemented** (Phase 1 skeleton only) |
-| [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Partly implemented** (local development only: sign-in, sign-out, sanitized session endpoint, active-principal enforcement; Owner provisioning tooling tested on disposable databases but not approved for real use before MFA, and no Owner exists; no public registration, MFA, or account management) |
-| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, the minimal sign-in, sign-out, and session transport, and resumable pre-MFA Owner provisioning tooling whose command refuses every run. No Owner, MFA, Owner readiness enforcement, permissions, UI, or deployment) |
+| [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Partly implemented** (local development only: password-plus-TOTP sign-in, sign-out, sanitized session endpoint, active-principal and mandatory-MFA enforcement; terminal Owner activation tested on disposable databases only, its command still refuses every run, and no Owner exists; no public registration, recovery-code use, break-glass recovery, password recovery, or account management) |
+| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, the sign-in, TOTP verification, sign-out, and session transport, mandatory MFA, TOTP replay protection, versioned secrets, recovery-code issuance, and resumable terminal Owner activation whose command refuses every run. No Owner, recovery-code use, break-glass tooling, Owner readiness enforcement, permissions, UI, or deployment) |
 | [postgresql-strategy.md](postgresql-strategy.md) | Schema approach, identifier preservation, roles, the PostgreSQL 18 volume rule | **Partly implemented** (development service only, no schema) |
 | [synchronization-strategy.md](synchronization-strategy.md) | Android synchronisation protocol and conflict rules | **Planned** (not implemented) |
 | [docker-vps-strategy.md](docker-vps-strategy.md) | Local Docker topology, port exposure rules, production deployment plan | **Partly implemented** (local development only) |
@@ -35,12 +35,13 @@ What exists:
 
 What does **not** exist, and must not be assumed to exist:
 
-- authentication beyond the Phase 2C local transport (email/password sign-in,
-  sign-out, and a sanitized session endpoint, verified only against disposable
-  test databases): no MFA, recovery, permissions, or real account,
-- a real Owner: provisioning tooling exists and is tested against disposable
-  databases, but its command refuses every run until MFA and recovery are
-  implemented and approved,
+- authentication beyond the Phase 2C local transport (email/password plus
+  mandatory TOTP sign-in, sign-out, and a sanitized session endpoint, verified
+  only against disposable test databases): no recovery-code use, break-glass
+  recovery, password recovery, permissions, or real account,
+- a real Owner: terminal activation exists and is tested against disposable
+  databases, but its command refuses every run until checkpoints 3F-B, 3F-C,
+  and 3F-D are accepted and OQ-161 is resolved (DEC-435),
 - any business table or business rule,
 - any Android synchronisation,
 - any deployment, any VPS configuration, and any production data.
@@ -78,8 +79,10 @@ The Android application is unchanged and remains offline-first on local SQLite
 | DEC-431 | Better Auth upgrades treated as security maintenance; separate migration sequence |
 | DEC-432 | Guardrail against automatic Daily Report linkage pending OQ-164 |
 | DEC-433 | WorkOS recorded as the named authentication fallback |
+| DEC-434 | Mandatory TOTP MFA enforced; first Owner activated only through the local terminal; no trusted-device bypass; versioned secrets; TOTP replay protection |
+| DEC-435 | Hardened Better Auth recovery codes; supported retrieval as the primary future break-glass; real activation prohibited until 3F-B, 3F-C, 3F-D, and OQ-161 |
 
-Full detail for DEC-418 through DEC-433 is in
+Full detail for DEC-418 through DEC-435 is in
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md).
 
 Open questions that gate later phases: **OQ-158** (whether the real

@@ -82,10 +82,22 @@ describe('Owner provisioning isolation from the running server', () => {
 
   it('issues no mutating SQL against Better Auth-owned tables from any provisioning module', async () => {
     const mutation =
-      /\b(insert\s+into|update|delete\s+from|truncate|alter\s+table|drop\s+table)\s+"?(user|account|session|verification|rateLimit)"?(\s|$|\()/i;
+      /\b(insert\s+into|update|delete\s+from|truncate|alter\s+table|drop\s+table)\s+"?(user|account|session|verification|rateLimit|twoFactor)"?(\s|$|\()/i;
 
     for (const file of await sourceFiles(PROVISIONING)) {
       expect(await readFile(file, 'utf8'), file).not.toMatch(mutation);
+    }
+  });
+
+  it('leaves every twoFactor write to Better Auth: no API source module writes that table with its own SQL', async () => {
+    // The generated table has no database defaults, so a row written outside
+    // Better Auth's adapter could carry a NULL counter that never locks.
+    const write = /\b(insert\s+into|update|delete\s+from|truncate|alter\s+table|drop\s+table|copy)\s+"?twoFactor"?/i;
+    const files = await sourceFiles(SRC);
+    expect(files.length).toBeGreaterThan(10);
+
+    for (const file of files) {
+      expect(await readFile(file, 'utf8'), file).not.toMatch(write);
     }
   });
 
@@ -134,6 +146,7 @@ describe('Owner provisioning isolation from the running server', () => {
         ['HEAD /ready', 'public'],
         ['POST /api/auth/sign-in/email', 'guest-only'],
         ['POST /api/auth/sign-out', 'session-cleanup'],
+        ['POST /api/auth/two-factor/verify-totp', 'mfa-challenge'],
       ]);
     } finally {
       await settle();

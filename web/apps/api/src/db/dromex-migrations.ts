@@ -12,6 +12,7 @@ const MIGRATIONS: ReadonlyArray<{ id: string; name: string; file: string }> = [
   { id: '0001', name: 'dromex_principal', file: '0001_dromex_principal.sql' },
   { id: '0002', name: 'dromex_rate_limit', file: '0002_dromex_rate_limit.sql' },
   { id: '0003', name: 'dromex_owner_bootstrap', file: '0003_dromex_owner_bootstrap.sql' },
+  { id: '0004', name: 'dromex_mfa', file: '0004_dromex_mfa.sql' },
 ];
 
 export async function loadDromexMigrations(): Promise<DromexMigration[]> {

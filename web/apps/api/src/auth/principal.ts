@@ -10,9 +10,8 @@ import type { Pool } from 'pg';
  * never sufficient.
  *
  * Deliberately read-only. Creating, disabling, promoting, or demoting a
- * principal are controlled operations that belong to services in later
- * checkpoints, with their own auditing and Owner protection. Exposing them
- * here would make them reachable before those controls exist.
+ * principal are controlled operations that belong to services with their own
+ * auditing and Owner protection.
  */
 
 export type PrincipalStatus = 'active' | 'disabled';
@@ -22,6 +21,12 @@ export interface Principal {
   userId: string;
   status: PrincipalStatus;
   isOwner: boolean;
+  /**
+   * When mandatory MFA activation completed (DEC-434), read from the
+   * database. `null` means incomplete, and an incomplete principal is never
+   * authenticated. An active status alone never implies MFA.
+   */
+  mfaCompletedAt: Date | null;
 }
 
 export interface PrincipalRepository {
@@ -33,6 +38,7 @@ interface PrincipalRow {
   user_id: string;
   status: PrincipalStatus;
   is_owner: boolean;
+  mfa_completed_at: Date | null;
 }
 
 /**
@@ -47,7 +53,7 @@ export function createPrincipalRepository(pool: Pool): PrincipalRepository {
       // Parameterised, always. The identifier originates from a session and
       // is never concatenated into SQL (ASVS 1.2.4).
       const { rows } = await pool.query<PrincipalRow>(
-        `SELECT user_id, status, is_owner
+        `SELECT user_id, status, is_owner, mfa_completed_at
            FROM dromex_principal
           WHERE user_id = $1`,
         [userId],
@@ -58,7 +64,12 @@ export function createPrincipalRepository(pool: Pool): PrincipalRepository {
         return null;
       }
 
-      return { userId: row.user_id, status: row.status, isOwner: row.is_owner };
+      return {
+        userId: row.user_id,
+        status: row.status,
+        isOwner: row.is_owner,
+        mfaCompletedAt: row.mfa_completed_at instanceof Date ? row.mfa_completed_at : null,
+      };
     },
   };
 }
@@ -66,11 +77,8 @@ export function createPrincipalRepository(pool: Pool): PrincipalRepository {
 /**
  * Raised when a principal may not proceed.
  *
- * Carries no detail on purpose. It does not say whether the principal was
- * missing or disabled, does not name the user, and does not quote the
- * database or the query — so the same message serves both cases and neither
- * can be distinguished by an outside observer. Future server code translates
- * this into one uniform unauthorized response.
+ * Carries no detail on purpose, so missing and disabled principals cannot be
+ * distinguished by an outside observer.
  */
 export class PrincipalAccessDeniedError extends Error {
   constructor() {
@@ -81,11 +89,7 @@ export class PrincipalAccessDeniedError extends Error {
 
 /**
  * Fail-closed gate: returns the principal only when it exists and is active.
- *
- * Everything else — missing, disabled, or any state not recognised as active
- * — is refused with the identical error. Deny is the default, and a state
- * this function does not understand is denied rather than waved through
- * (OWASP A01).
+ * Everything else is refused with the identical error.
  */
 export async function requireActivePrincipal(
   repository: PrincipalRepository,

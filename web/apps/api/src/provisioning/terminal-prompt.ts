@@ -2,6 +2,7 @@ import { StringDecoder } from 'node:string_decoder';
 
 import { OwnerProvisioningError } from './errors.ts';
 import type { OwnerDraft } from './owner-input.ts';
+import type { OwnerActivationTerminal } from './owner-provisioning.ts';
 
 /**
  * Interactive terminal entry for Owner provisioning, built only on Node's own
@@ -134,6 +135,82 @@ export function readTerminalLine(
     input.on('data', onData);
     input.resume();
   });
+}
+
+/** Typed acknowledgements required during Owner activation (DEC-435). */
+export const AUTHENTICATOR_ACKNOWLEDGEMENT = 'TWO DEVICES ENROLLED';
+export const RECOVERY_CODE_ACKNOWLEDGEMENT = 'CODES RECORDED';
+
+/** Clears the visible screen, asks the terminal to drop scrollback, and homes the cursor. */
+const CLEAR_SCREEN = `${ESC}[2J${ESC}[3J${ESC}[H`;
+
+/**
+ * The terminal side of Owner activation. It displays and reads only what the
+ * activation service hands it, and decides nothing: every refusal is the
+ * service's. A secret or code written here is shown once and never logged;
+ * scrollback, screen recording, and terminal logging can still retain it,
+ * which the operator is told before anything sensitive appears.
+ */
+export function createActivationTerminal(terminal: PromptTerminal): OwnerActivationTerminal {
+  const write = (lines: readonly string[]) => {
+    terminal.output.write(`${lines.join('\n')}\n`);
+  };
+
+  return {
+    async presentEnrollment({ secret, uri }) {
+      write([
+        '',
+        'Authenticator enrolment',
+        'Warning: terminal scrollback, screen recordings, and terminal logs may retain what follows.',
+        'Enrol this secret on TWO authenticator devices before continuing.',
+        'If an earlier interrupted run added a DROMEX entry to a device, delete that entry first.',
+        '',
+        `Secret for manual entry: ${secret}`,
+        `otpauth URI: ${uri}`,
+        '',
+      ]);
+    },
+
+    async readTotpCode(attempt, maxAttempts) {
+      return readTerminalLine(terminal, `Authenticator code, attempt ${attempt} of ${maxAttempts} (not shown): `, {
+        hidden: true,
+      });
+    },
+
+    async confirmAuthenticatorsAndStorage() {
+      write([
+        '',
+        'Confirm that the secret is enrolled on two separate authenticator devices,',
+        'and that you will keep two sealed paper copies of the recovery codes in separate physical locations.',
+        `Type ${AUTHENTICATOR_ACKNOWLEDGEMENT} to continue.`,
+      ]);
+      const typed = await readTerminalLine(terminal, 'Confirmation: ', { hidden: false });
+      return typed.trim() === AUTHENTICATOR_ACKNOWLEDGEMENT;
+    },
+
+    async presentRecoveryCodes(codes) {
+      write([
+        '',
+        'Recovery codes. These are shown once and cannot be shown again.',
+        'Write or print two copies, seal them, and store them in separate physical locations.',
+        'Each code works once. Do not copy them to the clipboard or any file.',
+        '',
+        ...codes.map((code, index) => `${index + 1}. ${code}`),
+        '',
+      ]);
+    },
+
+    async confirmRecoveryCodesRecorded() {
+      write([`Type ${RECOVERY_CODE_ACKNOWLEDGEMENT} once both copies are written down.`]);
+      const typed = await readTerminalLine(terminal, 'Confirmation: ', { hidden: false });
+      return typed.trim() === RECOVERY_CODE_ACKNOWLEDGEMENT;
+    },
+
+    async clearScreen() {
+      terminal.output.write(CLEAR_SCREEN);
+      write(['The screen was cleared. Some terminals keep scrollback anyway; close this terminal when finished.']);
+    },
+  };
 }
 
 /**

@@ -17,7 +17,7 @@ const BETTER_AUTH_MIGRATION = fileURLToPath(
 );
 
 const BETTER_AUTH_TABLES = ['user', 'session', 'account', 'verification', 'rateLimit'];
-const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003'];
+const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004'];
 
 describe('DROMEX migration mechanism', () => {
   let database: EphemeralDatabase;
@@ -288,6 +288,75 @@ describe('DROMEX migration mechanism', () => {
     });
   });
 
+  describe('MFA completion and TOTP replay state (0004)', () => {
+    beforeEach(async () => {
+      await applyMigrations(pool, await loadDromexMigrations());
+    });
+
+    it('adds a nullable, default-less mfa_completed_at to dromex_principal, with no backfill', async () => {
+      await seedUser(pool, 'mfa_principal');
+      await pool.query(`INSERT INTO dromex_principal (user_id, status) VALUES ($1, 'active')`, ['mfa_principal']);
+
+      const { rows } = await pool.query<{ data_type: string; is_nullable: string; column_default: string | null }>(
+        `SELECT data_type, is_nullable, column_default FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'dromex_principal' AND column_name = 'mfa_completed_at'`,
+      );
+      expect(rows).toEqual([{ data_type: 'timestamp with time zone', is_nullable: 'YES', column_default: null }]);
+
+      const principal = await pool.query<{ mfa_completed_at: Date | null }>(
+        `SELECT mfa_completed_at FROM dromex_principal WHERE user_id = $1`,
+        ['mfa_principal'],
+      );
+      expect(principal.rows[0]?.mfa_completed_at).toBeNull();
+    });
+
+    it('creates dromex_totp_replay with exactly a user, a digest, and an acceptance time', async () => {
+      const { rows } = await pool.query<{ column_name: string; data_type: string; is_nullable: string }>(
+        `SELECT column_name, data_type, is_nullable FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'dromex_totp_replay' ORDER BY column_name`,
+      );
+
+      expect(rows).toEqual([
+        { column_name: 'accepted_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
+        { column_name: 'code_digest', data_type: 'bytea', is_nullable: 'NO' },
+        { column_name: 'user_id', data_type: 'text', is_nullable: 'NO' },
+      ]);
+    });
+
+    it('makes a user and digest pair unique, and requires a 32-byte digest', async () => {
+      await seedUser(pool, 'replay_user');
+      const digest = Buffer.alloc(32, 7);
+      await pool.query(`INSERT INTO dromex_totp_replay (user_id, code_digest) VALUES ($1, $2)`, ['replay_user', digest]);
+
+      await expect(
+        pool.query(`INSERT INTO dromex_totp_replay (user_id, code_digest) VALUES ($1, $2)`, ['replay_user', digest]),
+      ).rejects.toThrow(/duplicate key|unique/i);
+      await expect(
+        pool.query(`INSERT INTO dromex_totp_replay (user_id, code_digest) VALUES ($1, $2)`, ['replay_user', Buffer.alloc(33)]),
+      ).rejects.toThrow(/check constraint/i);
+    });
+
+    it('restricts deleting a Better Auth user that has a replay marker', async () => {
+      await seedUser(pool, 'replay_restrict');
+      await pool.query(`INSERT INTO dromex_totp_replay (user_id, code_digest) VALUES ($1, $2)`, [
+        'replay_restrict',
+        Buffer.alloc(32, 1),
+      ]);
+
+      await expect(pool.query(`DELETE FROM "user" WHERE id = $1`, ['replay_restrict'])).rejects.toThrow(
+        /violates RESTRICT setting of foreign key constraint/i,
+      );
+    });
+
+    it('indexes the acceptance time for pruning', async () => {
+      const { rows } = await pool.query<{ indexdef: string }>(
+        `SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'dromex_totp_replay'`,
+      );
+
+      expect(rows.some((row) => /\(accepted_at\)/.test(row.indexdef))).toBe(true);
+    });
+  });
+
   it('does not replay an unchanged migration', async () => {
     const migrations = await loadDromexMigrations();
 
@@ -422,6 +491,7 @@ describe('DROMEX migration mechanism', () => {
       'dromex_owner_bootstrap',
       'dromex_principal',
       'dromex_rate_limit',
+      'dromex_totp_replay',
     ]);
 
     for (const table of tables.map((name) => name.toLowerCase())) {

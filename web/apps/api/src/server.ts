@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 
 import Fastify, { type FastifyInstance } from 'fastify';
 
-import type { AuthSettings } from './auth/config.ts';
+import { authCookieNames, type AuthSettings } from './auth/config.ts';
 import {
   registerAuthenticationGuard,
   registerAuthRoutes,
@@ -11,6 +11,7 @@ import {
 } from './auth/http.ts';
 import { createAuth } from './auth/instance.ts';
 import { createPrincipalRepository } from './auth/principal.ts';
+import { createTotpReplayGuard } from './auth/totp-replay.ts';
 import { loadRuntimeConfig, type RuntimeConfig } from './config/runtime.ts';
 import { checkDatabase, createPool } from './db.ts';
 import { registerRouteAccessGuard } from './routeAccess.ts';
@@ -73,8 +74,11 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
     backend: {
       handle: (request) => auth.handler(request),
       getSession: (headers) => auth.api.getSession({ headers, asResponse: true }),
+      signOut: (headers) => auth.api.signOut({ headers, asResponse: true }),
     },
     principals: createPrincipalRepository(pool),
+    replay: createTotpReplayGuard(pool),
+    cookies: authCookieNames(auth.options),
     // Already validated and normalised by createAuth, which would have thrown.
     baseURL: new URL(options.auth.baseURL).origin,
     trustedOrigins: options.auth.trustedOrigins,

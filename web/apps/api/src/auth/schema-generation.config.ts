@@ -50,7 +50,7 @@ if (!SCHEMA_GENERATION_DATABASE_URL) {
 
 export const auth = createAuth({
   environment: 'development',
-  secret: randomBytes(32).toString('hex'),
+  secrets: [{ version: 1, value: randomBytes(32).toString('hex') }],
   baseURL: 'http://127.0.0.1:3000',
   trustedOrigins: ['http://127.0.0.1:5173'],
   database: new Pool({ connectionString: SCHEMA_GENERATION_DATABASE_URL }),

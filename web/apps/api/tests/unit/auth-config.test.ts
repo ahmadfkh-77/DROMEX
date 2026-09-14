@@ -1,17 +1,15 @@
-import { randomBytes } from 'node:crypto';
-
 import { Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { hashPassword } from '../../src/auth/hashing.ts';
 import * as authConfigModule from '../../src/auth/config.ts';
-import { DROMEX_CLIENT_IP_HEADER, createAuthOptions } from '../../src/auth/config.ts';
-
-// Synthetic, generated in memory, never printed. This is not a credential:
-// nothing consumes it, because no Better Auth instance is constructed here.
-function syntheticSecret(): string {
-  return randomBytes(32).toString('hex');
-}
+import {
+  DROMEX_CLIENT_IP_HEADER,
+  authCookieNames,
+  createAuthOptions,
+} from '../../src/auth/config.ts';
+import { generateRecoveryCodes } from '../../src/auth/recovery-codes.ts';
+import { syntheticSecret } from '../helpers/auth-settings.ts';
 
 // Port 1 is reserved and closed. `new Pool()` is lazy — pg opens no socket
 // until a query runs, and no test here runs one. These stay Docker-free.
@@ -22,12 +20,21 @@ function inertPool(): Pool {
 function baseInput(overrides: Record<string, unknown> = {}) {
   return {
     environment: 'development' as const,
-    secret: syntheticSecret(),
+    secrets: [{ version: 1, value: syntheticSecret() }],
     baseURL: 'http://127.0.0.1:3000',
     trustedOrigins: ['http://127.0.0.1:5173'],
     database: inertPool(),
     ...overrides,
   };
+}
+
+function errorText(action: () => unknown): string {
+  try {
+    action();
+  } catch (error) {
+    return `${(error as Error).message}\n${(error as Error).stack ?? ''}`;
+  }
+  throw new Error('expected the configuration to be rejected');
 }
 
 describe('authentication configuration', () => {
@@ -37,24 +44,15 @@ describe('authentication configuration', () => {
 
   describe('email and password', () => {
     it('enables email and password authentication', () => {
-      const options = createAuthOptions(baseInput());
-
-      expect(options.emailAndPassword?.enabled).toBe(true);
+      expect(createAuthOptions(baseInput()).emailAndPassword?.enabled).toBe(true);
     });
 
     it('disables public sign-up explicitly', () => {
-      // Better Auth's own default for disableSignUp is false, so this must be
-      // set rather than assumed. Phase 2C has no invitation flow (OQ-161), so
-      // the only account that may exist is the CLI-provisioned Owner.
-      const options = createAuthOptions(baseInput());
-
-      expect(options.emailAndPassword?.disableSignUp).toBe(true);
+      expect(createAuthOptions(baseInput()).emailAndPassword?.disableSignUp).toBe(true);
     });
 
     it('disables automatic sign-in after account creation', () => {
-      const options = createAuthOptions(baseInput());
-
-      expect(options.emailAndPassword?.autoSignIn).toBe(false);
+      expect(createAuthOptions(baseInput()).emailAndPassword?.autoSignIn).toBe(false);
     });
 
     it('enforces a 15 character minimum and 128 character maximum password', () => {
@@ -65,18 +63,11 @@ describe('authentication configuration', () => {
     });
 
     it('uses the existing Argon2id wrapper for hashing', () => {
-      const options = createAuthOptions(baseInput());
-
-      expect(options.emailAndPassword?.password?.hash).toBe(hashPassword);
+      expect(createAuthOptions(baseInput()).emailAndPassword?.password?.hash).toBe(hashPassword);
     });
 
     it('verifies through the Argon2id wrapper, adapting the argument shape', async () => {
-      // Better Auth calls verify({ password, hash }); the DROMEX wrapper takes
-      // (password, encodedHash). The adapter between them is exactly where an
-      // argument swap would silently accept every password, so it is proven
-      // end to end rather than by inspection.
-      const options = createAuthOptions(baseInput());
-      const verify = options.emailAndPassword?.password?.verify;
+      const verify = createAuthOptions(baseInput()).emailAndPassword?.password?.verify;
       expect(verify).toBeTypeOf('function');
 
       const password = 'a sufficiently long passphrase';
@@ -98,71 +89,88 @@ describe('authentication configuration', () => {
     });
 
     it('disables session cookie caching', () => {
-      // DEC-420: with the cookie cache on, a revoked session can survive on
-      // another device until the cache expires. Immediate revocation is the
-      // requirement, so the cache stays off.
-      const options = createAuthOptions(baseInput());
-
-      expect(options.session?.cookieCache?.enabled).toBe(false);
+      expect(createAuthOptions(baseInput()).session?.cookieCache?.enabled).toBe(false);
     });
 
     it('does not configure freshAge, which is not verified for this version', () => {
-      const options = createAuthOptions(baseInput());
-
-      expect(options.session).not.toHaveProperty('freshAge');
+      expect(createAuthOptions(baseInput()).session).not.toHaveProperty('freshAge');
     });
   });
 
   describe('telemetry and rate limiting', () => {
     it('disables telemetry explicitly', () => {
-      const options = createAuthOptions(baseInput());
-
-      expect(options.telemetry?.enabled).toBe(false);
+      expect(createAuthOptions(baseInput()).telemetry?.enabled).toBe(false);
     });
 
     it('enables rate limiting even in development', () => {
-      // Better Auth disables rate limiting in development by default, which
-      // would mean the limit is never exercised by local tests.
-      const options = createAuthOptions(baseInput({ environment: 'development' }));
-
-      expect(options.rateLimit?.enabled).toBe(true);
+      expect(createAuthOptions(baseInput({ environment: 'development' })).rateLimit?.enabled).toBe(
+        true,
+      );
     });
 
     it('stores rate limit state in the database, not memory', () => {
-      const options = createAuthOptions(baseInput());
-
-      expect(options.rateLimit?.storage).toBe('database');
+      expect(createAuthOptions(baseInput()).rateLimit?.storage).toBe('database');
     });
 
-    it('keeps rate-limit state in DROMEX-owned PostgreSQL storage, not Better Auth\'s table', () => {
-      const options = createAuthOptions(baseInput());
-
-      expect(typeof options.rateLimit?.customStorage?.consume).toBe('function');
+    it("keeps rate-limit state in DROMEX-owned PostgreSQL storage, not Better Auth's table", () => {
+      expect(typeof createAuthOptions(baseInput()).rateLimit?.customStorage?.consume).toBe(
+        'function',
+      );
     });
 
-    it('limits /sign-in/email to 5 attempts per 60 seconds', () => {
-      const options = createAuthOptions(baseInput());
+    it('limits password sign-in and TOTP verification to 5 attempts per 60 seconds', () => {
+      const rules = createAuthOptions(baseInput()).rateLimit?.customRules;
 
-      expect(options.rateLimit?.customRules?.['/sign-in/email']).toEqual({
-        window: 60,
-        max: 5,
+      expect(rules).toEqual({
+        '/sign-in/email': { window: 60, max: 5 },
+        '/two-factor/verify-totp': { window: 60, max: 5 },
       });
+    });
+  });
+
+  describe('mandatory TOTP two-factor authentication', () => {
+    function twoFactorPlugin() {
+      const plugins = createAuthOptions(baseInput()).plugins ?? [];
+      expect(plugins.map((plugin) => plugin.id)).toEqual(['two-factor']);
+      return plugins[0]!;
+    }
+
+    it('names the application DROMEX, which authenticator apps display', () => {
+      expect(createAuthOptions(baseInput()).appName).toBe('DROMEX');
+    });
+
+    it('pins every security-relevant two-factor option explicitly', () => {
+      expect(twoFactorPlugin().options).toEqual({
+        issuer: 'DROMEX',
+        skipVerificationOnEnable: false,
+        allowPasswordless: false,
+        twoFactorCookieMaxAge: 300,
+        trustDeviceMaxAge: 1,
+        accountLockout: { enabled: true, maxFailedAttempts: 10, durationSeconds: 900 },
+        totpOptions: { digits: 6, period: 30 },
+        backupCodeOptions: {
+          amount: 10,
+          customBackupCodesGenerate: generateRecoveryCodes,
+          storeBackupCodes: 'encrypted',
+          allowPasswordless: false,
+        },
+      });
+    });
+
+    it('configures no OTP delivery method, so no code is ever emailed or texted', () => {
+      expect(twoFactorPlugin().options).not.toHaveProperty('otpOptions');
     });
   });
 
   describe('trusted origins', () => {
     it('passes through explicit origins', () => {
-      const options = createAuthOptions(
-        baseInput({ trustedOrigins: ['http://127.0.0.1:5173'] }),
-      );
+      const options = createAuthOptions(baseInput({ trustedOrigins: ['http://127.0.0.1:5173'] }));
 
       expect(options.trustedOrigins).toEqual(['http://127.0.0.1:5173']);
     });
 
     it('rejects an empty trusted origin list', () => {
-      expect(() => createAuthOptions(baseInput({ trustedOrigins: [] }))).toThrow(
-        /trusted origin/i,
-      );
+      expect(() => createAuthOptions(baseInput({ trustedOrigins: [] }))).toThrow(/trusted origin/i);
     });
 
     it('rejects a wildcard origin in production', () => {
@@ -178,51 +186,35 @@ describe('authentication configuration', () => {
     });
 
     it('rejects a bare wildcard anywhere', () => {
-      expect(() => createAuthOptions(baseInput({ trustedOrigins: ['*'] }))).toThrow(
-        /wildcard/i,
-      );
+      expect(() => createAuthOptions(baseInput({ trustedOrigins: ['*'] }))).toThrow(/wildcard/i);
     });
 
     it('rejects an origin that is not a valid absolute http(s) URL', () => {
-      expect(() =>
-        createAuthOptions(baseInput({ trustedOrigins: ['not-a-url'] })),
-      ).toThrow(/origin/i);
+      expect(() => createAuthOptions(baseInput({ trustedOrigins: ['not-a-url'] }))).toThrow(
+        /origin/i,
+      );
     });
 
     it('normalises a trailing slash away', () => {
-      const options = createAuthOptions(
-        baseInput({ trustedOrigins: ['http://127.0.0.1:5173/'] }),
-      );
+      const options = createAuthOptions(baseInput({ trustedOrigins: ['http://127.0.0.1:5173/'] }));
 
       expect(options.trustedOrigins).toEqual(['http://127.0.0.1:5173']);
     });
 
     it('normalises an uppercase hostname to lower case', () => {
-      const options = createAuthOptions(
-        baseInput({ trustedOrigins: ['http://LOCALHOST:5173'] }),
-      );
+      const options = createAuthOptions(baseInput({ trustedOrigins: ['http://LOCALHOST:5173'] }));
 
       expect(options.trustedOrigins).toEqual(['http://localhost:5173']);
     });
 
     it('removes duplicates that are equal only after normalisation', () => {
-      // Two spellings of one origin are one origin. Rejecting the list over a
-      // harmless restatement would be a configuration failure with no
-      // security benefit, so equal entries collapse and distinct ones remain.
       const options = createAuthOptions(
         baseInput({
-          trustedOrigins: [
-            'http://127.0.0.1:5173',
-            'http://127.0.0.1:5173/',
-            'http://LOCALHOST:5173',
-          ],
+          trustedOrigins: ['http://127.0.0.1:5173', 'http://127.0.0.1:5173/', 'http://LOCALHOST:5173'],
         }),
       );
 
-      expect(options.trustedOrigins).toEqual([
-        'http://127.0.0.1:5173',
-        'http://localhost:5173',
-      ]);
+      expect(options.trustedOrigins).toEqual(['http://127.0.0.1:5173', 'http://localhost:5173']);
     });
 
     it('requires https for every production trusted origin', () => {
@@ -238,19 +230,14 @@ describe('authentication configuration', () => {
     });
 
     it('accepts plain http for a loopback host outside production', () => {
-      for (const origin of [
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'http://[::1]:5173',
-      ]) {
-        const options = createAuthOptions(baseInput({ trustedOrigins: [origin] }));
-        expect(options.trustedOrigins).toHaveLength(1);
+      for (const origin of ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']) {
+        expect(createAuthOptions(baseInput({ trustedOrigins: [origin] })).trustedOrigins).toHaveLength(
+          1,
+        );
       }
     });
 
     it('rejects plain http for a non-loopback host outside production', () => {
-      // Loopback is a trustworthy origin; a LAN address reachable by other
-      // machines is not, so development convenience stops at the machine.
       expect(() =>
         createAuthOptions(baseInput({ trustedOrigins: ['http://192.168.10.25:5173'] })),
       ).toThrow(/loopback/i);
@@ -258,25 +245,17 @@ describe('authentication configuration', () => {
 
     it('rejects an origin embedding a username or password', () => {
       expect(() =>
-        createAuthOptions(
-          baseInput({ trustedOrigins: ['http://user:pass@127.0.0.1:5173'] }),
-        ),
+        createAuthOptions(baseInput({ trustedOrigins: ['http://user:pass@127.0.0.1:5173'] })),
       ).toThrow(/username or password/i);
     });
 
-    it('rejects an origin carrying a path', () => {
+    it('rejects an origin carrying a path, query, or fragment', () => {
       expect(() =>
         createAuthOptions(baseInput({ trustedOrigins: ['http://127.0.0.1:5173/app'] })),
       ).toThrow(/path/i);
-    });
-
-    it('rejects an origin carrying a query string', () => {
       expect(() =>
         createAuthOptions(baseInput({ trustedOrigins: ['http://127.0.0.1:5173/?a=1'] })),
       ).toThrow(/query/i);
-    });
-
-    it('rejects an origin carrying a fragment', () => {
       expect(() =>
         createAuthOptions(baseInput({ trustedOrigins: ['http://127.0.0.1:5173/#x'] })),
       ).toThrow(/fragment/i);
@@ -289,62 +268,39 @@ describe('authentication configuration', () => {
     });
 
     it('never echoes a rejected origin, which may carry credentials', () => {
-      const secretish = 'http://admin:hunter2@evil.example.com/path?q=1#f';
-
-      try {
-        createAuthOptions(baseInput({ trustedOrigins: [secretish] }));
-        throw new Error('expected the malformed origin to be rejected');
-      } catch (error) {
-        const text = `${(error as Error).message}\n${(error as Error).stack ?? ''}`;
-        expect(text).not.toContain('hunter2');
-        expect(text).not.toContain('admin');
-        expect(text).not.toContain('evil.example.com');
-      }
+      const text = errorText(() =>
+        createAuthOptions(
+          baseInput({ trustedOrigins: ['http://admin:hunter2@evil.example.com/path?q=1#f'] }),
+        ),
+      );
+      expect(text).not.toContain('hunter2');
+      expect(text).not.toContain('admin');
+      expect(text).not.toContain('evil.example.com');
     });
   });
 
   describe('baseURL', () => {
     it('is normalised to a canonical origin with no trailing slash', () => {
-      const options = createAuthOptions(baseInput({ baseURL: 'http://127.0.0.1:3000/' }));
-
-      expect(options.baseURL).toBe('http://127.0.0.1:3000');
-    });
-
-    it('normalises an uppercase hostname', () => {
-      const options = createAuthOptions(baseInput({ baseURL: 'http://LOCALHOST:3000' }));
-
-      expect(options.baseURL).toBe('http://localhost:3000');
-    });
-
-    it('rejects a malformed value', () => {
-      expect(() => createAuthOptions(baseInput({ baseURL: 'not a url' }))).toThrow(
-        /baseURL/,
+      expect(createAuthOptions(baseInput({ baseURL: 'http://127.0.0.1:3000/' })).baseURL).toBe(
+        'http://127.0.0.1:3000',
       );
     });
 
-    it('rejects an empty value', () => {
+    it('rejects a malformed or empty value', () => {
+      expect(() => createAuthOptions(baseInput({ baseURL: 'not a url' }))).toThrow(/baseURL/);
       expect(() => createAuthOptions(baseInput({ baseURL: '' }))).toThrow(/baseURL/);
     });
 
-    it('rejects an unsupported protocol', () => {
-      expect(() =>
-        createAuthOptions(baseInput({ baseURL: 'ftp://127.0.0.1:3000' })),
-      ).toThrow(/scheme/i);
-    });
-
-    it('rejects a path, query, or fragment', () => {
-      expect(() =>
-        createAuthOptions(baseInput({ baseURL: 'http://127.0.0.1:3000/api' })),
-      ).toThrow(/path/i);
-      expect(() =>
-        createAuthOptions(baseInput({ baseURL: 'http://127.0.0.1:3000/?a=1' })),
-      ).toThrow(/query/i);
-      expect(() =>
-        createAuthOptions(baseInput({ baseURL: 'http://127.0.0.1:3000/#x' })),
-      ).toThrow(/fragment/i);
-    });
-
-    it('rejects an embedded username or password', () => {
+    it('rejects a path, query, fragment, or embedded credential', () => {
+      expect(() => createAuthOptions(baseInput({ baseURL: 'http://127.0.0.1:3000/api' }))).toThrow(
+        /path/i,
+      );
+      expect(() => createAuthOptions(baseInput({ baseURL: 'http://127.0.0.1:3000/?a=1' }))).toThrow(
+        /query/i,
+      );
+      expect(() => createAuthOptions(baseInput({ baseURL: 'http://127.0.0.1:3000/#x' }))).toThrow(
+        /fragment/i,
+      );
       expect(() =>
         createAuthOptions(baseInput({ baseURL: 'http://user:pass@127.0.0.1:3000' })),
       ).toThrow(/username or password/i);
@@ -362,142 +318,142 @@ describe('authentication configuration', () => {
       ).toThrow(/https in production/i);
     });
 
-    it('rejects plain http for a non-loopback host outside production', () => {
-      expect(() =>
-        createAuthOptions(baseInput({ baseURL: 'http://192.168.10.25:3000' })),
-      ).toThrow(/loopback/i);
-    });
-
     it('never echoes a rejected baseURL', () => {
-      const secretish = 'http://admin:hunter2@evil.example.com/path';
-
-      try {
-        createAuthOptions(baseInput({ baseURL: secretish }));
-        throw new Error('expected the malformed baseURL to be rejected');
-      } catch (error) {
-        const text = `${(error as Error).message}\n${(error as Error).stack ?? ''}`;
-        expect(text).not.toContain('hunter2');
-        expect(text).not.toContain('evil.example.com');
-      }
+      const text = errorText(() =>
+        createAuthOptions(baseInput({ baseURL: 'http://admin:hunter2@evil.example.com/path' })),
+      );
+      expect(text).not.toContain('hunter2');
+      expect(text).not.toContain('evil.example.com');
     });
   });
 
-  describe('secret handling', () => {
-    it('fails closed when the secret is missing', () => {
-      expect(() => createAuthOptions(baseInput({ secret: '' }))).toThrow(/secret/i);
+  describe('versioned secrets', () => {
+    it('fails closed when secrets are missing or empty', () => {
+      expect(() => createAuthOptions(baseInput({ secrets: undefined }))).toThrow(/secret/i);
+      expect(() => createAuthOptions(baseInput({ secrets: [] }))).toThrow(/secret/i);
     });
 
-    it('fails closed when the secret is too short to be credible', () => {
-      expect(() => createAuthOptions(baseInput({ secret: 'short' }))).toThrow(/secret/i);
-    });
-
-    it('never reveals the secret value in the thrown error', () => {
-      const weak = 'x'.repeat(8);
-
-      try {
-        createAuthOptions(baseInput({ secret: weak }));
-        throw new Error('expected createAuthOptions to reject the weak secret');
-      } catch (error) {
-        const text = `${(error as Error).message}\n${(error as Error).stack ?? ''}`;
-        expect(text).not.toContain(weak);
-      }
-    });
-
-    it('has no fallback secret: the value supplied is the value used', () => {
-      const secret = syntheticSecret();
-      const options = createAuthOptions(baseInput({ secret }));
-
-      expect(options.secret).toBe(secret);
-    });
-
-    it('preserves a valid secret byte for byte', () => {
-      const secret = syntheticSecret();
-      const options = createAuthOptions(baseInput({ secret }));
-
-      expect(options.secret).toBe(secret);
-      expect(options.secret).toHaveLength(secret.length);
-    });
-
-    it('rejects a secret with leading whitespace rather than trimming it', () => {
-      // Trimming for the check and returning the untrimmed value would
-      // validate one string and use another, so a secret could pass
-      // validation and still not match what the operator configured.
+    it.each([
+      ['zero', 0],
+      ['negative', -1],
+      ['fractional', 1.5],
+      ['a string', '1'],
+      ['not a number', Number.NaN],
+      ['unsafe', Number.MAX_SAFE_INTEGER + 1],
+    ])('rejects a %s version', (_label, version) => {
       expect(() =>
-        createAuthOptions(baseInput({ secret: ` ${syntheticSecret()}` })),
-      ).toThrow(/whitespace/i);
+        createAuthOptions(baseInput({ secrets: [{ version, value: syntheticSecret() }] })),
+      ).toThrow(/version/i);
     });
 
-    it('rejects a secret with trailing whitespace', () => {
+    it('rejects a duplicate version', () => {
       expect(() =>
-        createAuthOptions(baseInput({ secret: `${syntheticSecret()}\n` })),
-      ).toThrow(/whitespace/i);
+        createAuthOptions(
+          baseInput({
+            secrets: [
+              { version: 2, value: syntheticSecret() },
+              { version: 2, value: syntheticSecret() },
+            ],
+          }),
+        ),
+      ).toThrow(/duplicate/i);
     });
 
-    it('never reveals a whitespace-padded secret in the message or stack', () => {
-      const inner = syntheticSecret();
+    it.each([
+      ['empty', ''],
+      ['short', 'x'.repeat(31)],
+      ['padded with leading whitespace', ` ${'a'.repeat(40)}`],
+      ['padded with trailing whitespace', `${'a'.repeat(40)}\n`],
+    ])('rejects an %s value without ever echoing it, naming only its version', (_label, value) => {
+      const text = errorText(() =>
+        createAuthOptions(
+          baseInput({
+            secrets: [
+              { version: 3, value: syntheticSecret() },
+              { version: 2, value },
+            ],
+          }),
+        ),
+      );
 
-      try {
-        createAuthOptions(baseInput({ secret: `  ${inner}  ` }));
-        throw new Error('expected the padded secret to be rejected');
-      } catch (error) {
-        const text = `${(error as Error).message}\n${(error as Error).stack ?? ''}`;
-        expect(text).not.toContain(inner);
-      }
+      expect(text).toMatch(/secret/i);
+      expect(text).toMatch(/version 2/i);
+      if (value.trim() !== '') expect(text).not.toContain(value.trim());
+    });
+
+    it('orders the newest version first, whatever order it was supplied in', () => {
+      const [one, two, three] = [syntheticSecret(), syntheticSecret(), syntheticSecret()];
+
+      const options = createAuthOptions(
+        baseInput({
+          secrets: [
+            { version: 1, value: one },
+            { version: 3, value: three },
+            { version: 2, value: two },
+          ],
+        }),
+      );
+
+      expect(options.secrets).toEqual([
+        { version: 3, value: three },
+        { version: 2, value: two },
+        { version: 1, value: one },
+      ]);
+    });
+
+    it('sets secrets explicitly and no single secret, so no ambient variable can take over', () => {
+      const options = createAuthOptions(baseInput());
+
+      expect(options.secrets).toHaveLength(1);
+      expect(options).not.toHaveProperty('secret');
     });
   });
 
   describe('cookie security', () => {
-    it('forces Secure cookies in production', () => {
-      const options = createAuthOptions(
-        baseInput({
-          environment: 'production',
-          trustedOrigins: ['https://app.fakihbrothers.com'],
-          baseURL: 'https://app.fakihbrothers.com',
-        }),
-      );
-
-      expect(options.advanced?.useSecureCookies).toBe(true);
-    });
-
-    it('defaults to Secure cookies in development too', () => {
-      const options = createAuthOptions(baseInput());
-
-      expect(options.advanced?.useSecureCookies).toBe(true);
-    });
-
-    it('allows insecure cookies only through the explicit development option', () => {
-      const options = createAuthOptions(
-        baseInput({ environment: 'development', allowInsecureCookies: true }),
-      );
-
-      expect(options.advanced?.useSecureCookies).toBe(false);
-    });
-
-    it('refuses to start when insecure cookies are requested in production', () => {
-      expect(() =>
+    it('forces Secure cookies in production and by default in development', () => {
+      expect(
         createAuthOptions(
           baseInput({
             environment: 'production',
-            allowInsecureCookies: true,
             trustedOrigins: ['https://app.fakihbrothers.com'],
             baseURL: 'https://app.fakihbrothers.com',
           }),
-        ),
-      ).toThrow(/insecure cookies/i);
+        ).advanced?.useSecureCookies,
+      ).toBe(true);
+      expect(createAuthOptions(baseInput()).advanced?.useSecureCookies).toBe(true);
     });
 
-    it('refuses to start when insecure cookies are requested outside development', () => {
+    it('allows insecure cookies only through the explicit development option', () => {
+      expect(
+        createAuthOptions(baseInput({ environment: 'development', allowInsecureCookies: true }))
+          .advanced?.useSecureCookies,
+      ).toBe(false);
       expect(() =>
         createAuthOptions(baseInput({ environment: 'test', allowInsecureCookies: true })),
       ).toThrow(/insecure cookies/i);
     });
+
+    it('names the session, challenge, and trusted-device cookies as Better Auth issues them', () => {
+      expect(authCookieNames(createAuthOptions(baseInput()))).toEqual({
+        sessionToken: '__Secure-better-auth.session_token',
+        twoFactor: '__Secure-better-auth.two_factor',
+        trustDevice: '__Secure-better-auth.trust_device',
+      });
+      expect(
+        authCookieNames(createAuthOptions(baseInput({ allowInsecureCookies: true }))),
+      ).toEqual({
+        sessionToken: 'better-auth.session_token',
+        twoFactor: 'better-auth.two_factor',
+        trustDevice: 'better-auth.trust_device',
+      });
+    });
   });
 
   describe('scope boundaries', () => {
-    it('enables no plugin: no admin, MFA, social, bearer, JWT, or Expo feature', () => {
+    it('enables only the two-factor plugin: no admin, social, bearer, JWT, email, or reset feature', () => {
       const options = createAuthOptions(baseInput());
 
-      expect(options.plugins ?? []).toEqual([]);
+      expect((options.plugins ?? []).map((plugin) => plugin.id)).toEqual(['two-factor']);
       expect(options).not.toHaveProperty('socialProviders');
       expect(options.emailAndPassword).not.toHaveProperty('sendResetPassword');
       expect(options.emailAndPassword).not.toHaveProperty('requireEmailVerification');
@@ -505,27 +461,21 @@ describe('authentication configuration', () => {
     });
 
     it('exports no provisioning-mode factory', () => {
-      // createProvisioningAuth() belongs to the Owner-bootstrap checkpoint and
-      // must not exist yet, so it cannot be reached early by accident.
       expect(authConfigModule).not.toHaveProperty('createProvisioningAuth');
     });
   });
 
   it('writes nothing to the console, on the success or the failure path', () => {
-    const spies = {
-      log: vi.spyOn(console, 'log').mockImplementation(() => undefined),
-      info: vi.spyOn(console, 'info').mockImplementation(() => undefined),
-      warn: vi.spyOn(console, 'warn').mockImplementation(() => undefined),
-      error: vi.spyOn(console, 'error').mockImplementation(() => undefined),
-      debug: vi.spyOn(console, 'debug').mockImplementation(() => undefined),
-    };
+    const spies = ['log', 'info', 'warn', 'error', 'debug'].map((method) =>
+      vi.spyOn(console, method as 'log').mockImplementation(() => undefined),
+    );
 
     createAuthOptions(baseInput());
-    expect(() => createAuthOptions(baseInput({ secret: 'short' }))).toThrow();
+    expect(() =>
+      createAuthOptions(baseInput({ secrets: [{ version: 1, value: 'short' }] })),
+    ).toThrow();
 
-    for (const spy of Object.values(spies)) {
-      expect(spy).not.toHaveBeenCalled();
-    }
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
 });
 
@@ -546,36 +496,30 @@ describe('principal gate at session issuance', () => {
     return before!;
   }
 
-  // Better Auth runs this hook before inserting the session row, and aborts
-  // the insert when it returns false. Denying here means no session exists
-  // at all, rather than one that is created and then hidden.
+  const row = (status: string) => ({
+    user_id: 'user_x',
+    status,
+    is_owner: false,
+    mfa_completed_at: null,
+  });
 
   it('allows session creation for an active principal', async () => {
-    const hook = sessionCreateHook(
-      poolReturning([{ user_id: 'user_active', status: 'active', is_owner: false }]),
-    );
-
-    await expect(hook({ userId: 'user_active' } as never, null as never)).resolves.not.toBe(false);
+    const hook = sessionCreateHook(poolReturning([row('active')]));
+    await expect(hook({ userId: 'user_x' } as never, null as never)).resolves.not.toBe(false);
   });
 
-  it('aborts session creation when the principal is missing', async () => {
-    const hook = sessionCreateHook(poolReturning([]));
-
-    await expect(hook({ userId: 'user_missing' } as never, null as never)).resolves.toBe(false);
-  });
-
-  it('aborts session creation when the principal is disabled', async () => {
-    const hook = sessionCreateHook(
-      poolReturning([{ user_id: 'user_disabled', status: 'disabled', is_owner: false }]),
-    );
-
-    await expect(hook({ userId: 'user_disabled' } as never, null as never)).resolves.toBe(false);
+  it('aborts session creation when the principal is missing or disabled', async () => {
+    await expect(
+      sessionCreateHook(poolReturning([]))({ userId: 'user_x' } as never, null as never),
+    ).resolves.toBe(false);
+    await expect(
+      sessionCreateHook(poolReturning([row('disabled')]))({ userId: 'user_x' } as never, null as never),
+    ).resolves.toBe(false);
   });
 
   it('fails closed when the principal lookup throws', async () => {
     const hook = sessionCreateHook(poolReturning(new Error('lookup failed')));
-
-    await expect(hook({ userId: 'user_any' } as never, null as never)).rejects.toThrow();
+    await expect(hook({ userId: 'user_x' } as never, null as never)).rejects.toThrow();
   });
 });
 

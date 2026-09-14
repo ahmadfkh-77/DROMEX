@@ -1,13 +1,16 @@
 # Security and Account Model
 
-Status: **partly implemented, local development only.** Sign-in, sign-out, and
-a sanitized session endpoint exist, with no public registration, and every
-authenticated request requires an active DROMEX principal. Owner provisioning
-tooling exists as a local, interactive, non-HTTP command and service, tested
-only against disposable databases; it is **not approved for real use** until
-mandatory MFA and recovery are implemented and approved, its command refuses
-every run, and **no Owner exists**. No MFA, account management, recovery,
-Owner readiness enforcement, permissions, or deployment exists.
+Status: **partly implemented, local development only.** Sign-in with a
+password followed by a mandatory TOTP code, sign-out, and a sanitized session
+endpoint exist, with no public registration, and every authenticated request
+requires an active DROMEX principal and completed MFA (DEC-434). Terminal
+Owner activation — identity, TOTP enrolment, recovery codes, and the Owner
+principal — exists as a local, interactive, non-HTTP service, tested only
+against disposable databases; it is **not approved for real use** until
+checkpoints 3F-B, 3F-C, and 3F-D are accepted and OQ-161 is resolved
+(DEC-435), its command refuses every run, and **no Owner exists**. No
+recovery-code use, break-glass recovery, password recovery, account
+management, Owner readiness enforcement, permissions, or deployment exists.
 
 The full authentication and authorization architecture — candidate research,
 the selected system and why, the threat model, session and MFA design, the
@@ -66,9 +69,11 @@ was selected over rolling the equivalent by hand.
 
 **Phase 2C has implemented part of it, for local development only:** the
 Better Auth user, session, account, verification, and rate-limit schema, the
-DROMEX principal table, the sign-in, sign-out, and session transport, and the
-pre-MFA Owner provisioning tooling. No MFA or recovery schema exists, no real
-account has been created, and nothing is deployed.
+DROMEX principal table, the sign-in, TOTP verification, sign-out, and session
+transport, mandatory MFA with TOTP replay protection and versioned secrets,
+Better Auth's two-factor schema, recovery-code issuance, and terminal Owner
+activation. Recovery-code use and break-glass recovery are not implemented,
+no real account has been created, and nothing is deployed.
 
 **The Owner is created only by a local interactive command, never over HTTP.**
 There is no setup route, no bootstrap website, no public registration, no

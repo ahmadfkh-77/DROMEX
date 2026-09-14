@@ -21,6 +21,8 @@ export type OwnerProvisioningCode =
   | 'identity_conflict'
   | 'verification_failed'
   | 'session_remains'
+  | 'totp_attempts_exhausted'
+  | 'totp_locked'
   | 'failed';
 
 const MESSAGES: Record<OwnerProvisioningCode, string> = {
@@ -40,6 +42,10 @@ const MESSAGES: Record<OwnerProvisioningCode, string> = {
     'The password could not be verified for the interrupted provisioning. Nothing was claimed.',
   session_remains:
     'A session for the identity could not be confirmed as revoked. The Owner was not created.',
+  totp_attempts_exhausted:
+    'The authenticator code could not be verified in five attempts. Nothing was activated; the operation can be run again.',
+  totp_locked:
+    'Too many failed authenticator verifications. Wait for the lockout to end, then run the operation again. Nothing was activated.',
   failed: 'Owner provisioning failed. No details are shown; the operation can be retried.',
 };
 
