@@ -38,6 +38,10 @@ describe('large linked demo backup generator',()=>{
         expect(projectColumns).toContain('consulting_agency_id');
         const reportColumns=(db.prepare('PRAGMA table_info(daily_project_reports)').all() as {name:string}[]).map(c=>c.name);
         expect(reportColumns).toEqual(expect.arrayContaining(['consulting_agency_id','consulting_agency_name_en','consulting_agency_name_ar']));
+        // Saved company sites and fill destinations are ordinary database content in the same way.
+        expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='company_sites'").get()).toMatchObject({name:'company_sites'});
+        const fuelColumns=(db.prepare('PRAGMA table_info(fuel_movements)').all() as {name:string}[]).map(c=>c.name);
+        expect(fuelColumns).toEqual(expect.arrayContaining(['destination_type','company_site_id']));
       }finally{db.close();}
     }finally{rmSync(directory,{recursive:true,force:true});}
   },20_000);
