@@ -413,10 +413,206 @@ covering the areas above:
 Not verified:
 
 - Terminal recovery for an existing Owner (checkpoint 3F-D), which an
-  abandoned replacement requires and which does not exist.
+  abandoned replacement requires. Implemented later on disposable databases
+  (DEC-437; see the next section); its command is not enabled.
 - An expiry event for a recovery nobody touches again.
 - Timing equivalence of failures, and cookie behaviour in a real browser.
 - Any run against a persistent database, which is prohibited.
+
+## Phase 2C terminal emergency Owner recovery: local verification
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases only, on exact Node 24.20.0.** This is not production verification
+and satisfies no item in the gate below. The command refuses every run, no
+Owner exists, and the Owner activation command is unchanged (DEC-437).
+
+Tests were written first. The RED runs failed for the expected reasons only
+(54 unit and 54 integration failures): stub modules that threw "not
+implemented", the missing `0007` tables and audit columns, a migration count
+of 6 instead of 7, and a command that did not refuse. Every test is run
+through injected terminals and disposable databases; the real command is
+never executed against a database.
+
+Proven locally, with synthetic identities:
+
+- **Eligibility.** No Owner, more than one Owner, and a disabled Owner are
+  refused before any prompt; a typed email that does not name the Owner is
+  refused before the password is asked for.
+- **Password proof.** An incorrect password is refused after exactly one
+  attempt and changes nothing but the audit trail (no run, no session, factor
+  and codes intact, `mfa_completed_at` unchanged). Five rejections within 15
+  minutes throttle the next run before any prompt; older rejections do not
+  count.
+- **Pinning.** Better Auth 1.7.5 reported, an extra `twoFactor` column, and a
+  missing `session` column are each refused before the Owner is touched.
+- **Supported retrieval.** Exactly one stored code is shown once; the stored
+  set is unchanged; the audit trail records the retrieval and contains no
+  code; the code then enters 3F-C web recovery successfully. Without the exact
+  confirmation nothing is shown and the run is abandoned.
+- **Supported replacement** for an Owner with no factor, an unverified factor,
+  a partially disabled factor, a factor disabled by an abandoned web recovery,
+  and a proven existing authenticator: ten new canonical codes equal to the
+  stored set, one verified factor, old codes and the old authenticator
+  refused, `mfa_completed_at` set, no session left, three terminal sessions
+  recorded, audit events in order, and normal sign-in with the new
+  authenticator reaching a business route.
+- **New codes.** An incorrect code and a replayed code are rejected, and the
+  replayed code is never sent to Better Auth; five wrong codes fail closed,
+  revoke every session, and a rerun completes.
+- **Sessions and access.** Every Owner session, including web sessions made
+  before the run, is revoked and counted. At every step from the availability
+  question to the screen clear, the pre-existing web session and every
+  session the run held are refused on `/api/session` and a business route,
+  and `mfa_completed_at` is null. Completion is refused while any session
+  remains, without a verified factor, without the exact two-device or
+  recovery-code acknowledgement, and after an operator cancellation.
+- **DEC-437 reset** only when every code is used and no authenticator is
+  available, when codes are encrypted under a retired secret version, and
+  when the enabled flag has no factor row. Its DROMEX statements to Better
+  Auth tables are exactly `update user` then `delete from twoFactor`, once
+  each, with no owner id or email in any statement text. A non-Owner
+  bystander's user row, factor row, and sessions are byte-identical before
+  and after. It is refused, leaving the factor intact, without the exact
+  phrase, with a malformed incident reference, when the factor changes after
+  classification, and when the Owner is disabled after classification; a
+  failure inside its transaction rolls back the flag, the factor row, the run
+  state, and the audit rows together. An interrupted reset is finished by a
+  supported rerun and never resets twice.
+- **Concurrency and crashes.** Two concurrent runs produce exactly one; a
+  foreign holder of the lock is refused; a stale open run is ended as
+  `interrupted` and audited. An interruption at enrolment, the new-code
+  prompt, the device acknowledgement, the code display, the code
+  acknowledgement, or the screen clear each leaves `mfa_completed_at` null
+  and no session, and a rerun completes with every previously shown code
+  invalid.
+- **Secrets.** After a rejected password, a crash whose underlying error
+  carries the password, and a full reset run, no password, TOTP secret, URI,
+  old or new recovery code, or session token appears in any error, stack, or
+  row of any `dromex_*` table. The command refuses secret-bearing and
+  account-naming arguments without echoing them, ignores the environment, and
+  fails closed as a real process with no stack; the prompts echo no hidden
+  entry and refuse a non-terminal; the configuration loader refuses
+  over-permissive, oversized, malformed, and invalid files without repeating
+  a path or value.
+- **3F-C protections.** Web recovery cannot begin while a terminal run is
+  open; a terminal run ends an open web recovery; and the ordinary gate
+  refuses a valid, MFA-complete session once it is recorded as a terminal
+  recovery session.
+- **Migration 0007.** One open run per Owner; state and end time consistent;
+  a reset requires a well-formed incident reference; every audit event type
+  is accepted while unknown types, free-text references, zero run
+  references, and changes are refused.
+- **Boundaries.** Exactly the two DEC-437 statements, parameterised, exist in
+  exactly one module; no other source module writes a Better Auth table; no
+  `twoFactor` row is inserted or rewritten; the route table is unchanged, so
+  no HTTP endpoint was added; provisioning modules read no environment.
+
+Suites on exact Node 24.20.0 (disposable container, `npm ci` from the
+committed lockfile, Docker-backed PostgreSQL 18.6): workspace typecheck
+clean; API unit tests 333/333 (19 files); API integration tests 242/242
+(12 files), including 53 terminal recovery tests. `npm audit` and
+`npm audit --omit=dev` report 0 vulnerabilities. The Playwright suite and the
+Android typecheck and suite were rerun on the host and are unaffected.
+
+**Mutation testing (38/38 killed).** Thirty-eight targeted mutations were each
+applied alone, inside the disposable Node 24.20.0 container's own copy of the
+workspace, with the named tests run and the file restored and confirmed
+byte-identical by SHA-256 afterwards. They covered password verification
+(ignoring a rejection, treating a 401 as a session), the throttle and its
+window, Owner selection (several Owners, a disabled Owner, the typed email),
+the version and schema pins, the advisory lock and stale-run clearing,
+`mfa_completed_at` clearing, the ordinary gate's terminal-session refusal,
+web recovery's refusal and supersession, terminal-session recording, session
+revocation at completion and on failure, the completion session and factor
+checks, replay claiming, the five-attempt limit, both acknowledgements, path
+selection, all three typed confirmations and the incident pattern, retired
+secret detection, the reset fingerprint, principal re-check, W1 and W2
+scoping, commit ordering, error redaction, the disabled command, the
+configuration permission check, and the audit incident-reference check.
+
+The first pass killed 32. Five mutations ran no test because the runner
+passed two name filters and Vitest honours only one; with the filters joined
+into one pattern, all five were killed. One genuinely survived — removing the
+schema column-count check — because the only schema test added a column,
+which the per-column type check already refused; a new test dropping a
+verified column kills it. Before the run, four further weak spots were found
+while mapping mutations to tests and closed with new tests, never production
+changes: the reset's principal re-check, the completion factor check, and
+the exact two-device and recovery-code acknowledgements. One 3F-C test that
+pins the audit table's exact column list was updated for the two
+constrained columns migration `0007` adds.
+
+Host notes: the host's Node 22.17.1 cannot execute a `.ts` entry point
+directly, so the real-process command tests (the new one and the existing
+activation command's) fail only there with `ERR_UNKNOWN_FILE_EXTENSION`; both
+pass on Node 24.20.0.
+
+Not verified:
+
+- Any real configuration file, real Owner, or real run of the command, all of
+  which are prohibited until a separate enabling decision.
+- The command wired end to end to the configuration loader and the real
+  terminal, deliberately not done while it is not enabled.
+- Operator identity capture and a second-person approval, which do not exist.
+- Timing equivalence of failures.
+- Any run against a persistent database, which is prohibited.
+
+### Continuation checkpoint: 3F-D paused (2026-09-15)
+
+Checkpoint 3F-D was paused by Owner directive so an Android workstream could
+proceed on a separate branch. Nothing below changes the status above; it
+records where to resume.
+
+- **Branch.** `web/phase2c-auth-foundation`, work-in-progress commit
+  `wip(web): checkpoint terminal Owner recovery` on top of `af407a4`. Not
+  merged into `main`.
+- **Completed.** The DEC-437 design approved on 2026-09-15 and implemented as
+  described in the architecture document (§11, checkpoint 3F-D): terminal-only
+  recovery requiring the current password; version, schema, and ledger pins;
+  advisory lock and durable run record (migration `0007`); containment that
+  keeps business access blocked; supported replacement, supported one-code
+  retrieval, and the last-resort reset limited to W1 and W2 in
+  `src/provisioning/owner-mfa-reset.ts`; the audit events; the configuration
+  loader; the tests, the RED record, and the 38-mutation run recorded above.
+- **Files.** New: `migrations/dromex/0007_dromex_terminal_recovery.sql`;
+  `src/provisioning/` `owner-mfa-reset.ts`, `owner-recovery-command.ts`,
+  `recovery-config.ts`, `terminal-recovery.ts`,
+  `terminal-recovery-errors.ts`, `terminal-recovery-identity.ts`,
+  `terminal-recovery-prompt.ts`; tests
+  `integration/terminal-owner-recovery.test.ts`,
+  `unit/owner-recovery-command.test.ts`,
+  `unit/owner-recovery-terminal.test.ts`, `unit/recovery-config.test.ts`.
+  Modified: `src/auth/owner-recovery.ts`, `src/auth/security-audit.ts`,
+  `src/db/dromex-migrations.ts`, five existing test files, this document,
+  `README.md`, `security-and-accounts.md`,
+  `authentication-and-authorization-architecture.md`, and
+  `requirements/decisions.md` (DEC-437).
+- **Re-verified at the pause, on the host.** Workspace typecheck clean; API
+  unit tests 331/333, with the two failures being the documented host
+  limitation (Node 22.17.1 cannot run a `.ts` entry point); secret scan of
+  every changed file found synthetic fixtures only; `web/.env` is ignored and
+  untouched, and the Android migrations and root `package.json` are
+  unchanged. In a disposable Node 24.20.0 container (`npm ci`, a copy
+  without `.env`): typecheck clean and API unit tests 333/333. On the host,
+  the five affected integration files (terminal recovery, web recovery,
+  migrations, authentication flow, rate-limit storage) passed 162/162 against
+  disposable PostgreSQL. The full 242-test integration suite and the mutation
+  checks were not rerun at the pause.
+- **Still pending.** Owner review and acceptance of 3F-D; replacing the
+  work-in-progress commit with an accepted `feat(web)` commit; the full
+  integration suite and mutation checks rerun on Node 24.20.0 after any
+  review changes; the enabling decision for the command (DEC-437 (8));
+  production secret delivery; operator identity capture and second-person
+  approval; OQ-161.
+- **Risks and blockers.** The known limits listed in the architecture
+  document (§11, checkpoint 3F-D) are unchanged. No blocker prevents
+  resumption; acceptance is the gate.
+- **First step on resume.** Check out `web/phase2c-auth-foundation`, confirm
+  it matches `origin`, rerun the typecheck and both API suites on exact Node
+  24.20.0, then present 3F-D for Owner acceptance. Do not enable the command.
+- **Not touched.** The real recovery command still refuses every run. No real
+  account, `web/.env`, VPS, persistent database, or production system was
+  accessed.
 
 ## Production-readiness gate
 

@@ -12,9 +12,13 @@ checkpoints 3F-B, 3F-C, and 3F-D are accepted and OQ-161 is resolved
 who has lost the authenticator can sign in with the password and one unused
 recovery code into a short-lived recovery state that reaches no business
 route and permits only replacing the authenticator, and every recovery step
-is recorded in a DROMEX-owned security audit (DEC-436). No terminal
-break-glass recovery, password recovery, account management, Owner
-readiness enforcement, permissions, or deployment exists.
+is recorded in a DROMEX-owned security audit (DEC-436). A terminal emergency
+recovery for an Owner who knows the current password but cannot complete MFA
+exists and is tested on disposable databases only: it prefers supported
+authenticator replacement and retrieval of one stored code, and permits a
+narrowly scoped two-operation factor reset only when neither is possible
+(DEC-437); its command refuses every run. No password recovery, account
+management, Owner readiness enforcement, permissions, or deployment exists.
 
 The full authentication and authorization architecture — candidate research,
 the selected system and why, the threat model, session and MFA design, the
@@ -77,8 +81,17 @@ DROMEX principal table, the sign-in, TOTP verification, sign-out, and session
 transport, mandatory MFA with TOTP replay protection and versioned secrets,
 Better Auth's two-factor schema, recovery-code issuance, terminal Owner
 activation, recovery-code sign-in with restricted authenticator replacement,
-and the security audit foundation. Terminal break-glass recovery is not
-implemented, no real account has been created, and nothing is deployed.
+the security audit foundation, and terminal emergency Owner recovery
+(DEC-437), whose command is not enabled. No real account has been created,
+and nothing is deployed.
+
+**Terminal emergency recovery never resets a forgotten password.** It
+requires the current password, verified by Better Auth, and accepts no
+account, password, code, or secret on the command line. The only exception
+to Better Auth owning its own rows is DEC-437's two operations on the single
+Owner's factor, used only when supported recovery is impossible. The detail
+is in
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#terminal-emergency-owner-recovery-phase-2c-checkpoint-3f-d-disposable-databases-only).
 
 **The Owner is created only by a local interactive command, never over HTTP.**
 There is no setup route, no bootstrap website, no public registration, no

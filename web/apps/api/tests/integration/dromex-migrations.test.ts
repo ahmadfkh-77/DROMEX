@@ -17,7 +17,7 @@ const BETTER_AUTH_MIGRATION = fileURLToPath(
 );
 
 const BETTER_AUTH_TABLES = ['user', 'session', 'account', 'verification', 'rateLimit'];
-const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006'];
+const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006', '0007'];
 
 describe('DROMEX migration mechanism', () => {
   let database: EphemeralDatabase;
@@ -494,6 +494,8 @@ describe('DROMEX migration mechanism', () => {
       'dromex_principal',
       'dromex_rate_limit',
       'dromex_recovery_session',
+      'dromex_terminal_recovery',
+      'dromex_terminal_recovery_session',
       'dromex_totp_replay',
     ]);
 

@@ -1201,8 +1201,8 @@ replacement is abandoned (sign-out), expires, fails five times, or fails at
 any later step, nothing is restored or re-enabled: the recovery ends,
 `terminal_recovery_required` is audited, and business access stays blocked.
 With no verified factor the password step issues no challenge, so no web
-path remains; the Owner needs terminal recovery, which is checkpoint 3F-D and
-**does not exist yet**.
+path remains; the Owner needs terminal recovery, which is checkpoint 3F-D
+(DEC-437, described below; implemented on disposable databases, not enabled).
 
 **6. Security audit foundation** (`dromex_audit_event`, DROMEX migration
 `0005`; `src/auth/security-audit.ts`). Events: recovery code accepted and
@@ -1227,9 +1227,8 @@ application currently connects as the table owner.
 
 **Known limits, not yet addressed:**
 
-- Terminal recovery for an existing Owner (3F-D) does not exist, so an
-  abandoned replacement after the old factor is disabled cannot yet be
-  recovered at all.
+- An abandoned replacement after the old factor is disabled can be recovered
+  only by terminal recovery (3F-D, DEC-437), whose command is not enabled.
 - An expired recovery is ended when a request next touches it (the recovery
   session, a new recovery for the same Owner, or sign-out). An Owner who
   simply walks away produces no expiry event until then.
@@ -1259,6 +1258,206 @@ Sources, inspected 2026-09-14: installed `better-auth@1.7.4`
 `revokeSessions`, `revokeOtherSessions`, `getSession`;
 `dist/api/rate-limiter/index.mjs`), and
 <https://www.better-auth.com/docs/plugins/2fa>.
+
+### Terminal emergency Owner recovery (Phase 2C checkpoint 3F-D, disposable databases only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases on exact Node 24.20.0 only. Not production-ready, not enabled, and
+not approved for real use.** The command refuses every run, no Owner exists,
+and the Owner activation command is unchanged and still refuses every run.
+Governing decision: DEC-437, which refines DEC-423 and realises DEC-435 (5).
+Password recovery (OQ-161) is not implemented: this procedure requires the
+current password.
+
+**Modules.** All live under `src/provisioning/`, which nothing the server
+imports can reach (a static boundary test), and no HTTP route was added (the
+complete route table is asserted unchanged).
+
+| Module | Role |
+|---|---|
+| `terminal-recovery.ts` | The recovery service: checks, path selection, containment, completion |
+| `terminal-recovery-identity.ts` | The seam to Better Auth's server API, through a terminal-only instance |
+| `owner-mfa-reset.ts` | The DEC-437 exception (W1 and W2), the version and schema pin, the factor fingerprint |
+| `terminal-recovery-prompt.ts` | The interactive terminal: hidden entries, one-time displays, typed confirmations |
+| `recovery-config.ts` | File-path-only configuration with owner-only permission checks |
+| `owner-recovery-command.ts` | The entry point, which refuses every run |
+| `terminal-recovery-errors.ts` | Fixed error messages; causes are dropped |
+
+**1. Before the password — nothing changes but the audit trail.** A run takes
+a PostgreSQL advisory lock (a distinct key) on one connection for its whole
+life; a second run is refused and audited without an actor. It then refuses
+unless Better Auth reports exactly version 1.7.4, the columns and types of
+`user`, `session`, and `twoFactor` match the verified set exactly, and the
+DROMEX migration ledger matches the migration list. It selects owners with
+`LIMIT 2` and refuses none, several, or a disabled one. It refuses when five
+`terminal_password_rejected` events were audited for the Owner in the last 15
+minutes. An open run record found while this process holds the lock belongs
+to a process that died, so it is ended as `interrupted` and audited. The
+operator sees the environment and a masked email, and must type the full
+email before the password is asked for.
+
+**2. Password proof.** One attempt per run, through Better Auth's
+`signInEmail` on a terminal-only instance built from the runtime options
+(public sign-up still disabled, logger disabled) whose session hook admits
+only the target Owner while it is an active Owner principal. Better Auth
+checks the password before creating anything; for an enabled factor the
+two-factor plugin deletes that session and returns only a challenge, so a
+challenge proves the password without granting a session. A rejection is
+audited and the run ends; no DROMEX state has changed.
+
+**3. Containment.** One transaction then locks the principal, ends any open
+web recovery as `abandoned` (audited with reason
+`terminal_recovery_superseded`), clears `mfa_completed_at`, records the run
+(`dromex_terminal_recovery`, DROMEX migration `0007`, at most one open per
+Owner), and audits `terminal_identity_verified`. From here, business access is
+refused by `mfa_completed_at` being null; by `dromex_terminal_recovery_session`,
+where every Better Auth session the run obtains is recorded before it is used
+and which the ordinary gate now refuses permanently alongside
+`dromex_recovery_session`; and, while the factor is disabled, by Better Auth
+reporting `twoFactorEnabled` false. Web recovery's `begin` refuses while a
+terminal run is open.
+
+**4. Path selection.**
+
+| Better Auth state after the password | Operator | Path |
+|---|---|---|
+| No enabled factor (absent, unverified, or flag off with a leftover row) | — | Supported replacement |
+| Enabled factor | Types `AUTHENTICATOR AVAILABLE` and proves a code | Supported replacement |
+| Enabled factor, a usable stored code | Types `NO AUTHENTICATOR AVAILABLE`, then `SHOW ONE CODE` | Supported retrieval |
+| Enabled factor, no usable stored code, or codes encrypted under a retired secret version | Types `NO AUTHENTICATOR AVAILABLE`, then `RESET OWNER MFA` and an incident reference | DEC-437 reset, then supported replacement |
+
+"Retired secret version" is decided without decrypting: the stored codes'
+Better Auth envelope names a version that is not configured. Any other
+decryption failure fails closed and never leads to a reset.
+
+**5. Supported replacement.** `disableTwoFactor` removes any old secret and
+every old code and rotates the session; `enableTwoFactor` creates the new,
+unverified factor through Better Auth's adapter; the secret and URI are shown
+once. At most five codes from the new authenticator are accepted. Unlike
+checkpoints 3F-B and 3F-C, which record a code after Better Auth accepts it,
+terminal recovery claims each code in `dromex_totp_replay` **before** Better
+Auth sees it, so a replayed code can never enable the factor; a malformed,
+replayed, or incorrect code is audited as `terminal_new_totp_rejected`. After
+the two-device acknowledgement, `generateBackupCodes` issues ten new codes —
+only now that the new authenticator is proven, and on every run, so no set an
+interrupted run showed stays valid — shown once and acknowledged. Every Owner
+session is revoked through `revokeSessions`, counted before and after, and
+audited. The completion transaction then locks the principal and the run and
+refuses unless the principal is an active Owner with `mfa_completed_at` null,
+the run is at `factor_verified`, **no Owner session remains**, the Owner has
+exactly one verified factor, and no web recovery is open; only then does it
+set `mfa_completed_at` and end the run. Normal password-and-TOTP sign-in is
+required afterwards.
+
+**6. Supported retrieval.** After the typed confirmation, one canonical unused
+code is read through server-only `viewBackupCodes`; the run is ended as
+`code_retrieved` and `recovery_code_retrieved` is audited in one transaction
+**before** the code is displayed once, with a sensitivity warning and the
+instruction to use it in web recovery. `mfa_completed_at` stays null, so the
+Owner must finish through DEC-436 web recovery.
+
+**7. The DEC-437 reset.** After the reset warning, the exact phrase, and a
+valid incident reference, `resetOwnerFactor` runs one transaction:
+`lock_timeout` 5 s and `statement_timeout` 15 s; the single Owner principal
+locked with `LIMIT 2 FOR UPDATE` and re-checked; the Owner's `user` row and
+any factor row locked; the enabled flag, the factor-row count (at most one),
+and a SHA-256 fingerprint of the flag and stored ciphertext compared with the
+state classified before the confirmations; `mfa_completed_at` cleared; then
+exactly:
+
+```sql
+-- W1: must change exactly one row
+UPDATE "user" SET "twoFactorEnabled" = FALSE, "updatedAt" = CURRENT_TIMESTAMP WHERE id = $1 AND "twoFactorEnabled" = TRUE
+-- W2: must change exactly the locked factor-row count (0 or 1)
+DELETE FROM "twoFactor" WHERE "userId" = $1
+```
+
+The run moves to `factor_reset` with path `reset` and the incident reference,
+and `owner_emergency_mfa_reset` and `terminal_old_factor_removed` are written
+in the same transaction. Any mismatch, count difference, or error rolls all of
+it back (`factor_changed`, `not_eligible`, or `failed`). The run then signs in
+again — now an ordinary session — and continues with supported replacement.
+No DROMEX SQL inserts or rewrites a `twoFactor` row; the static allowlist test
+permits exactly these two statements in exactly this module and nothing
+anywhere else.
+
+**8. Failures, crashes, and reruns.** Any failure or cancellation after the
+password ends the run as `failed` (or `abandoned` for a missing confirmation
+or Ctrl+C), revokes the run's newest session, audits the outcome with a
+reason code, and restores nothing.
+
+| Interrupted at | State left | A later run |
+|---|---|---|
+| Before the password | Unchanged | Starts normally |
+| After the password, before any factor change | Factor intact, access blocked | Reclassifies; may retrieve, replace, or reset |
+| After a committed reset | No factor, access blocked | Supported replacement; never a second reset |
+| After enrolment started | Unverified factor | `enableTwoFactor` replaces it |
+| After the new code verified, before or after codes shown | New factor, codes unseen or seen | Operator proves the new authenticator; codes are rotated |
+| A process killed while holding the lock | Open run record | Ended as `interrupted` and audited, then a normal run |
+
+**9. Secrets.** The password, codes, and confirmations are read only through
+the raw-mode prompt, which echoes nothing for hidden entries and refuses a
+non-terminal. Arguments are two paths; anything secret-bearing or naming an
+account is refused without being echoed. Better Auth's logger is disabled.
+Every error leaving the service is a fixed `TerminalRecoveryError`; the
+underlying cause — which may carry a password, as a test deliberately
+arranges — is dropped. The audit writer refuses any value outside its
+structured shape. Only three things are ever displayed: one retrieved code,
+the new secret and URI, and the new codes, each once, after a warning that
+scrollback and recordings may retain them.
+
+**10. Audit events.** `terminal_recovery_requested`,
+`terminal_identity_verified`, `terminal_password_rejected`,
+`terminal_recovery_concurrent_refused`, `terminal_stale_recovery_cleared`,
+`terminal_recovery_refused` (reasons `not_eligible`, `version_mismatch`,
+`schema_mismatch`, `throttled`, `not_confirmed`), `recovery_code_retrieved`,
+`owner_emergency_mfa_reset`, `terminal_replacement_started`,
+`terminal_old_factor_removed` (`removed` or `absent`),
+`terminal_new_totp_rejected`, `terminal_new_totp_verified`,
+`terminal_recovery_codes_issued`, `terminal_sessions_revoked` (with a count),
+`terminal_recovery_completed`, `terminal_recovery_failed`, and
+`terminal_recovery_abandoned`. Migration `0007` replaces only the event-type
+check (the earlier list is carried over unchanged) and adds two constrained
+columns, `terminal_recovery_id` and `incident_reference`
+(`^INC-[0-9]{8}-[0-9]{2}$`). The append-only protection is unchanged, and so
+is its limit: the table owner and database administrators can still disable
+the triggers or alter the table.
+
+**11. Configuration.** `recovery-config.ts` reads a JSON configuration file
+(environment, base URL, trusted origins, versioned secrets, optional
+insecure-cookie flag — exactly these keys) and a one-line PostgreSQL URL file.
+Each must be a non-empty regular file under a size limit and, on POSIX,
+carry no group or other permission bits; on Windows the file ACL governs.
+The configuration then passes the same `createAuthOptions` validation the API
+applies. It is tested with synthetic files only and is not wired to the
+command, which refuses every run.
+
+**Known limits, not yet addressed:**
+
+- The command is not enabled, and production secret delivery is undecided.
+- Identity proof on this path is server authority plus the current password;
+  possession of a second factor is not checked for the reset. Anyone with
+  privileged database access and the secrets already has substantial
+  control.
+- Re-enrolment is not atomic with the reset: Better Auth's calls run in its
+  own transactions. Containment and reruns handle the gap.
+- The operator's operating-system identity is not recorded, and there is no
+  second-person approval.
+- A challenge record from the password step lingers until Better Auth expires
+  it (300 seconds).
+- Terminal scrollback and recordings can retain the displayed secrets.
+- A JavaScript string holding the password cannot be zeroed.
+- The table owner and database administrators remain outside the audit
+  table's tamper resistance.
+
+Sources, inspected 2026-09-15: installed `better-auth@1.7.4`
+(`dist/plugins/two-factor/index.mjs` — `enableTwoFactor`, `disableTwoFactor`,
+the sign-in challenge hook; `backup-codes/index.mjs` — `viewBackupCodes`,
+`generateBackupCodes`; `totp/index.mjs` — `verifyTOTP`;
+`verify-two-factor.mjs`; `dist/api/routes/sign-in.mjs`;
+`dist/api/routes/session.mjs`; `dist/crypto/index.mjs` — `parseEnvelope`,
+`symmetricDecrypt`). Online documentation was not consulted for this
+checkpoint, which was restricted to the repository and the installed source.
 
 ## 12. PostgreSQL security and the row-level-security decision
 
@@ -1449,8 +1648,17 @@ the Owner has no one above them to perform an admin-side reset.
    resort** for when retrieval cannot work, requiring **separate explicit
    Owner approval** as an exception to the rule against mutating Better
    Auth-owned rows; where a property below refers to clearing MFA, it
-   applies only to that fallback. Neither is implemented; both belong to
-   Checkpoint 3F-D. The production implementation must be a
+   applies only to that fallback.
+
+   *Implemented 2026-09-15 (DEC-437, Checkpoint 3F-D), on disposable databases
+   only and not enabled.* Both now exist in one terminal command. Supported
+   retrieval of one code is preferred; the reset is narrowed to two exact
+   operations (turning the Owner's factor flag off and removing the Owner's
+   factor row) and is permitted only when supported replacement and
+   retrieval are both impossible. The command verifies the current password
+   first and completes re-enrolment in the same run instead of at the next
+   login, following DEC-434. See §11, checkpoint 3F-D. The production
+   implementation must be a
    **version-controlled administrative command or runbook**, reviewed and
    stored in this repository like any other operational tooling, that:
 

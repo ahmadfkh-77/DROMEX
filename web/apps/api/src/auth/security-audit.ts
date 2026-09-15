@@ -1,13 +1,15 @@
 /**
- * The DROMEX security audit writer (DEC-430, DEC-436).
+ * The DROMEX security audit writer (DEC-430, DEC-436, DEC-437).
  *
  * The only DROMEX path into `dromex_audit_event`. An event is a fixed,
  * structured shape: an event type from a closed list, an outcome, the acting
- * user and a snapshot of their name, a recovery reference, a constrained
- * reason code, a revoked-session count, and a client address. Anything else —
- * an unknown type, an extra property, a reason that is not a short lower-case
- * identifier — is refused before a statement is sent, so no caller can pass a
- * password, code, secret, cookie, token, or request body into the audit trail.
+ * user and a snapshot of their name, a web recovery reference, a constrained
+ * reason code, a revoked-session count, a client address, a terminal recovery
+ * run reference, and an incident reference. Anything else — an unknown type,
+ * an extra property, a reason that is not a short lower-case identifier, an
+ * incident reference that is not `INC-YYYYMMDD-NN` — is refused before a
+ * statement is sent, so no caller can pass a password, code, secret, cookie,
+ * token, or request body into the audit trail.
  *
  * Errors never include a submitted value, because a refused value may itself
  * be the secret that must not be recorded.
@@ -28,6 +30,24 @@ export const SECURITY_AUDIT_EVENT_TYPES = [
   'recovery_abandoned',
   'recovery_sessions_revoked',
   'terminal_recovery_required',
+  // Terminal emergency Owner recovery (DEC-437).
+  'terminal_recovery_requested',
+  'terminal_identity_verified',
+  'terminal_password_rejected',
+  'terminal_recovery_concurrent_refused',
+  'terminal_stale_recovery_cleared',
+  'terminal_recovery_refused',
+  'recovery_code_retrieved',
+  'owner_emergency_mfa_reset',
+  'terminal_replacement_started',
+  'terminal_old_factor_removed',
+  'terminal_new_totp_rejected',
+  'terminal_new_totp_verified',
+  'terminal_recovery_codes_issued',
+  'terminal_sessions_revoked',
+  'terminal_recovery_completed',
+  'terminal_recovery_failed',
+  'terminal_recovery_abandoned',
 ] as const;
 
 export type SecurityAuditEventType = (typeof SECURITY_AUDIT_EVENT_TYPES)[number];
@@ -42,12 +62,16 @@ export interface SecurityAuditEvent {
   type: SecurityAuditEventType;
   outcome: SecurityAuditOutcome;
   actor: SecurityAuditActor | null;
-  /** The recovery's database identifier, as a decimal string. */
+  /** The web recovery's database identifier, as a decimal string. */
   recoveryId: string | null;
   /** A short lower-case identifier such as `invalid_code`, never free text. */
   reason: string | null;
   revokedSessionCount: number | null;
   clientAddress: string | null;
+  /** The terminal recovery run's database identifier, as a decimal string. */
+  terminalRecoveryId: string | null;
+  /** The operator's dated incident reference, `INC-YYYYMMDD-NN`. */
+  incidentReference: string | null;
 }
 
 /** Anything that runs a parameterised statement: a pool or a client in a transaction. */
@@ -67,20 +91,33 @@ export class SecurityAuditValidationError extends Error {
   }
 }
 
-const EVENT_KEYS = ['actor', 'clientAddress', 'outcome', 'reason', 'recoveryId', 'revokedSessionCount', 'type'];
+/** Sorted, because the shape check compares sorted keys. */
+const EVENT_KEYS = [
+  'actor',
+  'clientAddress',
+  'incidentReference',
+  'outcome',
+  'reason',
+  'recoveryId',
+  'revokedSessionCount',
+  'terminalRecoveryId',
+  'type',
+];
 const ACTOR_KEYS = ['name', 'userId'];
 const EVENT_TYPES = new Set<string>(SECURITY_AUDIT_EVENT_TYPES);
 const OUTCOMES = new Set<string>(['success', 'failure']);
 const REASON = /^[a-z][a-z_]{0,63}$/;
-const RECOVERY_ID = /^[1-9][0-9]{0,18}$/;
+const DATABASE_ID = /^[1-9][0-9]{0,18}$/;
 const CLIENT_ADDRESS = /^[0-9A-Fa-f:.]{1,45}$/;
+const INCIDENT_REFERENCE = /^INC-[0-9]{8}-[0-9]{2}$/;
 const MAX_NAME_LENGTH = 200;
 const MAX_USER_ID_LENGTH = 255;
 
 const INSERT = `
   INSERT INTO dromex_audit_event
-    (event_type, outcome, actor_user_id, actor_name, recovery_id, reason, revoked_session_count, client_address)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`;
+    (event_type, outcome, actor_user_id, actor_name, recovery_id, reason, revoked_session_count, client_address,
+     terminal_recovery_id, incident_reference)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -91,11 +128,16 @@ function hasExactly(value: Record<string, unknown>, keys: readonly string[]): bo
   return actual.length === keys.length && actual.every((key, index) => key === keys[index]);
 }
 
-/** The eight statement values, in column order, or a thrown refusal. */
+function nullableMatch(value: unknown, pattern: RegExp): boolean {
+  return value === null || (typeof value === 'string' && pattern.test(value));
+}
+
+/** The ten statement values, in column order, or a thrown refusal. */
 function valuesOf(event: unknown): unknown[] {
   if (!isPlainObject(event) || !hasExactly(event, EVENT_KEYS)) throw new SecurityAuditValidationError('event shape');
 
-  const { type, outcome, actor, recoveryId, reason, revokedSessionCount, clientAddress } = event;
+  const { type, outcome, actor, recoveryId, reason, revokedSessionCount, clientAddress, terminalRecoveryId, incidentReference } =
+    event;
 
   if (typeof type !== 'string' || !EVENT_TYPES.has(type)) throw new SecurityAuditValidationError('event type');
   if (typeof outcome !== 'string' || !OUTCOMES.has(outcome)) throw new SecurityAuditValidationError('outcome');
@@ -113,23 +155,32 @@ function valuesOf(event: unknown): unknown[] {
     actorName = name === '' ? null : name;
   }
 
-  if (recoveryId !== null && (typeof recoveryId !== 'string' || !RECOVERY_ID.test(recoveryId))) {
-    throw new SecurityAuditValidationError('recovery reference');
-  }
-  if (reason !== null && (typeof reason !== 'string' || !REASON.test(reason))) {
-    throw new SecurityAuditValidationError('reason');
-  }
+  if (!nullableMatch(recoveryId, DATABASE_ID)) throw new SecurityAuditValidationError('recovery reference');
+  if (!nullableMatch(reason, REASON)) throw new SecurityAuditValidationError('reason');
   if (
     revokedSessionCount !== null &&
     (typeof revokedSessionCount !== 'number' || !Number.isSafeInteger(revokedSessionCount) || revokedSessionCount < 0)
   ) {
     throw new SecurityAuditValidationError('revoked session count');
   }
-  if (clientAddress !== null && (typeof clientAddress !== 'string' || !CLIENT_ADDRESS.test(clientAddress))) {
-    throw new SecurityAuditValidationError('client address');
+  if (!nullableMatch(clientAddress, CLIENT_ADDRESS)) throw new SecurityAuditValidationError('client address');
+  if (!nullableMatch(terminalRecoveryId, DATABASE_ID)) {
+    throw new SecurityAuditValidationError('terminal recovery reference');
   }
+  if (!nullableMatch(incidentReference, INCIDENT_REFERENCE)) throw new SecurityAuditValidationError('incident reference');
 
-  return [type, outcome, actorUserId, actorName, recoveryId, reason, revokedSessionCount, clientAddress];
+  return [
+    type,
+    outcome,
+    actorUserId,
+    actorName,
+    recoveryId,
+    reason,
+    revokedSessionCount,
+    clientAddress,
+    terminalRecoveryId,
+    incidentReference,
+  ];
 }
 
 /** Builds a structured event with every optional field explicitly null. */
@@ -139,7 +190,12 @@ export function securityEvent(
   actor: SecurityAuditActor | null,
   recoveryId: string | null,
   clientAddress: string | null,
-  extra: { reason?: string | null; revokedSessionCount?: number | null } = {},
+  extra: {
+    reason?: string | null;
+    revokedSessionCount?: number | null;
+    terminalRecoveryId?: string | null;
+    incidentReference?: string | null;
+  } = {},
 ): SecurityAuditEvent {
   return {
     type,
@@ -149,6 +205,8 @@ export function securityEvent(
     reason: extra.reason ?? null,
     revokedSessionCount: extra.revokedSessionCount ?? null,
     clientAddress,
+    terminalRecoveryId: extra.terminalRecoveryId ?? null,
+    incidentReference: extra.incidentReference ?? null,
   };
 }
 

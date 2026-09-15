@@ -163,8 +163,11 @@ export function createOwnerRecovery(pool: Pool, audit: SecurityAudit): OwnerReco
 
   return {
     async isRecoverySession(sessionId) {
+      // A session a terminal recovery run obtained (DEC-437) is refused
+      // exactly like a web recovery session.
       const { rows } = await pool.query<{ bound: boolean }>(
-        `SELECT EXISTS (SELECT 1 FROM dromex_recovery_session WHERE session_id = $1) AS bound`,
+        `SELECT EXISTS (SELECT 1 FROM dromex_recovery_session WHERE session_id = $1)
+             OR EXISTS (SELECT 1 FROM dromex_terminal_recovery_session WHERE session_id = $1) AS bound`,
         [sessionId],
       );
       return rows[0]?.bound === true;
@@ -182,6 +185,14 @@ export function createOwnerRecovery(pool: Pool, audit: SecurityAudit): OwnerReco
           if (principal === undefined || principal.status !== 'active' || principal.is_owner !== true) {
             throw new RecoveryRefusal('not_eligible');
           }
+
+          // A terminal recovery in progress excludes web recovery (DEC-437).
+          // The terminal run locks the same principal row when it begins.
+          const { rows: terminal } = await client.query(
+            `SELECT 1 FROM dromex_terminal_recovery WHERE user_id = $1 AND ended_at IS NULL`,
+            [actor.userId],
+          );
+          if (terminal.length > 0) throw new RecoveryRefusal('recovery_in_progress');
 
           const { rows: stale } = await client.query<{ id: string }>(
             `SELECT id::text AS id FROM dromex_owner_recovery

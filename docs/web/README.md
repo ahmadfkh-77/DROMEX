@@ -12,8 +12,8 @@ describes a rule, it cites the decision that established it.
 | Document | Covers | Implementation status |
 | --- | --- | --- |
 | [architecture.md](architecture.md) | Service boundaries, technology baseline, how the web system relates to the existing Android application | **Partly implemented** (Phase 1 skeleton only) |
-| [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Partly implemented** (local development only: password-plus-TOTP sign-in, sign-out, sanitized session endpoint, active-principal and mandatory-MFA enforcement, Owner recovery-code sign-in with restricted authenticator replacement, and a security audit foundation; terminal Owner activation tested on disposable databases only, its command still refuses every run, and no Owner exists; no public registration, terminal break-glass recovery, password recovery, or account management) |
-| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, the sign-in, TOTP verification, sign-out, and session transport, mandatory MFA, TOTP replay protection, versioned secrets, recovery-code issuance, resumable terminal Owner activation whose command refuses every run, recovery-code sign-in with a restricted recovery state and supported authenticator replacement, and the security audit foundation. No Owner, terminal break-glass tooling, Owner readiness enforcement, permissions, UI, or deployment) |
+| [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Partly implemented** (local development only: password-plus-TOTP sign-in, sign-out, sanitized session endpoint, active-principal and mandatory-MFA enforcement, Owner recovery-code sign-in with restricted authenticator replacement, and a security audit foundation; terminal Owner activation and terminal emergency Owner recovery tested on disposable databases only, both commands refuse every run, and no Owner exists; no public registration, password recovery, or account management) |
+| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, the sign-in, TOTP verification, sign-out, and session transport, mandatory MFA, TOTP replay protection, versioned secrets, recovery-code issuance, resumable terminal Owner activation whose command refuses every run, recovery-code sign-in with a restricted recovery state and supported authenticator replacement, the security audit foundation, and terminal emergency Owner recovery with the DEC-437 last-resort reset, whose command refuses every run. No Owner, Owner readiness enforcement, permissions, UI, or deployment) |
 | [postgresql-strategy.md](postgresql-strategy.md) | Schema approach, identifier preservation, roles, the PostgreSQL 18 volume rule | **Partly implemented** (development service only, no schema) |
 | [synchronization-strategy.md](synchronization-strategy.md) | Android synchronisation protocol and conflict rules | **Planned** (not implemented) |
 | [docker-vps-strategy.md](docker-vps-strategy.md) | Local Docker topology, port exposure rules, production deployment plan | **Partly implemented** (local development only) |
@@ -38,9 +38,10 @@ What does **not** exist, and must not be assumed to exist:
 - authentication beyond the Phase 2C local transport (email/password plus
   mandatory TOTP sign-in, sign-out, and a sanitized session endpoint, verified
   only against disposable test databases), recovery-code sign-in with
-  restricted authenticator replacement, and a security audit foundation:
-  no terminal break-glass recovery, password recovery, permissions, or real
-  account,
+  restricted authenticator replacement, a security audit foundation, and
+  terminal emergency Owner recovery tested on disposable databases only
+  (DEC-437; its command refuses every run): no password recovery,
+  permissions, or real account,
 - a real Owner: terminal activation exists and is tested against disposable
   databases, but its command refuses every run until checkpoints 3F-B, 3F-C,
   and 3F-D are accepted and OQ-161 is resolved (DEC-435),
@@ -84,8 +85,9 @@ The Android application is unchanged and remains offline-first on local SQLite
 | DEC-434 | Mandatory TOTP MFA enforced; first Owner activated only through the local terminal; no trusted-device bypass; versioned secrets; TOTP replay protection |
 | DEC-435 | Hardened Better Auth recovery codes; supported retrieval as the primary future break-glass; real activation prohibited until 3F-B, 3F-C, 3F-D, and OQ-161; precision correction: supported replacement temporarily disables the old factor |
 | DEC-436 | Restricted web recovery state for Owner recovery-code sign-in and supported authenticator replacement; no business access without a verified factor; security audit foundation |
+| DEC-437 | Terminal emergency Owner recovery requiring the current password; supported replacement and one-code retrieval preferred; narrowly scoped two-operation factor reset only when supported recovery is impossible; command not enabled |
 
-Full detail for DEC-418 through DEC-436 is in
+Full detail for DEC-418 through DEC-437 is in
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md).
 
 Open questions that gate later phases: **OQ-158** (whether the real

@@ -28,6 +28,8 @@ const VALID: SecurityAuditEvent = {
   reason: null,
   revokedSessionCount: 2,
   clientAddress: '198.51.100.7',
+  terminalRecoveryId: null,
+  incidentReference: null,
 };
 
 describe('security audit writer', () => {
@@ -49,6 +51,37 @@ describe('security audit writer', () => {
       null,
       2,
       '198.51.100.7',
+      null,
+      null,
+    ]);
+  });
+
+  it('writes a terminal recovery event with its run reference and incident reference', async () => {
+    const { db, statements } = recordingDatabase();
+
+    await createSecurityAudit(db).record({
+      type: 'owner_emergency_mfa_reset',
+      outcome: 'success',
+      actor: { userId: 'user_synthetic', name: 'Synthetic Owner' },
+      recoveryId: null,
+      reason: null,
+      revokedSessionCount: null,
+      clientAddress: null,
+      terminalRecoveryId: '7',
+      incidentReference: 'INC-20260915-01',
+    });
+
+    expect(statements[0]!.values).toEqual([
+      'owner_emergency_mfa_reset',
+      'success',
+      'user_synthetic',
+      'Synthetic Owner',
+      null,
+      null,
+      null,
+      null,
+      '7',
+      'INC-20260915-01',
     ]);
   });
 
@@ -63,9 +96,22 @@ describe('security audit writer', () => {
       reason: 'invalid_code',
       revokedSessionCount: null,
       clientAddress: null,
+      terminalRecoveryId: null,
+      incidentReference: null,
     });
 
-    expect(statements[0]!.values).toEqual(['recovery_code_rejected', 'failure', null, null, null, 'invalid_code', null, null]);
+    expect(statements[0]!.values).toEqual([
+      'recovery_code_rejected',
+      'failure',
+      null,
+      null,
+      null,
+      'invalid_code',
+      null,
+      null,
+      null,
+      null,
+    ]);
   });
 
   it.each<[string, unknown]>([
@@ -84,6 +130,10 @@ describe('security audit writer', () => {
     ['an actor with an extra property', { ...VALID, actor: { userId: 'user_synthetic', name: 'Owner', token: 'x' } }],
     ['an actor without a user id', { ...VALID, actor: { userId: '', name: 'Owner' } }],
     ['a non-object', 'recovery_code_rejected'],
+    ['an incident reference carrying free text', { ...VALID, incidentReference: 'INC-20260915-01 lost phone, code 4815' }],
+    ['a malformed incident reference', { ...VALID, incidentReference: 'INC-2026-1' }],
+    ['a non-numeric terminal recovery reference', { ...VALID, terminalRecoveryId: '7 OR 1=1' }],
+    ['a zero terminal recovery reference', { ...VALID, terminalRecoveryId: '0' }],
   ])('refuses %s before touching the database', async (_label, event) => {
     const { db, statements } = recordingDatabase();
 

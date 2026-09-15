@@ -15,6 +15,18 @@ import {
 
 const SRC = fileURLToPath(new URL('../../src/', import.meta.url));
 const PROVISIONING = join(SRC, 'provisioning');
+/** The only module DEC-437 permits to write a Better Auth-owned row. */
+const DEC_437_MODULE = join(PROVISIONING, 'owner-mfa-reset.ts');
+
+const BETTER_AUTH_WRITE =
+  /\b(insert\s+into|update|delete\s+from|truncate|alter\s+table|drop\s+table|copy)\s+"?(user|account|session|verification|rateLimit|twoFactor)"?(\s|$|\(|;)/gi;
+
+/** Every Better Auth-table write statement in a text, normalised as `<verb> <table>`. */
+function betterAuthWritesIn(text: string): string[] {
+  return [...text.matchAll(BETTER_AUTH_WRITE)].map(
+    (match) => `${match[1]!.toLowerCase().replace(/\s+/g, ' ')} ${match[2]}`,
+  );
+}
 
 async function sourceFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -80,36 +92,40 @@ describe('Owner provisioning isolation from the running server', () => {
     }
   });
 
-  it('issues no mutating SQL against Better Auth-owned tables from any provisioning module', async () => {
-    const mutation =
-      /\b(insert\s+into|update|delete\s+from|truncate|alter\s+table|drop\s+table)\s+"?(user|account|session|verification|rateLimit|twoFactor)"?(\s|$|\()/i;
-
-    for (const file of await sourceFiles(PROVISIONING)) {
-      expect(await readFile(file, 'utf8'), file).not.toMatch(mutation);
-    }
-  });
-
-  it('leaves every Better Auth-owned table to Better Auth: no API source module writes one with its own SQL (DEC-431)', async () => {
-    const write =
-      /\b(insert\s+into|update|delete\s+from|truncate|alter\s+table|drop\s+table|copy)\s+"?(user|account|session|verification|rateLimit|twoFactor)"?(\s|$|\(|;)/i;
+  it('leaves every Better Auth-owned table to Better Auth except the two DEC-437 statements, in their one allowlisted module', async () => {
     const files = await sourceFiles(SRC);
+    expect(files).toContain(DEC_437_MODULE);
     expect(files.some((file) => file.endsWith('owner-recovery.ts'))).toBe(true);
 
     for (const file of files) {
-      expect(await readFile(file, 'utf8'), file).not.toMatch(write);
+      const writes = betterAuthWritesIn(await readFile(file, 'utf8'));
+      // Exactly W1 and W2, once each, and nothing else anywhere.
+      expect(writes, file).toEqual(file === DEC_437_MODULE ? ['update user', 'delete from twoFactor'] : []);
     }
   });
 
-  it('leaves every twoFactor write to Better Auth: no API source module writes that table with its own SQL', async () => {
+  it('never inserts, updates, or copies a twoFactor row with DROMEX SQL; only DEC-437 deletes the Owner row', async () => {
     // The generated table has no database defaults, so a row written outside
     // Better Auth's adapter could carry a NULL counter that never locks.
-    const write = /\b(insert\s+into|update|delete\s+from|truncate|alter\s+table|drop\s+table|copy)\s+"?twoFactor"?/i;
+    const rewrite = /\b(insert\s+into|update|truncate|alter\s+table|drop\s+table|copy)\s+"?twoFactor"?/i;
+    const removal = /\bdelete\s+from\s+"?twoFactor"?/gi;
     const files = await sourceFiles(SRC);
     expect(files.length).toBeGreaterThan(10);
 
     for (const file of files) {
-      expect(await readFile(file, 'utf8'), file).not.toMatch(write);
+      const text = await readFile(file, 'utf8');
+      expect(text, file).not.toMatch(rewrite);
+      expect([...text.matchAll(removal)], file).toHaveLength(file === DEC_437_MODULE ? 1 : 0);
     }
+  });
+
+  it('keeps the DEC-437 statements parameterised and scoped to one Owner', async () => {
+    const text = await readFile(DEC_437_MODULE, 'utf8');
+
+    expect(text).toMatch(
+      /UPDATE "user" SET "twoFactorEnabled" = FALSE, "updatedAt" = CURRENT_TIMESTAMP WHERE id = \$1 AND "twoFactorEnabled" = TRUE/,
+    );
+    expect(text).toMatch(/DELETE FROM "twoFactor" WHERE "userId" = \$1`/);
   });
 
   it('keeps public sign-up disabled in the runtime configuration for every environment and cookie setting', () => {
