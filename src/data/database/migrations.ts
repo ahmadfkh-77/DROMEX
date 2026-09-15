@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 35;
+export const DATABASE_VERSION = 36;
 
 type TableColumn = { name: string };
 
@@ -1030,6 +1030,44 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       );
     }
     currentVersion = 35;
+  }
+
+  if (currentVersion === 35) {
+    // DEC-438. Saved company sites and the fuel destination of an equipment fill. Only execAsync and
+    // addColumnIfMissing are used, so the step runs identically on every supported database adapter.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS company_sites (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        -- Repository-computed duplicate key (trim, collapse internal whitespace, case-fold). It is
+        -- unique among active sites only, so a deactivated site's name can be used by a new site.
+        name_key TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_company_sites_active_name_key ON company_sites(name_key) WHERE is_active = 1;
+    `);
+    await addColumnIfMissing(db, 'fuel_movements', 'company_site_id', 'TEXT REFERENCES company_sites(id)');
+    // NULL is reserved for purchases, gauge readings, and a fill not yet backfilled; every value that
+    // is stored must agree with its links, so a stale hidden project or site id can never persist.
+    await addColumnIfMissing(db, 'fuel_movements', 'destination_type', `TEXT CHECK (
+      destination_type IS NULL OR (movement_type = 'fill' AND (
+        (destination_type = 'project' AND project_id IS NOT NULL AND company_site_id IS NULL) OR
+        (destination_type = 'company_site' AND company_site_id IS NOT NULL AND project_id IS NULL) OR
+        (destination_type = 'unassigned' AND project_id IS NULL AND company_site_id IS NULL)
+      ))
+    )`);
+    // Deterministic backfill: a fill with a project link was project fuel; every other existing fill
+    // is Unassigned. No existing fill is ever classified as a Company Site. Only still-NULL rows are
+    // touched, so re-entering this step never overrides a destination chosen after the first run.
+    await db.execAsync(`
+      UPDATE fuel_movements
+        SET destination_type = CASE WHEN project_id IS NOT NULL THEN 'project' ELSE 'unassigned' END
+        WHERE movement_type = 'fill' AND destination_type IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_fuel_movements_company_site ON fuel_movements(company_site_id, confirmed_at DESC);
+    `);
+    currentVersion = 36;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

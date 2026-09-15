@@ -503,6 +503,29 @@ values on its next save.
   release and were not yet committed at build time; the commit recording
   them follows this entry once the owner approves it.
 
+## Release — DROMEX 0.16.0, Android build 19 (2026-09-15)
+
+- **Build 19 — 0.16.0, feature commit `f066f54` plus the release-metadata
+  commit `4fa449c`.** Fuel Destinations and saved Company Sites (DEC-438,
+  database version 36): an equipment fill records a destination of Project,
+  Company Site, or Unassigned, and Fuel Usage by Destination replaces the
+  former fuel-cost-by-project view. Package identity
+  (`com.dromex.management`) and the existing EAS Android signing credentials
+  were reused unchanged, so this installs in place over build 18.
+- **EAS build**: `064e6578-1986-43c2-9839-d463018f22c3`, built from commit
+  `4fa449c`. Finished successfully on 2026-09-15; profile `preview`,
+  distribution `INTERNAL`, Expo SDK 54.
+- **Artifact**: `output/DROMEX-0.16.0-build19.apk`, 83,083,830 bytes
+  (~79 MB). SHA-256:
+  `37a3a1ebdb31c3f75eea1647d39b1616025f4f738e4747a722fbde2101bd69ab`.
+  Ignored by `output/*.apk` and untracked (DEC-396); build 18 and earlier
+  local installers are untouched.
+- **Physically verified.** The owner installed build 19 over build 18 on
+  their phone. Existing data was preserved, forward migration 36 succeeded
+  on the device, Fuel Destination and Company Sites worked correctly,
+  Unassigned fills were visible and inspectable, and the signed APK was
+  confirmed working. Build 19 is now the accepted internal artifact.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:
