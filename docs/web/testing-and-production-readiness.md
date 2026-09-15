@@ -614,6 +614,47 @@ records where to resume.
   account, `web/.env`, VPS, persistent database, or production system was
   accessed.
 
+### Resumed and re-verified (2026-09-15)
+
+3F-D was resumed on `web/phase2c-auth-foundation` at the work-in-progress
+commit, confirmed identical to `origin`. The Owner's approval of the DEC-437
+design, terminal re-enrolment, password proof, migration `0007`, the
+configuration boundary, and the implementation scope matches what DEC-437
+already records; no production source, migration, or decision text changed.
+
+- **Audit against the approval.** Every approved condition was traced to code
+  and a test. Five checks had no test, so five tests were added to
+  `integration/terminal-owner-recovery.test.ts` (four new, one strengthened):
+  an incomplete DROMEX migration ledger is refused before any prompt; an empty
+  or over-long password is rejected and audited without reaching Better Auth;
+  the terminal-only Better Auth instance issues no session to an identity that
+  is not an active Owner principal (Better Auth reports that refusal as an
+  ordinary sign-in failure); completion is refused while a web recovery is
+  open; and a completion refused because a session remains audits
+  `terminal_sessions_revoked` as a failure.
+- **RED evidence for the new tests.** Production code already existed, so
+  each new test was proven by mutation instead: removing the ledger check, the
+  password length guard, the terminal instance's principal check, the
+  completion's web-recovery check, or the failure outcome each made exactly its
+  test fail (M40–M44 below). One new test first failed on its own wrong
+  assumption (it expected a thrown error) and was corrected to assert the real
+  fail-closed result: no session and no session row.
+- **Suites on exact Node 24.20.0** (disposable container, `npm ci` from the
+  committed lockfile, export without `.env`, Docker-backed PostgreSQL 18.6).
+  Before the new tests: typecheck clean, unit 333/333, integration 242/242.
+  After: typecheck clean, unit 333/333 (19 files), integration 246/246
+  (12 files, 57 terminal recovery tests), `npm audit` and
+  `npm audit --omit=dev` 0 vulnerabilities, lockfile hash unchanged.
+- **Mutation testing (43/43 killed).** The 38 recorded mutations were rerun
+  and M40–M44 added, each applied alone in the container's own copy and
+  restored and confirmed byte-identical by SHA-256. The first pass killed 33;
+  the other 10 did not apply because their multi-line snippets were written
+  with LF while this Windows working tree uses CRLF. With line-ending-aware
+  matching all 10 were applied and killed. No mutation survived.
+- **Still pending.** Owner acceptance; replacing the work-in-progress commit;
+  the enabling decision for the command (DEC-437 (8)); production secret
+  delivery; operator identity capture and second-person approval; OQ-161.
+
 ## Production-readiness gate
 
 The system is **not** production ready until every line below is verified with

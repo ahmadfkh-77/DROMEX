@@ -4,7 +4,7 @@ import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { Pool } from 'pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { AuthSettings } from '../../src/auth/config.ts';
+import { PASSWORD_MAX_LENGTH, type AuthSettings } from '../../src/auth/config.ts';
 import {
   SECURITY_AUDIT_EVENT_TYPES,
   createSecurityAudit,
@@ -633,6 +633,44 @@ describe('Terminal Owner recovery against PostgreSQL 18.6', () => {
       expect(codeOf(run.error)).toBe('verification_failed');
       expect(run.record.steps).toContain('password');
     });
+
+    it('rejects an empty or over-long password without sending it to Better Auth', async () => {
+      const owner = await ownerWithFactor();
+      const real = identity();
+      let signIns = 0;
+      const counting: TerminalRecoveryIdentityPort = {
+        ...real,
+        async signIn(input) {
+          signIns += 1;
+          return real.signIn(input);
+        },
+      };
+
+      for (const password of ['', 'x'.repeat(PASSWORD_MAX_LENGTH + 1)]) {
+        const run = await recover(owner, { password }, { identity: counting });
+        expect(codeOf(run.error)).toBe('verification_failed');
+      }
+
+      expect(signIns).toBe(0);
+      expect((await eventTypes()).filter((type) => type === 'terminal_password_rejected')).toHaveLength(2);
+      expect(await runs(owner.id)).toEqual([]);
+      expect(await mfaCompletedAt(owner.id)).not.toBeNull();
+    });
+
+    it('never issues a terminal session to an identity that is not an active Owner principal', async () => {
+      const bystander = await provisionSyntheticUser(authPool, settings, 'bystander');
+      await setPrincipal(authPool, bystander.id, 'active', false);
+
+      // Better Auth reports a refused session as an ordinary sign-in failure.
+      const outcome = await identity().signIn({
+        email: bystander.email,
+        password: bystander.password,
+        userId: bystander.id,
+      });
+
+      expect(outcome).toEqual({ kind: 'invalid' });
+      expect(await sessionCount(bystander.id)).toBe(0);
+    });
   });
 
   describe('version and schema pinning', () => {
@@ -667,6 +705,19 @@ describe('Terminal Owner recovery against PostgreSQL 18.6', () => {
       expect(codeOf(run.error)).toBe('schema_mismatch');
       expect(run.record.steps).toEqual([]);
       expect(await factorState(owner.id)).toEqual({ enabled: true, factor_rows: 1, verified: true });
+    });
+
+    it('refuses when the DROMEX migration ledger is incomplete', async () => {
+      const owner = await ownerWithFactor();
+      await authPool.query(`DELETE FROM dromex_migration WHERE id = '0007'`);
+
+      const run = await recover(owner);
+
+      expect(codeOf(run.error)).toBe('schema_mismatch');
+      expect(run.record.steps).toEqual([]);
+      expect(await runs(owner.id)).toEqual([]);
+      expect(await mfaCompletedAt(owner.id)).not.toBeNull();
+      expect((await audit()).map((row) => row.reason)).toEqual(['schema_mismatch']);
     });
   });
 
@@ -1007,6 +1058,28 @@ describe('Terminal Owner recovery against PostgreSQL 18.6', () => {
       expect(await eventTypes()).not.toContain('terminal_recovery_completed');
     });
 
+    it('refuses completion while a web recovery is open', async () => {
+      const owner = await ownerWithoutFactor();
+
+      const run = await recover(owner, {
+        at: {
+          // Test-only state in a disposable database, just before completion.
+          clear: async () => {
+            await authPool.query(
+              `INSERT INTO dromex_owner_recovery (user_id, session_id, step, expires_at)
+               VALUES ($1, 'synthetic-web-session', 'code_accepted', CURRENT_TIMESTAMP + interval '1 minute')`,
+              [owner.id],
+            );
+          },
+        },
+      });
+
+      expect(codeOf(run.error)).toBe('failed');
+      expect(await mfaCompletedAt(owner.id)).toBeNull();
+      expect(await runs(owner.id)).toMatchObject([{ state: 'failed', ended: true }]);
+      expect(await eventTypes()).not.toContain('terminal_recovery_completed');
+    });
+
     it('ends the run as abandoned when the operator cancels', async () => {
       const owner = await ownerWithoutFactor();
 
@@ -1319,6 +1392,9 @@ describe('Terminal Owner recovery against PostgreSQL 18.6', () => {
       expect(await mfaCompletedAt(owner.id)).toBeNull();
       expect(await runs(owner.id)).toMatchObject([{ state: 'failed', ended: true }]);
       expect(await sessionCount(owner.id)).toBeGreaterThan(0);
+      expect((await audit()).find((row) => row.event_type === 'terminal_sessions_revoked')).toMatchObject({
+        outcome: 'failure',
+      });
       for (const cookie of captured.cookies) expect(await businessStatus(app, cookie)).toEqual([401, 401]);
     });
   });
