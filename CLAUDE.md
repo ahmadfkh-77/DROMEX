@@ -27,9 +27,11 @@ application. It records outgoing company loads, incoming supplier loads, project
 daily reports, equipment, fuel, waste, walls, pavement calculations, finances,
 documents, and backups.
 
-Current source release metadata is version `0.15.0`, Android version code `18`,
+Current source release metadata is version `0.16.0`, Android version code `19`,
 package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
-internal Android artifact is `output/DROMEX-0.15.0-build18.apk` when present.
+internal Android artifact is `output/DROMEX-0.15.0-build18.apk` when present;
+`output/DROMEX-0.16.0-build19.apk` (Fuel Destinations, DEC-438) is a preview
+build pending physical acceptance.
 
 Release APKs are no longer committed to Git from build 14 onward (DEC-396):
 `output/*.apk` is ignored, so the signed artifact lives in `output/` on the
