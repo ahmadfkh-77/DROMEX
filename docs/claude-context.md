@@ -21,14 +21,34 @@ answer any of these without a fresh Owner directive. **OQ-161 (email
 delivery) was closed on 2026-09-16 as a design decision by DEC-439 through
 DEC-442** (Resend via HTTPS API, Admin invitations with restricted web TOTP
 enrolment, password reset for every enabled account, fragment-only token
-links; architecture §14A). It is approved design only: nothing is
-implemented, production configured, or verified, and no email has been
-sent. **DEC-443 keeps real Owner activation blocked** until that reset path is
+links; architecture §14A). Only the email transport foundation is
+implemented (checkpoint 4A, local tests only, not wired to the server);
+invitations and password reset are not, nothing is production configured,
+and no email has been sent. **DEC-443 keeps real Owner activation blocked** until that reset path is
 implemented, verified, production configured, and physically rehearsed and
 the command is separately approved. Before
 starting the next web implementation phase, read that document in full,
 `docs/web/security-and-accounts.md`, and the relevant `requirements/`
 decisions and open questions — do not rely on this paragraph alone.
+
+### Web Phase 2C continuation checkpoint (branch `web/phase2c-auth-foundation`)
+
+- **Checkpoint 4A (email transport) — complete.** Committed as
+  `feat(web): add secure transactional email transport`. Includes the
+  verified Resend HTTP 409 policy recorded in DEC-439: in-progress retried with
+  the same key and body; conflict and unclassifiable 409 never retried.
+  Verified on exact Node 24.20.0 in a disposable container (unit 434/434,
+  integration 246/246, 17/17 + 9/9 mutations), host Playwright 12/12, Android
+  537/537. Not wired to the server.
+- **Next: checkpoint 4B1** — Owner-managed Admin invitation issuance (create,
+  resend, cancel, expiry, delivery handoff, audit; no acceptance). Verify the
+  branch is synchronised with `origin` and the tree is clean first.
+- Verification harness used: a disposable `node:24.20.0-trixie-slim`
+  container with the Docker socket mounted for Testcontainers, fed a tar of
+  Git-listed and untracked-unignored `web/` files (so `web/.env` is never
+  copied), `npm ci` from the lockfile.
+- Owner activation and terminal recovery still refuse every run. No real
+  provider, key, email, account, VPS, or `web/.env` was involved.
 
 ## Design context (Impeccable)
 

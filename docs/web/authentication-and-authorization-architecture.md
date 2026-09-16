@@ -1724,13 +1724,14 @@ resort, and the single-Owner rule never bent to provide either.
 
 ## 14A. Transactional email, Admin invitations, and password reset
 
-Status: **approved design only (DEC-439 through DEC-442, closing OQ-161,
-2026-09-16). Not implemented, not production configured, and not physically
-verified.** No email transport, invitation, reset route, page, template,
-token, provider account, DNS record, or secret file exists, and no email has
-been sent. The Accounts and Sessions phase (§23) has not started. The Owner
-activation command and the terminal recovery command are unchanged and still
-refuse every run.
+Status: **approved design (DEC-439 through DEC-442, closing OQ-161,
+2026-09-16); only the provider-neutral email transport foundation is
+implemented, locally and not wired to the server (checkpoint 4A, below).
+Nothing is production configured or physically verified.** No invitation,
+reset route, page, live template, token, Resend account, API key, DNS record,
+or secret file exists, and no email has been sent. The Accounts and Sessions
+phase (§23) has not started. The Owner activation command and the terminal
+recovery command are unchanged and still refuse every run.
 
 **Owner activation gate (DEC-443).** Closing OQ-161 by design does not
 unblock real Owner activation. The Owner activation command may be enabled
@@ -1878,9 +1879,148 @@ documentation):
 | Provider key compromised | Revoke, rotate, and review as in the incident procedure above |
 | Webhooks | None exist. If added later, they require a separate reviewed decision with signature, timestamp, and duplicate checks, and still may never change authentication state |
 
+### Implemented transport foundation (Phase 2C checkpoint 4A, local development only)
+
+Status: **implemented and verified on exact Node 24.20.0 in a disposable
+Linux container; not wired to the server, not production configured, and
+never connected to Resend.** No route, workflow, template, or audit event
+uses it yet. The verification record is in
+[testing-and-production-readiness.md](testing-and-production-readiness.md#phase-2c-email-transport-foundation-checkpoint-4a-local-verification).
+
+**Modules** (`web/apps/api/src/email/`, no new dependency):
+
+| Module | Responsibility |
+|---|---|
+| `message.ts` | The message model, the approved purposes, and validation |
+| `result.ts` | The closed result model and the transport interface |
+| `transport.ts` | The disabled and capture transports, and the factory |
+| `resend.ts` | The Resend HTTPS transport, retries, and response handling |
+| `secret-file.ts` | The secure loader for the Resend key file |
+| `config.ts` | Transport selection from a supplied environment object |
+| `errors.ts` | Fixed-text configuration errors |
+
+**Interface.** Every transport exposes `kind` and one `send(message)`
+returning exactly one of `accepted` (with a validated provider message id),
+`retryable_failure`, `permanent_failure`, or `disabled`, each with a fixed
+reason code and an attempt count. No result carries a provider body, header,
+address, subject, body, link, or key. Nothing writes to the console.
+
+**Message model.** One purpose from `admin_invitation`, `password_reset`,
+`password_changed`, `delivery_test`; an idempotency key of the form
+`<purpose>/<8–128 letters, digits, or hyphens>` that must match the purpose;
+one lower-case ASCII sender address with an optional plain display name; one
+lower-case ASCII recipient; an optional Reply-To; a subject of at most 150
+characters; and both a plain-text (at most 20,000 characters) and an HTML
+(at most 100,000 characters) body. Any other field is refused, so copies,
+custom headers, attachments, and scheduling cannot reach a provider. Control
+characters, including CR, LF, and the Unicode line separators, are refused
+in every header field. The HTML guard refuses images, scripts, frames,
+styles, forms, SVG, comments, character references, event handlers, URL-
+bearing attributes, `javascript:` and `data:` values, CSS `url()` and
+`@import`, and any link that is not double-quoted; every absolute URL in
+either body, and every `href`, must use the one configured link origin.
+Provider-key, bearer-token, private-key, and similar patterns are refused in
+the metadata, and the Resend transport also refuses any field containing its
+own key. This is a strict guard for DROMEX-authored static templates, not a
+general HTML sanitizer.
+
+**Selection** (`loadEmailTransportConfig`, not yet called by the server):
+`DROMEX_EMAIL_TRANSPORT` unset or empty means `disabled`; `capture` is
+refused in production; `resend` requires `DROMEX_EMAIL_RESEND_API_KEY_FILE`,
+an absolute path, and that variable is refused for any other transport. A
+key supplied directly as `RESEND_API_KEY`, `DROMEX_EMAIL_RESEND_API_KEY`,
+`DROMEX_EMAIL_API_KEY`, or `POSTMARK_SERVER_TOKEN` stops configuration
+rather than being used. The link origin must be one exact HTTPS origin;
+plain HTTP is accepted only for a loopback host outside production. The
+capture transport also refuses production at construction, independently of
+the configuration loader.
+
+**Key file.** Refused outright on Windows, where no equivalent guarantee
+exists. Otherwise the path must be absolute; the file is opened once with
+`O_RDONLY | O_NOFOLLOW | O_NONBLOCK`; `fstat` on that descriptor must show a
+regular file with no group or other permission bit and a size from 1 to 512
+bytes; the content must decode as UTF-8 and, after removing one final `\n`
+or `\r\n`, match the key shape Resend's documentation shows (`re_` then 8 to
+250 letters, digits, `_`, or `-`). The read buffer is zeroed and the
+descriptor closed on every path; errors never contain the path or content.
+Owner-matching of the file is **not** checked, so a root-owned `0400` Docker
+secret remains readable by design. The key must still become a JavaScript
+string to be sent in a header, and no JavaScript code can erase that string
+from memory; a process-memory disclosure remains an operational risk.
+
+**Resend request** (re-verified against Resend's official API reference,
+error, idempotency, and rate-limit pages on 2026-09-16): `POST
+https://api.resend.com/emails` with `Authorization: Bearer <key>`,
+`Content-Type` and `Accept` of `application/json`, `Idempotency-Key`, and
+`User-Agent: dromex-api/0.1.0` (Resend rejects requests without a
+User-Agent with 403). The body carries only `from`, `to`, `subject`, `text`,
+`html`, and `reply_to` when present. Redirects are refused. A success needs a
+2xx status, a JSON content type, a body of at most 16 KiB, and an `id` of 1 to
+128 letters, digits, `_`, or `-` starting with a letter or digit; anything
+else is a permanent `provider_response_invalid` and is not retried. Apart from
+a 409 body (below), no other response body is ever read.
+
+**HTTP 409** (re-verified 2026-09-16 against Resend's official
+[error reference](https://resend.com/docs/api-reference/errors) and
+[idempotency guide](https://resend.com/docs/dashboard/emails/idempotency-keys);
+the discriminating field is `name`, as typed by `ErrorResponse` in Resend's
+official Node SDK, `resend/resend-node` `src/interfaces.ts`). Resend documents
+three 409 types: `concurrent_idempotent_requests` (another request with the
+same key is in progress; "safe to retry this request later"),
+`invalid_idempotent_request` (the key was already used within 24 hours with a
+different body; retrying is useless), and `resource_locked` (resource
+updates). DROMEX reads a 409 body only when its content type is JSON and it is
+at most 4 KiB, parses it as an object, and compares only its top-level `name`
+exactly with the first two strings; no other field is used, and nothing from
+the body is kept, returned, or logged.
+
+| 409 body | Result | Retried |
+|---|---|---|
+| `name` exactly `concurrent_idempotent_requests` | retryable `idempotency_in_progress` | Yes, as a temporary failure: same key, byte-identical body, same backoff, `Retry-After` bound, three-attempt limit, and two-minute deadline; exhaustion ends as `retryable_failure` `idempotency_in_progress` |
+| `name` exactly `invalid_idempotent_request` | permanent `idempotency_conflict` | Never; the key is never changed to force a send |
+| `resource_locked`, any other or case-varied name, a missing or nested `name`, a non-object, invalid or empty JSON, a non-JSON content type, or a body over 4 KiB | permanent `provider_rejected` | Never |
+
+An exhausted in-progress result is reported as retryable, not accepted and not
+permanently failed, because the earlier request with that key may still
+complete: the caller must treat delivery as unknown, and a later attempt with
+the same key within Resend's 24-hour retention cannot create a second email.
+The capture transport mirrors this: a reused key with a changed payload
+returns `idempotency_conflict`.
+
+**Retries** (DEC-439). At most three attempts, all within 120 seconds of the
+first; the same idempotency key and byte-identical body on every attempt.
+Retried: HTTP 429, HTTP 5xx, the documented in-progress 409 above, an attempt timeout (30 seconds, or less when
+less time remains), and the network codes `ECONNRESET`, `ECONNREFUSED`,
+`ECONNABORTED`, `EPIPE`, `ETIMEDOUT`, `EAI_AGAIN`, `ENETUNREACH`,
+`ENETDOWN`, `EHOSTUNREACH`, and Undici's socket, close, and timeout codes.
+Not retried: every other 4xx, including every other 409 (401 and 403 as `provider_authentication`), a
+redirect, an unexpected status, and any other thrown error. Backoff is 1
+second, then 2 seconds, plus up to 250 ms of jitter. A `Retry-After` given as one
+to six digits of whole seconds lengthens the wait when it is at most 30 and
+ends the send as retryable, rather than retrying early, when it is above 30;
+any other form (an HTTP date, a fraction, a sign, or more digits) is ignored. No attempt starts, and
+no sleep begins, unless at least one second would remain before the deadline,
+and the deadline is re-checked after every sleep. Clock, sleep, randomness,
+timers, and `fetch` are injectable, and every loop is bounded.
+
+**Known limits of the foundation, not yet addressed:**
+
+- The 409 classification depends on Resend keeping its documented `name`
+  values and field. If either changes, an in-progress 409 fails closed as a
+  permanent `provider_rejected` rather than being retried; the email may then
+  in fact be sent, so a caller must never read a failure as proof of
+  non-delivery.
+- A 429 for an exhausted daily or monthly quota is retried like a rate limit,
+  because 429 bodies are not read; it ends as `retryable_failure`
+  after at most three attempts.
+- Open and click tracking are controlled per domain in the Resend dashboard;
+  the code sends no tracking field but cannot prove the dashboard setting.
+- The key's `re_` shape comes from Resend's documented example; a change in
+  Resend's key format would fail closed at startup.
+
 ### Deliberately left to the implementation phase
 
-Exact rate-limit values; table, column, route, and audit-event names; the
+Wiring the transport into the server; exact rate-limit values; table, column, route, and audit-event names; the
 handling of an invitation addressed to an email that already belongs to an
 account; and the mechanism that keeps the token only in memory across
 retries. (Whether design closure satisfies DEC-435 (6) is no longer open:
@@ -1908,7 +2048,12 @@ All **verified** against official documentation on that date unless marked.
   [domains](https://resend.com/docs/dashboard/domains/introduction) and
   [domain verification troubleshooting](https://resend.com/docs/knowledge-base/what-if-my-domain-is-not-verifying);
   [webhook verification](https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests);
-  [rate limit](https://resend.com/docs/api-reference/rate-limit).
+  [rate limit](https://resend.com/docs/api-reference/rate-limit);
+  re-verified for checkpoint 4A on 2026-09-16:
+  [send email](https://resend.com/docs/api-reference/emails/send-email),
+  [API introduction](https://resend.com/docs/api-reference/introduction)
+  (required `User-Agent`), and
+  [errors](https://resend.com/docs/api-reference/errors).
   **Not verified:** whether the Free plan's terms permit DROMEX's business
   use.
 - Svix: [manual webhook verification](https://docs.svix.com/receiving/verifying-payloads/how-manual).

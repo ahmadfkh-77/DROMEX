@@ -104,11 +104,18 @@ the honest non-atomic boundary between Better
 Auth and DROMEX, is in
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#owner-provisioning-tooling-phase-2c-checkpoint-3e-disposable-databases-only).
 
-## Email, invitations, and password reset: designed, not implemented
+## Email, invitations, and password reset: designed; transport foundation only
 
 **OQ-161 is closed as a design decision** (DEC-439 through DEC-442,
-2026-09-16). Nothing below is implemented, production configured, or
-physically verified, and no email has been sent. The full design, failure
+2026-09-16). Only the provider-neutral email transport foundation of DEC-439
+is implemented (checkpoint 4A): disabled, capture, and Resend transports,
+the secure key-file loader, message validation, and bounded retries (a
+documented in-progress idempotency 409 is retried with the same key; a
+conflict or unclassifiable 409 never is), tested
+locally and not wired to the server. Nothing below is production configured
+or physically verified: no Resend account, DNS record, API key, or secret
+file exists, and no email has been sent. Invitations and password reset are
+not implemented. The full design, failure
 behaviour, and dated sources are in
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#14a-transactional-email-admin-invitations-and-password-reset).
 

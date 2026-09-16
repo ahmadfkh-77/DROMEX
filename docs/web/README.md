@@ -13,7 +13,7 @@ describes a rule, it cites the decision that established it.
 | --- | --- | --- |
 | [architecture.md](architecture.md) | Service boundaries, technology baseline, how the web system relates to the existing Android application | **Partly implemented** (Phase 1 skeleton only) |
 | [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Partly implemented** (local development only: password-plus-TOTP sign-in, sign-out, sanitized session endpoint, active-principal and mandatory-MFA enforcement, Owner recovery-code sign-in with restricted authenticator replacement, and a security audit foundation; terminal Owner activation and terminal emergency Owner recovery tested on disposable databases only, both commands refuse every run, and no Owner exists; no public registration, password recovery, or account management) |
-| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, the sign-in, TOTP verification, sign-out, and session transport, mandatory MFA, TOTP replay protection, versioned secrets, recovery-code issuance, resumable terminal Owner activation whose command refuses every run, recovery-code sign-in with a restricted recovery state and supported authenticator replacement, the security audit foundation, and terminal emergency Owner recovery with the DEC-437 last-resort reset, whose command refuses every run. No Owner, Owner readiness enforcement, permissions, UI, or deployment) |
+| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, the sign-in, TOTP verification, sign-out, and session transport, mandatory MFA, TOTP replay protection, versioned secrets, recovery-code issuance, resumable terminal Owner activation whose command refuses every run, recovery-code sign-in with a restricted recovery state and supported authenticator replacement, the security audit foundation, and terminal emergency Owner recovery with the DEC-437 last-resort reset, whose command refuses every run, and the email transport foundation (checkpoint 4A, not wired to the server). No Owner, Owner readiness enforcement, invitation, password reset, email sending, permissions, UI, or deployment) |
 | [postgresql-strategy.md](postgresql-strategy.md) | Schema approach, identifier preservation, roles, the PostgreSQL 18 volume rule | **Partly implemented** (development service only, no schema) |
 | [synchronization-strategy.md](synchronization-strategy.md) | Android synchronisation protocol and conflict rules | **Planned** (not implemented) |
 | [docker-vps-strategy.md](docker-vps-strategy.md) | Local Docker topology, port exposure rules, production deployment plan | **Partly implemented** (local development only) |
@@ -43,8 +43,10 @@ What does **not** exist, and must not be assumed to exist:
   (DEC-437; its command refuses every run): no password recovery,
   permissions, or real account,
 - any email sending, Admin invitation, or password reset: these are an
-  approved design only (DEC-439 through DEC-442), with no provider account,
-  DNS configuration, secret file, or email,
+  approved design (DEC-439 through DEC-442). Only the email transport
+  foundation exists, tested locally and not wired to the server (checkpoint
+  4A); there is no provider account, API key, DNS configuration, secret file,
+  or email,
 - a real Owner: terminal activation exists and is tested against disposable
   databases, but its command refuses every run. OQ-161's design closure does
   not unblock it: enabling it requires the DEC-443 gate (implemented and

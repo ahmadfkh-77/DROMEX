@@ -655,10 +655,160 @@ already records; no production source, migration, or decision text changed.
   the enabling decision for the command (DEC-437 (8)); production secret
   delivery; operator identity capture and second-person approval; OQ-161.
 
+## Phase 2C email transport foundation (checkpoint 4A): local verification
+
+Status: **implemented and verified on exact Node 24.20.0 in a disposable Linux
+container only.** This is not production verification and satisfies no item
+in the gate below or in DEC-443. No Resend account, DNS record, API key, or
+secret file exists; the real Resend API was never contacted; no email was
+sent; the transport is not wired to the server; invitations and password
+reset remain unimplemented; and the Owner activation and terminal recovery
+commands still refuse every run. Design and limits:
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#implemented-transport-foundation-phase-2c-checkpoint-4a-local-development-only).
+
+Tests were written first against stub modules. The RED run in the container
+failed 87 of 92 tests, every one because a stub was not implemented; the 5
+that passed were the structural boundary guards, proven afterwards by
+mutation. Every fetch is injected, every key is generated in memory and
+labelled synthetic, every domain uses the reserved `.test` TLD, and every key
+file is a temporary file removed after its test.
+
+The HTTP 409 policy was added afterwards, also test first, once Resend's
+official error reference and idempotency guide and the error type in its
+official Node SDK had been re-checked (2026-09-16). Its RED run failed 6 of the
+8 new tests, each on the missing classification or the missing 4 KiB bound;
+the other 2 (fail-closed bodies and no other body read) already held and were
+proven by mutation. The capture transport's conflict reason was also changed
+test first (1 RED failure).
+
+Proven locally (101 tests in six files, including the HTTP 409 policy added
+before the checkpoint was committed):
+
+- **Configuration.** Disabled by default in every environment; capture
+  refused in production by both the loader and the transport; unknown
+  transport names refused; Resend requires an absolute key-file path, which is
+  refused for any other transport; four ambient key variables stop
+  configuration without repeating the value; only the supplied environment
+  object is read.
+- **Key file** (Linux). An owner-only regular file is accepted and loses only
+  one final newline; the open uses no-follow and non-blocking read-only flags;
+  a symbolic link, a directory, a FIFO (without blocking), a missing file, an
+  empty file, a file over 512 bytes, eight group or other permission
+  combinations, and ten malformed contents are each refused with a fixed
+  message that contains neither the synthetic key nor the path; the
+  descriptor is closed on every path; nothing is logged. Windows and relative
+  paths are refused before any open, on every platform.
+- **Message validation.** A synthetic message for every purpose is accepted;
+  malformed, non-normalised, and multiple recipients, extra fields, a purpose
+  and key mismatch, CR/LF and other control characters in every header field,
+  length boundaries on both sides, a missing text or HTML part, 24 unsafe
+  markup forms, links to any other origin or scheme, and secret-like metadata
+  are each refused with an issue code that repeats no content.
+- **Resend request.** The fixed endpoint, `POST`, refused redirects, exactly
+  five headers, and exactly the approved JSON body; no tracking or other
+  field; the key never in the URL or body and not reachable through the
+  transport object; strict provider id extraction; ten malformed success
+  responses refused without retry.
+- **Retries.** Success first time; success after 429, 500, 502, 503, a
+  timeout, a real abort, and three transient network codes; a lost response
+  retried with the same key and byte-identical body; seven permanent 4xx
+  statuses, a redirect, an unexpected status, and unknown errors not retried;
+  a documented in-progress 409 (`concurrent_idempotent_requests`) retried
+  with the same key and byte-identical body until acceptance, and ending as
+  `retryable_failure` `idempotency_in_progress` after three attempts, inside
+  the deadline and the `Retry-After` bound; a conflict 409
+  (`invalid_idempotent_request`) never retried, including after an
+  in-progress response, and reported only as `idempotency_conflict`;
+  `resource_locked`, unknown, case-varied, padded, nested, non-string, and
+  missing names, array, null, invalid, and empty bodies, non-JSON and missing
+  content types, and bodies one byte over the 4 KiB bound each refused as
+  `provider_rejected` without retry, while a body of exactly 4 KiB is
+  classified; no 409 message text reaches a result; no other error status
+  body is read;
+  at most three attempts; the two-minute deadline, including after an
+  overrunning sleep; per-attempt timeouts bounded by remaining time; bounded
+  jitter; `Retry-After` honoured, capped, or ignored as designed; no result
+  containing the key, an address, the subject, a body, or the idempotency
+  key.
+- **Disabled and capture.** Disabled never reports success, uses no network,
+  and still refuses invalid messages; capture is deterministic, frozen,
+  isolated per instance, clearable, mirrors provider idempotency (a changed
+  payload under a used key is `idempotency_conflict`), and uses no
+  network; neither writes to the console.
+- **Boundaries.** Exactly seven modules; no console, environment, `.env`,
+  `require`, debugger, or child-process use; only Node built-ins and local
+  imports and no email SDK in the manifest; exactly one network endpoint,
+  used only by the Resend transport; no webhook code. The existing route
+  table assertion still passes, so no HTTP route was added.
+
+Suites on exact Node 24.20.0 (disposable container, `npm ci` from the
+committed lockfile, a copy of the Git-listed workspace files that excluded
+`web/.env`): workspace typecheck clean; email tests 101/101; API unit tests
+434/434 (25 files); API integration tests 246/246 (12 files) against
+disposable PostgreSQL 18.6, run as a regression check although no database
+behaviour was introduced. `npm audit` and `npm audit --omit=dev` report 0
+vulnerabilities; the lockfile and all three manifests are byte-identical to
+the repository. On the host: the Playwright suite 12/12, the Android
+typecheck clean, and the Android suite 537/537. The email suites also pass on
+the Windows host with the 11 Linux-only key-file tests skipped by platform.
+
+**Mutation testing, 409 policy (17/17 killed) and transport regression (9/9
+killed).** After the 409 change, 17 mutations were each applied alone in the
+container and restored byte-identically (SHA-256): the in-progress case not
+retried; the conflict retried; an unclassified 409 retried; 409 no longer
+classified; every 4xx body classified; the 4 KiB bound removed and reduced by
+one byte; case-insensitive or trimmed name matching; a nested `error.name` or
+`message` accepted as the name; the JSON content-type check removed; the
+provider message leaked into the reason; a new key or a changed body on a
+retry; `Retry-After` ignored for a 409; another error body read; and the
+capture conflict reason. Nine regression mutations of the pre-existing
+transport were rerun against the changed code: four attempts, a widened
+deadline, 429 not retried, 400 retried, redirects followed, the key-in-message
+refusal removed, the success size cap removed, provider id validation
+removed, and the disabled transport claiming acceptance. The 54 mutations
+below were not individually re-applied after the change, because their
+scripts were not kept.
+
+**Mutation testing before the 409 change (53/54 killed, one equivalent).** Fifty-one targeted
+mutations of the transport, key loader, configuration, and validation, and
+three of the boundary guards, were each applied alone inside the container's
+copy, with the named tests run and the file restored and confirmed identical
+by SHA-256. They covered retry count in both directions, the deadline, both
+deadline checks, the attempt timeout, each retry classification, stable
+idempotency key and body, `Retry-After` handling and its bound, jitter,
+redirects, the endpoint, provider id validation, the response size cap,
+result redaction, the key-in-message refusal, validation bypass, the
+disabled transport's result, capture production refusal (transport and
+configuration), capture clearing, idempotency, and isolation, ambient key
+refusal, absolute paths, key-file permissions, `O_NOFOLLOW`, `O_NONBLOCK`,
+regular-file and size checks, key and path redaction, the Windows refusal,
+descriptor closing, header-field control characters, extra fields, recipient
+validation, the purpose prefix, unsafe markup, the link origin, secret-like
+metadata, the HTML alternative, console logging, environment reads, and a
+second endpoint. The first pass killed 49 of 51: the pre-attempt deadline
+check survived because no test overran a sleep, and a new test now kills it.
+The one remaining survivor, removing the control-character check on
+addresses, is equivalent: the address character classes already exclude
+every control character, so the check is kept only as defence in depth.
+
+Not verified:
+
+- Any real Resend request, key, domain, delivery, bounce, or dashboard
+  tracking setting, all of which are prohibited in this checkpoint.
+- The transport wired into the server, used by a workflow, or audited.
+- Behaviour against Resend's real error bodies and quota responses. The 409
+  classification is tested only against synthetic bodies shaped as the
+  official documentation and SDK describe.
+- File-ownership matching for the key file, which is deliberately not
+  enforced.
+
 ## Planned tests: email, Admin invitations, and password reset
 
-Status: **planned only (DEC-439 through DEC-442).** None of these tests is
-written or run, and nothing they would test exists. Each is to be written as
+Status: **planned only (DEC-439 through DEC-442).** The transport-level rows
+below (provider failure, secret handling, webhooks) are now covered by
+checkpoint 4A above; the invitation, enrolment, reset, enumeration, session,
+audit, page, and content rows are not written or run, and nothing they would
+test exists. Each is to be written as
 a failing test before the implementation it covers. Governing design:
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#14a-transactional-email-admin-invitations-and-password-reset).
 
