@@ -20,9 +20,11 @@ security-and-accounts.md links here rather than duplicating it.
 
 Research conducted 2026-09-11. Decisions recorded here were approved by the
 Owner on 2026-09-12 and are numbered DEC-418 through DEC-433 in
-`requirements/decisions.md`. Six related questions remain open and are
-tracked as OQ-160 through OQ-165 in `requirements/open-questions.md`; they
-are named throughout this document and **must not be answered here**.
+`requirements/decisions.md`. Six related questions were opened as OQ-160
+through OQ-165 in `requirements/open-questions.md`. **OQ-161 (email delivery)
+was closed on 2026-09-16 as a design decision by DEC-439 through DEC-442**
+(§14A: approved design only, not implemented). The other five remain open,
+are named throughout this document, and **must not be answered here**.
 
 ## 1. Plain-language objective
 
@@ -880,9 +882,9 @@ is asserted twice: by scanning every provisioning module for mutating SQL
 against Better Auth tables, and by recording every statement sent on
 provisioning's own connections during a real run.
 
-**Email delivery.** Initial Owner creation needs none. OQ-161 remains open and
-still gates Admin invitations and self-service password recovery, neither of
-which exists.
+**Email delivery.** Initial Owner creation needs none. Admin invitations and
+self-service password recovery were gated on OQ-161, which is now closed as a
+design decision (DEC-439 through DEC-442, §14A); neither exists yet.
 
 **Known limits, not yet addressed:**
 
@@ -1266,8 +1268,8 @@ databases on exact Node 24.20.0 only. Not production-ready, not enabled, and
 not approved for real use.** The command refuses every run, no Owner exists,
 and the Owner activation command is unchanged and still refuses every run.
 Governing decision: DEC-437, which refines DEC-423 and realises DEC-435 (5).
-Password recovery (OQ-161) is not implemented: this procedure requires the
-current password.
+Password recovery is designed (DEC-441, §14A) but not implemented: this
+procedure requires the current password.
 
 **Modules.** All live under `src/provisioning/`, which nothing the server
 imports can reach (a static boundary test), and no HTTP route was added (the
@@ -1720,6 +1722,218 @@ shape: physical-custody codes as the first line, a version-controlled,
 tested, transactional, audited administrative procedure as the last
 resort, and the single-Owner rule never bent to provide either.
 
+## 14A. Transactional email, Admin invitations, and password reset
+
+Status: **approved design only (DEC-439 through DEC-442, closing OQ-161,
+2026-09-16). Not implemented, not production configured, and not physically
+verified.** No email transport, invitation, reset route, page, template,
+token, provider account, DNS record, or secret file exists, and no email has
+been sent. The Accounts and Sessions phase (§23) has not started. The Owner
+activation command and the terminal recovery command are unchanged and still
+refuse every run.
+
+**Owner activation gate (DEC-443).** Closing OQ-161 by design does not
+unblock real Owner activation. The Owner activation command may be enabled
+only after the password-reset flow is implemented and verified (enumeration
+resistance, token lifecycle, session revocation, MFA preservation, auditing,
+failure behaviour); Resend is configured through the secret-file mechanism;
+the sending domain has valid SPF, DKIM, and DMARC; a monitored `Reply-To`
+mailbox exists; a real invitation or controlled test message is delivered; a
+complete password-reset recovery is physically rehearsed; and enabling the
+command is separately and explicitly approved. Local tests and documentation
+alone never satisfy this gate. The terminal recovery command stays
+separately disabled.
+
+The labels below follow §2: **verified** means fetched from official
+documentation, or read directly from the installed package source, on the
+date given.
+
+### Provider and integration (DEC-439)
+
+| Aspect | Approved design |
+|---|---|
+| Provider | Resend. Postmark is the documented fallback; activating it is a later reviewed operational change, never an automatic switch |
+| Rejected | A self-hosted SMTP server on the Contabo VPS; an ordinary mailbox SMTP account as the primary mechanism |
+| Plan | Resend Free if its then-current terms permit DROMEX's business use (**unverified; operational check**), otherwise Resend Pro with no architectural change |
+| Transport | Resend's HTTPS API through Node 24's built-in `fetch`; no provider SDK |
+| Interface | One small provider-neutral DROMEX email interface. Planned implementations: Resend production transport; deterministic capture transport (tests and disposable development only); disabled transport that fails closed when email is not configured |
+| Retries | At most three attempts within two minutes, all with the same idempotency key |
+| Webhooks | None initially; no inbound webhook route. Bounces and complaints are reviewed in the Resend dashboard |
+| Delivery status | Advisory only. It never activates an account, validates a token, or changes authentication state; PostgreSQL remains authoritative |
+| Tracking | Open tracking, click tracking, pixels, advertising, and remote images disabled |
+| Sender | `DROMEX <no-reply@notify.fakihbrothers.com>` on a dedicated notification subdomain of the DEC-409 domain; `Reply-To` a monitored company mailbox (exact mailbox and DNS values are operational setup) |
+| Outage | Existing password-plus-TOTP sign-in is unaffected; invitation and reset emails fail closed; the public reset response stays generic |
+
+**Secret delivery and handling.** The only provider credential is a Resend
+API key with sending-only permission, restricted to the notification domain.
+In production it is supplied as a Docker Compose secret backed by a
+tightly permissioned file on the host, mounted into the API container under
+`/run/secrets/`. The API receives only the path to that file through its
+validated configuration boundary, never the key as an ambient environment
+variable, and errors name the setting, never its value. The key is never
+logged, displayed, audited, or returned. **Claude never reads or creates the
+real secret file; the Owner creates it on the VPS.** Local development and
+automated tests use no key at all: they run the capture or disabled
+transport.
+
+| Procedure | Steps (Owner-performed) |
+|---|---|
+| Creation | Create the Resend account with account-level two-factor protection; verify the notification subdomain; create a key with sending-only permission restricted to that domain; write it once into the secret file; restrict the file to the account the API container reads it as |
+| Rotation | Create a new restricted key; replace the file contents; restart the API; confirm one real delivery to a company mailbox; revoke the old key |
+| Revocation | Revoke the key in the Resend dashboard. Sending then fails closed; sign-in is unaffected |
+| Incident (suspected key exposure) | Revoke immediately; create and install a new key; review Resend's email log (retained 30 days) for messages DROMEX did not send; review DMARC reports for the domain; record the incident in the security audit and incident record |
+| Least privilege | Sending-only permission, one domain, one key per environment, no key in development or tests, no key in any image layer, repository, document, or log |
+
+### Admin invitations (DEC-440)
+
+Owner-only creation, resend, and cancellation; no public signup. The
+recipient email is stored normalized, and at most one invitation per
+normalized email may be pending. Each invitation carries a single-use
+256-bit random token; PostgreSQL stores only its SHA-256 hash in a
+DROMEX-owned table, never Better Auth's (DEC-431). It expires after 24
+hours. Resending issues a new token and immediately supersedes the old one.
+The Owner's screen never shows a transferable link.
+
+```mermaid
+flowchart TD
+  A["Owner creates invitation"] --> B["Hash stored; email handed to provider"]
+  B --> C{"Link opened within 24 hours,<br/>latest token, not cancelled?"}
+  C -- no --> X["One generic 'link not valid' response"]
+  C -- yes --> D["Restricted, inactive principal created"]
+  D --> E["Password set under the existing policy"]
+  E --> F["Restricted web TOTP enrolment;<br/>recovery codes issued once"]
+  F --> G["Principal activated;<br/>every session revoked"]
+  G --> H["Fresh password + TOTP sign-in"]
+```
+
+**Refinement of DEC-434.** The terminal-only initial setup rule remains for
+the protected Owner. Invited Admins enrol TOTP through a restricted web flow
+that reaches only its own enrolment steps, following the containment pattern
+of DEC-436. The DEC-434 authentication gate is unchanged, so no business
+route is reachable before enrolment completes.
+
+### Password reset (DEC-441)
+
+Available to the Owner, Admins, and future enabled users. Tokens are
+single-use, stored only as a hash, and expire after 30 minutes; a new request
+supersedes older outstanding tokens. The response is identical for known,
+unknown, disabled, and rate-limited addresses, and timing is **measured**, not
+assumed. A disabled account gets no email. Success never signs the user in,
+revokes every session for that user, and sends a password-changed notification.
+MFA is never removed, bypassed, or replaced: the next sign-in requires the
+password and TOTP. Rate limits apply by account and by network source.
+
+**Owner eligibility and residual risk.** The Owner may reset by email
+because mailbox control alone still cannot pass TOTP. Someone who controls
+the Owner's mailbox can still change the Owner's password and cause a
+**nuisance lockout** without gaining access; this is accepted, made visible
+by the password-changed notification and the audit, and recorded in §21.
+
+**Better Auth 1.7.4 behaviour this design must correct** (verified by reading
+the installed package source, `better-auth@1.7.4`
+`dist/api/routes/password.mjs`, `dist/db/internal-adapter.mjs`,
+`dist/db/verification-token-storage.mjs`, and
+`dist/context/create-context.mjs`, 2026-09-16; not re-checked against its
+documentation):
+
+| Better Auth 1.7.4 behaviour | Required DROMEX handling |
+|---|---|
+| Reset tokens are stored as plaintext verification identifiers by default | Configure its hashed verification-identifier storage (SHA-256) for reset tokens |
+| A new request does not invalidate earlier reset tokens | DROMEX enforces supersession without writing Better Auth-owned rows (DEC-431) |
+| Other sessions survive a reset unless `revokeSessionsOnPasswordReset` is enabled, and revocation runs after the password update, not in the same transaction | Enable it; verify revocation and fail closed with an audit event if it does not complete |
+| The request waits for the email send for a real account unless a background-task handler is configured | Dispatch the send so that response timing does not depend on whether the account exists; measure it |
+| Its reset link is a GET callback that redirects with the token in a query string | Never expose that route; DROMEX builds its own fragment link (DEC-442) |
+| Unknown addresses already receive the same message as known ones | Keep; extend the same response to disabled and rate-limited cases |
+| Reset tokens are 24 random alphanumeric characters (about 143 bits) and are consumed once under a lock inside a transaction | Relied on, and covered by concurrency tests |
+
+### Links, pages, and email content (DEC-442)
+
+- Tokens travel only in the URL **fragment**
+  (`https://app.fakihbrothers.com/<page>#<token>`, shape only). The page
+  removes the fragment from the address bar and POSTs the token in the
+  request body.
+- Links are built from the configured HTTPS application origin, never the
+  request's `Host` header.
+- Invitation and reset pages send `Referrer-Policy: no-referrer` and load no
+  third-party script, analytics, remote asset, or tracking.
+- Invalid, expired, used, cancelled, and superseded links get one generic
+  response.
+- Emails are English only for now (Arabic is a later, separate decision),
+  in plain text and HTML, with no password, MFA secret, recovery code, role,
+  permission, financial or other business information, and no remote image,
+  pixel, advertising, or tracking. Each states its expiry and that DROMEX
+  never emails sign-in links and never asks users to send security codes.
+
+### Failure behaviour
+
+| Situation | Behaviour |
+|---|---|
+| Delivery delayed | No state changes; the token keeps its own expiry |
+| Provider rejects a message | The failure is audited; the Owner sees that an invitation email was not sent; a reset requester still receives the generic response |
+| Provider unavailable | Up to three attempts within two minutes with one idempotency key, then fail closed; sign-in unaffected; no automatic provider switch |
+| Delivery succeeded but the provider response was lost | Retrying with the same idempotency key does not send a second copy |
+| Invitation bounces | Visible in the Resend dashboard; the Owner corrects the address and issues a new invitation |
+| Same invitation resent | New token; the previous token stops working |
+| Reset requested repeatedly | Newest token supersedes older ones; rate limits apply; responses stay generic |
+| Provider key compromised | Revoke, rotate, and review as in the incident procedure above |
+| Webhooks | None exist. If added later, they require a separate reviewed decision with signature, timestamp, and duplicate checks, and still may never change authentication state |
+
+### Deliberately left to the implementation phase
+
+Exact rate-limit values; table, column, route, and audit-event names; the
+handling of an invitation addressed to an email that already belongs to an
+account; and the mechanism that keeps the token only in memory across
+retries. (Whether design closure satisfies DEC-435 (6) is no longer open:
+it does not, and DEC-443 sets the gate above.)
+
+### Sources (accessed 2026-09-16)
+
+All **verified** against official documentation on that date unless marked.
+
+- OWASP: [Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html);
+  [Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html);
+  [Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html);
+  [Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html).
+- Resend: [pricing](https://resend.com/pricing) (Free: 3,000 a month, 100 a
+  day; Pro from $20 a month);
+  [API key permissions](https://resend.com/docs/api-reference/api-keys/create-api-key)
+  (`sending_access`, restrictable to one domain);
+  [idempotency keys](https://resend.com/docs/dashboard/emails/idempotency-keys)
+  (retained 24 hours);
+  [open and click tracking](https://resend.com/docs/dashboard/domains/tracking)
+  (disabled by default);
+  [sending regions](https://resend.com/docs/dashboard/domains/regions) and
+  [security](https://resend.com/security) (data stored in the United States;
+  30-day email and log retention; SOC 2 Type II; pre-signed DPA);
+  [domains](https://resend.com/docs/dashboard/domains/introduction) and
+  [domain verification troubleshooting](https://resend.com/docs/knowledge-base/what-if-my-domain-is-not-verifying);
+  [webhook verification](https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests);
+  [rate limit](https://resend.com/docs/api-reference/rate-limit).
+  **Not verified:** whether the Free plan's terms permit DROMEX's business
+  use.
+- Svix: [manual webhook verification](https://docs.svix.com/receiving/verifying-payloads/how-manual).
+- Postmark: [pricing](https://postmarkapp.com/pricing);
+  [API overview](https://postmarkapp.com/developer/api/overview);
+  [webhooks overview](https://postmarkapp.com/developer/webhooks/webhooks-overview)
+  (no HMAC signature verification);
+  [SMTP](https://postmarkapp.com/developer/user-guide/send-email-with-smtp);
+  [EU privacy](https://postmarkapp.com/eu-privacy) (US processing; 45-day
+  content retention);
+  [account approval](https://postmarkapp.com/support/article/1084-how-does-the-account-approval-process-work).
+- Amazon: [SES pricing](https://aws.amazon.com/ses/pricing/);
+  [SES sandbox and production access](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html);
+  [SES SMTP credentials](https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html);
+  [SNS signature verification](https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html).
+- Mailgun: [pricing](https://www.mailgun.com/pricing/);
+  [webhook security](https://documentation.mailgun.com/docs/mailgun/user-manual/webhooks/securing-webhooks).
+- Contabo: [server email sending limit](https://help.contabo.com/en/support/solutions/articles/103000280507-is-there-a-limit-to-how-many-emails-can-be-sent-from-my-server-)
+  (about 25 emails a minute).
+- Docker: [Compose secrets](https://docs.docker.com/compose/how-tos/use-secrets/)
+  (mounted as files under `/run/secrets/`; not described as encrypted
+  outside Swarm).
+- Better Auth: [email and password](https://www.better-auth.com/docs/authentication/email-password),
+  plus the installed 1.7.4 source listed above.
+
 ## 15. Future Android authentication and synchronization
 
 Nothing here is implemented, and none of it may be built before the central
@@ -1824,11 +2038,11 @@ replicate that pairing.
 |---|---|
 | Sign-in | Cream page, navy header, two fields, one orange action. Identical response and timing for a wrong password and a non-existent account. `autocomplete` set for password managers. No sign-up link. |
 | First-time Owner setup | **Not a web screen** (DEC-434, superseding the earlier web design). The Owner is activated only through the local terminal command: name, email, hidden password with confirmation; the TOTP secret for manual entry and the `otpauth://` URI, with a scrollback warning and an instruction to enrol **two** authenticator devices; at most five TOTP attempts; a typed acknowledgement of two devices and two sealed code copies; the ten recovery codes shown once; a second typed acknowledgement; then a screen clear. There is no setup route before, during, or after. |
-| Admin invitation | Owner creates the account and chooses a template; the invited user receives a single-use, short-lived link to set their own password. The Owner never sees or sets another person's password. |
+| Admin invitation | Owner creates the account and chooses a template; the invited user receives a single-use link valid for 24 hours, sets their own password, and completes restricted web TOTP enrolment before any business access (DEC-440, §14A). The Owner never sees or sets another person's password and never sees a transferable invitation link. |
 | MFA enrolment | QR code plus the secret as selectable text; a verification field proving the authenticator works before enrolment completes. |
 | MFA verification | One six-digit field, `autocomplete="one-time-code"`; a quiet secondary link to use a recovery code instead. |
 | Recovery codes | Full-width monospace list; copy and print actions; a required "I have saved these codes" checkbox; shown once; regeneration states plainly that the old codes stop working immediately. |
-| Password recovery | Always the same message whether or not the address exists; single-use, short-lived, rate-limited link. |
+| Password recovery | Always the same message whether or not the address exists; single-use, rate-limited link valid for 30 minutes; after success, a calm notice that every device was signed out and that sign-in still needs the authenticator (DEC-441, DEC-442, §14A). |
 | Session expiration | A calm inline notice, not a modal; typed work is preserved and re-submitted after re-authentication wherever possible. |
 | Device and session management | One card per session: device, browser, IP, first/last seen; each carries a clearly separated "Revoke this session"; one "Sign out everywhere." |
 | Owner user management | Account cards: name, template, status, MFA state, last sign-in. |
@@ -1878,7 +2092,8 @@ any implementation exists.
 | Login / logout | Correct credentials succeed; wrong password fails; non-existent account fails identically in body, status, and timing; logout destroys the server session | Real PostgreSQL |
 | MFA enrolment and challenge | Enrolment requires verification; a user without MFA reaches only enrolment routes; a valid code succeeds; a stale or replayed code fails; the ±1 period window behaves as documented | PostgreSQL + controlled time |
 | Recovery codes | Generated at enrolment; each works once; a reused code fails; regeneration invalidates the previous set; viewing requires a fresh session | PostgreSQL, controlled time |
-| Password reset | Single-use, short-lived link; identical response for known and unknown addresses; reset revokes other sessions | PostgreSQL + captured email |
+| Password reset | Single-use 30-minute link; identical response and measured timing for known, unknown, disabled, and rate-limited addresses; a new request supersedes older tokens; reset revokes all sessions and leaves MFA required (DEC-441; full plan in testing-and-production-readiness.md) | PostgreSQL + capture transport |
+| Admin invitation | Owner-only; 24-hour single-use link; resend supersedes; restricted enrolment before activation; all sessions revoked afterwards (DEC-440) | PostgreSQL + capture transport + real browser |
 | Session rotation and expiry | New session ID on authentication; expiry and `updateAge` extension behave correctly | Controlled time |
 | Session revocation | Revoke one leaves others alive; revoke-all kills every session; an Owner revoking another user's session takes effect on their very next request | PostgreSQL |
 | Account disabling | A disabled user's existing session is refused immediately; their name still renders on historical records | PostgreSQL |
@@ -1939,6 +2154,10 @@ because they were solved above:
 - A fully compromised administrator computer defeats most controls in this
   document.
 - TOTP is phishable in real time; only a future WebAuthn phase closes this.
+- Someone who controls the Owner's mailbox can use password reset to change
+  the Owner's password and cause a nuisance lockout. TOTP still blocks
+  access; the password-changed notification and the audit make it visible
+  (DEC-441, §14A). Accepted.
 - A leaked backup is a total compromise of the business record.
 - The Owner-recovery break-glass procedure (§14) is, by necessity, an
   administrative bypass of MFA — its existence is a deliberate trade

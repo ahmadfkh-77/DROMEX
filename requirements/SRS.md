@@ -1430,7 +1430,34 @@ subsection records the confirmed requirements only.
   queries — and shall never create a second Owner-equivalent account,
   permanent or temporary. Claude is not authorized to execute that
   procedure against production under any circumstance (DEC-423, DEC-426).
-- Authentication, authorisation, the permission model, and the Owner
+- Transactional email for the web application shall be sent through Resend's
+  HTTPS API behind a provider-neutral DROMEX email interface, with Postmark
+  as the documented fallback and no self-hosted or mailbox SMTP. The
+  provider key is a sending-only, domain-restricted key delivered as a
+  secret file. Delivery status shall never activate an account or validate
+  a token (DEC-439).
+- Admins shall join only through an Owner-issued, single-use invitation
+  valid for 24 hours and stored only as a token hash. An invited Admin shall
+  set a password and complete a restricted web TOTP enrolment before any
+  business access, after which every session is revoked. The Owner remains
+  activated only through the local terminal (DEC-440, refining DEC-434).
+- Every enabled web account, including the Owner, shall be able to reset a
+  forgotten password through a single-use, hashed link valid for 30 minutes,
+  with identical responses for every address, no automatic sign-in,
+  revocation of every session, a password-changed notification, and MFA
+  still required afterwards (DEC-441).
+- Invitation and reset tokens shall travel only in the URL fragment, pages
+  shall load no third-party content, and security emails shall be English
+  only, in plain text and HTML, with no business or secret content and no
+  tracking (DEC-442).
+- A real Owner shall not be activated until password reset is implemented
+  and verified, email delivery is production configured with valid SPF,
+  DKIM, and DMARC and a monitored `Reply-To` mailbox, a real message is
+  delivered, a complete reset is physically rehearsed, and enabling the
+  activation command is separately approved; local tests or documentation
+  alone do not satisfy this (DEC-443).
+- Authentication, authorisation, the permission model, email delivery,
+  invitations, password reset, and the Owner
   recovery procedure are **not implemented**. This subsection records
   confirmed requirements for a later, separately approved implementation
   phase, not current behaviour.

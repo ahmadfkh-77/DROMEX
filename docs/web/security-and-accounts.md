@@ -98,10 +98,40 @@ There is no setup route, no bootstrap website, no public registration, no
 default Owner, and no shared credential. The password is entered through a
 hidden terminal prompt and is never accepted from a command argument, the
 environment, a file, or piped input. Initial Owner creation needs no email
-delivery; OQ-161 still gates Admin invitations and self-service password
-recovery. The detail, including the honest non-atomic boundary between Better
+delivery. Admin invitations and self-service password recovery depend on
+email, which is now designed but not built (see below). The detail, including
+the honest non-atomic boundary between Better
 Auth and DROMEX, is in
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#owner-provisioning-tooling-phase-2c-checkpoint-3e-disposable-databases-only).
+
+## Email, invitations, and password reset: designed, not implemented
+
+**OQ-161 is closed as a design decision** (DEC-439 through DEC-442,
+2026-09-16). Nothing below is implemented, production configured, or
+physically verified, and no email has been sent. The full design, failure
+behaviour, and dated sources are in
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#14a-transactional-email-admin-invitations-and-password-reset).
+
+- **Delivery (DEC-439).** Resend through its HTTPS API behind a
+  provider-neutral DROMEX email interface; Postmark is the documented
+  fallback. Self-hosted SMTP and an ordinary mailbox SMTP account are
+  rejected. No webhooks initially, and delivery status never grants
+  anything.
+- **Admin invitations (DEC-440).** Owner-only, single-use, 24 hours, token
+  stored only as a hash; resending supersedes the previous link. The invited
+  Admin sets a password and completes a restricted web TOTP enrolment before
+  any business access, then signs in afresh. The Owner stays terminal-only
+  (DEC-434).
+- **Password reset (DEC-441).** Available to every enabled account,
+  including the Owner; single-use, 30 minutes, same response for every
+  address, all sessions revoked, and MFA never removed or bypassed.
+- **Links and content (DEC-442).** Tokens only in the URL fragment; no
+  third-party content or tracking; English-only emails with no business or
+  secret information.
+- **Owner activation stays blocked (DEC-443).** Design closure does not
+  enable a real Owner. That requires an implemented, verified, production
+  configured, and physically rehearsed password reset plus a separate
+  approval; the full gate is in the architecture document.
 
 ## Requirements the chosen solution must satisfy
 
@@ -149,3 +179,7 @@ ASVS 5.0) and the decisions above.
 - `web/.env.example` contains placeholders only; `web/.env` is git-ignored.
 - Production secrets are supplied through Docker secrets or an equivalent
   approved mechanism, never baked into an image layer.
+- The email provider key (DEC-439) is a sending-only key restricted to the
+  notification domain, delivered as a Docker Compose secret file; the API
+  receives only its path, never the value through the environment. The
+  Owner creates that file; Claude never reads or creates it.

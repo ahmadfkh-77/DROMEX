@@ -13,11 +13,19 @@ full design — threat model, session architecture, mandatory-MFA policy, the
 Owner-recovery procedure, the permission-block and per-user-override model,
 API enforcement, PostgreSQL row-level-security decision, audit model, and
 testing strategy — is in
-`docs/web/authentication-and-authorization-architecture.md`. Six related
-questions remain deliberately open: OQ-160 (session lifetime), OQ-161 (email
-delivery), OQ-162 (Android authentication model), OQ-163 (offline-revocation
-policy), OQ-164 (Daily Report finalization boundary), OQ-165 (CI security
-tooling). Do not answer any of these without a fresh Owner directive. Before
+`docs/web/authentication-and-authorization-architecture.md`. Five related
+questions remain deliberately open: OQ-160 (session lifetime), OQ-162
+(Android authentication model), OQ-163 (offline-revocation policy), OQ-164
+(Daily Report finalization boundary), OQ-165 (CI security tooling). Do not
+answer any of these without a fresh Owner directive. **OQ-161 (email
+delivery) was closed on 2026-09-16 as a design decision by DEC-439 through
+DEC-442** (Resend via HTTPS API, Admin invitations with restricted web TOTP
+enrolment, password reset for every enabled account, fragment-only token
+links; architecture §14A). It is approved design only: nothing is
+implemented, production configured, or verified, and no email has been
+sent. **DEC-443 keeps real Owner activation blocked** until that reset path is
+implemented, verified, production configured, and physically rehearsed and
+the command is separately approved. Before
 starting the next web implementation phase, read that document in full,
 `docs/web/security-and-accounts.md`, and the relevant `requirements/`
 decisions and open questions — do not rely on this paragraph alone.

@@ -655,6 +655,37 @@ already records; no production source, migration, or decision text changed.
   the enabling decision for the command (DEC-437 (8)); production secret
   delivery; operator identity capture and second-person approval; OQ-161.
 
+## Planned tests: email, Admin invitations, and password reset
+
+Status: **planned only (DEC-439 through DEC-442).** None of these tests is
+written or run, and nothing they would test exists. Each is to be written as
+a failing test before the implementation it covers. Governing design:
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#14a-transactional-email-admin-invitations-and-password-reset).
+
+**No real email in any test.** Automated tests use the deterministic capture
+transport or the disabled transport, never the Resend transport and never a
+provider key. A local email-capture service may be used for Playwright flows
+only in disposable development environments, and choosing or installing one
+is a separate approved step.
+
+| Area | What is tested |
+|---|---|
+| Invitation lifecycle | Owner-only creation, resend, and cancellation; non-Owner and unauthenticated callers refused; one pending invitation per normalized email enforced by the database; 24-hour expiry under controlled time |
+| Invitation tokens | Only a SHA-256 hash persisted; a resend makes the previous token fail; used, cancelled, expired, and superseded tokens all return the same generic response; the Owner screen and API never return a link |
+| Restricted Admin enrolment | The inactive principal reaches no business route; only enrolment steps are reachable; activation happens only after a verified TOTP code; every session revoked afterwards; a fresh password-plus-TOTP sign-in is required |
+| Reset lifecycle | Token single-use; hashed storage confirmed in Better Auth's verification rows; 30-minute expiry; a new request supersedes older tokens; no automatic sign-in; all sessions revoked; password policy enforced; MFA still required at the next sign-in; the Owner can reset and still cannot sign in without TOTP |
+| Enumeration resistance | Identical status, body, and headers for known, unknown, disabled, and rate-limited addresses, and **measured** timing; a disabled account causes no send |
+| Replay and concurrency | Concurrent acceptance of one invitation or concurrent use of one reset token: exactly one succeeds; lock-dependent tests fail when the lock is removed |
+| Rate limiting | Limits by account and by network source, surviving a process restart |
+| Session revocation | A session created before a reset or before enrolment completion is refused on its next request; a failed revocation fails closed and is audited |
+| Audit redaction | Every lifecycle event recorded; no token, token hash, link, password, or provider key in any audit row or log line |
+| Link and page security | Tokens only in the fragment; the POST body carries the token; links built from the configured origin even when a hostile `Host` header is sent; `Referrer-Policy: no-referrer`; no third-party request from invitation or reset pages (real browser) |
+| Email content | Plain-text and HTML parts present; expiry stated; no business, role, permission, or secret content; no remote image or tracking; the "never emails sign-in links or asks for codes" statement present |
+| Provider failure | Rejection, 429, 5xx, timeout, and lost response simulated against a local fake: at most three attempts within two minutes with one idempotency key; failure closed and audited; existing password-plus-TOTP sign-in unaffected |
+| Secret handling | Configuration accepts only a secret-file path; a missing, empty, or over-permissive file refuses startup; errors name the setting, never the value; no key in the environment |
+| Delivery status | No provider response or status changes an account, a principal, or a token |
+| Webhooks | None exist; a test asserts no inbound webhook route is registered. Signature, timestamp, and duplicate tests are required only if a later decision adds one |
+
 ## Production-readiness gate
 
 The system is **not** production ready until every line below is verified with
@@ -689,6 +720,21 @@ evidence. Today, none of them are.
       trigger and PUBLIC holds none of those privileges, but the
       least-privilege runtime role and its grant are not provisioned, and
       only recovery events are recorded
+- [x] Email delivery mechanism chosen (OQ-161, closed by DEC-439 through
+      DEC-442) — **approved design only, not implemented**
+- [ ] Admin invitations, restricted Admin enrolment, and password reset
+      implemented and verified by the planned tests above
+- [ ] Email delivery production configured and physically verified by the
+      Owner: Resend account created; current plan and terms confirmed,
+      including whether the Free plan permits DROMEX's business use; the
+      notification domain verified; SPF, DKIM, and DMARC configured; the
+      monitored `Reply-To` mailbox in place; the secret file created; a real
+      delivery test received
+- [ ] A complete password-reset recovery physically rehearsed in production,
+      and enabling the Owner activation command separately and explicitly
+      approved. Together with the two items above, this is the DEC-443 Owner
+      activation gate; local tests and documentation alone never satisfy it,
+      and the terminal recovery command stays separately disabled
 - [ ] Business schema migrated and tested at realistic volumes
 - [ ] Existing-data migration reconciled: record counts, identifiers, financial
       totals, payment statuses
