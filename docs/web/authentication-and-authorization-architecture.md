@@ -1726,11 +1726,13 @@ resort, and the single-Owner rule never bent to provide either.
 
 Status: **approved design (DEC-439 through DEC-442, closing OQ-161,
 2026-09-16); only the provider-neutral email transport foundation is
-implemented, locally and not wired to the server (checkpoint 4A, below).
-Nothing is production configured or physically verified.** No invitation,
-reset route, page, live template, token, Resend account, API key, DNS record,
-or secret file exists, and no email has been sent. The Accounts and Sessions
-phase (§23) has not started. The Owner activation command and the terminal
+implemented locally (checkpoint 4A), and Owner-side Admin invitation
+issuance is implemented against disposable databases only (checkpoint 4B1,
+below); invitation acceptance and password reset are not. Nothing is
+production configured or physically verified.** No reset route, page, real
+invitation, Resend account, API key, DNS record, or secret file exists, and
+no email has been sent. The rest of the Accounts and Sessions phase (§23) has
+not started. The Owner activation command and the terminal
 recovery command are unchanged and still refuse every run.
 
 **Owner activation gate (DEC-443).** Closing OQ-161 by design does not
@@ -2018,13 +2020,138 @@ timers, and `fetch` are injectable, and every loop is bounded.
 - The key's `re_` shape comes from Resend's documented example; a change in
   Resend's key format would fail closed at startup.
 
+### Implemented invitation issuance (Phase 2C checkpoint 4B1, local development only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases only, on exact Node 24.20.0.** Only the Owner's side exists:
+create, list, resend, cancel, expiry, delivery handoff, and audit.
+**Invitation acceptance, the restricted Admin enrolment flow, and Admin
+account creation are not implemented**, so no invitation can yet be used. No
+email has been sent; tests use the capture transport and scripted fakes.
+The running server entry point passes no email configuration, so a real
+deployment would record invitations as `not_sent` (`email_disabled`). No
+Owner exists and Owner activation still refuses every run.
+
+**Routes.** A seventh route classification, `owner`, admits only what
+`authenticated` admits (a valid session, an active principal, an enabled
+factor, recorded MFA completion, a session created after it, and not a
+recovery session) and additionally requires `isOwner`; for a method other
+than `GET` or `HEAD` it first requires an exact trusted `Origin`, before any
+session work. Unauthenticated callers receive 401, any non-Owner 403.
+
+| Route | Result |
+|---|---|
+| `GET /api/owner/invitations` | `200 { invitations }`, newest first by creation time, at most 200 |
+| `POST /api/owner/invitations` with exactly `{ "email" }` | `201 { invitation }`; `400 invalid_email`; `409 account_exists`; `409 invitation_pending`; `429 too_many_requests` with `Retry-After` |
+| `POST /api/owner/invitations/:id/resend` | `200 { invitation }` (the new invitation); `404 not_found`; `409 invitation_not_pending`; `429` |
+| `POST /api/owner/invitations/:id/cancel` | `200 { invitation }`; `404 not_found`; `409 invitation_not_pending` |
+
+An invitation view has exactly `id`, `email`, `status` (`pending`,
+`accepted`, `superseded`, `cancelled`, `expired`), `createdAt`, `expiresAt`,
+`endedAt`, and `delivery` (`status` of `sending`, `provider_accepted`,
+`failed`, or `not_sent`, and a reason code). No token, hash, link, delivery
+id, idempotency key, provider id, or message content is ever returned, and
+no webhook route exists.
+
+**Use-case authorization (DEC-428).** `createAdminInvitationService`
+re-reads the caller's principal with `FOR SHARE` inside every operation and
+refuses anyone who is not active, the Owner, and MFA-complete, independently
+of the route; such a refusal is audited.
+
+**Data (migration `0008`).** `dromex_admin_invitation` holds the normalised
+email, a 32-byte token hash (unique), the status, the inviting user, the
+invitation it superseded (each at most once), creation, expiry, and end
+times, and the delivery id, status, reason, and attempt count. The database
+requires the lifetime to be exactly 24 hours, `ended_at` to be set exactly
+when the status is not `pending`, a reason exactly for `failed` and
+`not_sent`, a lower-case trimmed email, and at most one pending invitation
+per email (partial unique index). Triggers refuse any change to identifying
+columns, any status change once ended, and every delete; as for the audit
+table, this stops application defects, not the table owner.
+
+**Token.** 32 bytes from `crypto.randomBytes`, as 43 unpadded base64url
+characters. Stored only as SHA-256 over the label
+`dromex/admin-invitation/v1` and a NUL byte followed by the token, so the
+hash cannot be confused with one made for another purpose. The token is
+generated before the issuing transaction, only its hash is written, and it
+is passed once to the email renderer after that transaction commits. It is
+never returned, stored, logged, or audited; a JavaScript string cannot be
+erased from memory, so this is the practical meaning of "in memory only".
+
+**Email.** `renderAdminInvitationEmail` builds
+`<configured origin>/invitation#<token>` (fragment only, DEC-442), a
+subject without the token, and an idempotency key
+`admin_invitation/<delivery id>`, one per invitation row and never derived
+from the token. The English plain-text and HTML bodies state the 24-hour
+expiry, single use, and supersession, and the DEC-442 sentence "DROMEX never
+emails sign-in links and never asks users to send security codes"; they name
+no role, permission, or business data. The configured origin is validated by
+the 4A link-origin rule when the server is built.
+
+**Serialization.** Create, resend, and cancel take a transaction-scoped
+advisory lock derived from the normalised email, then row locks, always in
+that order; the partial unique index is the final guard. Concurrent
+creations for one email produce one invitation; concurrent resends produce
+one new invitation; a resend racing a cancellation ends as exactly one of
+the two outcomes.
+
+**Resend and supersession.** A resend requires a pending, unexpired
+invitation, marks it `superseded` and inserts its replacement with a new
+token, a new delivery id, and a fresh 24-hour lifetime, in one transaction.
+
+**Expiry.** Database time only. Every operation first ends due pending
+invitations (at most 100 per call, skipping rows another transaction has
+locked) and audits each once; a due row found under lock is expired on the
+spot; the list reports a due row as `expired` even before it is swept.
+
+**Rate limits** (implementation detail under DEC-440 (10), counted from
+the invitation rows in database time, per normalised email): at most one
+issuance (creation or resend) per 60 seconds, and at most six issuances in
+any 24 hours, which is the initial invitation plus five resends. Counting
+every issuance means cancelling and creating again cannot bypass the daily
+limit. `Retry-After` is the whole seconds until the governing limit frees.
+
+**Delivery.** A row is inserted as `sending`; no network call happens while
+a lock is held. The transport result is then recorded in a second
+transaction: `provider_accepted`; `failed` with the transport's safe reason
+(`provider_unavailable`, `rate_limited`, `timeout`, `network_unavailable`,
+`idempotency_in_progress`, `deadline_exhausted`, `provider_rejected`,
+`provider_authentication`, `provider_response_invalid`,
+`idempotency_conflict`, `invalid_message`, or `unexpected_failure`, including
+a thrown error); or `not_sent` with `email_disabled` for the disabled
+transport or no email configuration. The invitation stays pending in every
+case, so the Owner can resend it. A process that stops between the two
+transactions leaves `sending`, which means the outcome is unknown. Delivery
+status never grants anything (DEC-439 (5)).
+
+**Audit.** Closed events `admin_invitation_created`, `_resent`,
+`_superseded`, `_cancelled`, `_expired`, `_delivery_accepted`,
+`_delivery_failed`, and `_refused`, each with the acting user and name
+snapshot (none for expiry), the client address, a reason code where
+relevant (`forbidden`, `invalid_email`, `account_exists`,
+`invitation_pending`, `invitation_not_pending`, `not_found`, `rate_limited`,
+or a delivery reason), and a new plain `invitation_id` reference. No audit
+row holds an address, token, hash, link, or message body.
+
+**Known limits of checkpoint 4B1:**
+
+- An invitation whose email could not be delivered stays pending but is
+  unusable, because its token was never kept; the Owner must resend.
+- A resend supersedes the old invitation even if its email is still in the
+  provider's retry window; the old link then fails generically.
+- The Owner's route authorization refusals by the guard (401 and 403) are
+  not audited; refusals inside the use case are. Denied-attempt auditing for
+  account management is part of checkpoint 4E2.
+- `list` is capped at 200 rows with no pagination.
+- The `sending` state is not reconciled automatically after a crash.
+- Email configuration is not yet read from the process environment.
+
 ### Deliberately left to the implementation phase
 
-Wiring the transport into the server; exact rate-limit values; table, column, route, and audit-event names; the
-handling of an invitation addressed to an email that already belongs to an
-account; and the mechanism that keeps the token only in memory across
-retries. (Whether design closure satisfies DEC-435 (6) is no longer open:
-it does not, and DEC-443 sets the gate above.)
+Invitation acceptance and restricted Admin enrolment (checkpoint 4B2);
+password reset (checkpoint 4C); reading email configuration in the running
+server. (Whether design closure satisfies DEC-435 (6) is no longer open: it
+does not, and DEC-443 sets the gate above.)
 
 ### Sources (accessed 2026-09-16)
 

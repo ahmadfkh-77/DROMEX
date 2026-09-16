@@ -22,6 +22,10 @@ import type { FastifyInstance, RouteOptions } from 'fastify';
  *                     Owner recovery (DEC-436). Such a route must carry its
  *                     own `recoveryGate`, which the authentication guard
  *                     runs; a recovery route without one is refused.
+ * - `owner`           everything `authenticated` requires, and the principal
+ *                     must be the Owner (DEC-440). A state-changing method
+ *                     also requires a trusted Origin, checked before the
+ *                     session. The use case checks the Owner again (DEC-428).
  *
  * The classification itself does not authenticate anything; the
  * authentication guard in `auth/http.ts` enforces it per request. What this
@@ -34,6 +38,7 @@ export const ROUTE_ACCESS = [
   'session-cleanup',
   'mfa-challenge',
   'recovery',
+  'owner',
 ] as const;
 
 export type RouteAccess = (typeof ROUTE_ACCESS)[number];

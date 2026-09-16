@@ -43,7 +43,7 @@ describe('route access classification (default-deny registration)', () => {
     }).toThrow(/access/i);
   });
 
-  it('accepts each of the six recognised classifications', async () => {
+  it('accepts each of the seven recognised classifications', async () => {
     app = await build();
 
     expect(() => {
@@ -53,6 +53,7 @@ describe('route access classification (default-deny registration)', () => {
       app!.post('/d', { config: { access: 'session-cleanup' } }, async () => ({ ok: true }));
       app!.post('/e', { config: { access: 'mfa-challenge' } }, async () => ({ ok: true }));
       app!.post('/f', { config: { access: 'recovery' } }, async () => ({ ok: true }));
+      app!.get('/g', { config: { access: 'owner' } }, async () => ({ ok: true }));
     }).not.toThrow();
   });
 
@@ -93,9 +94,11 @@ describe('route access classification (default-deny registration)', () => {
     await app.ready();
 
     expect([...app.routeAccess.entries()].sort(([a], [b]) => a.localeCompare(b))).toEqual([
+      ['GET /api/owner/invitations', 'owner'],
       ['GET /api/session', 'authenticated'],
       ['GET /health', 'public'],
       ['GET /ready', 'public'],
+      ['HEAD /api/owner/invitations', 'owner'],
       ['HEAD /api/session', 'authenticated'],
       ['HEAD /health', 'public'],
       ['HEAD /ready', 'public'],
@@ -105,7 +108,43 @@ describe('route access classification (default-deny registration)', () => {
       ['POST /api/auth/sign-in/email', 'guest-only'],
       ['POST /api/auth/sign-out', 'session-cleanup'],
       ['POST /api/auth/two-factor/verify-totp', 'mfa-challenge'],
+      ['POST /api/owner/invitations', 'owner'],
+      ['POST /api/owner/invitations/:id/cancel', 'owner'],
+      ['POST /api/owner/invitations/:id/resend', 'owner'],
     ]);
+  });
+
+  it('refuses every Owner invitation route without a session, before any database work', async () => {
+    app = await build();
+    await app.ready();
+
+    for (const [method, url] of [
+      ['GET', '/api/owner/invitations'],
+      ['POST', '/api/owner/invitations'],
+      ['POST', '/api/owner/invitations/1/resend'],
+      ['POST', '/api/owner/invitations/1/cancel'],
+    ] as const) {
+      const response = await app.inject({
+        method,
+        url,
+        headers: { origin: 'http://127.0.0.1:5173', 'content-type': 'application/json' },
+        ...(method === 'POST' ? { payload: { email: 'new.admin@example.test' } } : {}),
+      });
+      expect(response.statusCode, `${method} ${url}`).toBe(401);
+      expect(response.json()).toEqual({ error: 'unauthorized' });
+    }
+  });
+
+  it('refuses a state-changing Owner route without a trusted Origin, even before resolving a session', async () => {
+    app = await build();
+    app.post('/owner-probe', { config: { access: 'owner' } }, async () => ({ reached: true }));
+    await app.ready();
+
+    for (const headers of [{}, { origin: 'https://evil.example.test' }, { origin: 'null' }]) {
+      const response = await app.inject({ method: 'POST', url: '/owner-probe', headers, payload: {} });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ error: 'forbidden' });
+    }
   });
 
   it('refuses to build without authentication configuration', async () => {

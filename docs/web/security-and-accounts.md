@@ -114,8 +114,9 @@ documented in-progress idempotency 409 is retried with the same key; a
 conflict or unclassifiable 409 never is), tested
 locally and not wired to the server. Nothing below is production configured
 or physically verified: no Resend account, DNS record, API key, or secret
-file exists, and no email has been sent. Invitations and password reset are
-not implemented. The full design, failure
+file exists, and no email has been sent. The Owner's side of Admin
+invitations is implemented against disposable databases (checkpoint 4B1);
+invitation acceptance and password reset are not. The full design, failure
 behaviour, and dated sources are in
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#14a-transactional-email-admin-invitations-and-password-reset).
 
@@ -128,7 +129,12 @@ behaviour, and dated sources are in
   stored only as a hash; resending supersedes the previous link. The invited
   Admin sets a password and completes a restricted web TOTP enrolment before
   any business access, then signs in afresh. The Owner stays terminal-only
-  (DEC-434).
+  (DEC-434). **The Owner's side is implemented (checkpoint 4B1, disposable
+  databases only):** `owner`-classified list, create, resend, and cancel
+  routes, re-checked in the use case; refusal of an address that already
+  has an account; at most one issuance per 60 seconds and six per 24 hours
+  per address; truthful delivery state; closed audit events without
+  addresses or tokens. Acceptance and enrolment are not implemented.
 - **Password reset (DEC-441).** Available to every enabled account,
   including the Owner; single-use, 30 minutes, same response for every
   address, all sessions revoked, and MFA never removed or bypassed.

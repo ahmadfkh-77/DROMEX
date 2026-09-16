@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { createSecurityAudit, type SecurityAuditEvent } from '../../src/auth/security-audit.ts';
+import {
+  SECURITY_AUDIT_EVENT_TYPES,
+  createSecurityAudit,
+  type SecurityAuditEvent,
+} from '../../src/auth/security-audit.ts';
 
 // The audit writer is the only DROMEX path into dromex_audit_event. These
 // tests prove it refuses anything outside its structured shape before any
@@ -30,6 +34,7 @@ const VALID: SecurityAuditEvent = {
   clientAddress: '198.51.100.7',
   terminalRecoveryId: null,
   incidentReference: null,
+  invitationId: null,
 };
 
 describe('security audit writer', () => {
@@ -53,6 +58,7 @@ describe('security audit writer', () => {
       '198.51.100.7',
       null,
       null,
+      null,
     ]);
   });
 
@@ -69,6 +75,7 @@ describe('security audit writer', () => {
       clientAddress: null,
       terminalRecoveryId: '7',
       incidentReference: 'INC-20260915-01',
+      invitationId: null,
     });
 
     expect(statements[0]!.values).toEqual([
@@ -82,6 +89,7 @@ describe('security audit writer', () => {
       null,
       '7',
       'INC-20260915-01',
+      null,
     ]);
   });
 
@@ -98,6 +106,7 @@ describe('security audit writer', () => {
       clientAddress: null,
       terminalRecoveryId: null,
       incidentReference: null,
+      invitationId: null,
     });
 
     expect(statements[0]!.values).toEqual([
@@ -111,6 +120,52 @@ describe('security audit writer', () => {
       null,
       null,
       null,
+      null,
+    ]);
+  });
+
+  it('writes an Admin invitation event with its invitation reference and no address', async () => {
+    const { db, statements } = recordingDatabase();
+
+    await createSecurityAudit(db).record({
+      type: 'admin_invitation_delivery_failed',
+      outcome: 'failure',
+      actor: { userId: 'user_synthetic', name: 'Synthetic Owner' },
+      recoveryId: null,
+      reason: 'provider_unavailable',
+      revokedSessionCount: null,
+      clientAddress: '198.51.100.7',
+      terminalRecoveryId: null,
+      incidentReference: null,
+      invitationId: '12',
+    });
+
+    expect(statements[0]!.text).toContain('invitation_id');
+    expect(statements[0]!.values).toEqual([
+      'admin_invitation_delivery_failed',
+      'failure',
+      'user_synthetic',
+      'Synthetic Owner',
+      null,
+      'provider_unavailable',
+      null,
+      '198.51.100.7',
+      null,
+      null,
+      '12',
+    ]);
+  });
+
+  it('accepts exactly the closed Admin invitation event vocabulary', () => {
+    expect(SECURITY_AUDIT_EVENT_TYPES.filter((type) => type.startsWith('admin_invitation_'))).toEqual([
+      'admin_invitation_created',
+      'admin_invitation_resent',
+      'admin_invitation_superseded',
+      'admin_invitation_cancelled',
+      'admin_invitation_expired',
+      'admin_invitation_delivery_accepted',
+      'admin_invitation_delivery_failed',
+      'admin_invitation_refused',
     ]);
   });
 
@@ -134,6 +189,10 @@ describe('security audit writer', () => {
     ['a malformed incident reference', { ...VALID, incidentReference: 'INC-2026-1' }],
     ['a non-numeric terminal recovery reference', { ...VALID, terminalRecoveryId: '7 OR 1=1' }],
     ['a zero terminal recovery reference', { ...VALID, terminalRecoveryId: '0' }],
+    ['a missing invitation reference', (({ invitationId: _omit, ...rest }) => rest)(VALID)],
+    ['a zero invitation reference', { ...VALID, invitationId: '0' }],
+    ['an invitation reference carrying an address', { ...VALID, invitationId: 'new.admin@example.test' }],
+    ['a numeric invitation reference', { ...VALID, invitationId: 12 }],
   ])('refuses %s before touching the database', async (_label, event) => {
     const { db, statements } = recordingDatabase();
 

@@ -42,11 +42,14 @@ What does **not** exist, and must not be assumed to exist:
   terminal emergency Owner recovery tested on disposable databases only
   (DEC-437; its command refuses every run): no password recovery,
   permissions, or real account,
-- any email sending, Admin invitation, or password reset: these are an
-  approved design (DEC-439 through DEC-442). Only the email transport
-  foundation exists, tested locally and not wired to the server (checkpoint
-  4A); there is no provider account, API key, DNS configuration, secret file,
-  or email,
+- any real email sending, invitation acceptance, or password reset: these
+  are an approved design (DEC-439 through DEC-442). Only the email transport
+  foundation (checkpoint 4A) and the Owner's side of Admin invitations
+  (create, list, resend, cancel, expiry, audit; checkpoint 4B1) exist, tested
+  against capture transports and disposable databases only; the running
+  server has no email configuration, no invitation can be accepted, and
+  there is no provider account, API key, DNS configuration, secret file, or
+  email,
 - a real Owner: terminal activation exists and is tested against disposable
   databases, but its command refuses every run. OQ-161's design closure does
   not unblock it: enabling it requires the DEC-443 gate (implemented and

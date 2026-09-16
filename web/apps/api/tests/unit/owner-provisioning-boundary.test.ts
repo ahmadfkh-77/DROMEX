@@ -155,7 +155,7 @@ describe('Owner provisioning isolation from the running server', () => {
     }
   });
 
-  it('adds no HTTP route: the complete server route table is unchanged', async () => {
+  it('adds no HTTP route: the complete server route table is exactly the approved surface', async () => {
     const app = await buildServer({
       databaseUrl: UNREACHABLE_DATABASE_URL,
       auth: syntheticAuthSettings(),
@@ -164,10 +164,14 @@ describe('Owner provisioning isolation from the running server', () => {
       await app.ready();
       const routes = [...app.routeAccess.entries()].sort(([a], [b]) => a.localeCompare(b));
 
+      // The Owner invitation routes (checkpoint 4B1) are the only addition
+      // since provisioning; none of them is a provisioning route.
       expect(routes).toEqual([
+        ['GET /api/owner/invitations', 'owner'],
         ['GET /api/session', 'authenticated'],
         ['GET /health', 'public'],
         ['GET /ready', 'public'],
+        ['HEAD /api/owner/invitations', 'owner'],
         ['HEAD /api/session', 'authenticated'],
         ['HEAD /health', 'public'],
         ['HEAD /ready', 'public'],
@@ -177,6 +181,9 @@ describe('Owner provisioning isolation from the running server', () => {
         ['POST /api/auth/sign-in/email', 'guest-only'],
         ['POST /api/auth/sign-out', 'session-cleanup'],
         ['POST /api/auth/two-factor/verify-totp', 'mfa-challenge'],
+        ['POST /api/owner/invitations', 'owner'],
+        ['POST /api/owner/invitations/:id/cancel', 'owner'],
+        ['POST /api/owner/invitations/:id/resend', 'owner'],
       ]);
     } finally {
       await settle();

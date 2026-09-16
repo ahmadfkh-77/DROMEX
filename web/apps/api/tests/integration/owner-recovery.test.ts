@@ -1399,6 +1399,7 @@ describe('Owner recovery against PostgreSQL 18.6', () => {
         { column_name: 'id', data_type: 'bigint' },
         // DEC-437 (migration 0007): both pattern-constrained, neither free-form.
         { column_name: 'incident_reference', data_type: 'text' },
+        { column_name: 'invitation_id', data_type: 'bigint' },
         { column_name: 'occurred_at', data_type: 'timestamp with time zone' },
         { column_name: 'outcome', data_type: 'text' },
         { column_name: 'reason', data_type: 'text' },

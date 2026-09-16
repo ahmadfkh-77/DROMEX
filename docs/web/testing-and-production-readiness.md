@@ -802,13 +802,121 @@ Not verified:
 - File-ownership matching for the key file, which is deliberately not
   enforced.
 
+## Phase 2C Owner-managed Admin invitations (checkpoint 4B1): local verification
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases only, on exact Node 24.20.0.** This is not production verification
+and satisfies no DEC-443 item. Only the Owner's side exists; invitation
+acceptance and Admin enrolment are not implemented. No real invitation,
+account, or email exists: every identity is synthetic, every address uses a
+reserved `.test` or `.invalid` domain, and every email went to the capture
+transport or a scripted fake. Design and limits:
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#implemented-invitation-issuance-phase-2c-checkpoint-4b1-local-development-only).
+
+**RED first.** The token, email, route-classification, and audit-writer unit
+tests and the 43-test integration file were written before any
+implementation. The RED run failed every new unit test on a missing module,
+the unrecognised `owner` classification, the missing routes (404 instead of
+401), or the audit writer's missing `invitationId`; the integration file
+failed to load on the missing service module. Three existing tests that
+enumerate the migration ledger, audit columns, and the full route table were
+then updated deliberately for migration `0008` and the four new routes.
+
+Proven locally (unit: token 5, email 9, route access and audit additions;
+integration: 44 tests in `admin-invitations.test.ts`):
+
+- **Authorization.** Unauthenticated callers get 401 on all four routes with
+  no database change, including without a database; an active, MFA-complete
+  Admin gets 403 on all four; an untrusted or missing Origin gets 403 before
+  any session work; a disabled Owner is refused at the route and the service;
+  the service alone refuses an Admin actor (audited `forbidden`, four times)
+  and an Owner whose MFA completion is missing.
+- **Creation.** 201 with exactly the approved keys; the stored hash equals
+  SHA-256 over the label and the token taken from the captured email; the
+  lifetime is exactly 24 hours of database time; the response, the stored
+  row, every audit column, and the logs contain no token, hash, link,
+  delivery id, or (for audit and logs) address; tokens and hashes differ for
+  every invitation; seven malformed bodies get `invalid_email` with no row or
+  email; an address with an account is refused whatever its case; a second
+  pending invitation is refused; eight concurrent creations produce one
+  invitation and one email.
+- **Delivery.** A retryable failure, a permanent rejection, an idempotency
+  conflict, and a thrown transport error are each recorded as `failed` with
+  the safe reason and audited, never as delivered, and the invitation stays
+  pending and resendable; the disabled transport and no email configuration
+  are recorded as `not_sent` (`email_disabled`); each invitation uses its own
+  stable idempotency key `admin_invitation/<delivery id>`.
+- **Resend.** New token and row; the old row becomes `superseded` with an end
+  time; both emails' tokens match their own rows only; audit order is
+  created, delivery accepted, superseded, resent, delivery accepted; one
+  issuance per 60 seconds per email with a `Retry-After` of 1 to 60 seconds
+  (58 seconds refused, 61 allowed); six issuances in 24 hours, then refused
+  with a longer `Retry-After`, still refused after cancel and create, and
+  allowed again after 24 hours; superseded, cancelled, unknown, and
+  malformed ids refused (404 for the last two); six concurrent resends
+  produce exactly one new invitation; a resend racing a cancellation ends as
+  exactly one of the two outcomes in four rounds.
+- **Cancellation and expiry.** Cancel ends the invitation once, a second
+  cancel is refused, the database refuses reopening it, and a new invitation
+  is allowed after the cooldown. A row 5 seconds before expiry is pending and
+  5 seconds after is `expired`, swept and audited exactly once; a due row
+  held by another transaction is still reported `expired`; resend and cancel
+  expire a due row themselves.
+- **Migration 0008.** One pending row per email; exact 24-hour lifetime;
+  32-byte hash; status and delivery-status lists; `ended_at` tied to status;
+  normalised email; unique hash; and a column list with nowhere to hold a
+  token, link, provider id, or body.
+
+Suites on exact Node 24.20.0 (disposable container, `npm ci` from the
+committed lockfile, a copy of the Git-listed workspace files that excluded
+`web/.env`, Docker-backed PostgreSQL 18.6): workspace typecheck clean; API
+unit tests 456/456 (27 files); API integration tests 290/290 (13 files).
+`npm audit` and `npm audit --omit=dev` report 0 vulnerabilities, and no
+manifest or lockfile changed. On the host: Playwright 12/12, the Android
+typecheck clean, and the Android suite 537/537. One Android run made while the
+integration suite was loading Docker timed out a single 5-second test; the
+suite was rerun alone and passed completely.
+
+**Mutation testing (32/33 killed, one equivalent).** Thirty-three targeted
+mutations were each applied alone in the container's copy, with the named
+test files run and the file restored and confirmed identical by SHA-256:
+storing the raw token; dropping the hash label; a 128-bit token; a token in a
+query string; an idempotency key derived from the token; a 48-hour lifetime
+at insert, and with the lifetime constraint loosened; the due check late by
+an hour; the expiry sweep disabled; a locked row never expiring; the
+effective `expired` status hidden; no supersession; the advisory lock
+removed; the route and the service Owner checks each removed; MFA completion
+ignored by the service; the Owner Origin check removed; a delivery id leaked
+in the response; the cooldown removed; the daily limit raised or counting
+resends only; the account check removed; the disabled transport or a crash
+claiming delivery; extra body fields accepted; cancel skipping its pending
+check; the one-pending index made non-unique; the ended-status trigger
+removed; the audit losing the invitation reference, in the service and in the
+writer; an unknown id reported as not pending; and normalisation keeping case.
+The first pass killed 31: hiding the effective `expired` status survived
+because every list swept first, so a test now holds the row in another
+transaction and the mutation is killed. The remaining survivor, dropping
+`status = 'pending'` from the cancel `UPDATE`, is equivalent: the same
+transaction has just checked the status under a row lock, and the trigger
+refuses any change to an ended row.
+
+Not verified:
+
+- Any real delivery, provider, or configured sending identity.
+- Acceptance, enrolment, or use of an invitation (checkpoint 4B2).
+- Recovery of a row left in `sending` by a crash between the two
+  transactions (documented as outcome unknown, not reconciled).
+- Behaviour under a least-privilege runtime database role, which is not
+  provisioned.
+
 ## Planned tests: email, Admin invitations, and password reset
 
 Status: **planned only (DEC-439 through DEC-442).** The transport-level rows
 below (provider failure, secret handling, webhooks) are now covered by
-checkpoint 4A above; the invitation, enrolment, reset, enumeration, session,
-audit, page, and content rows are not written or run, and nothing they would
-test exists. Each is to be written as
+checkpoint 4A above, and the Owner-side invitation rows (issuance, expiry,
+supersession, cancellation, delivery failure, audit, content) by checkpoint
+4B1; the acceptance, enrolment, reset, enumeration, session, and page rows
+are not written or run, and nothing they would test exists. Each is to be written as
 a failing test before the implementation it covers. Governing design:
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#14a-transactional-email-admin-invitations-and-password-reset).
 

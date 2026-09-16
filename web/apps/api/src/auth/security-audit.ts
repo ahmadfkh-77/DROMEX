@@ -5,7 +5,7 @@
  * structured shape: an event type from a closed list, an outcome, the acting
  * user and a snapshot of their name, a web recovery reference, a constrained
  * reason code, a revoked-session count, a client address, a terminal recovery
- * run reference, and an incident reference. Anything else — an unknown type,
+ * run reference, an incident reference, and an Admin invitation reference. Anything else — an unknown type,
  * an extra property, a reason that is not a short lower-case identifier, an
  * incident reference that is not `INC-YYYYMMDD-NN` — is refused before a
  * statement is sent, so no caller can pass a password, code, secret, cookie,
@@ -48,6 +48,15 @@ export const SECURITY_AUDIT_EVENT_TYPES = [
   'terminal_recovery_completed',
   'terminal_recovery_failed',
   'terminal_recovery_abandoned',
+  // Owner-managed Admin invitation issuance (DEC-440).
+  'admin_invitation_created',
+  'admin_invitation_resent',
+  'admin_invitation_superseded',
+  'admin_invitation_cancelled',
+  'admin_invitation_expired',
+  'admin_invitation_delivery_accepted',
+  'admin_invitation_delivery_failed',
+  'admin_invitation_refused',
 ] as const;
 
 export type SecurityAuditEventType = (typeof SECURITY_AUDIT_EVENT_TYPES)[number];
@@ -72,6 +81,8 @@ export interface SecurityAuditEvent {
   terminalRecoveryId: string | null;
   /** The operator's dated incident reference, `INC-YYYYMMDD-NN`. */
   incidentReference: string | null;
+  /** The Admin invitation's database identifier, as a decimal string. Never an address. */
+  invitationId: string | null;
 }
 
 /** Anything that runs a parameterised statement: a pool or a client in a transaction. */
@@ -96,6 +107,7 @@ const EVENT_KEYS = [
   'actor',
   'clientAddress',
   'incidentReference',
+  'invitationId',
   'outcome',
   'reason',
   'recoveryId',
@@ -116,8 +128,8 @@ const MAX_USER_ID_LENGTH = 255;
 const INSERT = `
   INSERT INTO dromex_audit_event
     (event_type, outcome, actor_user_id, actor_name, recovery_id, reason, revoked_session_count, client_address,
-     terminal_recovery_id, incident_reference)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
+     terminal_recovery_id, incident_reference, invitation_id)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -132,12 +144,22 @@ function nullableMatch(value: unknown, pattern: RegExp): boolean {
   return value === null || (typeof value === 'string' && pattern.test(value));
 }
 
-/** The ten statement values, in column order, or a thrown refusal. */
+/** The eleven statement values, in column order, or a thrown refusal. */
 function valuesOf(event: unknown): unknown[] {
   if (!isPlainObject(event) || !hasExactly(event, EVENT_KEYS)) throw new SecurityAuditValidationError('event shape');
 
-  const { type, outcome, actor, recoveryId, reason, revokedSessionCount, clientAddress, terminalRecoveryId, incidentReference } =
-    event;
+  const {
+    type,
+    outcome,
+    actor,
+    recoveryId,
+    reason,
+    revokedSessionCount,
+    clientAddress,
+    terminalRecoveryId,
+    incidentReference,
+    invitationId,
+  } = event;
 
   if (typeof type !== 'string' || !EVENT_TYPES.has(type)) throw new SecurityAuditValidationError('event type');
   if (typeof outcome !== 'string' || !OUTCOMES.has(outcome)) throw new SecurityAuditValidationError('outcome');
@@ -168,6 +190,7 @@ function valuesOf(event: unknown): unknown[] {
     throw new SecurityAuditValidationError('terminal recovery reference');
   }
   if (!nullableMatch(incidentReference, INCIDENT_REFERENCE)) throw new SecurityAuditValidationError('incident reference');
+  if (!nullableMatch(invitationId, DATABASE_ID)) throw new SecurityAuditValidationError('invitation reference');
 
   return [
     type,
@@ -180,6 +203,7 @@ function valuesOf(event: unknown): unknown[] {
     clientAddress,
     terminalRecoveryId,
     incidentReference,
+    invitationId,
   ];
 }
 
@@ -195,6 +219,7 @@ export function securityEvent(
     revokedSessionCount?: number | null;
     terminalRecoveryId?: string | null;
     incidentReference?: string | null;
+    invitationId?: string | null;
   } = {},
 ): SecurityAuditEvent {
   return {
@@ -207,6 +232,7 @@ export function securityEvent(
     clientAddress,
     terminalRecoveryId: extra.terminalRecoveryId ?? null,
     incidentReference: extra.incidentReference ?? null,
+    invitationId: extra.invitationId ?? null,
   };
 }
 

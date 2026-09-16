@@ -17,6 +17,9 @@ import { createSecurityAudit } from './auth/security-audit.ts';
 import { createTotpReplayGuard } from './auth/totp-replay.ts';
 import { loadRuntimeConfig, type RuntimeConfig } from './config/runtime.ts';
 import { checkDatabase, createPool } from './db.ts';
+import { parseLinkOrigin } from './email/message.ts';
+import { createAdminInvitationService, type InvitationDelivery } from './invitations/admin-invitations.ts';
+import { registerInvitationRoutes } from './invitations/invitation-http.ts';
 import { registerRouteAccessGuard } from './routeAccess.ts';
 
 export interface BuildServerOptions {
@@ -28,6 +31,11 @@ export interface BuildServerOptions {
   logger?: boolean;
   /** Captures structured logs, so tests can prove what is never written. */
   logStream?: Writable;
+  /**
+   * How invitation emails are sent. Absent means email is not configured:
+   * invitations are still recorded, and honestly reported as not sent.
+   */
+  email?: InvitationDelivery;
 }
 
 /**
@@ -119,6 +127,17 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   const audit = createSecurityAudit(pool);
   const recovery = createOwnerRecovery(pool, audit);
 
+  let delivery: InvitationDelivery | null = null;
+  if (options.email !== undefined) {
+    try {
+      delivery = { ...options.email, linkOrigin: parseLinkOrigin(options.email.linkOrigin, options.auth.environment) };
+    } catch (cause) {
+      await pool.end().catch(() => undefined);
+      throw cause;
+    }
+  }
+  const invitations = createAdminInvitationService({ pool, audit, delivery });
+
   const authDependencies: AuthRoutesDependencies = {
     backend: {
       handle: (request) => auth.handler(request),
@@ -168,6 +187,7 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   // its sign-out hooks are in place for them.
   registerRecoveryRoutes(app, { ...authDependencies, recovery, audit, recoveryBackend });
   registerAuthRoutes(app, authDependencies);
+  registerInvitationRoutes(app, invitations);
 
   app.addHook('onClose', async () => {
     await pool.end().catch(() => undefined);

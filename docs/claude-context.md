@@ -21,10 +21,11 @@ answer any of these without a fresh Owner directive. **OQ-161 (email
 delivery) was closed on 2026-09-16 as a design decision by DEC-439 through
 DEC-442** (Resend via HTTPS API, Admin invitations with restricted web TOTP
 enrolment, password reset for every enabled account, fragment-only token
-links; architecture §14A). Only the email transport foundation is
-implemented (checkpoint 4A, local tests only, not wired to the server);
-invitations and password reset are not, nothing is production configured,
-and no email has been sent. **DEC-443 keeps real Owner activation blocked** until that reset path is
+links; architecture §14A). Only the email transport foundation (checkpoint
+4A) and the Owner's side of Admin invitations (checkpoint 4B1) are
+implemented, tested on capture transports and disposable databases only;
+invitation acceptance and password reset are not, nothing is production
+configured, and no email has been sent. **DEC-443 keeps real Owner activation blocked** until that reset path is
 implemented, verified, production configured, and physically rehearsed and
 the command is separately approved. Before
 starting the next web implementation phase, read that document in full,
@@ -40,9 +41,19 @@ decisions and open questions — do not rely on this paragraph alone.
   Verified on exact Node 24.20.0 in a disposable container (unit 434/434,
   integration 246/246, 17/17 + 9/9 mutations), host Playwright 12/12, Android
   537/537. Not wired to the server.
-- **Next: checkpoint 4B1** — Owner-managed Admin invitation issuance (create,
-  resend, cancel, expiry, delivery handoff, audit; no acceptance). Verify the
-  branch is synchronised with `origin` and the tree is clean first.
+- **Checkpoint 4B1 (Owner-managed Admin invitations) — complete.** Committed
+  as `feat(web): add Owner-managed Admin invitations`. Migration `0008`, the
+  `owner` route classification, `src/invitations/`, list/create/resend/cancel
+  routes under `/api/owner/invitations`. Verified on exact Node 24.20.0
+  (unit 456/456, integration 290/290, 32/33 mutations killed with one
+  equivalent), host Playwright 12/12, Android 537/537. No acceptance; the
+  running server passes no email configuration.
+- **Next: checkpoint 4B2** (restricted Admin invitation acceptance). Before
+  implementing, confirm the Owner has decided the states DEC-440 leaves open
+  (see the phase report): what happens to a partially created Admin identity
+  when acceptance is abandoned, expires, or its invitation is cancelled or
+  superseded, and how the principal's pending state is represented. Verify
+  the branch is synchronised with `origin` and the tree is clean first.
 - Verification harness used: a disposable `node:24.20.0-trixie-slim`
   container with the Docker socket mounted for Testcontainers, fed a tar of
   Git-listed and untracked-unignored `web/` files (so `web/.env` is never

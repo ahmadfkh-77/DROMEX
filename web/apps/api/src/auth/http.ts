@@ -443,10 +443,16 @@ export function registerAuthenticationGuard(app: FastifyInstance, deps: AuthRout
       }
     }
 
-    if (access === 'authenticated') {
+    if (access === 'authenticated' || access === 'owner') {
+      // Owner routes that change state refuse a cross-origin caller before any
+      // session work, in addition to the SameSite session cookie.
+      if (access === 'owner' && request.method !== 'GET' && request.method !== 'HEAD' && !hasTrustedOrigin(request, deps)) {
+        return reply.code(403).send(FORBIDDEN);
+      }
       try {
         const identity = await resolveIdentity(toBackendHeaders(request, deps), deps, reply);
         if (identity === null) return reply.code(401).send(UNAUTHORIZED);
+        if (access === 'owner' && identity.principal.isOwner !== true) return reply.code(403).send(FORBIDDEN);
         request.dromexIdentity = identity;
         return;
       } catch (error) {
