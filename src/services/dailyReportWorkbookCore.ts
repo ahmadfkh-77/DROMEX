@@ -1,5 +1,5 @@
 import { netWorkMinutes, type DailyProjectReport, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
-import { describeWallConsumptionQuantity, supportsCoveredArea, wallConsumptionPurposeLabel, wallMaterialLabels, wallSystemLabels } from '../domain/walls';
+import { describeWallConsumptionQuantity, supportsVolumeCalculation, wallConsumptionPurposeLabel, wallMaterialLabels, wallSystemLabels } from '../domain/walls';
 import { buildWorkbookFromSheets, localizeWorkbookSheets, type EmbeddedWorkbookImage, type SheetSpec, type WorkbookLocale } from './businessWorkbook';
 
 const list = (values: string[]) => values.length ? values.join(', ') : null;
@@ -16,9 +16,10 @@ export function wallConstructionRows(walls: LinkedWallWork[]) {
     'Ready-Mix or Finished m³': entry.finishedVolumeM3, 'Cement Bags': entry.cementBags, 'Sand Quantity': entry.sandQuantity, 'Sand Unit': unit(entry.sandUnit),
     'Gravel Quantity': entry.gravelQuantity, 'Gravel Unit': unit(entry.gravelUnit), 'Water L': entry.waterLitres, 'Admixture Quantity': entry.admixtureQuantity, 'Admixture Unit': unit(entry.admixtureUnit),
     'Stone Quantity': entry.stoneQuantity, 'Stone Unit': unit(entry.stoneUnit), 'Rebar Diameter mm': entry.rebarDiameterMm, 'Rebar Bars': entry.rebarCount, 'Rebar Length Each m': entry.rebarLengthEachM, 'Rebar kg': entry.totalRebarKg,
-    'Area Length m': entry.area?.lengthM ?? null, 'Area Height m': entry.area?.heightM ?? null, 'Openings m²': entry.area?.deductionM2 ?? null,
-    'Gross Area m²': entry.area?.grossAreaM2 ?? null, 'Net Covered Area m²': entry.area?.netAreaM2 ?? null,
-    'Area Status': !supportsCoveredArea(entry.type) ? 'Not applicable' : entry.area ? 'Recorded' : 'Area not recorded',
+    'Calc Length m': entry.volume?.lengthM ?? null, 'Calc Height m': entry.volume?.heightM ?? null, 'Calc Bottom Thickness m': entry.volume?.bottomThicknessM ?? null,
+    'Calc Top Thickness m': entry.volume?.topThicknessM ?? null, 'Calc Deductions m³': entry.volume?.deductionM3 ?? null,
+    'Calc Gross Volume m³': entry.volume?.grossVolumeM3 ?? null, 'Calc Net Volume m³': entry.volume?.netVolumeM3 ?? null,
+    'Volume Calculation': !supportsVolumeCalculation(entry.type) ? 'Not applicable' : entry.volume ? 'Calculated' : 'Entered directly',
     Corrections: entry.correctionHistory.length, 'Last Correction Reason': entry.correctionHistory.at(-1)?.reason ?? null, Notes: entry.notes.trim() || null,
   })));
 }

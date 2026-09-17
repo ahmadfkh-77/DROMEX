@@ -12,7 +12,7 @@ import {
   type DailyProjectReport, type DailyProjectReportDraft, type DailyReportMaterial,
   type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject, type SafetyParticipantType, type WorkerSafetyStatus,
 } from '../../domain/projectReports';
-import {describeWallConsumptionQuantity,formatWallArea,supportsCoveredArea,wallConsumptionPurposeLabel,wallMaterialLabels,wallSystemLabels} from '../../domain/walls';
+import {describeWallConsumptionQuantity,formatVolumeCalculation,supportsVolumeCalculation,wallConsumptionPurposeLabel,wallMaterialLabels,wallSystemLabels} from '../../domain/walls';
 import { SearchableSelect } from '../components/SearchableSelect';
 import {CollapsibleFilterCard} from '../components/CollapsibleFilterCard';
 import {DatePickerField,todayIso} from '../components/DatePickerField';
@@ -382,7 +382,7 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
           <View style={styles.recordTop}><Text style={styles.recordName}>{wall.wallName}</Text><Text style={styles.recordMeta}>{wallSystemLabels[wall.system]}</Text></View>
           {wall.entries.map(entry=>{const purpose=wallConsumptionPurposeLabel(entry);return <View key={entry.id} style={styles.wallEntry}>
             <View style={styles.recordTop}><Text style={styles.wallEntryTitle}>{wallMaterialLabels[entry.type]}{purpose?` · ${purpose}`:''}</Text><Text style={styles.recordStrongValue}>{describeWallConsumptionQuantity(entry)}</Text></View>
-            {supportsCoveredArea(entry.type)?<Text style={entry.area?styles.recordMeta:styles.wallAreaMissing}>{entry.area?`Covered area ${formatWallArea(entry.area.netAreaM2)} (${formatWallArea(entry.area.grossAreaM2)} gross, ${formatWallArea(entry.area.deductionM2)} openings)`:formatWallArea(null)}</Text>:null}
+            {supportsVolumeCalculation(entry.type)?<Text style={entry.volume?styles.recordMeta:styles.wallCalcMissing}>{entry.volume?`Calculated ${formatVolumeCalculation(entry)}`:formatVolumeCalculation(entry)}</Text>:null}
             {entry.correctionHistory.length?<Text style={styles.recordMeta}>Corrected: {entry.correctionHistory[entry.correctionHistory.length-1]!.reason}</Text>:null}
             {entry.notes?<Text style={styles.recordMeta}>{entry.notes}</Text>:null}
           </View>;})}
@@ -648,7 +648,7 @@ const styles = StyleSheet.create({
   sourceGroupHeading:{flexDirection:'row',alignItems:'center',gap:8,marginTop:4},sourceDot:{width:10,height:10,borderRadius:5},sourceDotCompany:{backgroundColor:colors.brand},sourceDotSupplier:{backgroundColor:colors.navy},sourceGroupTitle:{color:colors.navy,fontSize:12,fontWeight:'700',letterSpacing:.4},
   loadRow:{backgroundColor:colors.surface,borderRadius:12,padding:13,gap:4,borderWidth:1,borderColor:'#D7E2E8',borderLeftWidth:3},recordTop:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-start',gap:8},recordStrongValue:{color:colors.ink,fontSize:16,fontWeight:'700'},recordMeta:{color:colors.muted,fontSize:12,lineHeight:17},
   recordRow:{backgroundColor:colors.surface,borderRadius:12,padding:13,gap:4,borderLeftWidth:3,borderLeftColor:colors.brand},
-  wallGroup:{backgroundColor:colors.surface,borderRadius:12,padding:13,gap:8,borderLeftWidth:3,borderLeftColor:colors.result},wallEntry:{gap:3,borderTopWidth:1,borderTopColor:colors.line,paddingTop:8},wallEntryTitle:{flex:1,color:colors.ink,fontSize:14,fontWeight:'700'},wallAreaMissing:{color:colors.muted,fontSize:12,fontStyle:'italic'},
+  wallGroup:{backgroundColor:colors.surface,borderRadius:12,padding:13,gap:8,borderLeftWidth:3,borderLeftColor:colors.result},wallEntry:{gap:3,borderTopWidth:1,borderTopColor:colors.line,paddingTop:8},wallEntryTitle:{flex:1,color:colors.ink,fontSize:14,fontWeight:'700'},wallCalcMissing:{color:colors.muted,fontSize:12,fontStyle:'italic'},
   totalsCard:{backgroundColor:'#F5F2EC',borderRadius:13,padding:14,alignItems:'flex-start',gap:2},totalsValue:{color:colors.ink,fontSize:22,fontWeight:'900'},totalsLabel:{color:colors.navy,fontSize:11,fontWeight:'700',letterSpacing:.4},
   noteCard:{backgroundColor:colors.surface,borderRadius:12,padding:13,gap:8,borderLeftWidth:3,borderLeftColor:colors.navy},noteCardAttention:{borderLeftColor:colors.danger,backgroundColor:'#FCE8E6'},noteInput:{minHeight:64,color:colors.ink,fontSize:14,lineHeight:20,textAlignVertical:'top'},
   save: { minHeight:48,backgroundColor: colors.ink, borderRadius: 13, padding: 16, alignItems: 'center' }, saveText: { color: '#FFF', fontWeight: '900', fontSize: 16 }, error: { color: colors.danger, backgroundColor: '#FCE8E6', padding: 12, borderRadius: 10, fontWeight: '700' }, success: { color: colors.success, backgroundColor: '#E5F3EC', padding: 12, borderRadius: 10, fontWeight: '700' },

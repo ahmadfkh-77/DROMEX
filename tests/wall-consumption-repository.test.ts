@@ -41,11 +41,13 @@ async function setup(){
   return{db,walls,reports,wallA,wallB,otherWall};
 }
 
-const draft=(wallId:string,overrides:Partial<WallConsumptionDraft>={}):WallConsumptionDraft=>({wallId,usedOn:'2026-09-10',type:'ready_mix',concretePurpose:'structural',customPurposeId:null,finishedVolumeM3:4.5,cementBags:null,cementBagKg:null,sandQuantity:null,sandUnit:null,gravelQuantity:null,gravelUnit:null,waterLitres:null,admixtureQuantity:null,admixtureUnit:null,stoneQuantity:null,stoneUnit:null,rebarDiameterMm:null,rebarCount:null,rebarLengthEachM:null,rebarGrade:'',notes:'',area:null,...overrides});
+const draft=(wallId:string,overrides:Partial<WallConsumptionDraft>={}):WallConsumptionDraft=>({wallId,usedOn:'2026-09-10',type:'ready_mix',concretePurpose:'structural',customPurposeId:null,finishedVolumeM3:4.5,cementBags:null,cementBagKg:null,sandQuantity:null,sandUnit:null,gravelQuantity:null,gravelUnit:null,waterLitres:null,admixtureQuantity:null,admixtureUnit:null,stoneQuantity:null,stoneUnit:null,rebarDiameterMm:null,rebarCount:null,rebarLengthEachM:null,rebarGrade:'',notes:'',volume:null,...overrides});
+const stoneCalc={lengthM:18,heightM:4.5,bottomThicknessM:0.9,topThicknessM:0.5,deductionM3:2.5};
+const mixCalc={lengthM:10,heightM:2,bottomThicknessM:0.5,topThicknessM:0.5,deductionM3:0};
 const count=(db:TestDatabase,sql:string)=>Number((db.raw.prepare(sql).get() as {count:number}).count);
 
 describe('migration 37: wall consumption area, purposes, and corrections',()=>{
-  it('is the current database version',()=>{expect(DATABASE_VERSION).toBe(37);});
+  it('keeps migration 37 in the upgrade path below the current version',()=>{expect(DATABASE_VERSION).toBe(38);});
 
   it('emits the version 37 step through execAsync alone, as older installations migrate',async()=>{
     const statements:string[]=[];
@@ -56,7 +58,7 @@ describe('migration 37: wall consumption area, purposes, and corrections',()=>{
     // Structure only: no data-modifying statement is part of the version 37 step.
     const step37=statements.slice(statements.findIndex(sql=>sql.includes('wall_concrete_purposes')));
     expect(step37.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 37');
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 38');
   });
 
   it('upgrades a version 36 database without changing existing consumption records, and is safe to re-run',async()=>{
@@ -90,11 +92,11 @@ describe('migration 37: wall consumption area, purposes, and corrections',()=>{
     db.raw.exec('PRAGMA user_version = 36;');
     await migrateDatabase(db as never);
     await migrateDatabase(db as never);
-    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:37});
+    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:38});
     expect(db.raw.prepare('SELECT id,wall_id,used_on,material_type,concrete_purpose,finished_volume_m3,stone_quantity,stone_unit,notes,created_at FROM wall_consumptions ORDER BY id').all()).toEqual(before);
     const detail=await new SqliteWallRepository(db as never).getWall('legacy_wall');
-    expect(detail.entries.find(entry=>entry.id==='legacy_stone')).toMatchObject({area:null,customPurposeId:null,customPurposeLabel:null,correctionHistory:[],updatedAt:null,stoneQuantity:6,stoneUnit:'tonnes'});
-    expect(detail.entries.find(entry=>entry.id==='legacy_mix')).toMatchObject({concretePurpose:'mortar',finishedVolumeM3:2.5,area:null});
+    expect(detail.entries.find(entry=>entry.id==='legacy_stone')).toMatchObject({volume:null,customPurposeId:null,customPurposeLabel:null,correctionHistory:[],updatedAt:null,stoneQuantity:6,stoneUnit:'tonnes'});
+    expect(detail.entries.find(entry=>entry.id==='legacy_mix')).toMatchObject({concretePurpose:'mortar',finishedVolumeM3:2.5,volume:null});
     expect(db.raw.prepare('PRAGMA integrity_check').get()).toMatchObject({integrity_check:'ok'});
     expect(db.raw.prepare('PRAGMA foreign_key_check').all()).toHaveLength(0);
   });
@@ -122,20 +124,64 @@ describe('migration 37: wall consumption area, purposes, and corrections',()=>{
   });
 });
 
-describe('covered area and reusable purposes in the wall repository',()=>{
-  it('stores a Ready Mix and a Stone area snapshot beside an independent quantity',async()=>{
-    const {walls,wallA}=await setup();
-    const mix=await walls.addConsumption(draft(wallA.id,{area:{lengthM:15.5,heightM:4,deductionM2:0}}));
-    const stone=await walls.addConsumption(draft(wallA.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:9,stoneUnit:'m3',area:{lengthM:18,heightM:4,deductionM2:10}}));
-    expect(mix).toMatchObject({finishedVolumeM3:4.5,area:{lengthM:15.5,heightM:4,deductionM2:0,grossAreaM2:62,netAreaM2:62}});
-    expect(stone).toMatchObject({stoneQuantity:9,stoneUnit:'m3',area:{grossAreaM2:72,deductionM2:10,netAreaM2:62}});
+describe('migration 38: wall consumption volume calculation',()=>{
+  it('emits the version 38 step through execAsync alone, as older installations migrate',async()=>{
+    const statements:string[]=[];
+    const db={execAsync:async(sql:string)=>{statements.push(sql);},getFirstAsync:async()=>({user_version:37})};
+    await migrateDatabase(db as never);
+    for(const column of ['volume_length_m','volume_height_m','volume_bottom_thickness_m','volume_top_thickness_m','volume_deduction_m3','volume_gross_m3','volume_net_m3'])expect(statements.some(sql=>sql.includes(`ALTER TABLE wall_consumptions ADD COLUMN ${column} `))).toBe(true);
+    expect(statements.some(sql=>sql.includes('wall_concrete_purposes'))).toBe(false);
+    expect(statements.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
+    expect(statements.at(-1)).toBe('PRAGMA user_version = 38');
   });
 
-  it('rejects invalid area dimensions and area on rebar without saving anything',async()=>{
+  it('upgrades a version 37 database, including superseded area test data, without changing any record',async()=>{
+    const {db,wallA}=await setup();
+    db.raw.exec(`INSERT INTO wall_consumptions (id,wall_id,used_on,material_type,stone_quantity,stone_unit,area_length_m,area_height_m,area_deduction_m2,area_gross_m2,area_net_m2,created_at) VALUES ('v37_area','${wallA.id}','2026-09-10','stone',9,'m3',18,4,10,72,62,'${NOW}')`);
+    const before=db.raw.prepare("SELECT * FROM wall_consumptions WHERE id='v37_area'").get();
+    db.raw.exec('PRAGMA user_version = 37;');
+    await migrateDatabase(db as never);
+    await migrateDatabase(db as never);
+    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:38});
+    expect(db.raw.prepare("SELECT * FROM wall_consumptions WHERE id='v37_area'").get()).toEqual(before);
+    expect((await new SqliteWallRepository(db as never).getWall(wallA.id)).entries[0]).toMatchObject({stoneQuantity:9,volume:null});
+  });
+
+  it('adds nullable volume columns and enforces a complete, positive, Stone or Ready Mix calculation',async()=>{
+    const {db,wallA}=await setup();
+    const columns=new Map((db.raw.prepare('PRAGMA table_info(wall_consumptions)').all() as {name:string;notnull:number}[]).map(column=>[column.name,column]));
+    for(const name of ['volume_length_m','volume_height_m','volume_bottom_thickness_m','volume_top_thickness_m','volume_deduction_m3','volume_gross_m3','volume_net_m3'])expect(columns.get(name)?.notnull).toBe(0);
+    const insert=(type:string,extra:string,values:string)=>()=>db.raw.exec(`INSERT INTO wall_consumptions (id,wall_id,used_on,material_type,created_at,${extra}) VALUES ('bad_${Math.random().toString(36).slice(2)}','${wallA.id}','2026-09-10','${type}','${NOW}',${values})`);
+    const cols='stone_quantity,stone_unit,volume_length_m,volume_height_m,volume_bottom_thickness_m,volume_top_thickness_m,volume_deduction_m3,volume_gross_m3,volume_net_m3';
+    expect(insert('stone',cols,"1,'m3',10,2,.5,.5,0,10,0")).toThrow();
+    expect(insert('stone',cols,"1,'m3',10,2,.5,.5,0,10,NULL")).toThrow();
+    expect(insert('stone',cols,"1,'m3',10,2,.5,.5,10,10,1")).toThrow();
+    expect(insert('rebar','rebar_diameter_mm,rebar_count,rebar_length_each_m,volume_length_m,volume_height_m,volume_bottom_thickness_m,volume_top_thickness_m,volume_deduction_m3,volume_gross_m3,volume_net_m3',"12,4,12,10,2,.5,.5,0,10,10")).toThrow();
+    expect(insert('stone',cols,"1,'m3',10,2,.5,.5,0,10,10")).not.toThrow();
+  });
+});
+
+describe('volume calculation and reusable purposes in the wall repository',()=>{
+  it('stores a Ready Mix and a Stone volume calculation beside the recorded quantity',async()=>{
+    const {walls,wallA}=await setup();
+    const mix=await walls.addConsumption(draft(wallA.id,{finishedVolumeM3:10,volume:mixCalc}));
+    const stone=await walls.addConsumption(draft(wallA.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:54.2,stoneUnit:'m3',volume:stoneCalc}));
+    expect(mix).toMatchObject({finishedVolumeM3:10,volume:{...mixCalc,grossVolumeM3:10,netVolumeM3:10}});
+    expect(stone).toMatchObject({stoneQuantity:54.2,stoneUnit:'m3',volume:{...stoneCalc,grossVolumeM3:56.7,netVolumeM3:54.2}});
+  });
+
+  it('keeps an edited quantity when it differs from the calculation',async()=>{
+    const {walls,wallA}=await setup();
+    const stone=await walls.addConsumption(draft(wallA.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:53,stoneUnit:'m3',volume:stoneCalc}));
+    expect(stone).toMatchObject({stoneQuantity:53,volume:{netVolumeM3:54.2}});
+  });
+
+  it('rejects invalid calculations, tonnes with a calculation, and a calculation on rebar without saving anything',async()=>{
     const {db,walls,wallA}=await setup();
-    await expect(walls.addConsumption(draft(wallA.id,{area:{lengthM:10,heightM:4,deductionM2:40}}))).rejects.toThrow('Openings and deductions must be smaller than the gross wall area.');
-    await expect(walls.addConsumption(draft(wallA.id,{area:{lengthM:-1,heightM:4,deductionM2:0}}))).rejects.toThrow('Wall length must be greater than zero');
-    await expect(walls.addConsumption(draft(wallA.id,{type:'rebar',concretePurpose:null,finishedVolumeM3:null,rebarDiameterMm:12,rebarCount:4,rebarLengthEachM:12,area:{lengthM:10,heightM:4,deductionM2:0}}))).rejects.toThrow('Covered area can be recorded only for Stone and Ready Mix.');
+    await expect(walls.addConsumption(draft(wallA.id,{volume:{lengthM:10,heightM:2,bottomThicknessM:0.5,topThicknessM:0.5,deductionM3:10}}))).rejects.toThrow('Volume deductions must be smaller than the gross wall volume.');
+    await expect(walls.addConsumption(draft(wallA.id,{volume:{lengthM:-1,heightM:2,bottomThicknessM:0.5,topThicknessM:0.5,deductionM3:0}}))).rejects.toThrow('Wall length must be greater than zero');
+    await expect(walls.addConsumption(draft(wallA.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:9,stoneUnit:'tonnes',volume:stoneCalc}))).rejects.toThrow('A calculated volume is in m³.');
+    await expect(walls.addConsumption(draft(wallA.id,{type:'rebar',concretePurpose:null,finishedVolumeM3:null,rebarDiameterMm:12,rebarCount:4,rebarLengthEachM:12,volume:mixCalc}))).rejects.toThrow('A volume calculation can be recorded only for Stone and Ready Mix.');
     expect(count(db,'SELECT COUNT(*) count FROM wall_consumptions')).toBe(0);
   });
 
@@ -181,13 +227,13 @@ describe('reasoned consumption corrections',()=>{
     await expect(walls.correctConsumption(entry.id,{...draft(wallA.id,{notes:' Pour 1 '}),correctionReason:'Checked'})).rejects.toThrow('Nothing changed. Edit at least one value before saving a correction.');
   });
 
-  it('corrects quantity, unit, area, purpose, and date in place with a before/after audit and no duplicate',async()=>{
+  it('corrects quantity, unit, volume calculation, purpose, and date in place with a before/after audit and no duplicate',async()=>{
     const {db,walls,wallA}=await setup();
     const purpose=await walls.createConcretePurpose('Parapet cap concrete');
     const entry=await walls.addConsumption(draft(wallA.id));
-    const corrected=await walls.correctConsumption(entry.id,{...draft(wallA.id,{usedOn:'2026-09-09',concretePurpose:null,customPurposeId:purpose.id,finishedVolumeM3:5,area:{lengthM:15.5,heightM:4,deductionM2:2}}),correctionReason:'Delivery ticket re-checked'});
+    const corrected=await walls.correctConsumption(entry.id,{...draft(wallA.id,{usedOn:'2026-09-09',concretePurpose:null,customPurposeId:purpose.id,finishedVolumeM3:5,volume:{lengthM:10,heightM:1,bottomThicknessM:0.5,topThicknessM:0.5,deductionM3:0}}),correctionReason:'Delivery ticket re-checked'});
     expect(corrected.id).toBe(entry.id);
-    expect(corrected).toMatchObject({usedOn:'2026-09-09',finishedVolumeM3:5,customPurposeLabel:'Parapet cap concrete',concretePurpose:null,area:{grossAreaM2:62,netAreaM2:60},createdAt:entry.createdAt});
+    expect(corrected).toMatchObject({usedOn:'2026-09-09',finishedVolumeM3:5,customPurposeLabel:'Parapet cap concrete',concretePurpose:null,volume:{grossVolumeM3:5,netVolumeM3:5},createdAt:entry.createdAt});
     expect(corrected.updatedAt).not.toBeNull();
     expect(corrected.correctionHistory).toHaveLength(1);
     expect(corrected.correctionHistory[0]).toMatchObject({correctedBy:'Owner',reason:'Delivery ticket re-checked'});
@@ -195,25 +241,32 @@ describe('reasoned consumption corrections',()=>{
       {field:'Used on',originalValue:'2026-09-10',newValue:'2026-09-09'},
       {field:'Concrete / mortar purpose',originalValue:'Structural concrete',newValue:'Parapet cap concrete'},
       {field:'Concrete volume (m³)',originalValue:'4.5',newValue:'5'},
-      {field:'Net covered area (m²)',originalValue:null,newValue:'60'},
+      {field:'Calculated net volume (m³)',originalValue:null,newValue:'5'},
     ]));
     const stone=await walls.addConsumption(draft(wallA.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:9,stoneUnit:'m3'}));
     const unit=await walls.correctConsumption(stone.id,{...draft(wallA.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:9,stoneUnit:'tonnes'}),correctionReason:'Weighbridge ticket'});
     expect(unit.correctionHistory[0]!.changes).toEqual([{field:'Stone',originalValue:'9 m³',newValue:'9 t'}]);
     expect(count(db,'SELECT COUNT(*) count FROM wall_consumptions')).toBe(2);
     const detail=await walls.getWall(wallA.id);
-    expect(summarizeWallConsumption(detail.entries)).toMatchObject({structural:0,otherConcrete:5,stoneM3:0,stoneT:9,readyMixAreaM2:60});
+    expect(summarizeWallConsumption(detail.entries)).toMatchObject({structural:0,otherConcrete:5,stoneM3:0,stoneT:9,calculatedRecords:1});
     expect(count(db,"SELECT COUNT(*) count FROM sync_outbox WHERE entity_type='wallConsumption'")).toBe(4);
   });
 
-  it('appends history across corrections and can remove a recorded area',async()=>{
+  it('appends history across corrections and can remove a recorded calculation',async()=>{
     const {walls,wallA}=await setup();
-    const entry=await walls.addConsumption(draft(wallA.id,{area:{lengthM:10,heightM:4,deductionM2:0}}));
-    await walls.correctConsumption(entry.id,{...draft(wallA.id,{finishedVolumeM3:4,area:{lengthM:10,heightM:4,deductionM2:0}}),correctionReason:'First'});
-    const second=await walls.correctConsumption(entry.id,{...draft(wallA.id,{finishedVolumeM3:4,area:null}),correctionReason:'Area was for a different pour'});
-    expect(second.area).toBeNull();
-    expect(second.correctionHistory.map(value=>value.reason)).toEqual(['First','Area was for a different pour']);
-    expect(second.correctionHistory[1]!.changes.find(change=>change.field==='Net covered area (m²)')).toEqual({field:'Net covered area (m²)',originalValue:'40',newValue:null});
+    const entry=await walls.addConsumption(draft(wallA.id,{finishedVolumeM3:10,volume:mixCalc}));
+    await walls.correctConsumption(entry.id,{...draft(wallA.id,{finishedVolumeM3:9.5,volume:mixCalc}),correctionReason:'First'});
+    const second=await walls.correctConsumption(entry.id,{...draft(wallA.id,{finishedVolumeM3:9.5,volume:null}),correctionReason:'Calculation was for a different pour'});
+    expect(second.volume).toBeNull();
+    expect(second.correctionHistory.map(value=>value.reason)).toEqual(['First','Calculation was for a different pour']);
+    expect(second.correctionHistory[1]!.changes.find(change=>change.field==='Calculated net volume (m³)')).toEqual({field:'Calculated net volume (m³)',originalValue:'10',newValue:null});
+  });
+
+  it('clears superseded area test data when such a record is corrected',async()=>{
+    const {db,walls,wallA}=await setup();
+    db.raw.exec(`INSERT INTO wall_consumptions (id,wall_id,used_on,material_type,stone_quantity,stone_unit,area_length_m,area_height_m,area_deduction_m2,area_gross_m2,area_net_m2,created_at) VALUES ('area_row','${wallA.id}','2026-09-10','stone',9,'m3',18,4,10,72,62,'${NOW}')`);
+    await walls.correctConsumption('area_row',{...draft(wallA.id,{type:'rebar',concretePurpose:null,finishedVolumeM3:null,rebarDiameterMm:12,rebarCount:4,rebarLengthEachM:6}),correctionReason:'Was rebar'});
+    expect(db.raw.prepare("SELECT area_net_m2,material_type FROM wall_consumptions WHERE id='area_row'").get()).toMatchObject({area_net_m2:null,material_type:'rebar'});
   });
 
   it('keeps the wall relationship and rejects unknown records',async()=>{
@@ -228,8 +281,8 @@ describe('Daily Report wall construction linkage',()=>{
   it('returns only the same project and work date, grouped by wall, with corrections applied',async()=>{
     const {walls,reports,wallA,wallB,otherWall}=await setup();
     const purpose=await walls.createConcretePurpose('Parapet cap concrete');
-    await walls.addConsumption(draft(wallA.id,{area:{lengthM:15.5,heightM:4,deductionM2:0}}));
-    await walls.addConsumption(draft(wallA.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:9,stoneUnit:'m3',area:{lengthM:18,heightM:4,deductionM2:10}}));
+    await walls.addConsumption(draft(wallA.id,{finishedVolumeM3:10,volume:mixCalc}));
+    await walls.addConsumption(draft(wallA.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:54.2,stoneUnit:'m3',volume:stoneCalc}));
     await walls.addConsumption(draft(wallB.id,{concretePurpose:null,customPurposeId:purpose.id,finishedVolumeM3:1.25}));
     await walls.addConsumption(draft(wallB.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:3,stoneUnit:'tonnes'}));
     await walls.addConsumption(draft(wallA.id,{usedOn:'2026-09-11'}));
@@ -239,8 +292,8 @@ describe('Daily Report wall construction linkage',()=>{
     const linked=await reports.listLinkedWallWork('road','2026-09-10');
     expect(linked.map(group=>group.wallName)).toEqual(['Boundary wall B','Retaining wall A']);
     expect(linked.find(group=>group.wallId===wallA.id)).toMatchObject({system:'rubble_masonry',lengthM:20,heightM:4,bottomThicknessM:.8,topThicknessM:.4});
-    expect(linked.find(group=>group.wallId===wallA.id)!.entries.map(entry=>entry.area?.netAreaM2)).toEqual([62,62]);
-    expect(linked.find(group=>group.wallId===wallB.id)!.entries.map(entry=>[entry.customPurposeLabel,entry.area])).toEqual([['Parapet cap concrete',null],[null,null]]);
+    expect(linked.find(group=>group.wallId===wallA.id)!.entries.map(entry=>entry.volume?.netVolumeM3)).toEqual([10,54.2]);
+    expect(linked.find(group=>group.wallId===wallB.id)!.entries.map(entry=>[entry.customPurposeLabel,entry.volume])).toEqual([['Parapet cap concrete',null],[null,null]]);
     expect(linked.flatMap(group=>group.entries)).toHaveLength(4);
     expect(await reports.listLinkedWallWork('other','2026-09-10')).toHaveLength(1);
     expect(await reports.listLinkedWallWork('road','2026-09-12')).toEqual([]);
@@ -261,7 +314,7 @@ describe('Daily Report wall construction linkage',()=>{
 });
 
 describe('backup and restore of wall improvements',()=>{
-  it('carries area snapshots, custom purposes, correction history, and legacy rows through a restored database file',async()=>{
+  it('carries volume calculations, custom purposes, correction history, and legacy rows through a restored database file',async()=>{
     const directory=mkdtempSync(join(tmpdir(),'dromex-wall-backup-')),path=join(directory,'backup.sqlite');
     try{
       const original=new TestDatabase(path);
@@ -269,8 +322,8 @@ describe('backup and restore of wall improvements',()=>{
       const walls=new SqliteWallRepository(original as never);
       const wall=await walls.saveWall({projectId:'road',name:'Wall A',system:'rubble_masonry',purpose:'retaining',lengthM:20,heightM:4,bottomThicknessM:.8,topThicknessM:.4,deductionM3:0,allowancePercent:0,notes:''});
       const purpose=await walls.createConcretePurpose('Parapet cap concrete');
-      const stone=await walls.addConsumption(draft(wall.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:9,stoneUnit:'m3',area:{lengthM:18,heightM:4,deductionM2:10}}));
-      await walls.correctConsumption(stone.id,{...draft(wall.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:10,stoneUnit:'m3',area:{lengthM:18,heightM:4,deductionM2:10}}),correctionReason:'Recount'});
+      const stone=await walls.addConsumption(draft(wall.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:54.2,stoneUnit:'m3',volume:stoneCalc}));
+      await walls.correctConsumption(stone.id,{...draft(wall.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:53,stoneUnit:'m3',volume:stoneCalc}),correctionReason:'Recount'});
       await walls.addConsumption(draft(wall.id,{concretePurpose:null,customPurposeId:purpose.id}));
       original.raw.exec(`INSERT INTO wall_consumptions (id,wall_id,used_on,material_type,stone_quantity,stone_unit,created_at) VALUES ('legacy','${wall.id}','2026-08-01','stone',4,'tonnes','${NOW}')`);
       original.raw.exec('PRAGMA wal_checkpoint(FULL)');
@@ -282,9 +335,9 @@ describe('backup and restore of wall improvements',()=>{
         const repository=new SqliteWallRepository(restored as never);
         expect(await repository.listConcretePurposes()).toEqual([purpose]);
         const entries=(await repository.getWall(wall.id)).entries;
-        expect(entries.find(entry=>entry.id===stone.id)).toMatchObject({stoneQuantity:10,area:{netAreaM2:62},correctionHistory:[expect.objectContaining({reason:'Recount'})]});
+        expect(entries.find(entry=>entry.id===stone.id)).toMatchObject({stoneQuantity:53,volume:{netVolumeM3:54.2},correctionHistory:[expect.objectContaining({reason:'Recount'})]});
         expect(entries.find(entry=>entry.customPurposeId===purpose.id)?.customPurposeLabel).toBe('Parapet cap concrete');
-        expect(entries.find(entry=>entry.id==='legacy')).toMatchObject({area:null,correctionHistory:[],stoneQuantity:4});
+        expect(entries.find(entry=>entry.id==='legacy')).toMatchObject({volume:null,correctionHistory:[],stoneQuantity:4});
         await expect(repository.createConcretePurpose('parapet cap CONCRETE')).rejects.toThrow('already exists');
         expect(restored.raw.prepare('PRAGMA integrity_check').get()).toMatchObject({integrity_check:'ok'});
         expect(restored.raw.prepare('PRAGMA foreign_key_check').all()).toHaveLength(0);

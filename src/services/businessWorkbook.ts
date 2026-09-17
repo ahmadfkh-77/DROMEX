@@ -109,8 +109,9 @@ const ARABIC_LABELS: Record<string, string> = {
   'Cement Bags': 'أكياس الإسمنت', 'Sand Quantity': 'كمية الرمل', 'Sand Unit': 'وحدة الرمل', 'Gravel Quantity': 'كمية الحصى', 'Gravel Unit': 'وحدة الحصى',
   'Water L': 'الماء لتر', 'Admixture Quantity': 'كمية المضافات', 'Admixture Unit': 'وحدة المضافات', 'Stone Quantity': 'كمية الحجر', 'Stone Unit': 'وحدة الحجر',
   'Rebar Diameter mm': 'قطر حديد التسليح مم', 'Rebar Bars': 'عدد قضبان التسليح', 'Rebar Length Each m': 'طول القضيب م', 'Rebar kg': 'حديد التسليح كغ',
-  'Area Length m': 'طول المساحة م', 'Area Height m': 'ارتفاع المساحة م', 'Openings m²': 'الفتحات م²', 'Gross Area m²': 'المساحة الإجمالية م²',
-  'Net Covered Area m²': 'صافي المساحة المغطاة م²', 'Area Status': 'حالة المساحة', Corrections: 'التصحيحات', 'Last Correction Reason': 'سبب آخر تصحيح',
+  'Calc Length m': 'طول الحساب م', 'Calc Height m': 'ارتفاع الحساب م', 'Calc Bottom Thickness m': 'السماكة السفلية م', 'Calc Top Thickness m': 'السماكة العلوية م',
+  'Calc Deductions m³': 'الخصومات م³', 'Calc Gross Volume m³': 'الحجم الإجمالي المحسوب م³', 'Calc Net Volume m³': 'صافي الحجم المحسوب م³',
+  'Volume Calculation': 'حساب الحجم', Corrections: 'التصحيحات', 'Last Correction Reason': 'سبب آخر تصحيح',
 };
 
 const ARABIC_VALUES: Record<string, string> = {

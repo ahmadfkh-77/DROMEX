@@ -1,7 +1,7 @@
 import {useState,type ReactNode} from 'react';
 import {LayoutAnimation,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
-import {describeWallConsumptionQuantity,formatWallArea,supportsCoveredArea,wallConsumptionPurposeLabel,wallMaterialLabels,type WallConsumption} from '../../domain/walls';
+import {describeWallConsumptionQuantity,formatCubicMetres,formatVolumeCalculation,supportsVolumeCalculation,wallConsumptionPurposeLabel,wallMaterialLabels,type WallConsumption} from '../../domain/walls';
 import {colors,radius} from '../theme';
 import {AppButton,EmptyState} from './AppPrimitives';
 import {useReducedMotion} from './ExpandableMenu';
@@ -31,7 +31,7 @@ export function WallConsumptionHistory({entries,renderCorrection}:{entries:WallC
           </View>
           <Text style={styles.quantity}>{describeWallConsumptionQuantity(entry)}</Text>
           <View style={styles.metaLine}>
-            {supportsCoveredArea(entry.type)?<Text style={entry.area?styles.area:styles.areaMissing}>{entry.area?`${formatWallArea(entry.area.netAreaM2)} covered`:formatWallArea(null)}</Text>:null}
+            {supportsVolumeCalculation(entry.type)?<Text style={entry.volume?styles.calc:styles.calcMissing}>{entry.volume?`Calculated: ${formatCubicMetres(entry.volume.netVolumeM3)} net`:formatVolumeCalculation(entry)}</Text>:null}
             {corrections?<Text style={styles.correctedTag}>{corrections===1?'Corrected':`Corrected ${corrections} times`}</Text>:null}
           </View>
         </View>
@@ -42,13 +42,13 @@ export function WallConsumptionHistory({entries,renderCorrection}:{entries:WallC
         <Detail label="Material" value={wallMaterialLabels[entry.type]}/>
         {purpose?<Detail label="Purpose" value={purpose} note={entry.customPurposeId?'Saved purpose':undefined}/>:null}
         <Detail label="Consumed" value={describeWallConsumptionQuantity(entry)}/>
-        {supportsCoveredArea(entry.type)?entry.area
-          ?<View style={styles.areaBlock}>
-            <Text style={styles.detailLabel}>Covered wall area</Text>
-            <Text style={styles.detailValue}>{entry.area.lengthM} m × {entry.area.heightM} m = {formatWallArea(entry.area.grossAreaM2)} gross</Text>
-            <Text style={styles.detailValue}>Openings {formatWallArea(entry.area.deductionM2)} · Net {formatWallArea(entry.area.netAreaM2)}</Text>
+        {supportsVolumeCalculation(entry.type)?entry.volume
+          ?<View style={styles.calcBlock}>
+            <Text style={styles.detailLabel}>Volume calculation</Text>
+            <Text style={styles.detailValue}>{entry.volume.lengthM} m × {entry.volume.heightM} m × {entry.volume.bottomThicknessM} to {entry.volume.topThicknessM} m = {formatCubicMetres(entry.volume.grossVolumeM3)} gross</Text>
+            <Text style={styles.detailValue}>Deductions {formatCubicMetres(entry.volume.deductionM3)} · Net {formatCubicMetres(entry.volume.netVolumeM3)}</Text>
           </View>
-          :<Detail label="Covered wall area" value={formatWallArea(null)}/>:null}
+          :<Detail label="Volume calculation" value={formatVolumeCalculation(entry)}/>:null}
         {entry.notes?<Detail label="Notes" value={entry.notes}/>:null}
         <Detail label="Recorded" value={dateTime(entry.createdAt)}/>
         {corrections?<View style={styles.trail}>
@@ -85,8 +85,8 @@ const styles=StyleSheet.create({
   date:{color:colors.brandDark,fontSize:11,fontWeight:'900',fontVariant:['tabular-nums']},
   quantity:{color:colors.resultDark,fontSize:13,fontWeight:'900',lineHeight:19,marginTop:3},
   metaLine:{flexDirection:'row',flexWrap:'wrap',alignItems:'center',gap:8,marginTop:3},
-  area:{color:colors.ink,fontSize:12,fontWeight:'800'},
-  areaMissing:{color:colors.muted,fontSize:12,fontWeight:'700',fontStyle:'italic'},
+  calc:{color:colors.ink,fontSize:12,fontWeight:'800'},
+  calcMissing:{color:colors.muted,fontSize:12,fontWeight:'700',fontStyle:'italic'},
   correctedTag:{color:colors.navy,fontSize:11,fontWeight:'900',borderWidth:1,borderColor:'#B9C9D8',borderRadius:6,paddingHorizontal:6,paddingVertical:1},
   chevron:{color:colors.navy,fontSize:12,fontWeight:'900',minWidth:44,textAlign:'right'},
   details:{borderTopWidth:1,borderTopColor:colors.line,padding:13,gap:9,backgroundColor:'#FFFEFC'},
@@ -94,7 +94,7 @@ const styles=StyleSheet.create({
   detailLabel:{color:colors.muted,fontSize:11,fontWeight:'800'},
   detailValue:{color:colors.ink,fontSize:13,fontWeight:'700',lineHeight:19},
   detailNote:{color:colors.muted,fontSize:11,fontWeight:'700'},
-  areaBlock:{gap:1,backgroundColor:colors.resultSoft,borderRadius:10,padding:10},
+  calcBlock:{gap:1,backgroundColor:colors.resultSoft,borderRadius:10,padding:10},
   trail:{gap:7,borderTopWidth:1,borderTopColor:colors.line,paddingTop:9},
   trailTitle:{color:colors.ink,fontSize:13,fontWeight:'900'},
   trailItem:{gap:2},

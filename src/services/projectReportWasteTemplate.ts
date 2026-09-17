@@ -1,6 +1,6 @@
 import {fuelTypeLabels} from '../domain/fuel';
 import {consultantSignoffState,netWorkMinutes,type DailyProjectReport,type LinkedFuelFill,type LinkedProjectLoad,type LinkedQuarryLoad,type LinkedWallWork,type LinkedWasteDump,type ProjectReportSetup,type ReportProject} from '../domain/projectReports';
-import {describeWallConsumptionQuantity,formatWallArea,supportsCoveredArea,wallConsumptionPurposeLabel,wallMaterialLabels,wallPurposeLabels,wallSystemLabels} from '../domain/walls';
+import {describeWallConsumptionQuantity,formatCubicMetres,supportsVolumeCalculation,wallConsumptionPurposeLabel,wallMaterialLabels,wallPurposeLabels,wallSystemLabels} from '../domain/walls';
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]??c));
 const display=(value:string|null|undefined)=>value?.trim()?e(value):'&mdash;';
@@ -8,31 +8,32 @@ const list=(values:string[])=>values.length?values.map(e).join('; '):'&mdash;';
 const fmt=(value:number)=>Number.isInteger(value)?String(value):value.toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
 
 /**
- * DEC-453. One block per wall: the wall's identity and geometry, then one row per consumption with the
- * consumed quantity and the covered wall area in separate columns. Missing area reads "Area not
- * recorded"; rebar and site mix read "Not applicable". Nothing missing is printed as zero.
+ * DEC-453/DEC-455. One block per wall: the wall's identity and geometry, then one row per consumption
+ * with the consumed quantity and, beside it, how that volume was calculated from wall dimensions. An
+ * uncalculated quantity reads "Entered directly"; rebar and site mix read "Not applicable". Nothing
+ * missing is printed as zero.
  */
 export function wallConstructionSectionHtml(walls:LinkedWallWork[]){
-  const head='<thead><tr><th>Material and purpose</th><th>Consumed quantity</th><th>Covered wall area</th><th>Notes</th></tr></thead>';
+  const head='<thead><tr><th>Material and purpose</th><th>Consumed quantity</th><th>Volume calculation</th><th>Notes</th></tr></thead>';
   const metres=(value:number)=>String(Number(value.toFixed(2)));
   if(!walls.length)return `<section class="wall-section"><h2>Wall construction that day</h2><table class="wall-table">${head}<tbody><tr><td colspan="4" class="empty">No wall construction recorded for this date</td></tr></tbody></table></section>`;
   const records=walls.reduce((sum,wall)=>sum+wall.entries.length,0);
   const blocks=walls.map(wall=>{
     const rows=wall.entries.map(entry=>{
       const purpose=wallConsumptionPurposeLabel(entry),last=entry.correctionHistory.at(-1);
-      const area=!supportsCoveredArea(entry.type)
+      const volume=entry.volume,calculation=!supportsVolumeCalculation(entry.type)
         ?'<span class="sub">Not applicable</span>'
-        :entry.area
-          ?`<b>${e(formatWallArea(entry.area.netAreaM2))} net</b><span class="sub">${entry.area.deductionM2>0?`${e(formatWallArea(entry.area.grossAreaM2))} gross, ${e(formatWallArea(entry.area.deductionM2))} openings`:`${e(formatWallArea(entry.area.grossAreaM2))} gross, no openings`}</span><span class="sub">${fmt(entry.area.lengthM)} m × ${fmt(entry.area.heightM)} m</span>`
-          :'<span class="missing">Area not recorded</span>';
+        :volume
+          ?`<b>${e(formatCubicMetres(volume.netVolumeM3))} net</b><span class="sub">${volume.deductionM3>0?`${e(formatCubicMetres(volume.grossVolumeM3))} gross, ${e(formatCubicMetres(volume.deductionM3))} deductions`:`${e(formatCubicMetres(volume.grossVolumeM3))} gross, no deductions`}</span><span class="sub">${fmt(volume.lengthM)} m × ${fmt(volume.heightM)} m × ${volume.bottomThicknessM===volume.topThicknessM?`${fmt(volume.bottomThicknessM)} m`:`${fmt(volume.bottomThicknessM)} to ${fmt(volume.topThicknessM)} m`} thick</span>`
+          :'<span class="missing">Entered directly</span>';
       const notes=[entry.notes.trim()?`<span>${e(entry.notes)}</span>`:'',last?`<span class="corrected">Corrected: ${e(last.reason)}</span>`:''].filter(Boolean).join('');
-      return `<tr><td><b>${e(wallMaterialLabels[entry.type])}</b>${purpose?`<span class="sub">${e(purpose)}</span>`:''}</td><td><b>${e(describeWallConsumptionQuantity(entry))}</b></td><td>${area}</td><td>${notes}</td></tr>`;
+      return `<tr><td><b>${e(wallMaterialLabels[entry.type])}</b>${purpose?`<span class="sub">${e(purpose)}</span>`:''}</td><td><b>${e(describeWallConsumptionQuantity(entry))}</b></td><td>${calculation}</td><td>${notes}</td></tr>`;
     }).join('');
     const thickness=wall.bottomThicknessM===wall.topThicknessM?`${fmt(wall.bottomThicknessM)} m thick`:`${fmt(wall.bottomThicknessM)} m to ${fmt(wall.topThicknessM)} m thick`;
     const geometry=`${fmt(wall.lengthM)} m long × ${fmt(wall.heightM)} m high &middot; ${thickness} &middot; ${metres(wall.plannedVolumeM3)} m³ planned`;
     return `<div class="wall-block"><div class="wall-head"><div class="wall-title"><h3>${e(wall.wallName)}</h3><p>${e(wallSystemLabels[wall.system])} &middot; ${e(wallPurposeLabels[wall.purpose])}</p></div><p class="wall-geometry">${geometry}</p></div><table class="wall-table">${head}<tbody>${rows}</tbody></table></div>`;
   }).join('');
-  return `<section class="wall-section"><h2>Wall construction that day</h2><p class="wall-summary">${walls.length} wall${walls.length===1?'':'s'} &middot; ${records} material record${records===1?'':'s'}. Covered wall area is recorded separately from the quantity consumed.</p>${blocks}</section>`;
+  return `<section class="wall-section"><h2>Wall construction that day</h2><p class="wall-summary">${walls.length} wall${walls.length===1?'':'s'} &middot; ${records} material record${records===1?'':'s'}. Calculated volumes use the wall's length, height, and thickness less deductions.</p>${blocks}</section>`;
 }
 
 export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],quarry:LinkedQuarryLoad[],waste:LinkedWasteDump[],fuel:LinkedFuelFill[],company:ProjectReportSetup['company'],logo:string|null,photos:(string|null)[],includePrices?:boolean,ministryLogo?:string|null,wallWork?:LinkedWallWork[]):string;

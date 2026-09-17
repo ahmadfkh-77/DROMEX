@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 37;
+export const DATABASE_VERSION = 38;
 
 type TableColumn = { name: string };
 
@@ -1108,6 +1108,30 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'wall_consumptions', 'updated_at', 'TEXT');
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_wall_consumptions_used_on ON wall_consumptions(used_on, wall_id);');
     currentVersion = 37;
+  }
+
+  if (currentVersion === 37) {
+    // DEC-455, superseding DEC-450 before release. Stone and Ready Mix consumption is calculated as a
+    // volume with the section 1 wall formula (length x height x average of bottom and top thickness,
+    // less deductions in m3), and the calculated net volume fills the consumed quantity. The snapshot
+    // is stored here. Structure only: no row is read, rewritten, or backfilled; the migration-37 area
+    // columns stay in place, unused, so a database that already reached version 37 is untouched.
+    await addColumnIfMissing(db, 'wall_consumptions', 'volume_length_m', 'REAL CHECK (volume_length_m IS NULL OR volume_length_m > 0)');
+    await addColumnIfMissing(db, 'wall_consumptions', 'volume_height_m', 'REAL CHECK (volume_height_m IS NULL OR volume_height_m > 0)');
+    await addColumnIfMissing(db, 'wall_consumptions', 'volume_bottom_thickness_m', 'REAL CHECK (volume_bottom_thickness_m IS NULL OR volume_bottom_thickness_m > 0)');
+    await addColumnIfMissing(db, 'wall_consumptions', 'volume_top_thickness_m', 'REAL CHECK (volume_top_thickness_m IS NULL OR volume_top_thickness_m > 0)');
+    await addColumnIfMissing(db, 'wall_consumptions', 'volume_deduction_m3', 'REAL CHECK (volume_deduction_m3 IS NULL OR volume_deduction_m3 >= 0)');
+    await addColumnIfMissing(db, 'wall_consumptions', 'volume_gross_m3', 'REAL CHECK (volume_gross_m3 IS NULL OR volume_gross_m3 > 0)');
+    // The snapshot is all present or all absent, only on Stone or Ready Mix, with deductions below the
+    // gross volume. Comparisons are guarded with IS NOT NULL because a CHECK evaluating to NULL passes.
+    await addColumnIfMissing(db, 'wall_consumptions', 'volume_net_m3', `REAL CHECK (
+      (volume_net_m3 IS NULL AND volume_length_m IS NULL AND volume_height_m IS NULL AND volume_bottom_thickness_m IS NULL
+        AND volume_top_thickness_m IS NULL AND volume_deduction_m3 IS NULL AND volume_gross_m3 IS NULL) OR
+      (volume_net_m3 IS NOT NULL AND volume_net_m3 > 0 AND volume_length_m IS NOT NULL AND volume_height_m IS NOT NULL
+        AND volume_bottom_thickness_m IS NOT NULL AND volume_top_thickness_m IS NOT NULL AND volume_deduction_m3 IS NOT NULL
+        AND volume_gross_m3 IS NOT NULL AND volume_deduction_m3 < volume_gross_m3 AND material_type IN ('stone','ready_mix'))
+    )`);
+    currentVersion = 38;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

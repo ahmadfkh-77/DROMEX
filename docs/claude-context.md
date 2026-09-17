@@ -532,16 +532,18 @@ values on its next save.
   separate worktree `C:\Users\fakih\Desktop\Dromex\DROMEX-wall-worktree` so the
   web authentication work in the main checkout was never touched. Not merged,
   no APK, release metadata unchanged (still 0.16.0 / build 19).
-- **Decisions** DEC-450 to DEC-454 (numbered above the web branch's
+- **Decisions** DEC-450 to DEC-456 (numbered above the web branch's
   in-progress DEC-434 to DEC-444 to avoid a collision when the branches meet).
-- **Database version 37** (DEC-454): `wall_concrete_purposes` table and nullable
-  area, saved-purpose, and correction columns on `wall_consumptions`.
+- **Database versions 37 and 38** (DEC-454, DEC-456): `wall_concrete_purposes` table and
+  nullable saved-purpose, correction, and volume-calculation columns on
+  `wall_consumptions` (migration 37's area columns remain unused).
   Structure-only; no existing row is changed. Backups carry the new data
   automatically because they serialize the whole SQLite database.
-- **Covered area** (DEC-450): optional for Stone and Ready Mix, one shared
-  face-area formula (`calculateWallArea`, also used by `calculateWallVolume`),
-  stored as a length/height/openings/gross/net snapshot, independent of the
-  consumed quantity, and shown as "Area not recorded" when absent.
+- **Volume calculation** (DEC-455, superseding DEC-450's covered area during
+  Expo device testing): optional for Stone and Ready Mix, the section 1 inputs
+  and `calculateWallVolume` without allowance; the net volume fills the
+  consumed quantity, which stays editable; the snapshot is stored with the
+  record; an uncalculated quantity reads "Entered directly".
 - **Saved purposes** (DEC-451): normalized, case-insensitive unique against
   saved and built-in purposes, label snapshotted on each record, no rename or
   delete.

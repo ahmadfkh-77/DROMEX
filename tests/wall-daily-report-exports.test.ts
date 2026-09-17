@@ -10,10 +10,10 @@ const report:DailyProjectReport={id:'report-1',projectId:'road',workDate:'2026-0
 const project:ReportProject={id:'road',name:'Mountain Road',customerName:'Road Co',location:'Aley',status:'active'};
 const company:ProjectReportSetup['company']={name:'DROMEX Paving',logoUri:null,address:null,phone:null,email:null,taxVatNumber:null,ministryName:'Ministry of Public Works',ministryNameAr:'وزارة الأشغال العامة',ministryLogoUri:null,consultingAgencyName:null,consultingAgencyNameAr:null,customHeaderEn:null,customHeaderAr:null};
 
-const entry=(overrides:Partial<WallConsumption>):WallConsumption=>({id:'use',wallId:'wall-a',usedOn:'2026-09-10',type:'ready_mix',concretePurpose:null,customPurposeId:null,customPurposeLabel:null,finishedVolumeM3:null,cementBags:null,cementBagKg:null,sandQuantity:null,sandUnit:null,gravelQuantity:null,gravelUnit:null,waterLitres:null,admixtureQuantity:null,admixtureUnit:null,stoneQuantity:null,stoneUnit:null,rebarDiameterMm:null,rebarCount:null,rebarLengthEachM:null,rebarGrade:'',notes:'',area:null,totalRebarLengthM:null,totalRebarKg:null,correctionHistory:[],createdAt:'2026-09-10T08:00:00Z',updatedAt:null,...overrides});
+const entry=(overrides:Partial<WallConsumption>):WallConsumption=>({id:'use',wallId:'wall-a',usedOn:'2026-09-10',type:'ready_mix',concretePurpose:null,customPurposeId:null,customPurposeLabel:null,finishedVolumeM3:null,cementBags:null,cementBagKg:null,sandQuantity:null,sandUnit:null,gravelQuantity:null,gravelUnit:null,waterLitres:null,admixtureQuantity:null,admixtureUnit:null,stoneQuantity:null,stoneUnit:null,rebarDiameterMm:null,rebarCount:null,rebarLengthEachM:null,rebarGrade:'',notes:'',volume:null,totalRebarLengthM:null,totalRebarKg:null,correctionHistory:[],createdAt:'2026-09-10T08:00:00Z',updatedAt:null,...overrides});
 const wallA:LinkedWallWork={wallId:'wall-a',wallName:'Retaining wall A',system:'rubble_masonry',purpose:'retaining',lengthM:20,heightM:4,bottomThicknessM:.8,topThicknessM:.4,netVolumeM3:48,plannedVolumeM3:48,entries:[
-  entry({id:'mix',concretePurpose:'structural',finishedVolumeM3:4.5,area:{lengthM:15.5,heightM:4,deductionM2:0,grossAreaM2:62,netAreaM2:62}}),
-  entry({id:'stone',type:'stone',stoneQuantity:9,stoneUnit:'m3',area:{lengthM:18,heightM:4,deductionM2:10,grossAreaM2:72,netAreaM2:62},notes:'Face course',correctionHistory:[{correctedAt:'2026-09-11T09:00:00Z',correctedBy:'Owner',reason:'Truck count re-checked',changes:[{field:'Stone',originalValue:'8 m³',newValue:'9 m³'}]}],updatedAt:'2026-09-11T09:00:00Z'}),
+  entry({id:'mix',concretePurpose:'structural',finishedVolumeM3:10,volume:{lengthM:10,heightM:2,bottomThicknessM:.5,topThicknessM:.5,deductionM3:0,grossVolumeM3:10,netVolumeM3:10}}),
+  entry({id:'stone',type:'stone',stoneQuantity:54.2,stoneUnit:'m3',volume:{lengthM:18,heightM:4.5,bottomThicknessM:.9,topThicknessM:.5,deductionM3:2.5,grossVolumeM3:56.7,netVolumeM3:54.2},notes:'Face course',correctionHistory:[{correctedAt:'2026-09-11T09:00:00Z',correctedBy:'Owner',reason:'Truck count re-checked',changes:[{field:'Stone',originalValue:'50 m³',newValue:'54.2 m³'}]}],updatedAt:'2026-09-11T09:00:00Z'}),
 ]};
 const wallB:LinkedWallWork={wallId:'wall-b',wallName:'Boundary wall B',system:'reinforced_concrete',purpose:'boundary',lengthM:12,heightM:2.5,bottomThicknessM:.3,topThicknessM:.3,netVolumeM3:9,plannedVolumeM3:9.45,entries:[
   entry({id:'custom',wallId:'wall-b',customPurposeId:'p1',customPurposeLabel:'Parapet cap concrete',finishedVolumeM3:1.25}),
@@ -37,24 +37,27 @@ describe('Daily Report PDF: Wall Construction section',()=>{
     expect(section).toContain('9.45 m³ planned');
   });
 
-  it('separates consumed quantity from covered area for Stone and Ready Mix, including openings',()=>{
+  it('shows the consumed quantity beside its volume calculation, including deductions',()=>{
     const section=wallSection(pdf([wallA]));
-    expect(section).toContain('<th>Material and purpose</th><th>Consumed quantity</th><th>Covered wall area</th><th>Notes</th>');
+    expect(section).toContain('<th>Material and purpose</th><th>Consumed quantity</th><th>Volume calculation</th><th>Notes</th>');
     expect(section).toContain(describeWallConsumptionQuantity(wallA.entries[0]!));
-    expect(section).toContain('9 m³ stone');
-    expect(section).toContain('62.00 m² net');
-    expect(section).toContain('72.00 m² gross, 10.00 m² openings');
-    expect(section).toContain('62.00 m² gross, no openings');
+    expect(section).toContain('54.2 m³ stone');
+    expect(section).toContain('54.20 m³ net');
+    expect(section).toContain('56.70 m³ gross, 2.50 m³ deductions');
+    expect(section).toContain('18 m × 4.5 m × 0.9 to 0.5 m thick');
+    expect(section).toContain('10.00 m³ gross, no deductions');
+    expect(section).toContain('10 m × 2 m × 0.5 m thick');
   });
 
-  it('shows custom purposes, missing area honestly, rebar as not applicable, and corrections',()=>{
+  it('shows custom purposes, uncalculated quantities honestly, rebar as not applicable, and corrections',()=>{
     const section=wallSection(pdf([wallA,wallB]));
     expect(section).toContain('Parapet cap concrete');
-    expect(section).toContain('Area not recorded');
-    expect(section).not.toMatch(/(^|[^\d.])0(\.00)? m² net/);
+    expect(section).toContain('Entered directly');
+    expect(section).not.toMatch(/(^|[^\d.])0(\.00)? m³ net/);
     expect(section).toContain('Not applicable');
     expect(section).toContain('Corrected: Truck count re-checked');
     expect(section).toContain('Face course');
+    expect(section).not.toContain('m²');
   });
 
   it('prints a single honest empty row with the correct column span when no wall work exists',()=>{
@@ -92,21 +95,22 @@ describe('Daily Report workbook: Wall Construction sheet',()=>{
     expect(sheets().map(sheet=>sheet.name)).toEqual(['Report Overview','Work Details','Presence','Worker Safety','Materials','Linked Loads','Supplier Loads','Fuel Used','Waste Dumps','Wall Construction','Photos']);
   });
 
-  it('has one row per consumption with the same quantity text as the PDF and numeric area columns',()=>{
+  it('has one row per consumption with the same quantity text as the PDF and numeric calculation columns',()=>{
     expect(rows()).toHaveLength(5);
     const stone=rows().find(row=>row['Record ID']==='stone')!;
-    expect(stone).toMatchObject({Wall:'Retaining wall A','Wall System':'Stacked rock + mortar/concrete','Used On':'2026-09-10',Material:'Stone',Quantity:'9 m³ stone','Stone Quantity':9,'Stone Unit':'m³','Area Length m':18,'Area Height m':4,'Openings m²':10,'Gross Area m²':72,'Net Covered Area m²':62,'Area Status':'Recorded',Corrections:1,'Last Correction Reason':'Truck count re-checked',Notes:'Face course'});
+    expect(stone).toMatchObject({Wall:'Retaining wall A','Wall System':'Stacked rock + mortar/concrete','Used On':'2026-09-10',Material:'Stone',Quantity:'54.2 m³ stone','Stone Quantity':54.2,'Stone Unit':'m³','Calc Length m':18,'Calc Height m':4.5,'Calc Bottom Thickness m':.9,'Calc Top Thickness m':.5,'Calc Deductions m³':2.5,'Calc Gross Volume m³':56.7,'Calc Net Volume m³':54.2,'Volume Calculation':'Calculated',Corrections:1,'Last Correction Reason':'Truck count re-checked',Notes:'Face course'});
     for(const row of rows())expect(String(row.Quantity)).toBe(describeWallConsumptionQuantity([...wallA.entries,...wallB.entries].find(value=>value.id===row['Record ID'])!));
+    expect(Object.keys(stone).some(key=>/Area|m²/.test(key))).toBe(false);
   });
 
-  it('leaves missing values empty, never zero, and marks missing or inapplicable area',()=>{
+  it('leaves missing values empty, never zero, and marks uncalculated or inapplicable records',()=>{
     const plain=rows().find(row=>row['Record ID']==='plain-stone')!,steel=rows().find(row=>row['Record ID']==='steel')!,custom=rows().find(row=>row['Record ID']==='custom')!;
-    expect(plain).toMatchObject({'Net Covered Area m²':null,'Gross Area m²':null,'Area Status':'Area not recorded','Cement Bags':null});
-    expect(steel).toMatchObject({'Area Status':'Not applicable','Rebar kg':213.1,Purpose:null});
+    expect(plain).toMatchObject({'Calc Net Volume m³':null,'Calc Gross Volume m³':null,'Volume Calculation':'Entered directly','Cement Bags':null});
+    expect(steel).toMatchObject({'Volume Calculation':'Not applicable','Rebar kg':213.1,Purpose:null});
     expect(custom).toMatchObject({Purpose:'Parapet cap concrete','Purpose Source':'Saved purpose','Ready-Mix or Finished m³':1.25});
   });
 
-  it('shows an empty-state row when no wall work exists and localizes the sheet name',()=>{
+  it('localizes the sheet name for the Arabic workbook',()=>{
     const files=unzipSync(buildDailyReportWorkbook(report,project,[],[],[],[],company,[],'ar',[]));
     expect(strFromU8(files['xl/workbook.xml']!)).toContain('أعمال الجدران');
     expect(strFromU8(files['xl/worksheets/sheet10.xml']!)).toContain('rightToLeft="1"');

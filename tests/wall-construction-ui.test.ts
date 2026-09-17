@@ -1,4 +1,4 @@
-import {readFileSync} from 'node:fs';
+import {existsSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {describe,expect,it} from 'vitest';
 
@@ -10,17 +10,24 @@ const source=(path:string)=>readFileSync(join(__dirname,'..',path),'utf8');
 describe('Wall Construction UI contract',()=>{
   const screen=source('src/ui/screens/WallConstructionScreen.tsx');
   const form=source('src/ui/components/WallConsumptionForm.tsx');
-  const area=source('src/ui/components/WallAreaCalculator.tsx');
+  const volume=source('src/ui/components/WallVolumeCalculator.tsx');
   const purpose=source('src/ui/components/ConcretePurposeField.tsx');
   const history=source('src/ui/components/WallConsumptionHistory.tsx');
 
-  it('offers the optional covered-area calculator only for Stone and Ready Mix',()=>{
-    expect(form).toContain('supportsCoveredArea(');
-    expect(form).toContain('<WallAreaCalculator');
-    expect(area).toContain('Add covered wall area');
-    expect(area).toContain('parseWallAreaInput(');
-    for(const label of ['Gross area','Openings','Net covered area'])expect(area).toContain(label);
-    expect(area).toMatch(/Covered area never changes the consumed quantity/);
+  it('replaces the covered-area calculator with a section 1 style volume calculator for Stone and Ready Mix',()=>{
+    expect(existsSync(join(__dirname,'..','src/ui/components/WallAreaCalculator.tsx'))).toBe(false);
+    expect(form).toContain('supportsVolumeCalculation(');
+    expect(form).toContain('<WallVolumeCalculator');
+    expect(volume).toContain('Calculate volume from wall dimensions');
+    expect(volume).toContain('parseWallVolumeInput(');
+    for(const label of ['Length (m) *','Height (m) *','Bottom thickness (m) *','Top thickness (m) *','Volume deductions (m³)','Gross volume','Deductions','Net volume'])expect(volume).toContain(label);
+    for(const file of [form,volume,history])expect(file).not.toMatch(/covered|m²|Openings/i);
+  });
+
+  it('fills the consumed quantity from the calculated net volume and sets stone to m³',()=>{
+    expect(form).toMatch(/onCalculated=\{/);
+    expect(form).toContain("stoneUnit:'m3'");
+    expect(volume).toContain('fills the consumed quantity');
   });
 
   it('adds a focused new-purpose form that selects the saved purpose',()=>{
@@ -40,16 +47,16 @@ describe('Wall Construction UI contract',()=>{
     expect(history).toContain('correctionHistory');
   });
 
-  it('never shows a missing area or ingredient as zero',()=>{
-    expect(history).toContain('formatWallArea(');
+  it('never shows a missing calculation or ingredient as zero',()=>{
+    expect(history).toContain('formatVolumeCalculation(');
     expect(history).toContain('describeWallConsumptionQuantity(');
     expect(screen).not.toMatch(/value\.cementBags\?\?0,0\)\} cement bags/);
   });
 
   it('keeps touch targets, accessibility state, and reduced motion',()=>{
-    for(const file of [area,history,purpose])expect(file).toMatch(/minHeight:(4[4-9]|[5-9]\d)/);
+    for(const file of [volume,history,purpose])expect(file).toMatch(/minHeight:(4[4-9]|[5-9]\d)/);
     expect(history).toContain('accessibilityState={{expanded');
-    for(const file of [area,history])expect(file).toContain('useReducedMotion');
+    for(const file of [volume,history])expect(file).toContain('useReducedMotion');
     expect(form).toContain('accessibilityLiveRegion="polite"');
   });
 
@@ -62,11 +69,11 @@ describe('Wall Construction UI contract',()=>{
     expect(reports.match(/repository\.listLinkedWallWork\(project\.id,\s*report\.workDate\)/g)).toHaveLength(2);
     expect(reports).toMatch(/exportAndShareProjectReport\([^;]*,includePrices,wallWork\)/);
     expect(reports).toMatch(/exportAndShareDailyReportWorkbook\([^;]*onProgress:setExportProgress\},wallWork\)/);
-    // Missing area renders through the shared domain formatter ("Area not recorded"), never a zero.
-    expect(reports).toContain('formatWallArea(null)');
+    expect(reports).toContain('formatVolumeCalculation(entry)');
+    expect(reports).not.toContain('formatWallArea');
   });
 
   it('uses no em-dash in new wall-construction copy',()=>{
-    for(const file of [form,area,purpose,history])expect(file).not.toContain('—');
+    for(const file of [form,volume,purpose,history])expect(file).not.toContain('—');
   });
 });

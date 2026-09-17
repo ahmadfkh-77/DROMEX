@@ -2110,3 +2110,12 @@ a refinement inside the committed ledger identity.
 
 Implemented on `feature/android-wall-consumption-improvements`. PDF output was
 inspected through the real print engine. Not yet verified on a physical device.
+
+### Addendum — 2026-09-17, during the first Expo Go device test
+
+The Owner rejected covered area: the calculation must produce volume exactly like
+section 1 (DEC-455). `WallAreaCalculator` was replaced by `WallVolumeCalculator`
+(length, height, bottom and top thickness, volume deductions, a shortcut to copy the
+wall's section 1 dimensions, and Gross volume / Deductions / Net volume results). The
+net volume now fills the consumed quantity and remains editable. History, the Daily
+Report editor, PDF, and workbook show the volume calculation instead of area.

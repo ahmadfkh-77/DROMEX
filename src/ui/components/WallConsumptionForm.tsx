@@ -1,14 +1,14 @@
 import {useState} from 'react';
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
-import {calculateRebar,parseWallAreaInput,supportsCoveredArea,wallMaterialLabels,type MaterialUnit,type SavedConcretePurpose,type WallConsumption,type WallConsumptionDraft,type WallMaterialType} from '../../domain/walls';
+import {calculateRebar,parseWallVolumeInput,supportsVolumeCalculation,type MaterialUnit,type SavedConcretePurpose,type Wall,type WallConsumption,type WallConsumptionDraft,type WallMaterialType} from '../../domain/walls';
 import {colors,radius} from '../theme';
 import {AppButton,AppField,MetricCard} from './AppPrimitives';
 import {ConcretePurposeField,type PurposeSelection} from './ConcretePurposeField';
 import {DatePickerField} from './DatePickerField';
-import {emptyWallAreaForm,WallAreaCalculator,type WallAreaForm} from './WallAreaCalculator';
+import {emptyWallVolumeForm,WallVolumeCalculator,type WallVolumeForm} from './WallVolumeCalculator';
 
-export type WallUseForm={type:WallMaterialType;usedOn:string;purpose:PurposeSelection|null;volume:string;bags:string;bagKg:string;sand:string;sandUnit:MaterialUnit;gravel:string;gravelUnit:MaterialUnit;water:string;admixture:string;admixtureUnit:'litres'|'kg';stone:string;stoneUnit:MaterialUnit;diameter:string;bars:string;lengthEach:string;grade:string;notes:string;area:WallAreaForm;reason:string};
+export type WallUseForm={type:WallMaterialType;usedOn:string;purpose:PurposeSelection|null;volume:string;bags:string;bagKg:string;sand:string;sandUnit:MaterialUnit;gravel:string;gravelUnit:MaterialUnit;water:string;admixture:string;admixtureUnit:'litres'|'kg';stone:string;stoneUnit:MaterialUnit;diameter:string;bars:string;lengthEach:string;grade:string;notes:string;calc:WallVolumeForm;reason:string};
 
 const today=()=>new Date().toISOString().slice(0,10);
 const n=(value:string)=>{const parsed=Number(value.replace(',','.'));return Number.isFinite(parsed)?parsed:0;};
@@ -16,7 +16,7 @@ const opt=(value:string)=>value.trim()?n(value):null;
 const str=(value:number|null)=>value==null?'':String(value);
 const materialOptions:{id:WallMaterialType;label:string}[]=[{id:'ready_mix',label:'Ready-mix m³'},{id:'site_mix',label:'Site-mixed'},{id:'rebar',label:'Steel rebar'},{id:'stone',label:'Stone'}];
 
-export const emptyWallUseForm=(usedOn=today()):WallUseForm=>({type:'ready_mix',usedOn,purpose:{kind:'builtin',id:'structural'},volume:'',bags:'',bagKg:'50',sand:'',sandUnit:'m3',gravel:'',gravelUnit:'m3',water:'',admixture:'',admixtureUnit:'litres',stone:'',stoneUnit:'m3',diameter:'12',bars:'',lengthEach:'12',grade:'',notes:'',area:emptyWallAreaForm(),reason:''});
+export const emptyWallUseForm=(usedOn=today()):WallUseForm=>({type:'ready_mix',usedOn,purpose:{kind:'builtin',id:'structural'},volume:'',bags:'',bagKg:'50',sand:'',sandUnit:'m3',gravel:'',gravelUnit:'m3',water:'',admixture:'',admixtureUnit:'litres',stone:'',stoneUnit:'m3',diameter:'12',bars:'',lengthEach:'12',grade:'',notes:'',calc:emptyWallVolumeForm(),reason:''});
 
 /** Prefills a correction with exactly what the record stores today. */
 export function wallUseFormFromEntry(entry:WallConsumption):WallUseForm{
@@ -25,14 +25,14 @@ export function wallUseFormFromEntry(entry:WallConsumption):WallUseForm{
     volume:str(entry.finishedVolumeM3),bags:str(entry.cementBags),bagKg:str(entry.cementBagKg),sand:str(entry.sandQuantity),sandUnit:entry.sandUnit??'m3',gravel:str(entry.gravelQuantity),gravelUnit:entry.gravelUnit??'m3',
     water:str(entry.waterLitres),admixture:str(entry.admixtureQuantity),admixtureUnit:entry.admixtureUnit??'litres',stone:str(entry.stoneQuantity),stoneUnit:entry.stoneUnit??'m3',
     diameter:str(entry.rebarDiameterMm),bars:str(entry.rebarCount),lengthEach:str(entry.rebarLengthEachM),grade:entry.rebarGrade,notes:entry.notes,
-    area:entry.area?{enabled:true,length:String(entry.area.lengthM),height:String(entry.area.heightM),deduction:String(entry.area.deductionM2)}:emptyWallAreaForm()};
+    calc:entry.volume?{enabled:true,length:String(entry.volume.lengthM),height:String(entry.volume.heightM),bottom:String(entry.volume.bottomThicknessM),top:String(entry.volume.topThicknessM),deduction:String(entry.volume.deductionM3)}:emptyWallVolumeForm()};
 }
 
-/** Converts the form into a repository draft. Throws the first covered-area problem so it is shown beside the action. */
+/** Converts the form into a repository draft. Throws the first volume-calculation problem so it is shown beside the action. */
 export function wallDraftFromForm(form:WallUseForm,wallId:string):WallConsumptionDraft{
   const concrete=form.type==='ready_mix'||form.type==='site_mix',site=form.type==='site_mix';
-  let area:WallConsumptionDraft['area']=null;
-  if(supportsCoveredArea(form.type)&&form.area.enabled){const parsed=parseWallAreaInput(form.area);if(!parsed.snapshot)throw new Error(parsed.issues[0]??'Check the covered wall area.');area={lengthM:parsed.snapshot.lengthM,heightM:parsed.snapshot.heightM,deductionM2:parsed.snapshot.deductionM2};}
+  let volume:WallConsumptionDraft['volume']=null;
+  if(supportsVolumeCalculation(form.type)&&form.calc.enabled){const parsed=parseWallVolumeInput(form.calc);if(!parsed.snapshot)throw new Error(parsed.issues[0]??'Check the volume calculation.');const {grossVolumeM3:_gross,netVolumeM3:_net,...dimensions}=parsed.snapshot;volume=dimensions;}
   return{wallId,usedOn:form.usedOn,type:form.type,
     concretePurpose:concrete&&form.purpose?.kind==='builtin'?form.purpose.id:null,customPurposeId:concrete&&form.purpose?.kind==='custom'?form.purpose.id:null,
     finishedVolumeM3:concrete?opt(form.volume):null,cementBags:site?opt(form.bags):null,cementBagKg:site?opt(form.bagKg):null,
@@ -40,18 +40,18 @@ export function wallDraftFromForm(form:WallUseForm,wallId:string):WallConsumptio
     waterLitres:site?opt(form.water):null,admixtureQuantity:site?opt(form.admixture):null,admixtureUnit:site&&form.admixture.trim()?form.admixtureUnit:null,
     stoneQuantity:form.type==='stone'?opt(form.stone):null,stoneUnit:form.type==='stone'?form.stoneUnit:null,
     rebarDiameterMm:form.type==='rebar'?opt(form.diameter):null,rebarCount:form.type==='rebar'?opt(form.bars):null,rebarLengthEachM:form.type==='rebar'?opt(form.lengthEach):null,rebarGrade:form.type==='rebar'?form.grade:'',
-    notes:form.notes,area};
+    notes:form.notes,volume};
 }
 
 /**
  * Records a new consumption or corrects an existing one. Values stay in the form after a failed save;
  * the error appears directly above the action that failed.
  */
-export function WallConsumptionForm({mode,initial,savedPurposes,onCreatePurpose,onSubmit,onDiscard}:{mode:'add'|'correct';initial:WallUseForm;savedPurposes:SavedConcretePurpose[];onCreatePurpose:(label:string)=>Promise<SavedConcretePurpose>;onSubmit:(form:WallUseForm)=>Promise<void>;onDiscard?:()=>void}){
+export function WallConsumptionForm({mode,initial,wall,savedPurposes,onCreatePurpose,onSubmit,onDiscard}:{mode:'add'|'correct';initial:WallUseForm;wall?:Pick<Wall,'lengthM'|'heightM'|'bottomThicknessM'|'topThicknessM'>|null;savedPurposes:SavedConcretePurpose[];onCreatePurpose:(label:string)=>Promise<SavedConcretePurpose>;onSubmit:(form:WallUseForm)=>Promise<void>;onDiscard?:()=>void}){
   const[form,setForm]=useState<WallUseForm>(initial),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
   const correcting=mode==='correct';
   const set=(patch:Partial<WallUseForm>)=>{setForm(current=>({...current,...patch}));setError(null);};
-  const changeType=(type:WallMaterialType)=>set({...emptyWallUseForm(form.usedOn),type,notes:form.notes,reason:form.reason,purpose:type==='ready_mix'||type==='site_mix'?form.purpose??{kind:'builtin',id:'structural'}:null,area:supportsCoveredArea(type)?form.area:emptyWallAreaForm()});
+  const changeType=(type:WallMaterialType)=>set({...emptyWallUseForm(form.usedOn),type,notes:form.notes,reason:form.reason,purpose:type==='ready_mix'||type==='site_mix'?form.purpose??{kind:'builtin',id:'structural'}:null,calc:supportsVolumeCalculation(type)?form.calc:emptyWallVolumeForm()});
   const rebarPreview=form.type==='rebar'&&n(form.diameter)>0&&n(form.bars)>0&&n(form.lengthEach)>0?calculateRebar(n(form.diameter),n(form.bars),n(form.lengthEach)):null;
 
   async function submit(){
@@ -92,7 +92,7 @@ export function WallConsumptionForm({mode,initial,savedPurposes,onCreatePurpose,
 
     {form.type==='stone'?<QuantityWithUnit label="Stone consumed *" value={form.stone} unit={form.stoneUnit} onValue={stone=>set({stone})} onUnit={stoneUnit=>set({stoneUnit})}/>:null}
 
-    {supportsCoveredArea(form.type)?<WallAreaCalculator value={form.area} onChange={area=>set({area})} materialLabel={wallMaterialLabels[form.type]}/>:null}
+    {supportsVolumeCalculation(form.type)?<WallVolumeCalculator value={form.calc} wall={wall} onChange={calc=>set({calc})} onCalculated={net=>set(form.type==='stone'?{stone:String(net),stoneUnit:'m3'}:{volume:String(net)})}/>:null}
 
     <AppField label="Entry notes" value={form.notes} onChangeText={notes=>set({notes})} multiline/>
     {correcting?<AppField label="Correction reason *" value={form.reason} onChangeText={reason=>set({reason})} multiline placeholder="Example: delivery ticket re-checked"/>:null}
