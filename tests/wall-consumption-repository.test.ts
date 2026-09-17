@@ -47,7 +47,7 @@ const mixCalc={lengthM:10,heightM:2,bottomThicknessM:0.5,topThicknessM:0.5,deduc
 const count=(db:TestDatabase,sql:string)=>Number((db.raw.prepare(sql).get() as {count:number}).count);
 
 describe('migration 37: wall consumption area, purposes, and corrections',()=>{
-  it('keeps migration 37 in the upgrade path below the current version',()=>{expect(DATABASE_VERSION).toBe(38);});
+  it('keeps migration 37 in the upgrade path below the current version',()=>{expect(DATABASE_VERSION).toBeGreaterThanOrEqual(38);});
 
   it('emits the version 37 step through execAsync alone, as older installations migrate',async()=>{
     const statements:string[]=[];
@@ -58,7 +58,7 @@ describe('migration 37: wall consumption area, purposes, and corrections',()=>{
     // Structure only: no data-modifying statement is part of the version 37 step.
     const step37=statements.slice(statements.findIndex(sql=>sql.includes('wall_concrete_purposes')));
     expect(step37.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 38');
+    expect(statements.at(-1)).toBe(`PRAGMA user_version = ${DATABASE_VERSION}`);
   });
 
   it('upgrades a version 36 database without changing existing consumption records, and is safe to re-run',async()=>{
@@ -92,7 +92,7 @@ describe('migration 37: wall consumption area, purposes, and corrections',()=>{
     db.raw.exec('PRAGMA user_version = 36;');
     await migrateDatabase(db as never);
     await migrateDatabase(db as never);
-    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:38});
+    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:DATABASE_VERSION});
     expect(db.raw.prepare('SELECT id,wall_id,used_on,material_type,concrete_purpose,finished_volume_m3,stone_quantity,stone_unit,notes,created_at FROM wall_consumptions ORDER BY id').all()).toEqual(before);
     const detail=await new SqliteWallRepository(db as never).getWall('legacy_wall');
     expect(detail.entries.find(entry=>entry.id==='legacy_stone')).toMatchObject({volume:null,customPurposeId:null,customPurposeLabel:null,correctionHistory:[],updatedAt:null,stoneQuantity:6,stoneUnit:'tonnes'});
@@ -132,7 +132,7 @@ describe('migration 38: wall consumption volume calculation',()=>{
     for(const column of ['volume_length_m','volume_height_m','volume_bottom_thickness_m','volume_top_thickness_m','volume_deduction_m3','volume_gross_m3','volume_net_m3'])expect(statements.some(sql=>sql.includes(`ALTER TABLE wall_consumptions ADD COLUMN ${column} `))).toBe(true);
     expect(statements.some(sql=>sql.includes('wall_concrete_purposes'))).toBe(false);
     expect(statements.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 38');
+    expect(statements.at(-1)).toBe(`PRAGMA user_version = ${DATABASE_VERSION}`);
   });
 
   it('upgrades a version 37 database, including superseded area test data, without changing any record',async()=>{
@@ -142,7 +142,7 @@ describe('migration 38: wall consumption volume calculation',()=>{
     db.raw.exec('PRAGMA user_version = 37;');
     await migrateDatabase(db as never);
     await migrateDatabase(db as never);
-    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:38});
+    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:DATABASE_VERSION});
     expect(db.raw.prepare("SELECT * FROM wall_consumptions WHERE id='v37_area'").get()).toEqual(before);
     expect((await new SqliteWallRepository(db as never).getWall(wallA.id)).entries[0]).toMatchObject({stoneQuantity:9,volume:null});
   });

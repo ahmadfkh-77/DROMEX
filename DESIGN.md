@@ -520,6 +520,15 @@ No new component, colour, or motion was introduced. Everything above is an exist
 
 No new colour, component primitive, or motion curve was introduced.
 
+## Implemented on the wall technical diagram (DEC-457)
+
+`src/domain/wallDiagram.ts` plus `WallDiagramView` and `WallLayersEditor`. One generated element model, two renderers: `react-native-svg` on the phone and inline SVG in the PDF.
+
+- **A construction drawing, not decoration.** Elevation on the left, cross-section on the right, legend beneath. Muted stone, concrete, and earth tones only, each layer carrying a hatch pattern and a numbered marker as well as its colour, so the figure survives grayscale printing and colour-vision deficiencies. No gradient, no 3D, no animation inside the PDF.
+- **The numbers are the truth.** A thin layer is widened to a minimum visible width, and the figure says so in Signal Orange Deep; the legend still prints the recorded thickness. The gross volume shown is the one the volume formula produced.
+- **Layer editor as ordered rows.** Each row shows its marker colour, its phase number, and Move up / Move down / Remove, with an inline confirmation before a row leaves the list. "Same thickness top and bottom" collapses the second field to a read-only echo of the first. Running totals are shown against the wall's own thickness in the calc-result teal, and disagreements appear as accessible live-region errors.
+- **Live preview.** Section 1 previews the geometry as it is typed; section 2 shows the saved wall with its layers. Both use the same component, so nothing can drift between preview and export.
+
 ## Current-vs-Target Gap List
 
 1. **Typography weight.** Current: `fontWeight: '900'` used pervasively in `src/ui/theme.ts`'s global tokens and on every screen except Home, Project Command Center, Supplier Loads, and Daily Reports. Target: graded hierarchy above. **Partially implemented** — Home's and Project Command Center's navigation sections use a 3-step subset (`900`/`700`/`500`); Supplier Loads' supplied-material records and Daily Reports' section/record content use the full 4-step scale including `600` (see "Implemented on Supplier Loads" and "Implemented on Daily Reports"). Every other screen is still the pre-existing pervasive-900 state, and the global `theme.ts` tokens themselves are unchanged.

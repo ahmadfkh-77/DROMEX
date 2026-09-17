@@ -11,11 +11,12 @@ const project:ReportProject={id:'road',name:'Mountain Road',customerName:'Road C
 const company:ProjectReportSetup['company']={name:'DROMEX Paving',logoUri:null,address:null,phone:null,email:null,taxVatNumber:null,ministryName:'Ministry of Public Works',ministryNameAr:'وزارة الأشغال العامة',ministryLogoUri:null,consultingAgencyName:null,consultingAgencyNameAr:null,customHeaderEn:null,customHeaderAr:null};
 
 const entry=(overrides:Partial<WallConsumption>):WallConsumption=>({id:'use',wallId:'wall-a',usedOn:'2026-09-10',type:'ready_mix',concretePurpose:null,customPurposeId:null,customPurposeLabel:null,finishedVolumeM3:null,cementBags:null,cementBagKg:null,sandQuantity:null,sandUnit:null,gravelQuantity:null,gravelUnit:null,waterLitres:null,admixtureQuantity:null,admixtureUnit:null,stoneQuantity:null,stoneUnit:null,rebarDiameterMm:null,rebarCount:null,rebarLengthEachM:null,rebarGrade:'',notes:'',volume:null,totalRebarLengthM:null,totalRebarKg:null,correctionHistory:[],createdAt:'2026-09-10T08:00:00Z',updatedAt:null,...overrides});
-const wallA:LinkedWallWork={wallId:'wall-a',wallName:'Retaining wall A',system:'rubble_masonry',purpose:'retaining',lengthM:20,heightM:4,bottomThicknessM:.8,topThicknessM:.4,netVolumeM3:48,plannedVolumeM3:48,entries:[
+const layers=[{id:'l1',wallId:'wall-a',phaseOrder:1,name:'Structural core',materialKey:null,bottomThicknessM:.6,topThicknessM:.3,note:'',createdAt:'2026-09-10T08:00:00Z',updatedAt:null},{id:'l2',wallId:'wall-a',phaseOrder:2,name:'Stone facing',materialKey:null,bottomThicknessM:.2,topThicknessM:.1,note:'Quarry stone',createdAt:'2026-09-10T08:00:00Z',updatedAt:null}];
+const wallA:LinkedWallWork={wallId:'wall-a',wallName:'Retaining wall A',system:'rubble_masonry',purpose:'retaining',lengthM:20,heightM:4,bottomThicknessM:.8,topThicknessM:.4,netVolumeM3:48,plannedVolumeM3:48,layers,entries:[
   entry({id:'mix',concretePurpose:'structural',finishedVolumeM3:10,volume:{lengthM:10,heightM:2,bottomThicknessM:.5,topThicknessM:.5,deductionM3:0,grossVolumeM3:10,netVolumeM3:10}}),
   entry({id:'stone',type:'stone',stoneQuantity:54.2,stoneUnit:'m3',volume:{lengthM:18,heightM:4.5,bottomThicknessM:.9,topThicknessM:.5,deductionM3:2.5,grossVolumeM3:56.7,netVolumeM3:54.2},notes:'Face course',correctionHistory:[{correctedAt:'2026-09-11T09:00:00Z',correctedBy:'Owner',reason:'Truck count re-checked',changes:[{field:'Stone',originalValue:'50 m³',newValue:'54.2 m³'}]}],updatedAt:'2026-09-11T09:00:00Z'}),
 ]};
-const wallB:LinkedWallWork={wallId:'wall-b',wallName:'Boundary wall B',system:'reinforced_concrete',purpose:'boundary',lengthM:12,heightM:2.5,bottomThicknessM:.3,topThicknessM:.3,netVolumeM3:9,plannedVolumeM3:9.45,entries:[
+const wallB:LinkedWallWork={wallId:'wall-b',wallName:'Boundary wall B',system:'reinforced_concrete',purpose:'boundary',lengthM:12,heightM:2.5,bottomThicknessM:.3,topThicknessM:.3,netVolumeM3:9,plannedVolumeM3:9.45,layers:[],entries:[
   entry({id:'custom',wallId:'wall-b',customPurposeId:'p1',customPurposeLabel:'Parapet cap concrete',finishedVolumeM3:1.25}),
   entry({id:'plain-stone',wallId:'wall-b',type:'stone',stoneQuantity:3,stoneUnit:'tonnes'}),
   entry({id:'steel',wallId:'wall-b',type:'rebar',rebarDiameterMm:12,rebarCount:40,rebarLengthEachM:6,totalRebarLengthM:240,totalRebarKg:213.1}),
@@ -75,6 +76,36 @@ describe('Daily Report PDF: Wall Construction section',()=>{
     expect(html).toMatch(/\.wall-block\{[^}]*break-inside:avoid/);
   });
 
+  it('embeds a generated vector diagram for every wall, with no raster image or external resource',()=>{
+    const section=wallSection(pdf([wallA,wallB]));
+    expect(section.match(/<svg /g)).toHaveLength(2);
+    expect(section).toContain('Elevation');
+    expect(section).toContain('Cross-section');
+    expect(section).toContain('Layers and construction phases');
+    expect(section).toContain('Phase 1');
+    expect(section).toContain('Stone facing');
+    expect(section).toContain('No layers recorded');
+    for(const forbidden of ['<image','<script','href=','data:image','url(http'])expect(section).not.toContain(forbidden);
+    // The only http text allowed is the SVG namespace declaration, which fetches nothing.
+    const urls=section.match(/https?:\/\/[^"' )]*/g)??[];
+    expect(urls.every(url=>url==='http://www.w3.org/2000/svg')).toBe(true);
+  });
+
+  it('keeps each diagram whole and lets a wall block move to the next page',()=>{
+    const html=pdf([wallA]);
+    expect(html).toMatch(/\.wall-figure\{[^}]*break-inside:avoid/);
+    expect(html).toMatch(/\.wall-figure svg\{[^}]*max-width:100%/);
+    expect(html).toMatch(/\.wall-block\{[^}]*break-inside:avoid/);
+  });
+
+  it('escapes entered text inside the diagram as well as the table',()=>{
+    const hostile={...wallA,wallName:'<script>alert(1)</script>',layers:[{...layers[0]!,name:'" onload="x'}]};
+    const section=wallSection(pdf([hostile]));
+    expect(section).not.toContain('<script>alert');
+    expect(section).not.toMatch(/"\s+onload="/);
+    expect(section).toContain('&lt;script&gt;');
+  });
+
   it('escapes entered text and keeps every existing header and section',()=>{
     const html=pdf([{...wallA,wallName:'<Wall & "A">'}]);
     expect(html).toContain('&lt;Wall &amp; &quot;A&quot;&gt;');
@@ -91,8 +122,20 @@ describe('Daily Report workbook: Wall Construction sheet',()=>{
   const sheets=()=>dailyReportWorkbookSheets({...report,showMinistryHeader:false},project,[],[],[],[],company,[],'en',[wallA,wallB]);
   const rows=()=>sheets().find(sheet=>sheet.name==='Wall Construction')!.rows;
 
-  it('adds the sheet after Waste Dumps and before Photos',()=>{
-    expect(sheets().map(sheet=>sheet.name)).toEqual(['Report Overview','Work Details','Presence','Worker Safety','Materials','Linked Loads','Supplier Loads','Fuel Used','Waste Dumps','Wall Construction','Photos']);
+  it('adds the wall sheets after Waste Dumps and before Photos',()=>{
+    expect(sheets().map(sheet=>sheet.name)).toEqual(['Report Overview','Work Details','Presence','Worker Safety','Materials','Linked Loads','Supplier Loads','Fuel Used','Waste Dumps','Wall Construction','Wall Layers','Photos']);
+  });
+
+  it('lists every layer with its phase order and thicknesses, agreeing with the PDF legend',()=>{
+    const rows=sheets().find(sheet=>sheet.name==='Wall Layers')!.rows;
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({Wall:'Retaining wall A','Wall ID':'wall-a',Phase:1,Layer:'Structural core','Layer Bottom Thickness m':.6,'Layer Top Thickness m':.3,Note:null});
+    expect(rows[1]).toMatchObject({Phase:2,Layer:'Stone facing','Layer Bottom Thickness m':.2,'Layer Top Thickness m':.1,Note:'Quarry stone'});
+  });
+
+  it('carries the wall geometry and volumes on the wall construction sheet',()=>{
+    const stone=sheets().find(sheet=>sheet.name==='Wall Construction')!.rows.find(row=>row['Record ID']==='stone')!;
+    expect(stone).toMatchObject({'Wall Bottom Thickness m':.8,'Wall Top Thickness m':.4,'Wall Gross Volume m³':48,'Wall Layer Count':2});
   });
 
   it('has one row per consumption with the same quantity text as the PDF and numeric calculation columns',()=>{

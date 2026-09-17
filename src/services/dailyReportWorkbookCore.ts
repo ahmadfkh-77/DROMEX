@@ -9,7 +9,8 @@ const unit = (value: string | null) => value === 'tonnes' ? 't' : value === 'm3'
 export function wallConstructionRows(walls: LinkedWallWork[]) {
   return walls.flatMap((wall) => wall.entries.map((entry) => ({
     'Record ID': entry.id, 'Wall ID': wall.wallId, Wall: wall.wallName, 'Wall System': wallSystemLabels[wall.system],
-    'Wall Length m': wall.lengthM, 'Wall Height m': wall.heightM, 'Wall Planned Volume m³': wall.plannedVolumeM3,
+    'Wall Length m': wall.lengthM, 'Wall Height m': wall.heightM, 'Wall Bottom Thickness m': wall.bottomThicknessM, 'Wall Top Thickness m': wall.topThicknessM,
+    'Wall Gross Volume m³': wall.netVolumeM3, 'Wall Planned Volume m³': wall.plannedVolumeM3, 'Wall Layer Count': wall.layers?.length ?? 0,
     'Used On': entry.usedOn, Material: wallMaterialLabels[entry.type], Purpose: wallConsumptionPurposeLabel(entry),
     'Purpose Source': entry.customPurposeId ? 'Saved purpose' : entry.concretePurpose ? 'Built-in purpose' : null,
     Quantity: describeWallConsumptionQuantity(entry),
@@ -21,6 +22,15 @@ export function wallConstructionRows(walls: LinkedWallWork[]) {
     'Calc Gross Volume m³': entry.volume?.grossVolumeM3 ?? null, 'Calc Net Volume m³': entry.volume?.netVolumeM3 ?? null,
     'Volume Calculation': !supportsVolumeCalculation(entry.type) ? 'Not applicable' : entry.volume ? 'Calculated' : 'Entered directly',
     Corrections: entry.correctionHistory.length, 'Last Correction Reason': entry.correctionHistory.at(-1)?.reason ?? null, Notes: entry.notes.trim() || null,
+  })));
+}
+
+/** DEC-457. The workbook twin of the diagram legend: one row per layer, in construction-phase order. */
+export function wallLayerRows(walls: LinkedWallWork[]) {
+  return walls.flatMap((wall) => (wall.layers ?? []).map((layer) => ({
+    'Wall ID': wall.wallId, Wall: wall.wallName, Phase: layer.phaseOrder, Layer: layer.name,
+    'Layer Bottom Thickness m': layer.bottomThicknessM, 'Layer Top Thickness m': layer.topThicknessM,
+    'Wall Bottom Thickness m': wall.bottomThicknessM, 'Wall Top Thickness m': wall.topThicknessM, Note: layer.note.trim() || null,
   })));
 }
 
@@ -51,6 +61,7 @@ export function dailyReportWorkbookSheets(report: DailyProjectReport, project: R
     { name:'Fuel Used',rows:fuel.map(fill=>({'Record ID':fill.id,'Confirmed At':fill.confirmedAt,Equipment:fill.equipmentName,'Litres Filled':fill.litres,'Price per Litre USD':fill.pricePerLitreUsd,'Consumption Cost USD':fill.consumptionCostUsd,'Cost Status':fill.consumptionCostUsd==null?'Unpriced':'Costed','Odometer Reference':fill.odometerReading,Notes:fill.notes}))},
     { name: 'Waste Dumps', rows: waste.map((entry) => ({ 'Record ID': entry.id, 'Dumped At': entry.dumpedAt, Material: entry.materialType, Location: entry.dumpLocation, Driver: entry.driverName, 'Truck Plate': entry.truckPlate })) },
     { name: 'Wall Construction', rows: wallConstructionRows(wallWork) },
+    { name: 'Wall Layers', rows: wallLayerRows(wallWork) },
     { name: 'Photos', rows: report.photos.map((uri, index) => ({ Photo: index + 1, 'File name': uri.split('/').pop() ?? `photo-${index + 1}.jpg`, 'Work Date': report.workDate })), images },
   ];
   return localizeWorkbookSheets(sheets, locale);

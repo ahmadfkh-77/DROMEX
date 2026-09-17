@@ -73,6 +73,33 @@ describe('Wall Construction UI contract',()=>{
     expect(reports).not.toContain('formatWallArea');
   });
 
+  it('renders the generated diagram natively from the same model as the PDF',()=>{
+    const view=source('src/ui/components/WallDiagramView.tsx');
+    expect(view).toContain("from 'react-native-svg'");
+    expect(view).toContain('buildWallDiagram');
+    expect(view).not.toContain('<Image');
+    expect(view).not.toContain('http');
+    expect(view).toContain('accessibilityLabel');
+  });
+
+  it('edits layers and construction phases with reorder, uniform thickness, and live totals',()=>{
+    const editor=source('src/ui/components/WallLayersEditor.tsx');
+    expect(editor).toContain('Layers and construction phases');
+    expect(editor).toContain('validateWallLayers(');
+    expect(editor).toContain('Same thickness top and bottom');
+    expect(editor).toContain('Move up');
+    expect(editor).toContain('Move down');
+    expect(editor).toContain('Remove');
+    expect(editor).toMatch(/minHeight:(4[4-9]|[5-9]\d)/);
+    expect(editor).toContain('useReducedMotion');
+    expect(editor).toContain('accessibilityLiveRegion');
+    expect(editor).not.toContain('—');
+    const screen2=source('src/ui/screens/WallConstructionScreen.tsx');
+    expect(screen2).toContain('<WallDiagramView');
+    expect(screen2).toContain('<WallLayersEditor');
+    expect(screen2).toContain('saveLayers(');
+  });
+
   it('uses no em-dash in new wall-construction copy',()=>{
     for(const file of [form,volume,purpose,history])expect(file).not.toContain('—');
   });

@@ -112,6 +112,9 @@ const ARABIC_LABELS: Record<string, string> = {
   'Calc Length m': 'طول الحساب م', 'Calc Height m': 'ارتفاع الحساب م', 'Calc Bottom Thickness m': 'السماكة السفلية م', 'Calc Top Thickness m': 'السماكة العلوية م',
   'Calc Deductions m³': 'الخصومات م³', 'Calc Gross Volume m³': 'الحجم الإجمالي المحسوب م³', 'Calc Net Volume m³': 'صافي الحجم المحسوب م³',
   'Volume Calculation': 'حساب الحجم', Corrections: 'التصحيحات', 'Last Correction Reason': 'سبب آخر تصحيح',
+  // DEC-457 wall layers and construction phases.
+  'Wall Layers': 'طبقات الجدار', Phase: 'المرحلة', Layer: 'الطبقة', 'Layer Bottom Thickness m': 'سماكة الطبقة السفلية م', 'Layer Top Thickness m': 'سماكة الطبقة العلوية م',
+  'Wall Bottom Thickness m': 'سماكة الجدار السفلية م', 'Wall Top Thickness m': 'سماكة الجدار العلوية م', 'Wall Gross Volume m³': 'حجم الجدار الإجمالي م³', 'Wall Layer Count': 'عدد طبقات الجدار',
 };
 
 const ARABIC_VALUES: Record<string, string> = {

@@ -1,3 +1,4 @@
+import type {WallLayer,WallLayerDraft} from '../../domain/wallDiagram';
 import type {SavedConcretePurpose,Wall,WallConsumption,WallConsumptionCorrectionDraft,WallConsumptionDraft,WallDetail,WallDraft,WallSetup} from '../../domain/walls';
 
 export interface WallRepository{
@@ -11,4 +12,8 @@ export interface WallRepository{
   /** DEC-451. Saved Concrete/Mortar purposes, oldest first. Built-in purposes are not listed here. */
   listConcretePurposes():Promise<SavedConcretePurpose[]>;
   createConcretePurpose(label:string):Promise<SavedConcretePurpose>;
+  /** DEC-457. Wall layers in construction-phase order; empty for a wall with no layers recorded. */
+  listLayers(wallId:string):Promise<WallLayer[]>;
+  /** Replaces the wall's whole layer set, after validating it against the wall's own thickness. */
+  saveLayers(wallId:string,layers:WallLayerDraft[]):Promise<WallLayer[]>;
 }

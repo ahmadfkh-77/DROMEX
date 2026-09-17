@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 38;
+export const DATABASE_VERSION = 39;
 
 type TableColumn = { name: string };
 
@@ -1132,6 +1132,31 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
         AND volume_gross_m3 IS NOT NULL AND volume_deduction_m3 < volume_gross_m3 AND material_type IN ('stone','ready_mix'))
     )`);
     currentVersion = 38;
+  }
+
+  if (currentVersion === 38) {
+    // DEC-457. Wall layers and construction phases, the structured data the generated technical
+    // diagram is drawn from. Structure only: no existing wall or consumption row is read or changed,
+    // and layers stay optional, so every historical wall remains valid with no layers at all.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS wall_layers (
+        id TEXT PRIMARY KEY NOT NULL,
+        wall_id TEXT NOT NULL REFERENCES walls(id),
+        -- Construction order, 1 upwards. Unique per wall, so two layers can never claim one phase.
+        phase_order INTEGER NOT NULL CHECK (phase_order >= 1 AND phase_order = CAST(phase_order AS INTEGER)),
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        -- Optional link to a catalog/material key; the name is always the printed label.
+        material_key TEXT,
+        bottom_thickness_m REAL NOT NULL CHECK (bottom_thickness_m > 0),
+        top_thickness_m REAL NOT NULL CHECK (top_thickness_m > 0),
+        note TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_wall_layers_phase ON wall_layers(wall_id, phase_order);
+      CREATE INDEX IF NOT EXISTS idx_wall_layers_wall ON wall_layers(wall_id, phase_order);
+    `);
+    currentVersion = 39;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

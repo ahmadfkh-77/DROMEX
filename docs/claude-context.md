@@ -556,6 +556,11 @@ values on its next save.
   renumbered 09–13), PDF section `Wall construction that day`, and a
   `Wall Construction` workbook sheet share `describeWallConsumptionQuantity`, so
   the three cannot disagree.
+- **Wall diagram and layers** (DEC-457, DEC-458, migration 39): `src/domain/wallDiagram.ts`
+  builds a deterministic element model; `wallDiagramToSvg` serializes it for the PDF and
+  `WallDiagramView` renders the same model with `react-native-svg` on the phone. Layers are
+  optional, ordered by phase, validated against the wall thickness within 5 mm, and never
+  auto-adjusted. No generated imagery, no stored bitmap, no external reference.
 - **Verification**: typecheck clean and the complete Vitest suite green. PDF
   samples (bilingual headers, Stone and Ready Mix areas with openings, a saved
   purpose, a corrected record, missing area, multiple walls, a 28-record wall

@@ -1,5 +1,6 @@
 import {fuelTypeLabels} from '../domain/fuel';
 import {consultantSignoffState,netWorkMinutes,type DailyProjectReport,type LinkedFuelFill,type LinkedProjectLoad,type LinkedQuarryLoad,type LinkedWallWork,type LinkedWasteDump,type ProjectReportSetup,type ReportProject} from '../domain/projectReports';
+import {buildWallDiagram} from '../domain/wallDiagram';
 import {describeWallConsumptionQuantity,formatCubicMetres,supportsVolumeCalculation,wallConsumptionPurposeLabel,wallMaterialLabels,wallPurposeLabels,wallSystemLabels} from '../domain/walls';
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]??c));
@@ -31,7 +32,10 @@ export function wallConstructionSectionHtml(walls:LinkedWallWork[]){
     }).join('');
     const thickness=wall.bottomThicknessM===wall.topThicknessM?`${fmt(wall.bottomThicknessM)} m thick`:`${fmt(wall.bottomThicknessM)} m to ${fmt(wall.topThicknessM)} m thick`;
     const geometry=`${fmt(wall.lengthM)} m long × ${fmt(wall.heightM)} m high &middot; ${thickness} &middot; ${metres(wall.plannedVolumeM3)} m³ planned`;
-    return `<div class="wall-block"><div class="wall-head"><div class="wall-title"><h3>${e(wall.wallName)}</h3><p>${e(wallSystemLabels[wall.system])} &middot; ${e(wallPurposeLabels[wall.purpose])}</p></div><p class="wall-geometry">${geometry}</p></div><table class="wall-table">${head}<tbody>${rows}</tbody></table></div>`;
+    // DEC-457. The figure is generated here from the same geometry the table prints; it is inline SVG,
+    // so the PDF carries no raster image and fetches nothing.
+    const figure=buildWallDiagram({wall:{name:wall.wallName,lengthM:wall.lengthM,heightM:wall.heightM,bottomThicknessM:wall.bottomThicknessM,topThicknessM:wall.topThicknessM},layers:wall.layers??[],base:null}).svg;
+    return `<div class="wall-block"><div class="wall-head"><div class="wall-title"><h3>${e(wall.wallName)}</h3><p>${e(wallSystemLabels[wall.system])} &middot; ${e(wallPurposeLabels[wall.purpose])}</p></div><p class="wall-geometry">${geometry}</p></div><div class="wall-figure">${figure}</div><table class="wall-table">${head}<tbody>${rows}</tbody></table></div>`;
   }).join('');
   return `<section class="wall-section"><h2>Wall construction that day</h2><p class="wall-summary">${walls.length} wall${walls.length===1?'':'s'} &middot; ${records} material record${records===1?'':'s'}. Calculated volumes use the wall's length, height, and thickness less deductions.</p>${blocks}</section>`;
 }
@@ -152,6 +156,9 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
     .wall-table .sub{display:block;margin-top:.6mm;font-size:7pt;color:#65717d;font-weight:400}
     .wall-table .missing{color:#65717d;font-style:italic}
     .wall-table .corrected{display:block;margin-top:.8mm;font-size:7pt;font-weight:700;color:#173f67}
+    /* The generated figure is never split; if it does not fit, its whole wall block moves on. */
+    .wall-figure{break-inside:avoid;page-break-inside:avoid;margin:2mm 0 2.5mm}
+    .wall-figure svg{max-width:100%;height:auto;display:block}
     .source-label{display:flex;align-items:center;gap:2mm;margin:3mm 0 1.5mm}.source-label h3{margin:0;font-size:10pt;font-weight:700;color:#17212b}.source-chip{font-size:7pt;font-weight:700;letter-spacing:.3pt;padding:.6mm 2mm;border-radius:2.5mm;color:#fff}.source-chip-company{background:#c84b31}.source-chip-supplier{background:#173f67}
     .consultant-complete{display:flex;align-items:flex-end;gap:5mm;padding:3.5mm 4mm;background:#fff8ed;border:1px solid #e3d6c2;border-left:3px solid #173f67}
     .consultant-signature-box{width:55mm;height:22mm;border-bottom:1px solid #17212b}.consultant-signature-box svg{width:100%;height:100%}
