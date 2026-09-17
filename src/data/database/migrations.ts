@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 36;
+export const DATABASE_VERSION = 37;
 
 type TableColumn = { name: string };
 
@@ -1068,6 +1068,46 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_fuel_movements_company_site ON fuel_movements(company_site_id, confirmed_at DESC);
     `);
     currentVersion = 36;
+  }
+
+  if (currentVersion === 36) {
+    // DEC-450 to DEC-453. Wall consumption covered area, saved Concrete/Mortar purposes, and reasoned
+    // corrections. Structure only: no existing row is read, rewritten, or backfilled, so every legacy
+    // consumption keeps NULL area (displayed as "Area not recorded", never zero) and an empty history.
+    // Nothing is normalized here, so no frozen copy of the live purpose normalization is needed.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS wall_concrete_purposes (
+        id TEXT PRIMARY KEY NOT NULL,
+        label TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        -- Repository-computed duplicate key (trim, collapse internal whitespace, case-fold).
+        label_key TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_wall_concrete_purposes_label_key ON wall_concrete_purposes(label_key);
+    `);
+    await addColumnIfMissing(db, 'wall_consumptions', 'custom_purpose_id', 'TEXT REFERENCES wall_concrete_purposes(id)');
+    // The label is snapshotted with the record. A record uses a built-in purpose or a saved one, never both.
+    await addColumnIfMissing(db, 'wall_consumptions', 'custom_purpose_label', `TEXT CHECK (
+      (custom_purpose_id IS NULL AND custom_purpose_label IS NULL) OR
+      (custom_purpose_id IS NOT NULL AND custom_purpose_label IS NOT NULL AND length(trim(custom_purpose_label)) > 0 AND concrete_purpose IS NULL AND material_type IN ('ready_mix','site_mix'))
+    )`);
+    await addColumnIfMissing(db, 'wall_consumptions', 'area_length_m', 'REAL CHECK (area_length_m IS NULL OR area_length_m > 0)');
+    await addColumnIfMissing(db, 'wall_consumptions', 'area_height_m', 'REAL CHECK (area_height_m IS NULL OR area_height_m > 0)');
+    await addColumnIfMissing(db, 'wall_consumptions', 'area_deduction_m2', 'REAL CHECK (area_deduction_m2 IS NULL OR area_deduction_m2 >= 0)');
+    await addColumnIfMissing(db, 'wall_consumptions', 'area_gross_m2', 'REAL CHECK (area_gross_m2 IS NULL OR area_gross_m2 > 0)');
+    // The whole snapshot is present or absent together, only on Stone or Ready Mix, and deductions
+    // can never reach the gross area. Every comparison is guarded with IS NOT NULL, because a CHECK
+    // expression that evaluates to NULL passes.
+    await addColumnIfMissing(db, 'wall_consumptions', 'area_net_m2', `REAL CHECK (
+      (area_net_m2 IS NULL AND area_length_m IS NULL AND area_height_m IS NULL AND area_deduction_m2 IS NULL AND area_gross_m2 IS NULL) OR
+      (area_net_m2 IS NOT NULL AND area_net_m2 > 0 AND area_length_m IS NOT NULL AND area_height_m IS NOT NULL AND area_deduction_m2 IS NOT NULL AND area_gross_m2 IS NOT NULL
+        AND area_deduction_m2 < area_gross_m2 AND material_type IN ('stone','ready_mix'))
+    )`);
+    await addColumnIfMissing(db, 'wall_consumptions', 'correction_history_json', "TEXT NOT NULL DEFAULT '[]'");
+    // NULL means the record has never been corrected.
+    await addColumnIfMissing(db, 'wall_consumptions', 'updated_at', 'TEXT');
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_wall_consumptions_used_on ON wall_consumptions(used_on, wall_id);');
+    currentVersion = 37;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

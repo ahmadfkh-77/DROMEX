@@ -1,14 +1,43 @@
 import {fuelTypeLabels} from '../domain/fuel';
-import {consultantSignoffState,netWorkMinutes,type DailyProjectReport,type LinkedFuelFill,type LinkedProjectLoad,type LinkedQuarryLoad,type LinkedWasteDump,type ProjectReportSetup,type ReportProject} from '../domain/projectReports';
+import {consultantSignoffState,netWorkMinutes,type DailyProjectReport,type LinkedFuelFill,type LinkedProjectLoad,type LinkedQuarryLoad,type LinkedWallWork,type LinkedWasteDump,type ProjectReportSetup,type ReportProject} from '../domain/projectReports';
+import {describeWallConsumptionQuantity,formatWallArea,supportsCoveredArea,wallConsumptionPurposeLabel,wallMaterialLabels,wallPurposeLabels,wallSystemLabels} from '../domain/walls';
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]??c));
 const display=(value:string|null|undefined)=>value?.trim()?e(value):'&mdash;';
 const list=(values:string[])=>values.length?values.map(e).join('; '):'&mdash;';
 const fmt=(value:number)=>Number.isInteger(value)?String(value):value.toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
 
-export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],quarry:LinkedQuarryLoad[],waste:LinkedWasteDump[],fuel:LinkedFuelFill[],company:ProjectReportSetup['company'],logo:string|null,photos:(string|null)[],includePrices?:boolean,ministryLogo?:string|null):string;
+/**
+ * DEC-453. One block per wall: the wall's identity and geometry, then one row per consumption with the
+ * consumed quantity and the covered wall area in separate columns. Missing area reads "Area not
+ * recorded"; rebar and site mix read "Not applicable". Nothing missing is printed as zero.
+ */
+export function wallConstructionSectionHtml(walls:LinkedWallWork[]){
+  const head='<thead><tr><th>Material and purpose</th><th>Consumed quantity</th><th>Covered wall area</th><th>Notes</th></tr></thead>';
+  const metres=(value:number)=>String(Number(value.toFixed(2)));
+  if(!walls.length)return `<section class="wall-section"><h2>Wall construction that day</h2><table class="wall-table">${head}<tbody><tr><td colspan="4" class="empty">No wall construction recorded for this date</td></tr></tbody></table></section>`;
+  const records=walls.reduce((sum,wall)=>sum+wall.entries.length,0);
+  const blocks=walls.map(wall=>{
+    const rows=wall.entries.map(entry=>{
+      const purpose=wallConsumptionPurposeLabel(entry),last=entry.correctionHistory.at(-1);
+      const area=!supportsCoveredArea(entry.type)
+        ?'<span class="sub">Not applicable</span>'
+        :entry.area
+          ?`<b>${e(formatWallArea(entry.area.netAreaM2))} net</b><span class="sub">${entry.area.deductionM2>0?`${e(formatWallArea(entry.area.grossAreaM2))} gross, ${e(formatWallArea(entry.area.deductionM2))} openings`:`${e(formatWallArea(entry.area.grossAreaM2))} gross, no openings`}</span><span class="sub">${fmt(entry.area.lengthM)} m × ${fmt(entry.area.heightM)} m</span>`
+          :'<span class="missing">Area not recorded</span>';
+      const notes=[entry.notes.trim()?`<span>${e(entry.notes)}</span>`:'',last?`<span class="corrected">Corrected: ${e(last.reason)}</span>`:''].filter(Boolean).join('');
+      return `<tr><td><b>${e(wallMaterialLabels[entry.type])}</b>${purpose?`<span class="sub">${e(purpose)}</span>`:''}</td><td><b>${e(describeWallConsumptionQuantity(entry))}</b></td><td>${area}</td><td>${notes}</td></tr>`;
+    }).join('');
+    const thickness=wall.bottomThicknessM===wall.topThicknessM?`${fmt(wall.bottomThicknessM)} m thick`:`${fmt(wall.bottomThicknessM)} m to ${fmt(wall.topThicknessM)} m thick`;
+    const geometry=`${fmt(wall.lengthM)} m long × ${fmt(wall.heightM)} m high &middot; ${thickness} &middot; ${metres(wall.plannedVolumeM3)} m³ planned`;
+    return `<div class="wall-block"><div class="wall-head"><div class="wall-title"><h3>${e(wall.wallName)}</h3><p>${e(wallSystemLabels[wall.system])} &middot; ${e(wallPurposeLabels[wall.purpose])}</p></div><p class="wall-geometry">${geometry}</p></div><table class="wall-table">${head}<tbody>${rows}</tbody></table></div>`;
+  }).join('');
+  return `<section class="wall-section"><h2>Wall construction that day</h2><p class="wall-summary">${walls.length} wall${walls.length===1?'':'s'} &middot; ${records} material record${records===1?'':'s'}. Covered wall area is recorded separately from the quantity consumed.</p>${blocks}</section>`;
+}
+
+export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],quarry:LinkedQuarryLoad[],waste:LinkedWasteDump[],fuel:LinkedFuelFill[],company:ProjectReportSetup['company'],logo:string|null,photos:(string|null)[],includePrices?:boolean,ministryLogo?:string|null,wallWork?:LinkedWallWork[]):string;
 export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],waste:LinkedWasteDump[],company:ProjectReportSetup['company'],logo:string|null,photos:(string|null)[]):string;
-export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],quarryOrWaste:LinkedQuarryLoad[]|LinkedWasteDump[],wasteOrCompany:LinkedWasteDump[]|ProjectReportSetup['company'],fuelOrLogo:LinkedFuelFill[]|string|null,companyOrPhotos:ProjectReportSetup['company']|(string|null)[],logo?:string|null,photosArg?:(string|null)[],includePricesArg=false,ministryLogoArg?:string|null){
+export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],quarryOrWaste:LinkedQuarryLoad[]|LinkedWasteDump[],wasteOrCompany:LinkedWasteDump[]|ProjectReportSetup['company'],fuelOrLogo:LinkedFuelFill[]|string|null,companyOrPhotos:ProjectReportSetup['company']|(string|null)[],logo?:string|null,photosArg?:(string|null)[],includePricesArg=false,ministryLogoArg?:string|null,wallWorkArg:LinkedWallWork[]=[]){
   const current=Array.isArray(wasteOrCompany);const quarry=current?quarryOrWaste as LinkedQuarryLoad[]:[];const waste=current?wasteOrCompany as LinkedWasteDump[]:quarryOrWaste as LinkedWasteDump[];const fuel=current?fuelOrLogo as LinkedFuelFill[]:[];const company=(current?companyOrPhotos:wasteOrCompany) as ProjectReportSetup['company'];const resolvedLogo=current?logo:fuelOrLogo as string|null;const photos=(current?photosArg:companyOrPhotos) as (string|null)[];
   const includePrices=current&&includePricesArg;
   const minutes=netWorkMinutes(report);
@@ -109,6 +138,19 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
     .photos{display:grid;grid-template-columns:1fr 1fr;gap:4mm}.photos figure{margin:0;break-inside:avoid}.photos img{width:100%;height:73mm;object-fit:contain;background:#f5f2ec;border-radius:2mm;border:1px solid #e3d6c2}.photos figcaption{font-size:7.5pt;color:#65717d;margin-top:1mm}
     .empty-photo{grid-column:1/-1;background:#f5f2ec;color:#65717d;padding:16mm;text-align:center;border:1px dashed #d9d5ce}
     .footer-note{margin-top:5mm;border-top:1px solid #d9d5ce;padding-top:2mm;color:#65717d;font-size:7pt}
+    /* DEC-453 Wall Construction. The heading stays with its table, a short block never splits, and a
+       long one breaks only between rows with the column headings repeated. Weight, rules, and italics
+       carry the hierarchy so the section still reads in grayscale. */
+    .wall-summary{margin:0 0 2.5mm;color:#65717d;font-size:8pt}
+    .wall-block{break-inside:avoid;page-break-inside:avoid;margin:0 0 4mm}
+    .wall-head{break-after:avoid;page-break-after:avoid;display:flex;justify-content:space-between;align-items:flex-end;gap:5mm;padding:2.5mm 3mm;background:#fff8ed;border:1px solid #e3d6c2;border-bottom:2px solid #173f67}
+    .wall-title{min-width:0}.wall-title h3{margin:0;font-size:10.5pt;font-weight:700;color:#17212b}.wall-title p{margin:.6mm 0 0;font-size:7.5pt;color:#65717d}
+    .wall-geometry{margin:0;font-size:7.5pt;color:#17212b;text-align:right;max-width:52%}
+    .wall-table{table-layout:fixed}.wall-table th:nth-child(1){width:27%}.wall-table th:nth-child(2){width:25%}.wall-table th:nth-child(3){width:26%}
+    .wall-table tr{break-inside:avoid;page-break-inside:avoid}
+    .wall-table .sub{display:block;margin-top:.6mm;font-size:7pt;color:#65717d;font-weight:400}
+    .wall-table .missing{color:#65717d;font-style:italic}
+    .wall-table .corrected{display:block;margin-top:.8mm;font-size:7pt;font-weight:700;color:#173f67}
     .source-label{display:flex;align-items:center;gap:2mm;margin:3mm 0 1.5mm}.source-label h3{margin:0;font-size:10pt;font-weight:700;color:#17212b}.source-chip{font-size:7pt;font-weight:700;letter-spacing:.3pt;padding:.6mm 2mm;border-radius:2.5mm;color:#fff}.source-chip-company{background:#c84b31}.source-chip-supplier{background:#173f67}
     .consultant-complete{display:flex;align-items:flex-end;gap:5mm;padding:3.5mm 4mm;background:#fff8ed;border:1px solid #e3d6c2;border-left:3px solid #173f67}
     .consultant-signature-box{width:55mm;height:22mm;border-bottom:1px solid #17212b}.consultant-signature-box svg{width:100%;height:100%}
@@ -158,10 +200,11 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
       <section><h2>Loads delivered that day</h2><div class="source-label"><h3>Company Loads</h3><span class="source-chip source-chip-company">${e(company.name)}</span></div><table class="table-accent-company"><thead><tr><th>Transaction</th><th>Item</th><th>Quantity</th><th>Driver</th><th>Truck</th>${includePrices?'<th>Total</th>':''}</tr></thead><tbody>${loadRows}</tbody></table><div class="source-label"><h3>Supplier Loads</h3><span class="source-chip source-chip-supplier">SUPPLIER</span></div><table class="table-accent-supplier"><thead><tr><th>Reference</th><th>Supplier</th><th>Item</th><th>Quantity</th><th>Delivery</th><th>Truck</th><th>Ticket</th>${includePrices?'<th>Total</th>':''}</tr></thead><tbody>${quarryRows}</tbody></table></section>
       <section><h2>Fuel used that day</h2><table><thead><tr><th>Time</th><th>Equipment</th><th>Fuel type</th><th>Litres</th>${includePrices?'<th>Price</th><th>Cost</th>':''}<th>Odometer</th></tr></thead><tbody>${fuelRows}</tbody></table></section>
       <section><h2>Waste dumps completed that day</h2><div class="two"><div class="card"><strong>${waste.length}</strong><b>TOTAL DUMPS</b><small>Total completed dumps: ${waste.length}</small></div><table class="waste"><thead><tr><th>Material</th><th>Dump location</th><th>Dumps</th></tr></thead><tbody>${wasteRows}</tbody></table></div></section>
+      ${wallConstructionSectionHtml(current?wallWorkArg:[])}
       <section><h2>Site notes and follow-up</h2><div class="notes-grid"><div class="panel"><h3>General notes</h3><p>${display(report.notes)}</p></div><div class="panel panel-attention"><h3>Problems, delays, or incidents</h3><p>${display(report.problemsDelaysIncidents)}</p></div><div class="panel"><h3>Next work planned</h3><p>${display(report.nextWorkPlanned)}</p></div><div class="panel"><h3>Daily report status</h3><p>Saved project-day record<br/>Updated ${e(updatedLabel)}</p></div></div></section>
       ${consultantSection}
       <section><h2>Photo evidence</h2><div class="photos">${photoHtml}</div></section>
-      <div class="footer-note">Linked company loads, supplier loads, fuel fills, and waste dumps are read-only here. Corrections are made in their original operational records and automatically appear in later exports.</div>
+      <div class="footer-note">Linked company loads, supplier loads, fuel fills, waste dumps, and wall construction records are read-only here. Corrections are made in their original operational records and automatically appear in later exports.</div>
     </div>
   </body></html>`;
 }

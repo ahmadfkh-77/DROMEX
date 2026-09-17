@@ -526,6 +526,42 @@ values on its next save.
   Unassigned fills were visible and inspectable, and the signed APK was
   confirmed working. Build 19 is now the accepted internal artifact.
 
+## Wall Construction consumption improvements — feature branch, not released (2026-09-17)
+
+- **Branch** `feature/android-wall-consumption-improvements`, developed in the
+  separate worktree `C:\Users\fakih\Desktop\Dromex\DROMEX-wall-worktree` so the
+  web authentication work in the main checkout was never touched. Not merged,
+  no APK, release metadata unchanged (still 0.16.0 / build 19).
+- **Decisions** DEC-450 to DEC-454 (numbered above the web branch's
+  in-progress DEC-434 to DEC-444 to avoid a collision when the branches meet).
+- **Database version 37** (DEC-454): `wall_concrete_purposes` table and nullable
+  area, saved-purpose, and correction columns on `wall_consumptions`.
+  Structure-only; no existing row is changed. Backups carry the new data
+  automatically because they serialize the whole SQLite database.
+- **Covered area** (DEC-450): optional for Stone and Ready Mix, one shared
+  face-area formula (`calculateWallArea`, also used by `calculateWallVolume`),
+  stored as a length/height/openings/gross/net snapshot, independent of the
+  consumed quantity, and shown as "Area not recorded" when absent.
+- **Saved purposes** (DEC-451): normalized, case-insensitive unique against
+  saved and built-in purposes, label snapshotted on each record, no rename or
+  delete.
+- **Corrections** (DEC-452): `WallRepository.correctConsumption` corrects in
+  place with a required reason and a before/after `correction_history_json`
+  trail; the wall and project are not correctable.
+- **Daily Report** (DEC-453): `ProjectReportRepository.listLinkedWallWork` links
+  by project and `used_on` = work date and is read at generation time like every
+  other linked section. Editor section `08 Wall Construction` (later sections
+  renumbered 09–13), PDF section `Wall construction that day`, and a
+  `Wall Construction` workbook sheet share `describeWallConsumptionQuantity`, so
+  the three cannot disagree.
+- **Verification**: typecheck clean and the complete Vitest suite green. PDF
+  samples (bilingual headers, Stone and Ready Mix areas with openings, a saved
+  purpose, a corrected record, missing area, multiple walls, a 28-record wall
+  forcing a page break, and an empty day) were printed through headless Edge and
+  inspected page by page; the samples stayed outside the repository. The React
+  Native screens were verified by typecheck and source-contract tests only.
+  **Not yet verified on a physical device.**
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:

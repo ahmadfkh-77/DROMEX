@@ -6,19 +6,144 @@ export type WallMaterialType='ready_mix'|'site_mix'|'rebar'|'stone';
 export type ConcretePurpose='structural'|'filling'|'cyclopean_matrix'|'mortar'|'footing'|'coping';
 export type MaterialUnit='m3'|'tonnes';
 
+// DEC-450. The dimensions a user enters for a covered-area calculation, and the snapshot stored with
+// the consumption record once gross and net area have been derived from them.
+export type WallAreaDimensions={lengthM:number;heightM:number;deductionM2:number};
+export type WallAreaSnapshot=WallAreaDimensions&{grossAreaM2:number;netAreaM2:number};
+export type WallAreaInput={length:string;height:string;deduction:string};
+// DEC-451. A saved, reusable Concrete/Mortar purpose. Never renamed or deleted, so a record's label
+// snapshot and the saved label can never disagree.
+export type SavedConcretePurpose={id:string;label:string;createdAt:string};
+// DEC-452. Reasoned correction audit, the same shape used by loads, supplier loads, and fuel.
+export type WallCorrectionChange={field:string;originalValue:string|null;newValue:string|null};
+export type WallCorrectionEntry={correctedAt:string;correctedBy:string;reason:string;changes:WallCorrectionChange[]};
+
 export type WallDraft={projectId:string;name:string;system:WallSystem;purpose:WallPurpose;lengthM:number;heightM:number;bottomThicknessM:number;topThicknessM:number;deductionM3:number;allowancePercent:number;notes:string};
 export type Wall=WallDraft&{id:string;projectName:string;netVolumeM3:number;plannedVolumeM3:number;createdAt:string;updatedAt:string};
-export type WallConsumptionDraft={wallId:string;usedOn:string;type:WallMaterialType;concretePurpose:ConcretePurpose|null;finishedVolumeM3:number|null;cementBags:number|null;cementBagKg:number|null;sandQuantity:number|null;sandUnit:MaterialUnit|null;gravelQuantity:number|null;gravelUnit:MaterialUnit|null;waterLitres:number|null;admixtureQuantity:number|null;admixtureUnit:'litres'|'kg'|null;stoneQuantity:number|null;stoneUnit:MaterialUnit|null;rebarDiameterMm:number|null;rebarCount:number|null;rebarLengthEachM:number|null;rebarGrade:string;notes:string};
-export type WallConsumption=WallConsumptionDraft&{id:string;totalRebarLengthM:number|null;totalRebarKg:number|null;createdAt:string};
+export type WallConsumptionDraft={wallId:string;usedOn:string;type:WallMaterialType;concretePurpose:ConcretePurpose|null;customPurposeId?:string|null;finishedVolumeM3:number|null;cementBags:number|null;cementBagKg:number|null;sandQuantity:number|null;sandUnit:MaterialUnit|null;gravelQuantity:number|null;gravelUnit:MaterialUnit|null;waterLitres:number|null;admixtureQuantity:number|null;admixtureUnit:'litres'|'kg'|null;stoneQuantity:number|null;stoneUnit:MaterialUnit|null;rebarDiameterMm:number|null;rebarCount:number|null;rebarLengthEachM:number|null;rebarGrade:string;notes:string;area?:WallAreaDimensions|null};
+export type WallConsumptionCorrectionDraft=WallConsumptionDraft&{correctionReason:string};
+export type WallConsumption=Omit<WallConsumptionDraft,'customPurposeId'|'area'>&{id:string;customPurposeId:string|null;customPurposeLabel:string|null;area:WallAreaSnapshot|null;totalRebarLengthM:number|null;totalRebarKg:number|null;correctionHistory:WallCorrectionEntry[];createdAt:string;updatedAt:string|null};
 export type WallDetail={wall:Wall;entries:WallConsumption[]};
 export type WallSetup={projects:Project[]};
 
 export const wallSystemLabels:Record<WallSystem,string>={reinforced_concrete:'Reinforced concrete',rubble_masonry:'Stacked rock + mortar/concrete',cyclopean_concrete:'Concrete + embedded rocks'};
+export const wallPurposeLabels:Record<WallPurpose,string>={retaining:'Retaining wall',boundary:'Boundary / free-standing wall',other:'Other wall'};
 export const concretePurposeLabels:Record<ConcretePurpose,string>={structural:'Structural concrete',filling:'Filling concrete',cyclopean_matrix:'Cyclopean matrix concrete',mortar:'Stone-wall mortar/fill',footing:'Footing concrete',coping:'Coping concrete'};
+export const builtInConcretePurposes=(Object.keys(concretePurposeLabels) as ConcretePurpose[]).map(id=>({id,label:concretePurposeLabels[id]}));
+export const wallMaterialLabels:Record<WallMaterialType,string>={ready_mix:'Ready-mix concrete',site_mix:'Site-mixed concrete',rebar:'Steel rebar',stone:'Stone'};
 
-export function calculateWallVolume(lengthM:number,heightM:number,bottomThicknessM:number,topThicknessM:number,deductionM3=0,allowancePercent=0){const round=(value:number)=>Number(value.toFixed(9)),gross=round(lengthM*heightM*((bottomThicknessM+topThicknessM)/2)),net=round(Math.max(0,gross-Math.max(0,deductionM3))),allowance=round(net*Math.max(0,allowancePercent)/100);return{grossVolumeM3:gross,netVolumeM3:net,allowanceM3:allowance,plannedVolumeM3:round(net+allowance)};}
+const round=(value:number)=>Number(value.toFixed(9));
+const trimNumber=(value:number,digits:number)=>String(Number(value.toFixed(digits)));
+const unitSymbol=(unit:MaterialUnit|null)=>unit==='tonnes'?'t':'m³';
+
+/** DEC-450. The single wall face-area formula: length x height, less openings, never below zero. */
+export function calculateWallArea(lengthM:number,heightM:number,deductionM2=0){const gross=round(lengthM*heightM),deduction=round(Math.max(0,deductionM2));return{grossAreaM2:gross,deductionM2:deduction,netAreaM2:round(Math.max(0,gross-deduction))};}
+export function calculateWallVolume(lengthM:number,heightM:number,bottomThicknessM:number,topThicknessM:number,deductionM3=0,allowancePercent=0){const gross=round(calculateWallArea(lengthM,heightM).grossAreaM2*((bottomThicknessM+topThicknessM)/2)),net=round(Math.max(0,gross-Math.max(0,deductionM3))),allowance=round(net*Math.max(0,allowancePercent)/100);return{grossVolumeM3:gross,netVolumeM3:net,allowanceM3:allowance,plannedVolumeM3:round(net+allowance)};}
 export function rebarUnitWeightKgM(diameterMm:number){return Math.PI*(diameterMm/1000)**2/4*7850;}
 export function calculateRebar(diameterMm:number,count:number,lengthEachM:number){const totalLengthM=count*lengthEachM;return{totalLengthM,totalKg:totalLengthM*rebarUnitWeightKgM(diameterMm)};}
 
+export function supportsCoveredArea(type:WallMaterialType){return type==='stone'||type==='ready_mix';}
+export function formatWallArea(value:number|null|undefined){return value==null?'Area not recorded':`${value.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} m²`;}
+
+const areaMessages={length:'Wall length must be greater than zero with no more than three decimals.',height:'Wall height must be greater than zero with no more than three decimals.',deduction:'Openings and deductions must be zero or more with no more than three decimals.',exceeds:'Openings and deductions must be smaller than the gross wall area.'};
+const threeDecimals=/^\d+([.,]\d{1,3})?$/;
+const parseMetric=(value:string)=>{const text=value.trim();return threeDecimals.test(text)?Number(text.replace(',','.')):Number.NaN;};
+const hasThreeDecimalsAtMost=(value:number)=>Math.abs(value*1000-Math.round(value*1000))<1e-6;
+
+function areaIssues(dimensions:WallAreaDimensions){
+  const issues:string[]=[];
+  if(!Number.isFinite(dimensions.lengthM)||dimensions.lengthM<=0||!hasThreeDecimalsAtMost(dimensions.lengthM))issues.push(areaMessages.length);
+  if(!Number.isFinite(dimensions.heightM)||dimensions.heightM<=0||!hasThreeDecimalsAtMost(dimensions.heightM))issues.push(areaMessages.height);
+  if(!Number.isFinite(dimensions.deductionM2)||dimensions.deductionM2<0||!hasThreeDecimalsAtMost(dimensions.deductionM2))issues.push(areaMessages.deduction);
+  if(!issues.length&&dimensions.deductionM2>=calculateWallArea(dimensions.lengthM,dimensions.heightM).grossAreaM2)issues.push(areaMessages.exceeds);
+  return issues;
+}
+/** Builds the stored snapshot from validated dimensions; throws when the dimensions are invalid. */
+export function wallAreaSnapshot(dimensions:WallAreaDimensions):WallAreaSnapshot{const issue=areaIssues(dimensions)[0];if(issue)throw new Error(issue);const result=calculateWallArea(dimensions.lengthM,dimensions.heightM,dimensions.deductionM2);return{lengthM:dimensions.lengthM,heightM:dimensions.heightM,deductionM2:result.deductionM2,grossAreaM2:result.grossAreaM2,netAreaM2:result.netAreaM2};}
+/** Parses the calculator's text fields. An empty deduction means no openings. */
+export function parseWallAreaInput(input:WallAreaInput):{snapshot:WallAreaSnapshot|null;issues:string[]}{
+  const issues:string[]=[];
+  if(!input.length.trim())issues.push('Enter the wall length in metres.');
+  if(!input.height.trim())issues.push('Enter the wall height in metres.');
+  if(issues.length)return{snapshot:null,issues};
+  const dimensions={lengthM:parseMetric(input.length),heightM:parseMetric(input.height),deductionM2:input.deduction.trim()?parseMetric(input.deduction):0};
+  const found=areaIssues(dimensions);
+  return found.length?{snapshot:null,issues:found}:{snapshot:wallAreaSnapshot(dimensions),issues:[]};
+}
+
+export function normalizePurposeLabel(label:string){return label.trim().replace(/\s+/g,' ');}
+export function purposeKey(label:string){return normalizePurposeLabel(label).toLocaleLowerCase('en-US');}
+export function validateNewPurposeLabel(label:string,saved:SavedConcretePurpose[]){
+  const clean=normalizePurposeLabel(label);
+  if(!clean)return['Enter a purpose name.'];
+  if(clean.length>60)return['Purpose name must be 60 characters or fewer.'];
+  const existing=[...builtInConcretePurposes,...saved].find(value=>purposeKey(value.label)===purposeKey(clean));
+  return existing?[`A purpose named “${existing.label}” already exists.`]:[];
+}
+export function wallConsumptionPurposeLabel(entry:Pick<WallConsumption,'concretePurpose'|'customPurposeLabel'>){return entry.concretePurpose?concretePurposeLabels[entry.concretePurpose]:entry.customPurposeLabel??null;}
+
 export function validateWall(draft:WallDraft,projects:Project[]){const issues:string[]=[];if(!projects.some(value=>value.id===draft.projectId&&value.status==='active'))issues.push('Select an active project.');if(!draft.name.trim())issues.push('Enter a wall or section name.');if(draft.lengthM<=0||draft.heightM<=0)issues.push('Length and height must be greater than zero.');if(draft.bottomThicknessM<=0||draft.topThicknessM<=0)issues.push('Bottom and top thickness must be greater than zero.');if(draft.deductionM3<0||draft.allowancePercent<0)issues.push('Deductions and allowance cannot be negative.');if(calculateWallVolume(draft.lengthM,draft.heightM,draft.bottomThicknessM,draft.topThicknessM,draft.deductionM3).netVolumeM3<=0)issues.push('Wall net volume must be greater than zero.');return issues;}
-export function validateWallConsumption(draft:WallConsumptionDraft){const issues:string[]=[];if(!draft.usedOn)issues.push('Choose the consumption date.');if(draft.type==='ready_mix'&&(!(draft.finishedVolumeM3!>0)||!draft.concretePurpose))issues.push('Choose the concrete purpose and enter used m³.');if(draft.type==='site_mix'){const hasIngredient=(draft.finishedVolumeM3??0)>0||(draft.cementBags??0)>0||(draft.sandQuantity??0)>0||(draft.gravelQuantity??0)>0||(draft.waterLitres??0)>0||(draft.admixtureQuantity??0)>0;if(!draft.concretePurpose)issues.push('Choose the site-mix purpose.');if(!hasIngredient)issues.push('Enter at least one site-mixed quantity.');}if(draft.type==='rebar'&&(!(draft.rebarDiameterMm!>0)||!(draft.rebarCount!>0)||!(draft.rebarLengthEachM!>0)))issues.push('Enter rebar diameter, number of bars, and length per bar.');if(draft.type==='stone'&&(!(draft.stoneQuantity!>0)||!draft.stoneUnit))issues.push('Enter the stone quantity and unit.');return issues;}
+export function validateWallConsumption(draft:WallConsumptionDraft){
+  const issues:string[]=[],concrete=draft.type==='ready_mix'||draft.type==='site_mix',hasPurpose=!!draft.concretePurpose||!!draft.customPurposeId;
+  if(!draft.usedOn)issues.push('Choose the consumption date.');
+  if(concrete&&draft.concretePurpose&&draft.customPurposeId)issues.push('Choose one concrete / mortar purpose.');
+  if(!concrete&&(draft.concretePurpose||draft.customPurposeId))issues.push('A concrete / mortar purpose applies only to ready-mix and site-mixed records.');
+  if(draft.type==='ready_mix'&&(!(draft.finishedVolumeM3!>0)||!hasPurpose))issues.push('Choose the concrete purpose and enter used m³.');
+  if(draft.type==='site_mix'){const hasIngredient=(draft.finishedVolumeM3??0)>0||(draft.cementBags??0)>0||(draft.sandQuantity??0)>0||(draft.gravelQuantity??0)>0||(draft.waterLitres??0)>0||(draft.admixtureQuantity??0)>0;if(!hasPurpose)issues.push('Choose the site-mix purpose.');if(!hasIngredient)issues.push('Enter at least one site-mixed quantity.');}
+  if(draft.type==='rebar'&&(!(draft.rebarDiameterMm!>0)||!(draft.rebarCount!>0)||!(draft.rebarLengthEachM!>0)))issues.push('Enter rebar diameter, number of bars, and length per bar.');
+  if(draft.type==='stone'&&(!(draft.stoneQuantity!>0)||!draft.stoneUnit))issues.push('Enter the stone quantity and unit.');
+  if(draft.area){if(!supportsCoveredArea(draft.type))issues.push('Covered area can be recorded only for Stone and Ready Mix.');else issues.push(...areaIssues(draft.area));}
+  return issues;
+}
+
+/** One quantity sentence shared by the wall screen, the Daily Report PDF, and the workbook. Missing values are omitted, never shown as zero. */
+export function describeWallConsumptionQuantity(entry:WallConsumption){
+  if(entry.type==='rebar')return `${trimNumber(entry.rebarCount??0,0)} bars × ${trimNumber(entry.rebarLengthEachM??0,3)} m${entry.totalRebarKg==null?'':` · ${entry.totalRebarKg.toFixed(1)} kg`}`;
+  if(entry.type==='stone')return entry.stoneQuantity==null?'Quantity not recorded':`${trimNumber(entry.stoneQuantity,3)} ${unitSymbol(entry.stoneUnit)} stone`;
+  if(entry.type==='ready_mix')return entry.finishedVolumeM3==null?'Quantity not recorded':`${trimNumber(entry.finishedVolumeM3,3)} m³`;
+  const parts=[
+    entry.finishedVolumeM3==null?null:`${trimNumber(entry.finishedVolumeM3,3)} m³ finished`,
+    entry.cementBags==null?null:`${trimNumber(entry.cementBags,2)} cement bags`,
+    entry.sandQuantity==null?null:`${trimNumber(entry.sandQuantity,3)} ${unitSymbol(entry.sandUnit)} sand`,
+    entry.gravelQuantity==null?null:`${trimNumber(entry.gravelQuantity,3)} ${unitSymbol(entry.gravelUnit)} gravel`,
+    entry.waterLitres==null?null:`${trimNumber(entry.waterLitres,1)} L water`,
+    entry.admixtureQuantity==null?null:`${trimNumber(entry.admixtureQuantity,3)} ${entry.admixtureUnit==='kg'?'kg':'L'} admixture`,
+  ].filter((part):part is string=>!!part);
+  return parts.length?parts.join(' · '):'Quantity not recorded';
+}
+
+const text=(value:number|null|undefined)=>value==null?null:String(value);
+const quantity=(value:number|null,unit:MaterialUnit|'litres'|'kg'|null)=>value==null?null:`${value} ${unit==='tonnes'?'t':unit==='litres'?'L':unit==='kg'?'kg':'m³'}`;
+function correctionFields(entry:WallConsumption):[string,string|null][]{
+  return [
+    ['Used on',entry.usedOn],['Material',wallMaterialLabels[entry.type]],['Concrete / mortar purpose',wallConsumptionPurposeLabel(entry)],
+    ['Concrete volume (m³)',text(entry.finishedVolumeM3)],['Cement bags',text(entry.cementBags)],['Kilograms per cement bag',text(entry.cementBagKg)],
+    ['Sand',quantity(entry.sandQuantity,entry.sandUnit)],['Gravel / aggregate',quantity(entry.gravelQuantity,entry.gravelUnit)],['Water (L)',text(entry.waterLitres)],
+    ['Admixture',quantity(entry.admixtureQuantity,entry.admixtureUnit)],['Stone',quantity(entry.stoneQuantity,entry.stoneUnit)],
+    ['Rebar diameter (mm)',text(entry.rebarDiameterMm)],['Number of bars',text(entry.rebarCount)],['Length per bar (m)',text(entry.rebarLengthEachM)],['Rebar grade',entry.rebarGrade.trim()||null],
+    ['Area length (m)',text(entry.area?.lengthM)],['Area height (m)',text(entry.area?.heightM)],['Openings / deductions (m²)',text(entry.area?.deductionM2)],
+    ['Gross area (m²)',text(entry.area?.grossAreaM2)],['Net covered area (m²)',text(entry.area?.netAreaM2)],['Notes',entry.notes.trim()||null],
+  ];
+}
+/** DEC-452. Field-level before/after changes between a stored record and its proposed correction. */
+export function diffWallConsumption(before:WallConsumption,after:WallConsumption):WallCorrectionChange[]{
+  const next=new Map(correctionFields(after));
+  return correctionFields(before).flatMap(([field,originalValue])=>{const newValue=next.get(field)??null;return originalValue===newValue?[]:[{field,originalValue,newValue}];});
+}
+
+export type WallConsumptionSummary={structural:number;filling:number;otherConcrete:number;cement:number;cementKg:number;water:number;rebarKg:number;stoneM3:number;stoneT:number;sandM3:number;sandT:number;gravelM3:number;gravelT:number;readyMixAreaM2:number;stoneAreaM2:number;areaRecords:number};
+export function summarizeWallConsumption(entries:WallConsumption[]):WallConsumptionSummary{
+  const sum=(filter:(entry:WallConsumption)=>boolean,value:(entry:WallConsumption)=>number)=>round(entries.filter(filter).reduce((total,entry)=>total+value(entry),0));
+  const all=()=>true,volume=(entry:WallConsumption)=>entry.finishedVolumeM3??0;
+  return{
+    structural:sum(entry=>entry.concretePurpose==='structural',volume),
+    filling:sum(entry=>entry.concretePurpose==='filling'||entry.concretePurpose==='mortar',volume),
+    otherConcrete:sum(entry=>!!entry.customPurposeId||entry.concretePurpose==='cyclopean_matrix'||entry.concretePurpose==='footing'||entry.concretePurpose==='coping',volume),
+    cement:sum(all,entry=>entry.cementBags??0),cementKg:sum(all,entry=>(entry.cementBags??0)*(entry.cementBagKg??0)),water:sum(all,entry=>entry.waterLitres??0),rebarKg:sum(all,entry=>entry.totalRebarKg??0),
+    stoneM3:sum(entry=>entry.stoneUnit==='m3',entry=>entry.stoneQuantity??0),stoneT:sum(entry=>entry.stoneUnit==='tonnes',entry=>entry.stoneQuantity??0),
+    sandM3:sum(entry=>entry.sandUnit==='m3',entry=>entry.sandQuantity??0),sandT:sum(entry=>entry.sandUnit==='tonnes',entry=>entry.sandQuantity??0),
+    gravelM3:sum(entry=>entry.gravelUnit==='m3',entry=>entry.gravelQuantity??0),gravelT:sum(entry=>entry.gravelUnit==='tonnes',entry=>entry.gravelQuantity??0),
+    readyMixAreaM2:sum(entry=>entry.type==='ready_mix',entry=>entry.area?.netAreaM2??0),stoneAreaM2:sum(entry=>entry.type==='stone',entry=>entry.area?.netAreaM2??0),
+    areaRecords:entries.filter(entry=>entry.area).length,
+  };
+}

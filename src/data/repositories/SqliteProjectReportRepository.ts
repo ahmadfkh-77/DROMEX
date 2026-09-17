@@ -1,8 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { FuelType } from '../../domain/fuel';
-import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedFuelFill, LinkedProjectLoad, LinkedQuarryLoad, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption, WorkerSafetyEntry } from '../../domain/projectReports';
+import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedFuelFill, LinkedProjectLoad, LinkedQuarryLoad, LinkedWallWork, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption, WorkerSafetyEntry } from '../../domain/projectReports';
 import { validateDailyReport } from '../../domain/projectReports';
+import { wallConsumptionFromRow, type WallConsumptionRow } from './SqliteWallRepository';
 import type { ProjectReportRepository } from './ProjectReportRepository';
 
 type ReportRow = {
@@ -130,6 +131,18 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   async listLinkedFuelFills(projectId:string,workDate:string):Promise<LinkedFuelFill[]> {
     const rows=await this.db.getAllAsync<{id:string;confirmed_at:string;equipment_name:string;fuel_type:FuelType;litres:number;price_per_litre_usd_cents:number|null;consumption_cost_usd_cents:number|null;odometer_reading:string|null;notes:string|null}>(`SELECT id,confirmed_at,equipment_name,fuel_type,litres,price_per_litre_usd_cents,consumption_cost_usd_cents,odometer_reading,notes FROM fuel_movements WHERE project_id=? AND movement_type='fill' AND status='Active' AND date(confirmed_at,'localtime')=? ORDER BY confirmed_at`,projectId,workDate);
     return rows.map(row=>({id:row.id,confirmedAt:row.confirmed_at,equipmentName:row.equipment_name??'Unknown equipment',fuelType:row.fuel_type,litres:row.litres,pricePerLitreUsd:row.price_per_litre_usd_cents==null?null:row.price_per_litre_usd_cents/100,consumptionCostUsd:row.consumption_cost_usd_cents==null?null:row.consumption_cost_usd_cents/100,odometerReading:row.odometer_reading,notes:row.notes}));
+  }
+
+  async listLinkedWallWork(projectId: string, workDate: string): Promise<LinkedWallWork[]> {
+    const rows=await this.db.getAllAsync<WallConsumptionRow&{w_name:string;w_system:LinkedWallWork['system'];w_purpose:LinkedWallWork['purpose'];w_length_m:number;w_height_m:number;w_bottom_thickness_m:number;w_top_thickness_m:number;w_net_volume_m3:number;w_planned_volume_m3:number}>(`SELECT wc.*,w.name w_name,w.system w_system,w.purpose w_purpose,w.length_m w_length_m,w.height_m w_height_m,w.bottom_thickness_m w_bottom_thickness_m,w.top_thickness_m w_top_thickness_m,w.net_volume_m3 w_net_volume_m3,w.planned_volume_m3 w_planned_volume_m3
+      FROM wall_consumptions wc JOIN walls w ON w.id=wc.wall_id JOIN projects p ON p.id=w.project_id
+      WHERE w.project_id=? AND wc.used_on=? AND p.is_archived=0 ORDER BY w.name COLLATE NOCASE,w.id,wc.created_at`,projectId,workDate);
+    const groups=new Map<string,LinkedWallWork>();
+    for(const row of rows){
+      const group=groups.get(row.wall_id)??{wallId:row.wall_id,wallName:row.w_name,system:row.w_system,purpose:row.w_purpose,lengthM:row.w_length_m,heightM:row.w_height_m,bottomThicknessM:row.w_bottom_thickness_m,topThicknessM:row.w_top_thickness_m,netVolumeM3:row.w_net_volume_m3,plannedVolumeM3:row.w_planned_volume_m3,entries:[]};
+      group.entries.push(wallConsumptionFromRow(row));groups.set(row.wall_id,group);
+    }
+    return [...groups.values()];
   }
 
   async listLinkedWasteDumps(projectId: string, workDate: string): Promise<LinkedWasteDump[]> {

@@ -102,6 +102,15 @@ const ARABIC_LABELS: Record<string, string> = {
   'Daily reports by project': 'التقارير اليومية حسب المشروع', 'Financial overview (USD)': 'نظرة مالية عامة (دولار)',
   'Operational record counts': 'أعداد السجلات التشغيلية',
   Sheet: 'ورقة', Purpose: 'الغرض', Photo: 'الصورة', 'File name': 'اسم الملف', 'Work performed': 'العمل المنفذ',
+  // DEC-453 Daily Report Wall Construction sheet.
+  'Wall Construction': 'أعمال الجدران', 'Wall ID': 'معرف الجدار', Wall: 'الجدار', 'Wall System': 'نظام الجدار',
+  'Wall Length m': 'طول الجدار م', 'Wall Height m': 'ارتفاع الجدار م', 'Wall Planned Volume m³': 'الحجم المخطط للجدار م³',
+  'Used On': 'تاريخ الاستخدام', 'Purpose Source': 'مصدر الغرض', 'Ready-Mix or Finished m³': 'الخرسانة الجاهزة أو المنجزة م³',
+  'Cement Bags': 'أكياس الإسمنت', 'Sand Quantity': 'كمية الرمل', 'Sand Unit': 'وحدة الرمل', 'Gravel Quantity': 'كمية الحصى', 'Gravel Unit': 'وحدة الحصى',
+  'Water L': 'الماء لتر', 'Admixture Quantity': 'كمية المضافات', 'Admixture Unit': 'وحدة المضافات', 'Stone Quantity': 'كمية الحجر', 'Stone Unit': 'وحدة الحجر',
+  'Rebar Diameter mm': 'قطر حديد التسليح مم', 'Rebar Bars': 'عدد قضبان التسليح', 'Rebar Length Each m': 'طول القضيب م', 'Rebar kg': 'حديد التسليح كغ',
+  'Area Length m': 'طول المساحة م', 'Area Height m': 'ارتفاع المساحة م', 'Openings m²': 'الفتحات م²', 'Gross Area m²': 'المساحة الإجمالية م²',
+  'Net Covered Area m²': 'صافي المساحة المغطاة م²', 'Area Status': 'حالة المساحة', Corrections: 'التصحيحات', 'Last Correction Reason': 'سبب آخر تصحيح',
 };
 
 const ARABIC_VALUES: Record<string, string> = {

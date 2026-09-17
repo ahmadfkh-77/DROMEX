@@ -2076,3 +2076,37 @@ confirmed before the rename still displays its original project name.
 ### Status
 
 Implemented, released in build 17, and accepted after device verification.
+
+---
+
+## 2026-09-17 — Wall Construction consumption, area, purposes, and corrections
+
+**Trigger**: Owner directive to add covered area for Stone and Ready Mix, saved
+Concrete/Mortar purposes, reasoned consumption corrections, and a Daily Report
+Wall Construction section (DEC-450 to DEC-453), with the design skills applied as
+a refinement inside the committed ledger identity.
+
+### Critique of the previous screen
+
+- Missing quantities printed as zero (`0 cement bags`, `0.00 m³` metric cards).
+- Validation errors appeared only at the top of a long page, away from the action.
+- Consumption History was read-only with no way to correct a wrong entry.
+- The wall row nested an Edit touchable inside the row touchable.
+
+### Changes
+
+- One `WallConsumptionForm` for recording and for in-place correction, with the
+  error shown directly above the failed action and values preserved.
+- `WallAreaCalculator`: progressive disclosure in Calc Result Teal with gross,
+  openings, and net results beside the inputs.
+- `ConcretePurposeField`: built-in and saved purposes in one selector and a
+  focused Add new purpose form that selects the saved purpose.
+- `WallConsumptionHistory`: expandable records, correction trail, and a
+  non-destructive Correct This Record action.
+- Metrics show only recorded totals; the Edit action has its own touch target.
+- Daily Report editor section 08, PDF section, and workbook sheet (see DESIGN.md).
+
+### Status
+
+Implemented on `feature/android-wall-consumption-improvements`. PDF output was
+inspected through the real print engine. Not yet verified on a physical device.

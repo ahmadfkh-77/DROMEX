@@ -1,5 +1,6 @@
 import type {FuelType} from './fuel';
 import type {ConsultingAgencyOption} from './profiles';
+import type {WallConsumption,WallPurpose,WallSystem} from './walls';
 export type ReportProjectStatus = 'active' | 'completed';
 export type MaterialMovement = 'used' | 'transported';
 export type WorkerSafetyStatus = 'compliant' | 'missing' | 'not_checked';
@@ -95,7 +96,11 @@ export type LinkedProjectLoad = {
 export type LinkedQuarryLoad = { id:string; purchaseNumber:string; confirmedAt:string; supplierName:string; itemName:string; quantity:number; unitSymbol:string; deliveryMethod:'company'|'supplier'; deliveryLabel:string; truckPlate:string|null; supplierTicketNumber:string|null; notes:string|null; unitPriceUsd?:number|null;subtotalUsd?:number|null;vatAmountUsd?:number|null;finalTotalUsd?:number|null };
 export type LinkedFuelFill = {id:string;confirmedAt:string;equipmentName:string;fuelType:FuelType;litres:number;pricePerLitreUsd:number|null;consumptionCostUsd:number|null;odometerReading:string|null;notes:string|null};
 export type LinkedWasteDump = { id: string; dumpedAt: string; materialType: string; dumpLocation: string; truckPlate: string | null; driverName: string | null };
-export type ProjectCompletionLoad = LinkedProjectLoad & { workDate: string };
+// DEC-453. Wall construction read live for a Daily Report, like every other linked section: each
+// consumption record whose wall belongs to the report's project and whose used-on date equals the work
+// date, grouped by wall. Corrections therefore appear in the next generated export.
+export type LinkedWallWork = { wallId:string; wallName:string; system:WallSystem; purpose:WallPurpose; lengthM:number; heightM:number; bottomThicknessM:number; topThicknessM:number; netVolumeM3:number; plannedVolumeM3:number; entries:WallConsumption[] };
+export type ProjectCompletionLoad =LinkedProjectLoad & { workDate: string };
 export type ProjectCompletionWasteDump = LinkedWasteDump & { workDate: string };
 
 export type ProjectReportSetup = {
