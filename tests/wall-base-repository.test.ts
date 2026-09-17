@@ -47,7 +47,7 @@ async function cureBase(walls:SqliteWallRepository,wallId:string){
 }
 
 describe('migration 40: wall base and curing lifecycle',()=>{
-  it('is the current database version',()=>{expect(DATABASE_VERSION).toBe(40);});
+  it('is at least version 40 (later migrations may have advanced it further)',()=>{expect(DATABASE_VERSION).toBeGreaterThanOrEqual(40);});
 
   it('emits the version 40 step through execAsync alone, changing no existing record',async()=>{
     const statements:string[]=[];
@@ -56,7 +56,7 @@ describe('migration 40: wall base and curing lifecycle',()=>{
     expect(statements.some(sql=>sql.includes('CREATE TABLE IF NOT EXISTS wall_bases'))).toBe(true);
     expect(statements.some(sql=>sql.includes('ADD COLUMN base_required'))).toBe(true);
     expect(statements.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 40');
+    expect(statements.at(-1)).toBe(`PRAGMA user_version = ${DATABASE_VERSION}`);
   });
 
   it('upgrades a version 39 database, leaving existing walls usable as legacy walls',async()=>{
@@ -68,7 +68,7 @@ describe('migration 40: wall base and curing lifecycle',()=>{
     db.raw.exec("DROP TABLE wall_bases; ALTER TABLE walls DROP COLUMN base_required; PRAGMA user_version = 39;");
     await migrateDatabase(db as never);
     await migrateDatabase(db as never);
-    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:40});
+    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:DATABASE_VERSION});
     expect(db.raw.prepare('SELECT id,name,bottom_thickness_m FROM walls').all()).toEqual(before);
     // The wall existed before the rule, so it stays usable and is never given an invented base.
     const detail=await walls.getWall(wall.id);

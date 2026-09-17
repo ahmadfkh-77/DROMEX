@@ -2127,3 +2127,42 @@ generated technical figure and an ordered layer editor (DEC-457). `WallBaseWorkf
 where a wall section records its base, marks it constructed, tracks curing, and unlocks wall work only
 through an explicit cured confirmation (DEC-459). Walls created before the rule stay usable and are
 labelled as legacy walls with no base recorded.
+
+### Addendum — 2026-09-17, composite foundation model (DEC-461)
+
+Audited the existing base workflow before building on top of it: `WallBaseWorkflow`'s four-stage
+strip, cream lock banner, and single-action lifecycle controls were already close to the guided,
+one-primary-action pattern this phase's brief asked for, so this addition extends that pattern
+rather than rebuilding it. What changed:
+
+- **New domain module** `src/domain/wallFoundation.ts`: Simple/Detailed Stone-core modes, position
+  clamping and nudging (the accessible alternative to a drag gesture), detailed-offset containment
+  validation, active-quantity aggregation excluding cancelled records, the capacity refusal in both
+  directions (recording too much Stone, and correcting the base geometry down below what is already
+  recorded), estimated concrete, and actual-vs-estimated variance. 36 unit tests, written before the
+  implementation and kept as the RED-then-GREEN record of this phase.
+- **New diagram module** `src/domain/wallFoundationDiagram.ts`: draws the Stone core inside the
+  outer foundation boundary — never beside it — with the surrounding region visually distinct as
+  "estimated" versus "poured", reusing the existing `wallDiagramToSvg` serializer rather than
+  duplicating it. 8 tests, including an outer-boundary-only planned state, simple vs. detailed core
+  rendering, the estimated/poured distinction, and XML-escaping of an injected label.
+- **Repository**: `wall_base_composition_records` (migration 41) holds each Stone/Ready-Mix entry
+  as its own cancellable, correctable row, mirroring the existing wall-consumption correction model
+  instead of introducing a second one. 20 repository tests, plus 2 migration tests confirming the
+  step is additive and every existing base defaults to single mode.
+- **New screen component** `FoundationCompositionCard.tsx`, mounted inside `WallBaseWorkflow`
+  beneath the existing base summary, additive to (never replacing) the base's single
+  materialType/quantity field: a mode toggle, the technical preview, Simple-mode nudge buttons with
+  a Reset-to-Centre action, Detailed-mode numeric offset fields, a record-entry form, and a per-record
+  Cancel/Correct list.
+- **Deliberately not built in this phase**, and called out as open in DEC-461 rather than left
+  unstated: the requested 5-stage guided-workflow redesign of the whole Wall Construction screen
+  (this addition extends the existing base workflow instead), and Daily Report PDF/workbook
+  representation of the composite breakdown. Both are recommended as the next phase.
+
+### Status
+
+Domain, migration, repository, diagram, and screen wiring implemented on
+`feature/android-wall-consumption-improvements`. Typecheck clean; 734 Vitest tests green across 64
+files. Not yet verified on a physical device or in Expo Go — the Owner will test the guided base
+workflow and the new Foundation composition card there.

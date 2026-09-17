@@ -3,10 +3,12 @@ import type {Project} from '../../domain/loads';
 import {calculateRebar,calculateWallVolume,diffWallConsumption,normalizePurposeLabel,purposeKey,validateNewPurposeLabel,validateWall,validateWallConsumption,wallVolumeSnapshot,type SavedConcretePurpose,type Wall,type WallConsumption,type WallConsumptionCorrectionDraft,type WallConsumptionDraft,type WallCorrectionEntry,type WallDetail,type WallDraft,type WallSetup} from '../../domain/walls';
 import {calculateBaseVolume,describeWallStageLock,validateBaseLifecycle,validateBaseStatusChange,validateWallBase,validateWallWorkDate,type BaseStatusChange,type WallBase,type WallBaseCorrectionDraft,type WallBaseDraft} from '../../domain/wallBase';
 import {sortedLayers,validateWallLayers,type WallLayer,type WallLayerDraft} from '../../domain/wallDiagram';
+import {aggregateActiveQuantity,buildFoundationComposition,defaultStoneCorePosition,validateCompositionRecordDraft,validateFoundationVolumeAgainstStone,validateStoneCapacity,validateStoneCoreOffsets,type FoundationComposition,type FoundationCompositionCorrectionDraft,type FoundationCompositionMode,type FoundationCompositionRecord,type FoundationCompositionRecordDraft,type StoneCoreMode,type StoneCoreOffsets,type StoneCorePosition} from '../../domain/wallFoundation';
 import type {WallRepository} from './WallRepository';
 
 type LayerRow={id:string;wall_id:string;phase_order:number;name:string;material_key:string|null;bottom_thickness_m:number;top_thickness_m:number;note:string|null;created_at:string;updated_at:string|null};
-type BaseRow={id:string;wall_id:string;reference:string;location:string|null;length_m:number;height_m:number;bottom_thickness_m:number;top_thickness_m:number;deduction_m3:number;gross_volume_m3:number;net_volume_m3:number;material_type:WallBase['materialType'];concrete_purpose:WallBase['concretePurpose'];custom_purpose_id:string|null;custom_purpose_label:string|null;quantity:number;quantity_unit:WallBase['quantityUnit'];manual_override:number;consumption_date:string|null;status:WallBase['status'];constructed_on:string|null;curing_started_on:string|null;cured_on:string|null;curing_note:string|null;notes:string|null;correction_history_json:string|null;created_at:string;updated_at:string|null};
+type BaseRow={id:string;wall_id:string;reference:string;location:string|null;length_m:number;height_m:number;bottom_thickness_m:number;top_thickness_m:number;deduction_m3:number;gross_volume_m3:number;net_volume_m3:number;material_type:WallBase['materialType'];concrete_purpose:WallBase['concretePurpose'];custom_purpose_id:string|null;custom_purpose_label:string|null;quantity:number;quantity_unit:WallBase['quantityUnit'];manual_override:number;consumption_date:string|null;status:WallBase['status'];constructed_on:string|null;curing_started_on:string|null;cured_on:string|null;curing_note:string|null;notes:string|null;correction_history_json:string|null;created_at:string;updated_at:string|null;foundation_mode?:FoundationCompositionMode;stone_core_mode?:StoneCoreMode|null;stone_core_position_x?:number|null;stone_core_position_y?:number|null;stone_core_offsets_json?:string|null};
+type CompositionRow={id:string;base_id:string;wall_id:string;material_type:FoundationCompositionRecord['materialType'];quantity_m3:number;recorded_on:string;notes:string|null;cancelled_at:string|null;cancelled_reason:string|null;correction_history_json:string|null;created_at:string;updated_at:string|null};
 type WallRow={id:string;project_id:string;project_name:string;base_required?:number;name:string;system:Wall['system'];purpose:Wall['purpose'];length_m:number;height_m:number;bottom_thickness_m:number;top_thickness_m:number;deduction_m3:number;allowance_percent:number;net_volume_m3:number;planned_volume_m3:number;notes:string|null;created_at:string;updated_at:string};
 export type WallConsumptionRow={id:string;wall_id:string;used_on:string;material_type:WallConsumption['type'];concrete_purpose:WallConsumption['concretePurpose'];custom_purpose_id:string|null;custom_purpose_label:string|null;finished_volume_m3:number|null;cement_bags:number|null;cement_bag_kg:number|null;sand_quantity:number|null;sand_unit:WallConsumption['sandUnit'];gravel_quantity:number|null;gravel_unit:WallConsumption['gravelUnit'];water_litres:number|null;admixture_quantity:number|null;admixture_unit:WallConsumption['admixtureUnit'];stone_quantity:number|null;stone_unit:WallConsumption['stoneUnit'];rebar_diameter_mm:number|null;rebar_count:number|null;rebar_length_each_m:number|null;total_rebar_length_m:number|null;total_rebar_kg:number|null;rebar_grade:string|null;notes:string|null;volume_length_m:number|null;volume_height_m:number|null;volume_bottom_thickness_m:number|null;volume_top_thickness_m:number|null;volume_deduction_m3:number|null;volume_gross_m3:number|null;volume_net_m3:number|null;correction_history_json:string|null;created_at:string;updated_at:string|null};
 const id=(prefix:string)=>`${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
@@ -16,6 +18,8 @@ const layerFromRow=(row:LayerRow):WallLayer=>({id:row.id,wallId:row.wall_id,phas
 const baseFromRow=(row:BaseRow):WallBase=>({id:row.id,wallId:row.wall_id,reference:row.reference,location:row.location??'',lengthM:row.length_m,heightM:row.height_m,bottomThicknessM:row.bottom_thickness_m,topThicknessM:row.top_thickness_m,deductionM3:row.deduction_m3,grossVolumeM3:row.gross_volume_m3,netVolumeM3:row.net_volume_m3,materialType:row.material_type,concretePurpose:row.concrete_purpose,customPurposeId:row.custom_purpose_id,customPurposeLabel:row.custom_purpose_label,quantity:row.quantity,quantityUnit:row.quantity_unit,manualOverride:row.manual_override===1,consumptionDate:row.consumption_date,status:row.status,constructedOn:row.constructed_on,curingStartedOn:row.curing_started_on,curedOn:row.cured_on,curingNote:row.curing_note??'',notes:row.notes??'',correctionHistory:parseCorrections(row.correction_history_json),createdAt:row.created_at,updatedAt:row.updated_at});
 const baseFields=(base:WallBase):[string,string|null][]=>[['Base reference',base.reference],['Base location',base.location.trim()||null],['Base length (m)',String(base.lengthM)],['Base height (m)',String(base.heightM)],['Base bottom thickness (m)',String(base.bottomThicknessM)],['Base top thickness (m)',String(base.topThicknessM)],['Base deductions (m³)',String(base.deductionM3)],['Calculated gross volume (m³)',String(base.grossVolumeM3)],['Calculated net volume (m³)',String(base.netVolumeM3)],['Base material',base.materialType],['Base purpose',base.customPurposeLabel??base.concretePurpose??null],['Recorded quantity',`${base.quantity} ${base.quantityUnit==='tonnes'?'t':'m³'}`],['Manual override',base.manualOverride?'Yes':'No'],['Consumption date',base.consumptionDate],['Construction date',base.constructedOn],['Curing started',base.curingStartedOn],['Cured date',base.curedOn],['Curing note',base.curingNote.trim()||null],['Base notes',base.notes.trim()||null]];
 const parseCorrections=(value:string|null):WallCorrectionEntry[]=>{try{const parsed=JSON.parse(value??'[]') as unknown;return Array.isArray(parsed)?parsed as WallCorrectionEntry[]:[];}catch{return[];}};
+const compositionRecordFromRow=(row:CompositionRow):FoundationCompositionRecord=>({id:row.id,baseId:row.base_id,wallId:row.wall_id,materialType:row.material_type,quantityM3:row.quantity_m3,recordedOn:row.recorded_on,notes:row.notes??'',cancelledAt:row.cancelled_at,cancelledReason:row.cancelled_reason,correctionHistory:parseCorrections(row.correction_history_json),createdAt:row.created_at,updatedAt:row.updated_at});
+const parseOffsets=(value:string|null|undefined):StoneCoreOffsets|null=>{if(!value)return null;try{return JSON.parse(value) as StoneCoreOffsets;}catch{return null;}};
 /** Shared with the Daily Report repository so both read a consumption row identically. */
 export const wallConsumptionFromRow=(row:WallConsumptionRow):WallConsumption=>({id:row.id,wallId:row.wall_id,usedOn:row.used_on,type:row.material_type,concretePurpose:row.concrete_purpose,customPurposeId:row.custom_purpose_id??null,customPurposeLabel:row.custom_purpose_label??null,finishedVolumeM3:row.finished_volume_m3,cementBags:row.cement_bags,cementBagKg:row.cement_bag_kg,sandQuantity:row.sand_quantity,sandUnit:row.sand_unit,gravelQuantity:row.gravel_quantity,gravelUnit:row.gravel_unit,waterLitres:row.water_litres,admixtureQuantity:row.admixture_quantity,admixtureUnit:row.admixture_unit,stoneQuantity:row.stone_quantity,stoneUnit:row.stone_unit,rebarDiameterMm:row.rebar_diameter_mm,rebarCount:row.rebar_count,rebarLengthEachM:row.rebar_length_each_m,totalRebarLengthM:row.total_rebar_length_m,totalRebarKg:row.total_rebar_kg,rebarGrade:row.rebar_grade??'',notes:row.notes??'',volume:row.volume_net_m3==null?null:{lengthM:row.volume_length_m!,heightM:row.volume_height_m!,bottomThicknessM:row.volume_bottom_thickness_m!,topThicknessM:row.volume_top_thickness_m!,deductionM3:row.volume_deduction_m3!,grossVolumeM3:row.volume_gross_m3!,netVolumeM3:row.volume_net_m3},correctionHistory:parseCorrections(row.correction_history_json),createdAt:row.created_at,updatedAt:row.updated_at??null});
 
@@ -158,6 +162,9 @@ export class SqliteWallRepository implements WallRepository{
     if(!reason)throw new Error('A correction reason is required.');
     const issue=validateWallBase(draft)[0];if(issue)throw new Error(issue);
     const volume=calculateBaseVolume(draft);
+    // DEC-461. A geometry correction can never silently strand Stone already recorded against this base.
+    const capacityIssue=validateFoundationVolumeAgainstStone(volume.netVolumeM3,await this.activeStoneVolume(before.id))[0];
+    if(capacityIssue)throw new Error(capacityIssue);
     const purposeLabel=await this.purposeLabel(draft.customPurposeId,before.customPurposeId===draft.customPurposeId?before.customPurposeLabel:null);
     const after:WallBase={...before,...draft,...volume,customPurposeLabel:purposeLabel};
     const next=new Map(baseFields(after));
@@ -212,4 +219,125 @@ export class SqliteWallRepository implements WallRepository{
 
   private async readConsumption(recordId:string){const found=await this.db.getFirstAsync<WallConsumptionRow>(`SELECT * FROM wall_consumptions WHERE id=?`,recordId);if(!found)throw new Error('Wall consumption was not found after saving.');return wallConsumptionFromRow(found);}
   private async enqueue(entity:string,entityId:string,payload:unknown,now:string){await this.db.runAsync(`INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES (?,?,?,?,?)`,entity,entityId,'upsert',JSON.stringify(payload),now);}
+
+  // DEC-461. The composite foundation model: an optional Stone core inside the base's outer volume,
+  // with the concrete that fills the rest estimated rather than assumed poured until Ready Mix is
+  // itself recorded. Additive on top of the existing single-material base above.
+  private async compositionRecords(baseId:string):Promise<FoundationCompositionRecord[]>{
+    const rows=await this.db.getAllAsync<CompositionRow>('SELECT * FROM wall_base_composition_records WHERE base_id=? ORDER BY recorded_on,created_at',baseId);
+    return rows.map(compositionRecordFromRow);
+  }
+  private async activeStoneVolume(baseId:string):Promise<number>{return aggregateActiveQuantity(await this.compositionRecords(baseId),'stone');}
+  private async requireBaseRow(wallId:string):Promise<BaseRow>{const row=await this.db.getFirstAsync<BaseRow>('SELECT * FROM wall_bases WHERE wall_id=?',wallId);if(!row)throw new Error('This wall has no recorded base yet.');return row;}
+  private async compositionFor(row:BaseRow):Promise<FoundationComposition>{
+    const base=baseFromRow(row);
+    return buildFoundationComposition({
+      baseId:row.id,wallId:row.wall_id,mode:row.foundation_mode??'single',stoneCoreMode:row.stone_core_mode??null,
+      position:row.stone_core_position_x!=null&&row.stone_core_position_y!=null?{xNorm:row.stone_core_position_x,yNorm:row.stone_core_position_y}:null,
+      offsets:parseOffsets(row.stone_core_offsets_json),netFoundationVolumeM3:base.netVolumeM3,records:await this.compositionRecords(row.id),
+    });
+  }
+
+  async getFoundationComposition(wallId:string):Promise<FoundationComposition|null>{
+    const row=await this.db.getFirstAsync<BaseRow>('SELECT * FROM wall_bases WHERE wall_id=?',wallId);
+    return row?this.compositionFor(row):null;
+  }
+
+  async setFoundationMode(wallId:string,mode:FoundationCompositionMode,stoneCoreMode?:StoneCoreMode):Promise<FoundationComposition>{
+    const row=await this.requireBaseRow(wallId);
+    const nextStoneCoreMode=mode==='composite'?stoneCoreMode??row.stone_core_mode??'simple':row.stone_core_mode??null;
+    const hasPosition=row.stone_core_position_x!=null&&row.stone_core_position_y!=null;
+    const position=mode==='composite'&&nextStoneCoreMode==='simple'&&!hasPosition?defaultStoneCorePosition():null;
+    const now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      if(position)await this.db.runAsync('UPDATE wall_bases SET foundation_mode=?,stone_core_mode=?,stone_core_position_x=?,stone_core_position_y=?,updated_at=? WHERE id=?',mode,nextStoneCoreMode,position.xNorm,position.yNorm,now,row.id);
+      else await this.db.runAsync('UPDATE wall_bases SET foundation_mode=?,stone_core_mode=?,updated_at=? WHERE id=?',mode,nextStoneCoreMode,now,row.id);
+      await this.enqueue('wallFoundationMode',row.id,{baseId:row.id,wallId,mode,stoneCoreMode:nextStoneCoreMode,updatedAt:now},now);
+    });
+    return this.getFoundationComposition(wallId) as Promise<FoundationComposition>;
+  }
+
+  async saveStoneCorePosition(wallId:string,position:StoneCorePosition):Promise<FoundationComposition>{
+    const row=await this.requireBaseRow(wallId);
+    if(row.foundation_mode!=='composite'||row.stone_core_mode!=='simple')throw new Error('Switch this base to composite / simple Stone-core mode before positioning the core.');
+    const now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync('UPDATE wall_bases SET stone_core_position_x=?,stone_core_position_y=?,updated_at=? WHERE id=?',position.xNorm,position.yNorm,now,row.id);
+      await this.enqueue('wallFoundationPosition',row.id,{baseId:row.id,wallId,position,updatedAt:now},now);
+    });
+    return this.getFoundationComposition(wallId) as Promise<FoundationComposition>;
+  }
+
+  async saveStoneCoreOffsets(wallId:string,offsets:StoneCoreOffsets):Promise<FoundationComposition>{
+    const row=await this.requireBaseRow(wallId);
+    if(row.foundation_mode!=='composite'||row.stone_core_mode!=='detailed')throw new Error('Switch this base to composite / detailed Stone-core mode before entering its geometry.');
+    const base=baseFromRow(row);
+    const issue=validateStoneCoreOffsets(offsets,base)[0];if(issue)throw new Error(issue);
+    const now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync('UPDATE wall_bases SET stone_core_offsets_json=?,updated_at=? WHERE id=?',JSON.stringify(offsets),now,row.id);
+      await this.enqueue('wallFoundationOffsets',row.id,{baseId:row.id,wallId,offsets,updatedAt:now},now);
+    });
+    return this.getFoundationComposition(wallId) as Promise<FoundationComposition>;
+  }
+
+  async addFoundationCompositionRecord(draft:FoundationCompositionRecordDraft):Promise<FoundationCompositionRecord>{
+    const row=await this.requireBaseRow(draft.wallId);
+    if(row.foundation_mode!=='composite')throw new Error('Switch this base to composite mode before recording Stone or Ready Mix separately.');
+    const issue=validateCompositionRecordDraft(draft)[0];if(issue)throw new Error(issue);
+    if(draft.materialType==='stone'){
+      const capacityIssue=validateStoneCapacity(baseFromRow(row).netVolumeM3,await this.activeStoneVolume(row.id),draft.quantityM3)[0];
+      if(capacityIssue)throw new Error(capacityIssue);
+    }
+    const recordId=id('wall_found_rec'),now=new Date().toISOString();
+    const record:FoundationCompositionRecord={id:recordId,baseId:row.id,wallId:draft.wallId,materialType:draft.materialType,quantityM3:draft.quantityM3,recordedOn:draft.recordedOn,notes:draft.notes.trim(),cancelledAt:null,cancelledReason:null,correctionHistory:[],createdAt:now,updatedAt:null};
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync('INSERT INTO wall_base_composition_records (id,base_id,wall_id,material_type,quantity_m3,recorded_on,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',recordId,row.id,draft.wallId,draft.materialType,draft.quantityM3,draft.recordedOn,record.notes||null,now,now);
+      await this.enqueue('wallFoundationRecord',recordId,record,now);
+    });
+    return record;
+  }
+
+  async cancelFoundationCompositionRecord(recordId:string,reason:string):Promise<FoundationCompositionRecord>{
+    const cleanReason=reason.trim();if(!cleanReason)throw new Error('A cancellation reason is required.');
+    const row=await this.db.getFirstAsync<CompositionRow>('SELECT * FROM wall_base_composition_records WHERE id=?',recordId);
+    if(!row)throw new Error('The foundation composition record was not found.');
+    if(row.cancelled_at)throw new Error('This record is already cancelled.');
+    const now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync('UPDATE wall_base_composition_records SET cancelled_at=?,cancelled_reason=? WHERE id=?',now,cleanReason,recordId);
+      await this.enqueue('wallFoundationRecord',recordId,{...compositionRecordFromRow(row),cancelledAt:now,cancelledReason:cleanReason},now);
+    });
+    const found=await this.db.getFirstAsync<CompositionRow>('SELECT * FROM wall_base_composition_records WHERE id=?',recordId);
+    return compositionRecordFromRow(found!);
+  }
+
+  async correctFoundationCompositionRecord(recordId:string,draft:FoundationCompositionCorrectionDraft):Promise<FoundationCompositionRecord>{
+    const reason=draft.correctionReason.trim();if(!reason)throw new Error('A correction reason is required.');
+    const row=await this.db.getFirstAsync<CompositionRow>('SELECT * FROM wall_base_composition_records WHERE id=?',recordId);
+    if(!row)throw new Error('The foundation composition record was not found.');
+    const before=compositionRecordFromRow(row);
+    const issue=validateCompositionRecordDraft(draft)[0];if(issue)throw new Error(issue);
+    if(draft.materialType==='stone'){
+      const baseRow=await this.db.getFirstAsync<BaseRow>('SELECT * FROM wall_bases WHERE id=?',row.base_id);
+      if(!baseRow)throw new Error('Wall base was not found.');
+      const othersActive=await this.activeStoneVolume(row.base_id)-(before.cancelledAt?0:before.quantityM3);
+      const capacityIssue=validateStoneCapacity(baseFromRow(baseRow).netVolumeM3,othersActive,draft.quantityM3)[0];
+      if(capacityIssue)throw new Error(capacityIssue);
+    }
+    const changed=before.quantityM3!==draft.quantityM3||before.recordedOn!==draft.recordedOn||before.notes.trim()!==draft.notes.trim();
+    if(!changed)throw new Error('Nothing changed. Edit at least one value before saving a correction.');
+    const now=new Date().toISOString();
+    const history=[...before.correctionHistory,{correctedAt:now,correctedBy:'Owner',reason,changes:[
+      ...(before.quantityM3!==draft.quantityM3?[{field:'Quantity (m³)',originalValue:String(before.quantityM3),newValue:String(draft.quantityM3)}]:[]),
+      ...(before.recordedOn!==draft.recordedOn?[{field:'Recorded on',originalValue:before.recordedOn,newValue:draft.recordedOn}]:[]),
+      ...(before.notes.trim()!==draft.notes.trim()?[{field:'Notes',originalValue:before.notes.trim()||null,newValue:draft.notes.trim()||null}]:[]),
+    ]}];
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync('UPDATE wall_base_composition_records SET quantity_m3=?,recorded_on=?,notes=?,correction_history_json=?,updated_at=? WHERE id=?',draft.quantityM3,draft.recordedOn,draft.notes.trim()||null,JSON.stringify(history),now,recordId);
+      await this.enqueue('wallFoundationRecord',recordId,{...before,quantityM3:draft.quantityM3,recordedOn:draft.recordedOn,notes:draft.notes.trim(),correctionHistory:history,updatedAt:now},now);
+    });
+    const found=await this.db.getFirstAsync<CompositionRow>('SELECT * FROM wall_base_composition_records WHERE id=?',recordId);
+    return compositionRecordFromRow(found!);
+  }
 }

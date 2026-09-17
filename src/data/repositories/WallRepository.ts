@@ -1,6 +1,7 @@
 import type {BaseStatusChange,WallBase,WallBaseCorrectionDraft,WallBaseDraft} from '../../domain/wallBase';
 import type {WallLayer,WallLayerDraft} from '../../domain/wallDiagram';
 import type {SavedConcretePurpose,Wall,WallConsumption,WallConsumptionCorrectionDraft,WallConsumptionDraft,WallDetail,WallDraft,WallSetup} from '../../domain/walls';
+import type {FoundationComposition,FoundationCompositionCorrectionDraft,FoundationCompositionMode,FoundationCompositionRecord,FoundationCompositionRecordDraft,StoneCoreMode,StoneCoreOffsets,StoneCorePosition} from '../../domain/wallFoundation';
 
 export interface WallRepository{
   getSetup():Promise<WallSetup>;
@@ -27,4 +28,17 @@ export interface WallRepository{
   correctBase(wallId:string,draft:WallBaseCorrectionDraft):Promise<WallBase>;
   /** Reasoned correction of the curing dates; refused when it would strand existing wall work. */
   correctBaseCuring(wallId:string,change:{constructedOn?:string;curingStartedOn?:string;curedOn?:string;reason:string}):Promise<WallBase>;
+
+  /** DEC-461. The base's composite composition (Stone core + estimated concrete), or null with no base. */
+  getFoundationComposition(wallId:string):Promise<FoundationComposition|null>;
+  /** Switches the base between a single recorded material and the composite Stone-core model. */
+  setFoundationMode(wallId:string,mode:FoundationCompositionMode,stoneCoreMode?:StoneCoreMode):Promise<FoundationComposition>;
+  /** Simple mode only. Moves the schematic Stone-core block; never changes its recorded volume. */
+  saveStoneCorePosition(wallId:string,position:StoneCorePosition):Promise<FoundationComposition>;
+  /** Detailed mode only. Refused when the core would extend outside the outer foundation. */
+  saveStoneCoreOffsets(wallId:string,offsets:StoneCoreOffsets):Promise<FoundationComposition>;
+  /** Refused for Stone when the active total would exceed the foundation's net volume. */
+  addFoundationCompositionRecord(draft:FoundationCompositionRecordDraft):Promise<FoundationCompositionRecord>;
+  cancelFoundationCompositionRecord(recordId:string,reason:string):Promise<FoundationCompositionRecord>;
+  correctFoundationCompositionRecord(recordId:string,draft:FoundationCompositionCorrectionDraft):Promise<FoundationCompositionRecord>;
 }

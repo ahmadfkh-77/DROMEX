@@ -567,13 +567,24 @@ values on its next save.
   `walls.base_required` is 0 for every wall that existed before migration 40, so legacy walls
   stay usable with no invented base. Daily Reports show base events on their own date and the
   stage reached by that date, never a later one.
-- **Verification**: typecheck clean and the complete Vitest suite green. PDF
-  samples (bilingual headers, Stone and Ready Mix areas with openings, a saved
-  purpose, a corrected record, missing area, multiple walls, a 28-record wall
-  forcing a page break, and an empty day) were printed through headless Edge and
-  inspected page by page; the samples stayed outside the repository. The React
-  Native screens were verified by typecheck and source-contract tests only.
-  **Not yet verified on a physical device.**
+- **Composite foundation model** (DEC-461, DEC-462, migration 41): `src/domain/wallFoundation.ts`
+  holds the Stone-core/estimated-concrete math (aggregate active quantity, capacity refusal,
+  variance, Simple/Detailed geometry validation); `src/domain/wallFoundationDiagram.ts` draws the
+  Stone core inside the outer foundation boundary, reusing `wallDiagramToSvg` for serialization.
+  `SqliteWallRepository` adds `getFoundationComposition`, `setFoundationMode`,
+  `saveStoneCorePosition`/`saveStoneCoreOffsets`, and `addFoundationCompositionRecord` /
+  `cancelFoundationCompositionRecord` / `correctFoundationCompositionRecord` against the new
+  `wall_base_composition_records` table, and revalidates active Stone against the net volume
+  whenever `correctBase` changes the base's own geometry. `FoundationCompositionCard` and
+  `FoundationDiagramView` mount inside `WallBaseWorkflow`, additive to the existing single-material
+  base field. Every base defaults to `foundation_mode = 'single'`; nothing here changes an existing
+  base's own recorded material. Daily Report PDF/workbook representation of the composite
+  breakdown and the requested 5-stage guided-workflow screen redesign are **not built in this
+  phase** — see DEC-461.
+- **Verification**: typecheck clean and the complete Vitest suite green (734 tests across 64
+  files, including 56 new domain/repository tests and 8 new diagram tests for the composite
+  foundation model). The React Native screens were verified by typecheck and source-contract
+  tests only. **Not yet verified on a physical device or in Expo Go.**
 
 ## Standing rules this project expects every session to follow
 

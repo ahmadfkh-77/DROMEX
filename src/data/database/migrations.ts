@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 40;
+export const DATABASE_VERSION = 41;
 
 type TableColumn = { name: string };
 
@@ -1210,6 +1210,40 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     `);
     await addColumnIfMissing(db, 'walls', 'base_required', 'INTEGER NOT NULL DEFAULT 0 CHECK (base_required IN (0, 1))');
     currentVersion = 40;
+  }
+
+  if (currentVersion === 40) {
+    // DEC-461. The composite foundation model: a base's outer geometry may optionally hold a Stone
+    // core, with the concrete that fills the rest estimated rather than assumed poured. Additive only
+    // -- every existing base keeps foundation_mode = 'single' (the column default) and its own
+    // materialType/quantity exactly as recorded; nothing here changes an existing base's data.
+    await addColumnIfMissing(db, 'wall_bases', 'foundation_mode', "TEXT NOT NULL DEFAULT 'single' CHECK (foundation_mode IN ('single','composite'))");
+    await addColumnIfMissing(db, 'wall_bases', 'stone_core_mode', "TEXT CHECK (stone_core_mode IN ('simple','detailed'))");
+    await addColumnIfMissing(db, 'wall_bases', 'stone_core_position_x', 'REAL CHECK (stone_core_position_x IS NULL OR (stone_core_position_x >= 0 AND stone_core_position_x <= 1))');
+    await addColumnIfMissing(db, 'wall_bases', 'stone_core_position_y', 'REAL CHECK (stone_core_position_y IS NULL OR (stone_core_position_y >= 0 AND stone_core_position_y <= 1))');
+    await addColumnIfMissing(db, 'wall_bases', 'stone_core_offsets_json', 'TEXT');
+    await db.execAsync(`
+      -- DEC-461. Multiple Stone/Ready-Mix records against one composite base, each cancellable and
+      -- correctable in place, so the aggregate Stone core and estimated concrete always derive from
+      -- the same active, auditable records rather than a single overwritten quantity.
+      CREATE TABLE IF NOT EXISTS wall_base_composition_records (
+        id TEXT PRIMARY KEY NOT NULL,
+        base_id TEXT NOT NULL REFERENCES wall_bases(id),
+        wall_id TEXT NOT NULL REFERENCES walls(id),
+        material_type TEXT NOT NULL CHECK (material_type IN ('stone','ready_mix')),
+        quantity_m3 REAL NOT NULL CHECK (quantity_m3 > 0),
+        recorded_on TEXT NOT NULL,
+        notes TEXT,
+        cancelled_at TEXT,
+        cancelled_reason TEXT,
+        correction_history_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        CHECK (cancelled_at IS NULL OR cancelled_reason IS NOT NULL)
+      );
+      CREATE INDEX IF NOT EXISTS idx_wall_base_composition_base ON wall_base_composition_records(base_id, material_type);
+    `);
+    currentVersion = 41;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

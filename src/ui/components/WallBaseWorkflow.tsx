@@ -3,11 +3,13 @@ import {LayoutAnimation,StyleSheet,Text,TouchableOpacity,View} from 'react-nativ
 
 import {baseStatusLabels,calculateBaseVolume,curingDays,validateWallBase,type BaseStatus,type BaseStatusChange,type WallBase,type WallBaseDraft} from '../../domain/wallBase';
 import {formatCubicMetres,wallMaterialLabels,type SavedConcretePurpose,type Wall} from '../../domain/walls';
+import type {FoundationComposition,FoundationCompositionMaterial,FoundationCompositionMode,StoneCoreMode,StoneCoreOffsets,StoneCorePosition} from '../../domain/wallFoundation';
 import {colors,radius} from '../theme';
 import {AppButton,AppCard,AppField} from './AppPrimitives';
 import {ConcretePurposeField,type PurposeSelection} from './ConcretePurposeField';
 import {DatePickerField} from './DatePickerField';
 import {useReducedMotion} from './ExpandableMenu';
+import {FoundationCompositionCard} from './FoundationCompositionCard';
 
 export type BaseForm={reference:string;location:string;length:string;height:string;bottom:string;top:string;deduction:string;material:'ready_mix'|'site_mix'|'stone';purpose:PurposeSelection|null;quantity:string;quantityUnit:'m3'|'tonnes';manualOverride:boolean;consumptionDate:string;notes:string};
 const today=()=>new Date().toISOString().slice(0,10);
@@ -29,10 +31,17 @@ const stageIndexFor=(base:WallBase|null)=>!base?0:base.status==='planned'?1:base
  * geometry and material, then construction, curing, and an explicit cured confirmation, which is the
  * only thing that unlocks wall work. Nothing here cures a base because days have passed.
  */
-export function WallBaseWorkflow({wall,base,legacy,savedPurposes,busy,onCreatePurpose,onSaveBase,onChangeStatus,onCorrectBase}:{
+export function WallBaseWorkflow({wall,base,legacy,savedPurposes,busy,onCreatePurpose,onSaveBase,onChangeStatus,onCorrectBase,composition,onSetFoundationMode,onSaveStoneCorePosition,onSaveStoneCoreOffsets,onAddFoundationRecord,onCancelFoundationRecord,onCorrectFoundationRecord}:{
   wall:Wall;base:WallBase|null;legacy:boolean;savedPurposes:SavedConcretePurpose[];busy:boolean;
   onCreatePurpose:(label:string)=>Promise<SavedConcretePurpose>;onSaveBase:(draft:WallBaseDraft)=>Promise<void>;
   onChangeStatus:(change:BaseStatusChange)=>Promise<void>;onCorrectBase:(draft:WallBaseDraft,reason:string)=>Promise<void>;
+  composition:FoundationComposition|null;
+  onSetFoundationMode:(mode:FoundationCompositionMode,stoneCoreMode?:StoneCoreMode)=>Promise<void>;
+  onSaveStoneCorePosition:(position:StoneCorePosition)=>Promise<void>;
+  onSaveStoneCoreOffsets:(offsets:StoneCoreOffsets)=>Promise<void>;
+  onAddFoundationRecord:(materialType:FoundationCompositionMaterial,quantityM3:number,recordedOn:string,notes:string)=>Promise<void>;
+  onCancelFoundationRecord:(recordId:string,reason:string)=>Promise<void>;
+  onCorrectFoundationRecord:(recordId:string,quantityM3:number,recordedOn:string,notes:string,reason:string)=>Promise<void>;
 }){
   const[form,setForm]=useState<BaseForm>(()=>base?baseFormFrom(base):emptyBaseForm(wall));
   const[editing,setEditing]=useState(!base);
@@ -118,6 +127,10 @@ export function WallBaseWorkflow({wall,base,legacy,savedPurposes,busy,onCreatePu
       {base.status==='cured'?<Text style={styles.ready}>Base confirmed cured on {base.curedOn}. Wall geometry, layers, and wall material are unlocked below.</Text>:null}
       {error?<Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>:null}
     </View>:null}
+
+    {base&&!editing?<FoundationCompositionCard base={base} composition={composition} busy={busy}
+      onSetMode={onSetFoundationMode} onSavePosition={onSaveStoneCorePosition} onSaveOffsets={onSaveStoneCoreOffsets}
+      onAddRecord={onAddFoundationRecord} onCancelRecord={onCancelFoundationRecord} onCorrectRecord={onCorrectFoundationRecord}/>:null}
   </AppCard>;
 }
 
