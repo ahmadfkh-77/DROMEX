@@ -2119,3 +2119,11 @@ section 1 (DEC-455). `WallAreaCalculator` was replaced by `WallVolumeCalculator`
 wall's section 1 dimensions, and Gross volume / Deductions / Net volume results). The
 net volume now fills the consumed quantity and remains editable. History, the Daily
 Report editor, PDF, and workbook show the volume calculation instead of area.
+
+### Addendum - 2026-09-17, wall diagram, layers, and mandatory base
+
+Two approved additions landed on the same branch. `WallDiagramView` and `WallLayersEditor` add a
+generated technical figure and an ordered layer editor (DEC-457). `WallBaseWorkflow` adds section A,
+where a wall section records its base, marks it constructed, tracks curing, and unlocks wall work only
+through an explicit cured confirmation (DEC-459). Walls created before the rule stay usable and are
+labelled as legacy walls with no base recorded.

@@ -529,6 +529,17 @@ No new colour, component primitive, or motion curve was introduced.
 - **Layer editor as ordered rows.** Each row shows its marker colour, its phase number, and Move up / Move down / Remove, with an inline confirmation before a row leaves the list. "Same thickness top and bottom" collapses the second field to a read-only echo of the first. Running totals are shown against the wall's own thickness in the calc-result teal, and disagreements appear as accessible live-region errors.
 - **Live preview.** Section 1 previews the geometry as it is typed; section 2 shows the saved wall with its layers. Both use the same component, so nothing can drift between preview and export.
 
+## Implemented on the wall base and curing workflow (DEC-459)
+
+`src/ui/components/WallBaseWorkflow.tsx`, inside Wall Construction so the base and its wall stay one place.
+
+- **A stage strip, not a wizard.** Four compact steps (Base geometry, Base material and volume, Construction and curing, Wall geometry and layers) show done in Status Success, current in Structural Navy, and later stages in muted grey. The strip states the stage; it never navigates away from the wall.
+- **Locked, and it says why.** While the base is not cured, a Status Warning band reads "Wall construction locked until base is cured", with the current stage and the elapsed curing days. The wall sections below are not rendered as broken controls: they are replaced by one cream card repeating the reason and what will unlock.
+- **Cured is a decision, never a timer.** The curing step shows the dates and the elapsed days, then asks for a cured date and an explicit inspected-and-ready confirmation before **Confirm Base Is Cured** is enabled. The wording avoids "approved" and "certified" on purpose.
+- **The calculated volume is offered, never forced.** Gross and net volume sit in the calc-result teal beside the fields, with a "Use Calculated" action; typing a different quantity marks it a manual override and the calculation stays visible beside it.
+- **Legacy walls keep their dignity.** A wall from before the rule shows "Base not recorded - legacy wall" with a plain explanation and an optional "Record This Wall's Base" action, and its existing wall workflow is untouched.
+- **The diagram knows the stage.** The base is drawn beneath the wall: dashed outline while planned, solid with its status label once constructed, and with curing days while curing. In the Daily Report the figure is drawn for the stage reached by that work date, so an early base report never shows a wall that did not exist yet.
+
 ## Current-vs-Target Gap List
 
 1. **Typography weight.** Current: `fontWeight: '900'` used pervasively in `src/ui/theme.ts`'s global tokens and on every screen except Home, Project Command Center, Supplier Loads, and Daily Reports. Target: graded hierarchy above. **Partially implemented** — Home's and Project Command Center's navigation sections use a 3-step subset (`900`/`700`/`500`); Supplier Loads' supplied-material records and Daily Reports' section/record content use the full 4-step scale including `600` (see "Implemented on Supplier Loads" and "Implemented on Daily Reports"). Every other screen is still the pre-existing pervasive-900 state, and the global `theme.ts` tokens themselves are unchanged.

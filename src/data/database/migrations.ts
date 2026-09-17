@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 39;
+export const DATABASE_VERSION = 40;
 
 type TableColumn = { name: string };
 
@@ -1157,6 +1157,59 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_wall_layers_wall ON wall_layers(wall_id, phase_order);
     `);
     currentVersion = 39;
+  }
+
+  if (currentVersion === 39) {
+    // DEC-459. The mandatory base of a wall section: its geometry and consumed material, then the
+    // construction, curing, and explicit cured confirmation that unlock wall work above it. Structure
+    // only: no base is invented for an existing wall and no curing data is fabricated. Walls that
+    // already exist keep base_required = 0 (the column default) and stay usable as legacy walls; the
+    // repository sets 1 on every wall created from now on.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS wall_bases (
+        id TEXT PRIMARY KEY NOT NULL,
+        -- One base per wall section, enforced by the unique index below.
+        wall_id TEXT NOT NULL REFERENCES walls(id),
+        reference TEXT NOT NULL CHECK (length(trim(reference)) > 0),
+        location TEXT,
+        length_m REAL NOT NULL CHECK (length_m > 0),
+        height_m REAL NOT NULL CHECK (height_m > 0),
+        bottom_thickness_m REAL NOT NULL CHECK (bottom_thickness_m > 0),
+        top_thickness_m REAL NOT NULL CHECK (top_thickness_m > 0),
+        deduction_m3 REAL NOT NULL DEFAULT 0 CHECK (deduction_m3 >= 0),
+        gross_volume_m3 REAL NOT NULL CHECK (gross_volume_m3 > 0),
+        net_volume_m3 REAL NOT NULL CHECK (net_volume_m3 > 0 AND net_volume_m3 <= gross_volume_m3),
+        material_type TEXT NOT NULL CHECK (material_type IN ('ready_mix','site_mix','stone')),
+        concrete_purpose TEXT CHECK (concrete_purpose IN ('structural','filling','cyclopean_matrix','mortar','footing','coping')),
+        custom_purpose_id TEXT REFERENCES wall_concrete_purposes(id),
+        custom_purpose_label TEXT,
+        quantity REAL NOT NULL CHECK (quantity > 0),
+        quantity_unit TEXT NOT NULL CHECK (quantity_unit IN ('m3','tonnes')),
+        -- A quantity that differs from the calculated volume is always a deliberate override.
+        manual_override INTEGER NOT NULL DEFAULT 0 CHECK (manual_override IN (0, 1)),
+        consumption_date TEXT,
+        -- The lifecycle is constrained here as well as in the domain, so an invalid state fails closed.
+        status TEXT NOT NULL CHECK (status IN ('planned','constructed','curing','cured')),
+        constructed_on TEXT,
+        curing_started_on TEXT,
+        cured_on TEXT,
+        curing_note TEXT,
+        notes TEXT,
+        correction_history_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        -- Dates may only run forwards, and a status past planned must carry the dates it implies.
+        CHECK (constructed_on IS NULL OR curing_started_on IS NULL OR curing_started_on >= constructed_on),
+        CHECK (curing_started_on IS NULL OR cured_on IS NULL OR cured_on >= curing_started_on),
+        CHECK (status = 'planned' OR constructed_on IS NOT NULL),
+        CHECK (status <> 'curing' OR curing_started_on IS NOT NULL),
+        CHECK (status <> 'cured' OR cured_on IS NOT NULL)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_wall_bases_wall ON wall_bases(wall_id);
+      CREATE INDEX IF NOT EXISTS idx_wall_bases_dates ON wall_bases(cured_on, constructed_on);
+    `);
+    await addColumnIfMissing(db, 'walls', 'base_required', 'INTEGER NOT NULL DEFAULT 0 CHECK (base_required IN (0, 1))');
+    currentVersion = 40;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

@@ -1,5 +1,6 @@
 import type {FuelType} from './fuel';
 import type {ConsultingAgencyOption} from './profiles';
+import type {BaseStatus,WallBase} from './wallBase';
 import type {WallLayer} from './wallDiagram';
 import type {WallConsumption,WallPurpose,WallSystem} from './walls';
 export type ReportProjectStatus = 'active' | 'completed';
@@ -100,7 +101,10 @@ export type LinkedWasteDump = { id: string; dumpedAt: string; materialType: stri
 // DEC-453. Wall construction read live for a Daily Report, like every other linked section: each
 // consumption record whose wall belongs to the report's project and whose used-on date equals the work
 // date, grouped by wall. Corrections therefore appear in the next generated export.
-export type LinkedWallWork = { wallId:string; wallName:string; system:WallSystem; purpose:WallPurpose; lengthM:number; heightM:number; bottomThicknessM:number; topThicknessM:number; netVolumeM3:number; plannedVolumeM3:number; layers:WallLayer[]; entries:WallConsumption[] };
+export type LinkedWallWork = { wallId:string; wallName:string; system:WallSystem; purpose:WallPurpose; lengthM:number; heightM:number; bottomThicknessM:number; topThicknessM:number; netVolumeM3:number; plannedVolumeM3:number; layers:WallLayer[]; entries:WallConsumption[];
+  // DEC-459. The wall's base, the base events that happened on this work date, and the stage the base
+  // had reached by that date, so an earlier report never shows a wall that did not exist yet.
+  base:WallBase|null; baseEvents:string[]; baseStatusAsOf:BaseStatus|null };
 export type ProjectCompletionLoad =LinkedProjectLoad & { workDate: string };
 export type ProjectCompletionWasteDump = LinkedWasteDump & { workDate: string };
 

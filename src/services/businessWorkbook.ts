@@ -113,6 +113,10 @@ const ARABIC_LABELS: Record<string, string> = {
   'Calc Deductions m³': 'الخصومات م³', 'Calc Gross Volume m³': 'الحجم الإجمالي المحسوب م³', 'Calc Net Volume m³': 'صافي الحجم المحسوب م³',
   'Volume Calculation': 'حساب الحجم', Corrections: 'التصحيحات', 'Last Correction Reason': 'سبب آخر تصحيح',
   // DEC-457 wall layers and construction phases.
+  'Wall Bases': 'قواعد الجدران', 'Base Reference': 'مرجع القاعدة', 'Base Status': 'حالة القاعدة', 'Constructed On': 'تاريخ التنفيذ', 'Curing Started': 'بداية المعالجة', 'Cured On': 'تاريخ اكتمال المعالجة',
+  'Base Length m': 'طول القاعدة م', 'Base Height m': 'ارتفاع القاعدة م', 'Base Bottom Thickness m': 'سماكة القاعدة السفلية م', 'Base Top Thickness m': 'سماكة القاعدة العلوية م',
+  'Base Gross Volume m³': 'حجم القاعدة الإجمالي م³', 'Base Deduction m³': 'خصم القاعدة م³', 'Base Net Volume m³': 'صافي حجم القاعدة م³',
+  'Recorded Quantity': 'الكمية المسجلة', 'Quantity Unit': 'وحدة الكمية', 'Manual Override': 'تعديل يدوي', 'Consumption Date': 'تاريخ الاستهلاك', 'Events On This Date': 'أحداث هذا التاريخ', 'Curing Note': 'ملاحظة المعالجة',
   'Wall Layers': 'طبقات الجدار', Phase: 'المرحلة', Layer: 'الطبقة', 'Layer Bottom Thickness m': 'سماكة الطبقة السفلية م', 'Layer Top Thickness m': 'سماكة الطبقة العلوية م',
   'Wall Bottom Thickness m': 'سماكة الجدار السفلية م', 'Wall Top Thickness m': 'سماكة الجدار العلوية م', 'Wall Gross Volume m³': 'حجم الجدار الإجمالي م³', 'Wall Layer Count': 'عدد طبقات الجدار',
 };

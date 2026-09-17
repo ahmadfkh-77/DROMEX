@@ -33,13 +33,15 @@ async function setup(location?:string){
   await migrateDatabase(db as never);seed(db);
   const walls=new SqliteWallRepository(db as never);
   const wall=await walls.saveWall({projectId:'road',name:'Retaining wall A',system:'rubble_masonry',purpose:'retaining',lengthM:20,heightM:4,bottomThicknessM:.8,topThicknessM:.4,deductionM3:0,allowancePercent:0,notes:''});
+  // Layer tests predate the mandatory-base rule; this wall is legacy, like every wall migration 40 finds.
+  db.raw.exec('UPDATE walls SET base_required=0');
   return{db,walls,wall};
 }
 const layer=(name:string,phaseOrder:number,bottom:number,top:number,note=''):WallLayerDraft=>({name,phaseOrder,bottomThicknessM:bottom,topThicknessM:top,note,materialKey:null});
 const core=layer('Structural core',1,.6,.3),facing=layer('Stone facing',2,.2,.1);
 
 describe('migration 39: wall layers and construction phases',()=>{
-  it('is the current database version and keeps the earlier steps in the upgrade path',()=>{expect(DATABASE_VERSION).toBe(39);});
+  it('keeps migration 39 in the upgrade path below the current version',()=>{expect(DATABASE_VERSION).toBeGreaterThanOrEqual(39);});
 
   it('emits the version 39 step through execAsync alone and changes no data',async()=>{
     const statements:string[]=[];
@@ -48,7 +50,7 @@ describe('migration 39: wall layers and construction phases',()=>{
     expect(statements.some(sql=>sql.includes('CREATE TABLE IF NOT EXISTS wall_layers'))).toBe(true);
     expect(statements.some(sql=>sql.includes('idx_wall_layers_phase'))).toBe(true);
     expect(statements.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 39');
+    expect(statements.at(-1)).toBe(`PRAGMA user_version = ${DATABASE_VERSION}`);
   });
 
   it('upgrades a version 38 database and leaves existing walls and consumption untouched',async()=>{
@@ -58,7 +60,7 @@ describe('migration 39: wall layers and construction phases',()=>{
     db.raw.exec('DROP TABLE wall_layers; PRAGMA user_version = 38;');
     await migrateDatabase(db as never);
     await migrateDatabase(db as never);
-    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:39});
+    expect(db.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:DATABASE_VERSION});
     expect(db.raw.prepare('SELECT * FROM wall_consumptions').all()).toEqual(before);
     expect(await walls.listLayers(wall.id)).toEqual([]);
     expect(db.raw.prepare('PRAGMA integrity_check').get()).toMatchObject({integrity_check:'ok'});

@@ -1,5 +1,6 @@
 import { netWorkMinutes, type DailyProjectReport, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
-import { describeWallConsumptionQuantity, supportsVolumeCalculation, wallConsumptionPurposeLabel, wallMaterialLabels, wallSystemLabels } from '../domain/walls';
+import { baseStatusLabels } from '../domain/wallBase';
+import { concretePurposeLabels, describeWallConsumptionQuantity, supportsVolumeCalculation, wallConsumptionPurposeLabel, wallMaterialLabels, wallSystemLabels } from '../domain/walls';
 import { buildWorkbookFromSheets, localizeWorkbookSheets, type EmbeddedWorkbookImage, type SheetSpec, type WorkbookLocale } from './businessWorkbook';
 
 const list = (values: string[]) => values.length ? values.join(', ') : null;
@@ -34,6 +35,23 @@ export function wallLayerRows(walls: LinkedWallWork[]) {
   })));
 }
 
+/** DEC-459. The base of each wall on this work date, with the stage it had reached by then. */
+export function wallBaseRows(walls: LinkedWallWork[]) {
+  return walls.flatMap((wall) => {
+    const base = wall.base;
+    if (!base || !wall.baseStatusAsOf) return [];
+    return [{
+      'Wall ID': wall.wallId, Wall: wall.wallName, 'Base Reference': base.reference, Location: base.location.trim() || null,
+      'Base Status': baseStatusLabels[wall.baseStatusAsOf], 'Constructed On': base.constructedOn, 'Curing Started': base.curingStartedOn, 'Cured On': base.curedOn,
+      'Base Length m': base.lengthM, 'Base Height m': base.heightM, 'Base Bottom Thickness m': base.bottomThicknessM, 'Base Top Thickness m': base.topThicknessM,
+      'Base Gross Volume m³': base.grossVolumeM3, 'Base Deduction m³': base.deductionM3, 'Base Net Volume m³': base.netVolumeM3,
+      'Recorded Quantity': base.quantity, 'Quantity Unit': base.quantityUnit === 'tonnes' ? 't' : 'm³', 'Manual Override': base.manualOverride ? 'Yes' : 'No',
+      Material: wallMaterialLabels[base.materialType], Purpose: base.customPurposeLabel ?? (base.concretePurpose ? concretePurposeLabels[base.concretePurpose] : null),
+      'Consumption Date': base.consumptionDate, 'Events On This Date': wall.baseEvents.join('; ') || null, 'Curing Note': base.curingNote.trim() || null, Notes: base.notes.trim() || null,
+    }];
+  });
+}
+
 export function dailyReportWorkbookSheets(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], images: EmbeddedWorkbookImage[] = [], locale: WorkbookLocale = 'en', wallWork: LinkedWallWork[] = []): SheetSpec[] {
   const net = netWorkMinutes(report);
   const sheets: SheetSpec[] = [
@@ -62,6 +80,7 @@ export function dailyReportWorkbookSheets(report: DailyProjectReport, project: R
     { name: 'Waste Dumps', rows: waste.map((entry) => ({ 'Record ID': entry.id, 'Dumped At': entry.dumpedAt, Material: entry.materialType, Location: entry.dumpLocation, Driver: entry.driverName, 'Truck Plate': entry.truckPlate })) },
     { name: 'Wall Construction', rows: wallConstructionRows(wallWork) },
     { name: 'Wall Layers', rows: wallLayerRows(wallWork) },
+    { name: 'Wall Bases', rows: wallBaseRows(wallWork) },
     { name: 'Photos', rows: report.photos.map((uri, index) => ({ Photo: index + 1, 'File name': uri.split('/').pop() ?? `photo-${index + 1}.jpg`, 'Work Date': report.workDate })), images },
   ];
   return localizeWorkbookSheets(sheets, locale);

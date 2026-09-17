@@ -100,6 +100,31 @@ describe('Wall Construction UI contract',()=>{
     expect(screen2).toContain('saveLayers(');
   });
 
+  it('stages the base, curing, and wall work with an explicit cured confirmation',()=>{
+    const base=source('src/ui/components/WallBaseWorkflow.tsx');
+    expect(base).toContain('A · Base and Wall Geometry');
+    for(const stage of ['Base geometry','Base material and volume','Construction and curing','Wall geometry and layers'])expect(base).toContain(stage);
+    expect(base).toContain('Confirm Base Is Cured');
+    expect(base).toContain('inspected and is ready for wall work');
+    expect(base).not.toMatch(/Approved|Certified|certif/i);
+    expect(base).toContain('Wall construction locked until base is cured');
+    expect(base).toContain('validateWallBase(');
+    expect(base).toContain('calculateBaseVolume(');
+    expect(base).toContain('Manual quantity override');
+    expect(base).toContain('Base not recorded');
+    expect(base).toMatch(/minHeight:(4[4-9]|[5-9]\d)/);
+    expect(base).toContain('useReducedMotion');
+    expect(base).toContain('accessibilityLiveRegion');
+    expect(base).not.toContain('—');
+  });
+
+  it('gates the wall sections on the base and keeps the reason visible',()=>{
+    const screen3=source('src/ui/screens/WallConstructionScreen.tsx');
+    expect(screen3).toContain('<WallBaseWorkflow');
+    expect(screen3).toContain('stage.locked');
+    expect(screen3).toContain('selected.stage.reason');
+  });
+
   it('uses no em-dash in new wall-construction copy',()=>{
     for(const file of [form,volume,purpose,history])expect(file).not.toContain('—');
   });

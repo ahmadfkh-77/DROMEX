@@ -36,8 +36,10 @@ async function setup(){
   const walls=new SqliteWallRepository(db as never),reports=new SqliteProjectReportRepository(db as never);
   const wallDraft={name:'Retaining wall A',system:'rubble_masonry' as const,purpose:'retaining' as const,lengthM:20,heightM:4,bottomThicknessM:.8,topThicknessM:.4,deductionM3:0,allowancePercent:0,notes:''};
   const wallA=await walls.saveWall({...wallDraft,projectId:'road'});
+  db.raw.exec('UPDATE walls SET base_required=0');
   const wallB=await walls.saveWall({...wallDraft,projectId:'road',name:'Boundary wall B',system:'reinforced_concrete',purpose:'boundary'});
   const otherWall=await walls.saveWall({...wallDraft,projectId:'other',name:'Harbour wall'});
+  db.raw.exec('UPDATE walls SET base_required=0');
   return{db,walls,reports,wallA,wallB,otherWall};
 }
 
@@ -130,7 +132,7 @@ describe('migration 38: wall consumption volume calculation',()=>{
     const db={execAsync:async(sql:string)=>{statements.push(sql);},getFirstAsync:async()=>({user_version:37})};
     await migrateDatabase(db as never);
     for(const column of ['volume_length_m','volume_height_m','volume_bottom_thickness_m','volume_top_thickness_m','volume_deduction_m3','volume_gross_m3','volume_net_m3'])expect(statements.some(sql=>sql.includes(`ALTER TABLE wall_consumptions ADD COLUMN ${column} `))).toBe(true);
-    expect(statements.some(sql=>sql.includes('wall_concrete_purposes'))).toBe(false);
+    expect(statements.some(sql=>sql.includes('CREATE TABLE IF NOT EXISTS wall_concrete_purposes'))).toBe(false);
     expect(statements.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
     expect(statements.at(-1)).toBe(`PRAGMA user_version = ${DATABASE_VERSION}`);
   });
@@ -321,6 +323,7 @@ describe('backup and restore of wall improvements',()=>{
       await migrateDatabase(original as never);seedProjects(original);
       const walls=new SqliteWallRepository(original as never);
       const wall=await walls.saveWall({projectId:'road',name:'Wall A',system:'rubble_masonry',purpose:'retaining',lengthM:20,heightM:4,bottomThicknessM:.8,topThicknessM:.4,deductionM3:0,allowancePercent:0,notes:''});
+      original.raw.exec('UPDATE walls SET base_required=0');
       const purpose=await walls.createConcretePurpose('Parapet cap concrete');
       const stone=await walls.addConsumption(draft(wall.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:54.2,stoneUnit:'m3',volume:stoneCalc}));
       await walls.correctConsumption(stone.id,{...draft(wall.id,{type:'stone',concretePurpose:null,finishedVolumeM3:null,stoneQuantity:53,stoneUnit:'m3',volume:stoneCalc}),correctionReason:'Recount'});

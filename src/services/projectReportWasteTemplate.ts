@@ -1,7 +1,9 @@
 import {fuelTypeLabels} from '../domain/fuel';
 import {consultantSignoffState,netWorkMinutes,type DailyProjectReport,type LinkedFuelFill,type LinkedProjectLoad,type LinkedQuarryLoad,type LinkedWallWork,type LinkedWasteDump,type ProjectReportSetup,type ReportProject} from '../domain/projectReports';
+import {baseStatusLabels} from '../domain/wallBase';
 import {buildWallDiagram} from '../domain/wallDiagram';
-import {describeWallConsumptionQuantity,formatCubicMetres,supportsVolumeCalculation,wallConsumptionPurposeLabel,wallMaterialLabels,wallPurposeLabels,wallSystemLabels} from '../domain/walls';
+import {concretePurposeLabels,describeWallConsumptionQuantity,formatCubicMetres,supportsVolumeCalculation,wallConsumptionPurposeLabel,wallMaterialLabels,wallPurposeLabels,wallSystemLabels} from '../domain/walls';
+const concretePurposeLabelOf=(purpose:keyof typeof concretePurposeLabels|null)=>purpose?concretePurposeLabels[purpose]:'';
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]??c));
 const display=(value:string|null|undefined)=>value?.trim()?e(value):'&mdash;';
@@ -29,13 +31,17 @@ export function wallConstructionSectionHtml(walls:LinkedWallWork[]){
           :'<span class="missing">Entered directly</span>';
       const notes=[entry.notes.trim()?`<span>${e(entry.notes)}</span>`:'',last?`<span class="corrected">Corrected: ${e(last.reason)}</span>`:''].filter(Boolean).join('');
       return `<tr><td><b>${e(wallMaterialLabels[entry.type])}</b>${purpose?`<span class="sub">${e(purpose)}</span>`:''}</td><td><b>${e(describeWallConsumptionQuantity(entry))}</b></td><td>${calculation}</td><td>${notes}</td></tr>`;
-    }).join('');
+    }).join('')||'<tr><td colspan="4" class="empty">No wall material recorded on this date</td></tr>';
     const thickness=wall.bottomThicknessM===wall.topThicknessM?`${fmt(wall.bottomThicknessM)} m thick`:`${fmt(wall.bottomThicknessM)} m to ${fmt(wall.topThicknessM)} m thick`;
     const geometry=`${fmt(wall.lengthM)} m long × ${fmt(wall.heightM)} m high &middot; ${thickness} &middot; ${metres(wall.plannedVolumeM3)} m³ planned`;
     // DEC-457. The figure is generated here from the same geometry the table prints; it is inline SVG,
     // so the PDF carries no raster image and fetches nothing.
-    const figure=buildWallDiagram({wall:{name:wall.wallName,lengthM:wall.lengthM,heightM:wall.heightM,bottomThicknessM:wall.bottomThicknessM,topThicknessM:wall.topThicknessM},layers:wall.layers??[],base:null}).svg;
-    return `<div class="wall-block"><div class="wall-head"><div class="wall-title"><h3>${e(wall.wallName)}</h3><p>${e(wallSystemLabels[wall.system])} &middot; ${e(wallPurposeLabels[wall.purpose])}</p></div><p class="wall-geometry">${geometry}</p></div><div class="wall-figure">${figure}</div><table class="wall-table">${head}<tbody>${rows}</tbody></table></div>`;
+    const base=wall.base,stage=wall.baseStatusAsOf;
+    const figure=buildWallDiagram({wall:{name:wall.wallName,lengthM:wall.lengthM,heightM:wall.heightM,bottomThicknessM:wall.bottomThicknessM,topThicknessM:wall.topThicknessM},layers:wall.layers??[],
+      base:base&&stage?{geometry:{lengthM:base.lengthM,heightM:base.heightM,bottomThicknessM:base.bottomThicknessM,topThicknessM:base.topThicknessM},status:stage,label:base.reference}:null}).svg;
+    // DEC-459. The base block states the stage reached by this work date, never a later one.
+    const baseBlock=base&&stage?`<div class="wall-base"><b>${e(base.reference)}</b> &middot; ${e(baseStatusLabels[stage])}${base.location.trim()?` &middot; ${e(base.location)}`:''}<span class="sub">${fmt(base.lengthM)} m × ${fmt(base.heightM)} m × ${fmt(base.bottomThicknessM)}${base.bottomThicknessM===base.topThicknessM?'':` to ${fmt(base.topThicknessM)}`} m &middot; gross ${e(formatCubicMetres(base.grossVolumeM3))}, deduction ${e(formatCubicMetres(base.deductionM3))}, net ${e(formatCubicMetres(base.netVolumeM3))}</span><span class="sub">Recorded ${base.quantity==null?'not recorded':fmt(base.quantity)} ${base.quantityUnit==='tonnes'?'t':'m³'}${base.manualOverride?' (manual override)':''} &middot; ${e(wallMaterialLabels[base.materialType])}${base.customPurposeLabel??base.concretePurpose?` &middot; ${e(base.customPurposeLabel??concretePurposeLabelOf(base.concretePurpose))}`:''}</span>${base.constructedOn?`<span class="sub">Constructed ${e(base.constructedOn)}${base.curingStartedOn?` &middot; curing from ${e(base.curingStartedOn)}`:''}${base.curedOn?` &middot; cured ${e(base.curedOn)}`:''}</span>`:''}${wall.baseEvents.length?`<span class="base-events">${wall.baseEvents.map(e).join(' &middot; ')}</span>`:''}${base.notes.trim()?`<span class="sub">${e(base.notes)}</span>`:''}</div>`:'';
+    return `<div class="wall-block"><div class="wall-head"><div class="wall-title"><h3>${e(wall.wallName)}</h3><p>${e(wallSystemLabels[wall.system])} &middot; ${e(wallPurposeLabels[wall.purpose])}</p></div><p class="wall-geometry">${geometry}</p></div>${baseBlock}<div class="wall-figure">${figure}</div><table class="wall-table">${head}<tbody>${rows}</tbody></table></div>`;
   }).join('');
   return `<section class="wall-section"><h2>Wall construction that day</h2><p class="wall-summary">${walls.length} wall${walls.length===1?'':'s'} &middot; ${records} material record${records===1?'':'s'}. Calculated volumes use the wall's length, height, and thickness less deductions.</p>${blocks}</section>`;
 }
@@ -157,6 +163,9 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
     .wall-table .missing{color:#65717d;font-style:italic}
     .wall-table .corrected{display:block;margin-top:.8mm;font-size:7pt;font-weight:700;color:#173f67}
     /* The generated figure is never split; if it does not fit, its whole wall block moves on. */
+    .wall-base{break-inside:avoid;margin:2mm 0;padding:2.5mm 3mm;background:#f5f2ec;border-left:3px solid #65717d;font-size:8.5pt}
+    .wall-base .sub{display:block;margin-top:.6mm;font-size:7.5pt;color:#65717d}
+    .wall-base .base-events{display:block;margin-top:1mm;font-size:7.5pt;font-weight:700;color:#173f67}
     .wall-figure{break-inside:avoid;page-break-inside:avoid;margin:2mm 0 2.5mm}
     .wall-figure svg{max-width:100%;height:auto;display:block}
     .source-label{display:flex;align-items:center;gap:2mm;margin:3mm 0 1.5mm}.source-label h3{margin:0;font-size:10pt;font-weight:700;color:#17212b}.source-chip{font-size:7pt;font-weight:700;letter-spacing:.3pt;padding:.6mm 2mm;border-radius:2.5mm;color:#fff}.source-chip-company{background:#c84b31}.source-chip-supplier{background:#173f67}

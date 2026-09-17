@@ -1,4 +1,6 @@
 import type {Project} from './loads';
+import type {WallBase} from './wallBase';
+import type {WallStageLock} from './wallBase';
 import type {WallLayer} from './wallDiagram';
 
 export type WallSystem='reinforced_concrete'|'rubble_masonry'|'cyclopean_concrete';
@@ -20,11 +22,11 @@ export type WallCorrectionChange={field:string;originalValue:string|null;newValu
 export type WallCorrectionEntry={correctedAt:string;correctedBy:string;reason:string;changes:WallCorrectionChange[]};
 
 export type WallDraft={projectId:string;name:string;system:WallSystem;purpose:WallPurpose;lengthM:number;heightM:number;bottomThicknessM:number;topThicknessM:number;deductionM3:number;allowancePercent:number;notes:string};
-export type Wall=WallDraft&{id:string;projectName:string;netVolumeM3:number;plannedVolumeM3:number;createdAt:string;updatedAt:string};
+export type Wall=WallDraft&{id:string;projectName:string;baseRequired:boolean;netVolumeM3:number;plannedVolumeM3:number;createdAt:string;updatedAt:string};
 export type WallConsumptionDraft={wallId:string;usedOn:string;type:WallMaterialType;concretePurpose:ConcretePurpose|null;customPurposeId?:string|null;finishedVolumeM3:number|null;cementBags:number|null;cementBagKg:number|null;sandQuantity:number|null;sandUnit:MaterialUnit|null;gravelQuantity:number|null;gravelUnit:MaterialUnit|null;waterLitres:number|null;admixtureQuantity:number|null;admixtureUnit:'litres'|'kg'|null;stoneQuantity:number|null;stoneUnit:MaterialUnit|null;rebarDiameterMm:number|null;rebarCount:number|null;rebarLengthEachM:number|null;rebarGrade:string;notes:string;volume?:WallVolumeDimensions|null};
 export type WallConsumptionCorrectionDraft=WallConsumptionDraft&{correctionReason:string};
 export type WallConsumption=Omit<WallConsumptionDraft,'customPurposeId'|'volume'>&{id:string;customPurposeId:string|null;customPurposeLabel:string|null;volume:WallVolumeSnapshot|null;totalRebarLengthM:number|null;totalRebarKg:number|null;correctionHistory:WallCorrectionEntry[];createdAt:string;updatedAt:string|null};
-export type WallDetail={wall:Wall;entries:WallConsumption[];layers:WallLayer[]};
+export type WallDetail={wall:Wall;entries:WallConsumption[];layers:WallLayer[];base:WallBase|null;stage:WallStageLock};
 export type WallSetup={projects:Project[]};
 
 export const wallSystemLabels:Record<WallSystem,string>={reinforced_concrete:'Reinforced concrete',rubble_masonry:'Stacked rock + mortar/concrete',cyclopean_concrete:'Concrete + embedded rocks'};

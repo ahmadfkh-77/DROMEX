@@ -561,6 +561,12 @@ values on its next save.
   `WallDiagramView` renders the same model with `react-native-svg` on the phone. Layers are
   optional, ordered by phase, validated against the wall thickness within 5 mm, and never
   auto-adjusted. No generated imagery, no stored bitmap, no external reference.
+- **Base and curing** (DEC-459, DEC-460, migration 40): `src/domain/wallBase.ts` holds the
+  lifecycle (planned, constructed, curing, cured), the shared base volume, the stage lock, and
+  the work-date rule; `SqliteWallRepository` gates `addConsumption` and `saveLayers` on it.
+  `walls.base_required` is 0 for every wall that existed before migration 40, so legacy walls
+  stay usable with no invented base. Daily Reports show base events on their own date and the
+  stage reached by that date, never a later one.
 - **Verification**: typecheck clean and the complete Vitest suite green. PDF
   samples (bilingual headers, Stone and Ready Mix areas with openings, a saved
   purpose, a corrected record, missing area, multiple walls, a 28-record wall
