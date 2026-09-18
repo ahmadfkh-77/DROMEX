@@ -82,6 +82,22 @@ describe('base activity in the Daily Report',()=>{
     expect(wallDay.baseStatusAsOf).toBe('cured');
   });
 
+  // DEC-463. Curing is informational: wall work recorded while the base is still curing is honestly
+  // reported (never hidden, never labelled cured) with a concise non-blocking note.
+  it('shows recorded wall work honestly on a date the base was still curing, with a concise note and no false cured claim',async()=>{
+    const {reports,walls,wall}=await setup();
+    await walls.addConsumption(use(wall.id,'2026-09-01'));
+    const linked=await reports.listLinkedWallWork('road','2026-09-01');
+    const day=linked[0]!;
+    expect(day.baseStatusAsOf).toBe('curing');
+    expect(day.entries).toHaveLength(1);
+    const html=section(pdf(linked,'2026-09-01'));
+    expect(html).toContain('Curing');
+    expect(html).toContain('9 m³ stone');
+    expect(html).toContain('Base curing not confirmed on this work date');
+    expect(html).not.toContain('&middot; cured');
+  });
+
   it('prints the base stage, geometry, and volumes in the PDF, with a stage-appropriate diagram',async()=>{
     const {reports,walls,wall}=await setup();
     const curingDay=section(pdf(await reports.listLinkedWallWork('road','2026-09-01'),'2026-09-01'));

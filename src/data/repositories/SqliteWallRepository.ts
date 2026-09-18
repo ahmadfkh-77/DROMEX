@@ -36,7 +36,7 @@ export class SqliteWallRepository implements WallRepository{
     return rows.map(layerFromRow);
   }
   async saveLayers(wallId:string,layers:WallLayerDraft[]):Promise<WallLayer[]>{
-    if(layers.length)await this.assertWallStageOpen(wallId,null);
+    if(layers.length)await this.assertWallHasBase(wallId);
     const found=await this.db.getFirstAsync<{bottom_thickness_m:number;top_thickness_m:number}>('SELECT bottom_thickness_m,top_thickness_m FROM walls WHERE id=?',wallId);
     if(!found)throw new Error('Wall was not found.');
     const issue=validateWallLayers(layers,{bottomThicknessM:found.bottom_thickness_m,topThicknessM:found.top_thickness_m})[0];
@@ -67,7 +67,7 @@ export class SqliteWallRepository implements WallRepository{
   }
 
   async addConsumption(draft:WallConsumptionDraft){
-    await this.assertWallStageOpen(draft.wallId,draft.usedOn);
+    await this.assertWallHasBase(draft.wallId);
     const recordId=id('wall_use'),now=new Date().toISOString(),stored=await this.prepare(draft,{id:recordId,createdAt:now,updatedAt:null,correctionHistory:[]});
     await this.db.withTransactionAsync(async()=>{
       await this.db.runAsync(`INSERT INTO wall_consumptions (id,wall_id,used_on,material_type,concrete_purpose,custom_purpose_id,custom_purpose_label,finished_volume_m3,cement_bags,cement_bag_kg,sand_quantity,sand_unit,gravel_quantity,gravel_unit,water_litres,admixture_quantity,admixture_unit,stone_quantity,stone_unit,rebar_diameter_mm,rebar_count,rebar_length_each_m,total_rebar_length_m,total_rebar_kg,rebar_grade,notes,volume_length_m,volume_height_m,volume_bottom_thickness_m,volume_top_thickness_m,volume_deduction_m3,volume_gross_m3,volume_net_m3,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,recordId,...this.values(stored),now);
@@ -111,14 +111,14 @@ export class SqliteWallRepository implements WallRepository{
   private values(entry:WallConsumption){
     return [entry.wallId,entry.usedOn,entry.type,entry.concretePurpose,entry.customPurposeId,entry.customPurposeLabel,entry.finishedVolumeM3,entry.cementBags,entry.cementBagKg,entry.sandQuantity,entry.sandUnit,entry.gravelQuantity,entry.gravelUnit,entry.waterLitres,entry.admixtureQuantity,entry.admixtureUnit,entry.stoneQuantity,entry.stoneUnit,entry.rebarDiameterMm,entry.rebarCount,entry.rebarLengthEachM,entry.totalRebarLengthM,entry.totalRebarKg,entry.rebarGrade||null,entry.notes||null,entry.volume?.lengthM??null,entry.volume?.heightM??null,entry.volume?.bottomThicknessM??null,entry.volume?.topThicknessM??null,entry.volume?.deductionM3??null,entry.volume?.grossVolumeM3??null,entry.volume?.netVolumeM3??null] as const;
   }
-  /** DEC-459. Wall work is refused until this wall's base is explicitly cured, unless it is a legacy wall. */
-  private async assertWallStageOpen(wallId:string,usedOn:string|null){
+  /** DEC-463. Wall work is refused only when this wall requires a base and none is recorded yet; curing status never blocks it. */
+  private async assertWallHasBase(wallId:string){
     const row=await this.db.getFirstAsync<{base_required:number}>('SELECT base_required FROM walls WHERE id=?',wallId);
     if(!row)throw new Error('Wall was not found.');
     if(row.base_required!==1)return;
     const base=await this.getBase(wallId);
-    const issue=usedOn?validateWallWorkDate(usedOn,base,false):describeWallStageLock(base,false).reason;
-    if(usedOn?issue:describeWallStageLock(base,false).locked)throw new Error(issue??'Wall construction is locked until the base is confirmed cured.');
+    const issue=validateWallWorkDate(base,false);
+    if(issue)throw new Error(issue);
   }
 
   async getBase(wallId:string):Promise<WallBase|null>{
@@ -146,8 +146,7 @@ export class SqliteWallRepository implements WallRepository{
 
   async changeBaseStatus(wallId:string,change:BaseStatusChange):Promise<WallBase>{
     const base=await this.requireBase(wallId);
-    const wallActivity=await this.hasWallActivity(wallId);
-    const issue=validateBaseStatusChange(base,change,{wallActivity})[0];if(issue)throw new Error(issue);
+    const issue=validateBaseStatusChange(base,change)[0];if(issue)throw new Error(issue);
     const now=new Date().toISOString();
     const next={constructedOn:change.constructedOn??base.constructedOn,curingStartedOn:change.status==='curing'?change.curingStartedOn??base.curingStartedOn:base.curingStartedOn,curedOn:change.status==='cured'?change.curedOn??base.curedOn:change.status==='curing'?null:base.curedOn};
     await this.db.withTransactionAsync(async()=>{
@@ -184,11 +183,7 @@ export class SqliteWallRepository implements WallRepository{
     if(!reason)throw new Error('A correction reason is required.');
     const after={...before,constructedOn:change.constructedOn??before.constructedOn,curingStartedOn:change.curingStartedOn??before.curingStartedOn,curedOn:change.curedOn??before.curedOn};
     const issue=validateBaseLifecycle(after)[0];if(issue)throw new Error(issue);
-    // A corrected cured date may never leave already recorded wall work dated before it.
-    if(after.curedOn){
-      const earliest=await this.db.getFirstAsync<{used_on:string}>('SELECT used_on FROM wall_consumptions WHERE wall_id=? ORDER BY used_on LIMIT 1',wallId);
-      if(earliest&&earliest.used_on<after.curedOn)throw new Error(`Wall work is already recorded on ${earliest.used_on}, before the corrected cured date of ${after.curedOn}.`);
-    }
+    // DEC-463. Curing chronology is informational: a cured-date correction never invalidates, blocks, or removes wall work already recorded, however it is dated.
     const fields:[string,string|null][]=[['Construction date',before.constructedOn],['Curing started',before.curingStartedOn],['Cured date',before.curedOn]];
     const nextValues=new Map<string,string|null>([['Construction date',after.constructedOn],['Curing started',after.curingStartedOn],['Cured date',after.curedOn]]);
     const changes=fields.flatMap(([field,originalValue])=>{const newValue=nextValues.get(field)??null;return originalValue===newValue?[]:[{field,originalValue,newValue}];});
@@ -202,13 +197,6 @@ export class SqliteWallRepository implements WallRepository{
   }
 
   private async requireBase(wallId:string){const base=await this.getBase(wallId);if(!base)throw new Error('This wall has no recorded base yet.');return base;}
-  private async hasWallActivity(wallId:string){
-    const [entries,layers]=await Promise.all([
-      this.db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM wall_consumptions WHERE wall_id=?',wallId),
-      this.db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM wall_layers WHERE wall_id=?',wallId),
-    ]);
-    return Number(entries?.count??0)+Number(layers?.count??0)>0;
-  }
   private async purposeLabel(customPurposeId:string|null,known:string|null){
     if(!customPurposeId)return null;
     if(known)return known;

@@ -561,12 +561,18 @@ values on its next save.
   `WallDiagramView` renders the same model with `react-native-svg` on the phone. Layers are
   optional, ordered by phase, validated against the wall thickness within 5 mm, and never
   auto-adjusted. No generated imagery, no stored bitmap, no external reference.
-- **Base and curing** (DEC-459, DEC-460, migration 40): `src/domain/wallBase.ts` holds the
-  lifecycle (planned, constructed, curing, cured), the shared base volume, the stage lock, and
-  the work-date rule; `SqliteWallRepository` gates `addConsumption` and `saveLayers` on it.
-  `walls.base_required` is 0 for every wall that existed before migration 40, so legacy walls
-  stay usable with no invented base. Daily Reports show base events on their own date and the
-  stage reached by that date, never a later one.
+- **Base and curing** (DEC-459, DEC-460, migration 40, refined by DEC-463): `src/domain/wallBase.ts`
+  holds the lifecycle (planned, constructed, curing, cured) and the shared base volume.
+  `SqliteWallRepository.assertWallHasBase` gates `addConsumption` and `saveLayers` on **a base
+  existing**, nothing more — `walls.base_required` is 0 for every wall that existed before
+  migration 40, so legacy walls stay usable with no invented base. **Curing itself never gates
+  wall work** (DEC-463): `describeWallStageLock`'s `locked` is true only when a required base is
+  missing, `validateWallWorkDate` no longer refuses a date for curing chronology, and
+  `describeWallWorkDateNotice` gives a purely informational note instead. Reverting a cured base to
+  curing, and correcting its curing/cured dates, never touch existing wall records. Daily Reports
+  show base events on their own date and the stage reached by that date, never a later one, plus a
+  concise "Base curing not confirmed on this work date" note beside any wall material recorded
+  before the base reached cured — the material is never hidden.
 - **Composite foundation model** (DEC-461, DEC-462, migration 41): `src/domain/wallFoundation.ts`
   holds the Stone-core/estimated-concrete math (aggregate active quantity, capacity refusal,
   variance, Simple/Detailed geometry validation); `src/domain/wallFoundationDiagram.ts` draws the
@@ -581,9 +587,10 @@ values on its next save.
   base's own recorded material. Daily Report PDF/workbook representation of the composite
   breakdown and the requested 5-stage guided-workflow screen redesign are **not built in this
   phase** — see DEC-461.
-- **Verification**: typecheck clean and the complete Vitest suite green (734 tests across 64
-  files, including 56 new domain/repository tests and 8 new diagram tests for the composite
-  foundation model). The React Native screens were verified by typecheck and source-contract
+- **Verification**: typecheck clean and the complete Vitest suite green (743 tests across 64
+  files, including 56 domain/repository tests and 8 diagram tests for the composite foundation
+  model, plus the curing-gate-removal test replacements from DEC-463). The React Native screens
+  were verified by typecheck and source-contract
   tests only. **Not yet verified on a physical device or in Expo Go.**
 
 ## Standing rules this project expects every session to follow

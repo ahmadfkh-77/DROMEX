@@ -105,36 +105,50 @@ describe('base workflow and wall stage gating',()=>{
     expect(overridden).toMatchObject({quantity:23,manualOverride:true,netVolumeM3:21.12});
   });
 
-  it('keeps wall work locked until the base is explicitly confirmed cured',async()=>{
+  // DEC-463. Curing is tracked information, never a workflow gate: wall work is available for a
+  // base in any status once the base itself is recorded, and a status change never refuses it.
+  it('allows wall work as soon as the base is recorded, in every base status',async()=>{
     const {walls,wall}=await setup();
     await walls.saveBase(baseDraft(wall.id));
-    await expect(walls.addConsumption(use(wall.id))).rejects.toThrow('locked until the base is confirmed cured');
+    await expect(walls.addConsumption(use(wall.id))).resolves.toBeTruthy();
+    expect((await walls.getWall(wall.id)).stage).toMatchObject({locked:false,curingConfirmed:false});
     await walls.changeBaseStatus(wall.id,{status:'constructed',constructedOn:'2026-09-01'});
+    await expect(walls.addConsumption(use(wall.id,{usedOn:'2026-09-11'}))).resolves.toBeTruthy();
     await walls.changeBaseStatus(wall.id,{status:'curing',curingStartedOn:'2026-09-01'});
-    await expect(walls.addConsumption(use(wall.id))).rejects.toThrow('locked until the base is confirmed cured');
+    await expect(walls.addConsumption(use(wall.id,{usedOn:'2026-09-12'}))).resolves.toBeTruthy();
+    // The cured confirmation itself still requires its own date and explicit inspection.
     await expect(walls.changeBaseStatus(wall.id,{status:'cured',curedOn:'2026-09-08'})).rejects.toThrow('Confirm that the base was inspected');
     const cured=await walls.changeBaseStatus(wall.id,{status:'cured',curedOn:'2026-09-08',inspected:true,curingNote:'Seven days'});
     expect(cured).toMatchObject({status:'cured',curedOn:'2026-09-08',curingNote:'Seven days'});
-    expect((await walls.getWall(wall.id)).stage).toMatchObject({locked:false});
-    await expect(walls.addConsumption(use(wall.id))).resolves.toBeTruthy();
+    expect((await walls.getWall(wall.id)).stage).toMatchObject({locked:false,curingConfirmed:true});
+    await expect(walls.addConsumption(use(wall.id,{usedOn:'2026-09-13'}))).resolves.toBeTruthy();
   });
 
-  it('refuses wall work dated before the cured date',async()=>{
+  it('accepts wall work dated before, during, and after the cured date, never refusing it for chronology',async()=>{
     const {walls,wall}=await setup();
     await cureBase(walls,wall.id);
-    await expect(walls.addConsumption(use(wall.id,{usedOn:'2026-09-07'}))).rejects.toThrow('cannot be dated before the base was confirmed cured on 2026-09-08');
+    await expect(walls.addConsumption(use(wall.id,{usedOn:'2026-09-07'}))).resolves.toBeTruthy();
     await expect(walls.addConsumption(use(wall.id,{usedOn:'2026-09-08'}))).resolves.toBeTruthy();
+    await expect(walls.addConsumption(use(wall.id,{usedOn:'2026-09-30'}))).resolves.toBeTruthy();
   });
 
-  it('refuses a skipped transition and a revert once wall work exists',async()=>{
+  it('accepts wall geometry (layers) before curing is confirmed',async()=>{
+    const {walls,wall}=await setup();
+    await walls.saveBase(baseDraft(wall.id));
+    await expect(walls.saveLayers(wall.id,[{name:'Core',phaseOrder:1,bottomThicknessM:.8,topThicknessM:.4,note:'',materialKey:null}])).resolves.toBeTruthy();
+  });
+
+  it('refuses a skipped status transition, but allows reverting a cured base to curing even once wall work exists',async()=>{
     const {walls,wall}=await setup();
     await walls.saveBase(baseDraft(wall.id));
     await expect(walls.changeBaseStatus(wall.id,{status:'cured',curedOn:'2026-09-08',inspected:true})).rejects.toThrow('A base moves from planned to constructed');
     await cureBase(walls,wall.id);
-    await expect(walls.changeBaseStatus(wall.id,{status:'curing',curingStartedOn:'2026-09-01'})).resolves.toMatchObject({status:'curing'});
-    await walls.changeBaseStatus(wall.id,{status:'cured',curedOn:'2026-09-08',inspected:true});
     await walls.addConsumption(use(wall.id));
-    await expect(walls.changeBaseStatus(wall.id,{status:'curing',curingStartedOn:'2026-09-01'})).rejects.toThrow('Wall work is already recorded above this base');
+    const entriesBefore=(await walls.getWall(wall.id)).entries;
+    const reverted=await walls.changeBaseStatus(wall.id,{status:'curing',curingStartedOn:'2026-09-01'});
+    expect(reverted).toMatchObject({status:'curing'});
+    // The revert never touches the wall records recorded above the base.
+    expect((await walls.getWall(wall.id)).entries).toEqual(entriesBefore);
   });
 });
 
@@ -155,14 +169,20 @@ describe('base corrections',()=>{
     await expect(walls.correctBase(wall.id,{...baseDraft(wall.id,{lengthM:25}),correctionReason:'   '})).rejects.toThrow('A correction reason is required.');
   });
 
-  it('refuses a cured-date correction that would strand existing wall work',async()=>{
+  // DEC-463. Curing chronology is informational: correcting the cured date never invalidates,
+  // blocks, or removes wall work already recorded, however that work is dated relative to it.
+  it('preserves existing wall work when a cured-date correction moves the cured date later than it',async()=>{
     const {walls,wall}=await setup();
     await cureBase(walls,wall.id);
     await walls.addConsumption(use(wall.id,{usedOn:'2026-09-09'}));
-    await expect(walls.correctBaseCuring(wall.id,{curedOn:'2026-09-20',reason:'Wrong cured date'})).rejects.toThrow('Wall work is already recorded on 2026-09-09, before the corrected cured date of 2026-09-20.');
-    const moved=await walls.correctBaseCuring(wall.id,{curedOn:'2026-09-05',reason:'Cured earlier than recorded'});
-    expect(moved).toMatchObject({curedOn:'2026-09-05'});
-    expect(moved.correctionHistory.at(-1)).toMatchObject({reason:'Cured earlier than recorded'});
+    const entriesBefore=(await walls.getWall(wall.id)).entries;
+    const moved=await walls.correctBaseCuring(wall.id,{curedOn:'2026-09-20',reason:'Wrong cured date'});
+    expect(moved).toMatchObject({curedOn:'2026-09-20'});
+    expect((await walls.getWall(wall.id)).entries).toEqual(entriesBefore);
+    const movedEarlier=await walls.correctBaseCuring(wall.id,{curedOn:'2026-09-05',reason:'Cured earlier than recorded'});
+    expect(movedEarlier).toMatchObject({curedOn:'2026-09-05'});
+    expect(movedEarlier.correctionHistory.at(-1)).toMatchObject({reason:'Cured earlier than recorded'});
+    expect((await walls.getWall(wall.id)).entries).toEqual(entriesBefore);
   });
 });
 

@@ -2166,3 +2166,40 @@ Domain, migration, repository, diagram, and screen wiring implemented on
 `feature/android-wall-consumption-improvements`. Typecheck clean; 734 Vitest tests green across 64
 files. Not yet verified on a physical device or in Expo Go — the Owner will test the guided base
 workflow and the new Foundation composition card there.
+
+### Addendum — 2026-09-18, curing gate removed (DEC-463)
+
+The Owner corrected the base/curing rule this branch had shipped under DEC-459: curing must be
+tracked but must never block, hide, or disable wall work. The earlier design entry above described
+the base workflow as "locked" until cured — that language, and the behavior behind it, is now wrong
+and is superseded here rather than edited in place, since it was an accurate record of what shipped
+at the time.
+
+What changed:
+
+- `describeWallStageLock` in `src/domain/wallBase.ts` now returns `locked:true` only when a wall
+  requires a base and none has been recorded; curing status never sets it. It gained
+  `curingConfirmed`, `warningTitle`, and `warningBody` fields carrying the new non-blocking notice
+  ("Base curing is not yet confirmed" / "You can continue recording wall planning and work. Confirm
+  curing separately when the base is ready."), exported as `CURING_WARNING_TITLE`/`CURING_WARNING_BODY`.
+- `validateWallWorkDate` no longer refuses a wall-work date for curing chronology; a new
+  `describeWallWorkDateNotice` gives a purely informational note instead. `SqliteWallRepository`'s
+  gate (renamed `assertWallHasBase`) checks only that a base exists.
+- `validateBaseStatusChange` no longer refuses reverting a cured base to curing because wall work
+  exists, and `correctBaseCuring` no longer refuses a cured-date correction that would leave earlier
+  wall work "stranded" — both cases are now allowed, and neither ever touches the wall records.
+- `WallBaseWorkflow`'s stepper no longer calls an upcoming stage "locked"; the base-missing case
+  keeps a blocking notice, and the not-yet-cured case shows the new warning-styled (not error-styled)
+  banner instead, beside the wall sections, which are never hidden by it.
+- `WallConstructionScreen` still hides sections only for `stage.locked` (now base-existence only) and
+  additionally shows the same non-blocking warning card when `!stage.curingConfirmed`.
+- The Daily Report PDF (`projectReportWasteTemplate.ts`) prints a concise
+  "Base curing not confirmed on this work date" note beside any wall material recorded before the
+  base reached `cured`, without ever hiding that material or claiming the base was cured early.
+- Obsolete blocking tests across `wall-base-domain.test.ts`, `wall-base-repository.test.ts`, and
+  `wall-construction-ui.test.ts` were replaced with tests proving every base status can be selected
+  and worked on, dates in any order are accepted, curing-date corrections and reverts preserve wall
+  records, and reports show curing status and wall work honestly without a false "cured" claim.
+
+Full suite (743 Vitest tests, 64 files) and typecheck green. Not yet verified on a physical device
+or in Expo Go.

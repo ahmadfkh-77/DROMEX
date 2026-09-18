@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import {LayoutAnimation,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
-import {baseStatusLabels,calculateBaseVolume,curingDays,validateWallBase,type BaseStatus,type BaseStatusChange,type WallBase,type WallBaseDraft} from '../../domain/wallBase';
+import {baseStatusLabels,calculateBaseVolume,CURING_WARNING_BODY,CURING_WARNING_TITLE,curingDays,validateWallBase,type BaseStatus,type BaseStatusChange,type WallBase,type WallBaseDraft} from '../../domain/wallBase';
 import {formatCubicMetres,wallMaterialLabels,type SavedConcretePurpose,type Wall} from '../../domain/walls';
 import type {FoundationComposition,FoundationCompositionMaterial,FoundationCompositionMode,StoneCoreMode,StoneCoreOffsets,StoneCorePosition} from '../../domain/wallFoundation';
 import {colors,radius} from '../theme';
@@ -27,9 +27,11 @@ const STAGES:{key:string;title:string}[]=[
 const stageIndexFor=(base:WallBase|null)=>!base?0:base.status==='planned'?1:base.status==='cured'?3:2;
 
 /**
- * DEC-459. Section A · Base and Wall Geometry. A wall section is built on a recorded base: its
- * geometry and material, then construction, curing, and an explicit cured confirmation, which is the
- * only thing that unlocks wall work. Nothing here cures a base because days have passed.
+ * DEC-459/460, refined by DEC-463. Section A · Base and Wall Geometry. A wall section is built on a
+ * recorded base: its geometry and material, then construction and curing. Recording the base is
+ * still required before wall work; curing itself is tracked information only and never blocks the
+ * wall sections below, which stay open, editable, and saveable in every base status. Nothing here
+ * cures a base because days have passed.
  */
 export function WallBaseWorkflow({wall,base,legacy,savedPurposes,busy,onCreatePurpose,onSaveBase,onChangeStatus,onCorrectBase,composition,onSetFoundationMode,onSaveStoneCorePosition,onSaveStoneCoreOffsets,onAddFoundationRecord,onCancelFoundationRecord,onCorrectFoundationRecord}:{
   wall:Wall;base:WallBase|null;legacy:boolean;savedPurposes:SavedConcretePurpose[];busy:boolean;
@@ -75,19 +77,22 @@ export function WallBaseWorkflow({wall,base,legacy,savedPurposes,busy,onCreatePu
     {editing?<BaseFields form={form} set={set} savedPurposes={savedPurposes} onCreatePurpose={onCreatePurpose} volume={volume} useCalculated={useCalculated} issues={issues} error={error} busy={busy} onSave={()=>void run(async()=>{await onSaveBase(draft);setEditing(false);})}/>:null}
   </AppCard>;
 
-  return <AppCard tone="cream" title="A · Base and Wall Geometry" hint="The base is recorded and cured first; wall work follows on top of it.">
+  return <AppCard tone="cream" title="A · Base and Wall Geometry" hint="Record the base to unlock wall work below. Curing is tracked separately and never blocks it.">
     <View style={styles.stepper} accessibilityRole="progressbar" accessibilityLabel={`Stage ${stageIndex+1} of ${STAGES.length}: ${STAGES[Math.min(stageIndex,STAGES.length-1)]!.title}`}>
       {STAGES.map((stage,index)=>{
-        const state=index<stageIndex?'done':index===stageIndex?'current':'locked';
+        const state=index<stageIndex?'done':index===stageIndex?'current':'upcoming';
         return <View key={stage.key} style={[styles.step,state==='current'&&styles.stepCurrent,state==='done'&&styles.stepDone]}>
-          <Text style={[styles.stepNumber,state!=='locked'&&styles.stepNumberOn]}>{state==='done'?'✓':index+1}</Text>
-          <Text style={[styles.stepTitle,state==='locked'&&styles.stepLocked]} numberOfLines={2}>{stage.title}</Text>
+          <Text style={[styles.stepNumber,state!=='upcoming'&&styles.stepNumberOn]}>{state==='done'?'✓':index+1}</Text>
+          <Text style={[styles.stepTitle,state==='upcoming'&&styles.stepLocked]} numberOfLines={2}>{stage.title}</Text>
         </View>;
       })}
     </View>
 
-    {base&&base.status!=='cured'?<Text style={styles.lockBanner} accessibilityLiveRegion="polite">Wall construction locked until base is cured. The base is {baseStatusLabels[base.status].toLocaleLowerCase('en-US')}{elapsed!=null?`, ${elapsed} curing day${elapsed===1?'':'s'} so far`:''}.</Text>:null}
-    {!base?<Text style={styles.lockBanner} accessibilityLiveRegion="polite">Wall construction locked until base is cured. Record the base geometry and material first.</Text>:null}
+    {!base?<Text style={styles.lockBanner} accessibilityLiveRegion="polite">Record the base for this wall before recording wall construction.</Text>:null}
+    {base&&base.status!=='cured'?<View style={styles.curingNotice} accessibilityLiveRegion="polite">
+      <Text style={styles.curingNoticeTitle}>{CURING_WARNING_TITLE}</Text>
+      <Text style={styles.curingNoticeBody}>{CURING_WARNING_BODY} The base is currently {baseStatusLabels[base.status].toLocaleLowerCase('en-US')}{elapsed!=null?`, ${elapsed} curing day${elapsed===1?'':'s'} so far`:''}.</Text>
+    </View>:null}
 
     {base&&!editing?<View style={styles.summary}>
       <Text style={styles.summaryTitle}>{base.reference}{base.location?` · ${base.location}`:''}</Text>
@@ -190,6 +195,9 @@ const styles=StyleSheet.create({
   stepTitle:{color:colors.ink,fontSize:11,fontWeight:'800',lineHeight:15},
   stepLocked:{color:colors.muted},
   lockBanner:{color:colors.warning,backgroundColor:'#FFF3D8',borderRadius:radius.sm,padding:10,fontSize:12,fontWeight:'800',lineHeight:17},
+  curingNotice:{backgroundColor:'#FFF3D8',borderRadius:radius.sm,padding:10,gap:3},
+  curingNoticeTitle:{color:colors.warning,fontSize:12,fontWeight:'900'},
+  curingNoticeBody:{color:colors.warning,fontSize:12,fontWeight:'700',lineHeight:17},
   summary:{gap:3,backgroundColor:colors.surface,borderRadius:radius.md,padding:12},
   summaryTitle:{color:colors.ink,fontSize:14,fontWeight:'900'},
   summaryLine:{color:colors.muted,fontSize:12,lineHeight:17},

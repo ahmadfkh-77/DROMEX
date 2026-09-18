@@ -71,7 +71,8 @@ export function WallConstructionScreen({repository,onBack,initialProjectId}:{rep
       <WallBaseWorkflow wall={selected.wall} base={selected.base} legacy={selected.stage.legacy} savedPurposes={purposes} busy={busy} onCreatePurpose={createPurpose} onSaveBase={saveBase} onChangeStatus={changeBaseStatus} onCorrectBase={correctBase}
         composition={composition} onSetFoundationMode={setFoundationMode} onSaveStoneCorePosition={saveStoneCorePosition} onSaveStoneCoreOffsets={saveStoneCoreOffsets}
         onAddFoundationRecord={addFoundationRecord} onCancelFoundationRecord={cancelFoundationRecord} onCorrectFoundationRecord={correctFoundationRecord}/>
-      {selected.stage.locked?<AppCard tone="cream"><Text style={styles.stageLocked}>{selected.stage.reason}</Text><Text style={styles.detail}>Wall drawing, layers, and material consumption open once the base is confirmed cured.</Text></AppCard>:null}
+      {selected.stage.locked?<AppCard tone="cream"><Text style={styles.stageLocked}>{selected.stage.reason}</Text><Text style={styles.detail}>Wall drawing, layers, and material consumption open as soon as the base above is recorded — curing is tracked separately and does not need to be confirmed first.</Text></AppCard>:null}
+      {!selected.stage.locked&&!selected.stage.curingConfirmed?<AppCard tone="cream"><Text style={styles.stageLocked}>{selected.stage.warningTitle}</Text><Text style={styles.detail}>{selected.stage.warningBody}</Text></AppCard>:null}
       {selected.stage.locked?null:<>
       <ExpandableMenuSection title="2 · Wall drawing, layers, and phases" hint={`${selected.layers.length?`${selected.layers.length} layer${selected.layers.length===1?'':'s'} recorded`:'No layers recorded yet'}. The drawing is generated from the saved dimensions.`} tone="cream" open={open.has('preview')} onToggle={()=>toggle('preview')}>
         <AppCard>

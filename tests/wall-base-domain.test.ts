@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 
 import {
-  baseStatusLabels,calculateBaseVolume,describeWallStageLock,validateBaseLifecycle,validateBaseStatusChange,validateWallBase,validateWallWorkDate,
+  baseStatusLabels,calculateBaseVolume,CURING_WARNING_BODY,CURING_WARNING_TITLE,describeWallStageLock,describeWallWorkDateNotice,validateBaseLifecycle,validateBaseStatusChange,validateWallBase,validateWallWorkDate,
   type WallBase,type WallBaseDraft,
 } from '../src/domain/wallBase';
 import {calculateWallVolume} from '../src/domain/walls';
@@ -73,35 +73,56 @@ describe('base lifecycle',()=>{
 
   it('never cures a base by elapsed time alone',()=>{
     const curing=base({status:'curing',constructedOn:'2026-09-01',curingStartedOn:'2026-09-01'});
-    expect(describeWallStageLock(curing,false).locked).toBe(true);
     expect(validateBaseStatusChange(curing,{status:'cured'})).toContain('Record the date the base was confirmed cured.');
     expect(validateBaseStatusChange(curing,{status:'cured',curedOn:'2026-09-08',inspected:false})).toContain('Confirm that the base was inspected and is ready for wall work.');
     expect(validateBaseStatusChange(curing,{status:'cured',curedOn:'2026-09-08',inspected:true})).toEqual([]);
   });
 
-  it('refuses reverting a cured base while wall work exists, and allows it when none does',()=>{
-    expect(validateBaseStatusChange(cured,{status:'curing',curingStartedOn:'2026-09-01'},{wallActivity:true})).toContain('Wall work is already recorded above this base, so it cannot return to curing. Correct the wall records first.');
-    expect(validateBaseStatusChange(cured,{status:'curing',curingStartedOn:'2026-09-01'},{wallActivity:false})).toEqual([]);
+  // DEC-463. Curing is informational: reverting a cured base to curing never blocks or invalidates wall work.
+  it('allows reverting a cured base back to curing regardless of whether wall work already exists',()=>{
+    expect(validateBaseStatusChange(cured,{status:'curing',curingStartedOn:'2026-09-01'})).toEqual([]);
   });
 });
 
-describe('wall stage locking',()=>{
-  it('locks wall work until the base is explicitly cured, and explains why',()=>{
+// DEC-463. Curing status is tracked information, not a workflow gate: the only thing that still
+// blocks wall work is a missing base, never the base's curing status.
+describe('wall stage — curing is informational, never a lock',()=>{
+  it('locks wall work only when a base is required and none has been recorded yet',()=>{
     expect(describeWallStageLock(null,false)).toMatchObject({locked:true,reason:'Record the base for this wall before recording wall construction.'});
-    expect(describeWallStageLock(base(),false)).toMatchObject({locked:true,reason:'Wall construction is locked until the base is confirmed cured. The base is planned.'});
-    expect(describeWallStageLock(base({status:'curing',constructedOn:'2026-09-01',curingStartedOn:'2026-09-01'}),false).reason).toContain('curing');
-    expect(describeWallStageLock(cured,false)).toMatchObject({locked:false});
+    expect(validateWallWorkDate(null,false)).toBe('Record the base for this wall before recording wall construction.');
+  });
+
+  it.each(['planned','constructed','curing','cured'] as const)('never locks wall work once a base exists, in %s status',status=>{
+    const value=base({status,constructedOn:status==='planned'?null:'2026-09-01',curingStartedOn:status==='planned'||status==='constructed'?null:'2026-09-01',curedOn:status==='cured'?'2026-09-08':null});
+    expect(describeWallStageLock(value,false)).toMatchObject({locked:false});
+    expect(validateWallWorkDate(value,false)).toBeNull();
   });
 
   it('leaves a legacy wall usable and says its base was never recorded',()=>{
     expect(describeWallStageLock(null,true)).toMatchObject({locked:false,legacy:true,reason:'Base not recorded — legacy wall'});
+    expect(validateWallWorkDate(null,true)).toBeNull();
   });
 
-  it('refuses wall work dated before the base was cured',()=>{
-    expect(validateWallWorkDate('2026-09-07',cured,false)).toBe('Wall work cannot be dated before the base was confirmed cured on 2026-09-08.');
-    expect(validateWallWorkDate('2026-09-08',cured,false)).toBeNull();
-    expect(validateWallWorkDate('2026-09-09',cured,false)).toBeNull();
-    expect(validateWallWorkDate('2026-09-01',null,true)).toBeNull();
-    expect(validateWallWorkDate('2026-09-09',base(),false)).toContain('locked until the base is confirmed cured');
+  it('shows a non-blocking curing warning while curing is not yet confirmed, with warning (not error) wording',()=>{
+    const planned=describeWallStageLock(base(),false);
+    expect(planned).toMatchObject({locked:false,curingConfirmed:false,warningTitle:CURING_WARNING_TITLE,warningBody:CURING_WARNING_BODY});
+    expect(planned.warningTitle).not.toMatch(/approved|certified|unsafe/i);
+  });
+
+  it('carries no curing warning once cured, or for a legacy wall with no base',()=>{
+    expect(describeWallStageLock(cured,false)).toMatchObject({curingConfirmed:true,warningTitle:null,warningBody:null});
+    expect(describeWallStageLock(null,true)).toMatchObject({warningTitle:null,warningBody:null});
+  });
+
+  it('accepts a wall work date before, during, and after the curing period, never refusing it for chronology',()=>{
+    expect(validateWallWorkDate(cured,false)).toBeNull();
+    expect(validateWallWorkDate(base({status:'curing',constructedOn:'2026-09-01',curingStartedOn:'2026-09-01'}),false)).toBeNull();
+    expect(validateWallWorkDate(base(),false)).toBeNull(); // planned — not cured, but never refused
+  });
+
+  it('gives a non-blocking chronology notice only when curing is not confirmed, and none once cured',()=>{
+    expect(describeWallWorkDateNotice('2026-09-02',base({status:'curing',constructedOn:'2026-09-01',curingStartedOn:'2026-09-01'}))).toContain('Base curing not confirmed on this work date');
+    expect(describeWallWorkDateNotice('2026-09-09',cured)).toBeNull();
+    expect(describeWallWorkDateNotice('2026-09-01',null)).toBeNull();
   });
 });

@@ -100,14 +100,17 @@ describe('Wall Construction UI contract',()=>{
     expect(screen2).toContain('saveLayers(');
   });
 
-  it('stages the base, curing, and wall work with an explicit cured confirmation',()=>{
+  it('stages the base and curing as tracked information, never a lock on wall work',()=>{
     const base=source('src/ui/components/WallBaseWorkflow.tsx');
     expect(base).toContain('A · Base and Wall Geometry');
     for(const stage of ['Base geometry','Base material and volume','Construction and curing','Wall geometry and layers'])expect(base).toContain(stage);
     expect(base).toContain('Confirm Base Is Cured');
     expect(base).toContain('inspected and is ready for wall work');
     expect(base).not.toMatch(/Approved|Certified|certif/i);
-    expect(base).toContain('Wall construction locked until base is cured');
+    // DEC-463. Curing is a non-blocking, warning-styled notice, never a lock on the wall sections.
+    expect(base).not.toContain('Wall construction locked until base is cured');
+    expect(base).toContain('CURING_WARNING_TITLE');
+    expect(base).toContain('CURING_WARNING_BODY');
     expect(base).toContain('validateWallBase(');
     expect(base).toContain('calculateBaseVolume(');
     expect(base).toContain('Manual quantity override');
@@ -118,11 +121,15 @@ describe('Wall Construction UI contract',()=>{
     expect(base).not.toContain('—');
   });
 
-  it('gates the wall sections on the base and keeps the reason visible',()=>{
+  it('gates the wall sections only on a recorded base, and shows a non-blocking curing notice rather than hiding anything',()=>{
     const screen3=source('src/ui/screens/WallConstructionScreen.tsx');
     expect(screen3).toContain('<WallBaseWorkflow');
     expect(screen3).toContain('stage.locked');
     expect(screen3).toContain('selected.stage.reason');
+    // DEC-463. The wall sections are only ever hidden for a missing base; curing produces a warning, not a lock.
+    expect(screen3).toContain('selected.stage.curingConfirmed');
+    expect(screen3).toContain('selected.stage.warningTitle');
+    expect(screen3).toContain('selected.stage.warningBody');
   });
 
   it('uses no em-dash in new wall-construction copy',()=>{

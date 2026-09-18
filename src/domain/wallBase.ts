@@ -2,10 +2,14 @@ import type {WallCorrectionEntry} from './walls';
 import {calculateWallVolume,type ConcretePurpose,type MaterialUnit} from './walls';
 
 /**
- * DEC-459. Every wall section created from now on is built on a recorded base: its geometry and
- * consumed material, then construction, curing, and an explicit cured confirmation, which is what
- * unlocks wall geometry, layers, and wall-material consumption. Nothing here infers a cured base
- * from elapsed time, and a wall that existed before this feature stays usable as a legacy wall.
+ * DEC-459/460, refined by DEC-463. Every wall section created from now on is built on a recorded
+ * base: its geometry, consumed material, construction, and curing. Recording a base remains
+ * required before wall geometry, layers, or wall-material consumption can be entered — but curing
+ * itself is tracked information only. DEC-463 removed the earlier rule that locked wall work until
+ * the base was explicitly confirmed cured: a base in any status (planned, constructed, curing, or
+ * cured) may have its wall recorded, edited, and dated freely. Nothing here infers a cured base
+ * from elapsed time, curing is never inferred either, and a wall that existed before this feature
+ * stays usable as a legacy wall.
  */
 export type BaseStatus='planned'|'constructed'|'curing'|'cured';
 export const baseStatusLabels:Record<BaseStatus,string>={planned:'Planned',constructed:'Constructed / poured',curing:'Curing',cured:'Cured'};
@@ -50,16 +54,17 @@ export function validateWallBase(draft:WallBaseDraft):string[]{
   return issues;
 }
 
-/** DEC-459. Only forward transitions, each with its own date; curing never completes on its own. */
-export function validateBaseStatusChange(base:WallBase,change:BaseStatusChange,context:{wallActivity?:boolean}={}):string[]{
+/**
+ * DEC-459, refined by DEC-463. Only forward transitions, each with its own date; curing never
+ * completes on its own. Reverting a cured base back to curing is always allowed, including when
+ * wall work already exists above it: curing chronology is informational and a correction here
+ * never invalidates, blocks, or removes any wall record.
+ */
+export function validateBaseStatusChange(base:WallBase,change:BaseStatusChange):string[]{
   const issues:string[]=[];
   const from=ORDER.indexOf(base.status),to=ORDER.indexOf(change.status);
   const revertingCure=base.status==='cured'&&change.status==='curing';
-  if(revertingCure){
-    // A cured base may only step back while nothing has been built on it.
-    if(context.wallActivity)issues.push('Wall work is already recorded above this base, so it cannot return to curing. Correct the wall records first.');
-    return issues;
-  }
+  if(revertingCure)return issues;
   if(to!==from+1)issues.push('A base moves from planned to constructed, then curing, then cured.');
   if(issues.length)return issues;
   if(change.status==='constructed'&&!change.constructedOn)issues.push('Record the construction or pour date.');
@@ -89,21 +94,43 @@ export function validateBaseLifecycle(base:Pick<WallBase,'status'|'constructedOn
   return issues;
 }
 
-export type WallStageLock={locked:boolean;legacy:boolean;reason:string};
-/** DEC-459. Why wall construction is or is not available, in plain words for the screen and the API. */
+export const CURING_WARNING_TITLE='Base curing is not yet confirmed';
+export const CURING_WARNING_BODY='You can continue recording wall planning and work. Confirm curing separately when the base is ready.';
+
+export type WallStageLock={locked:boolean;legacy:boolean;curingConfirmed:boolean;reason:string;warningTitle:string|null;warningBody:string|null};
+/**
+ * DEC-459/460, refined by DEC-463. `locked` is true only when this wall requires a base and none
+ * has been recorded yet — the one thing that still blocks wall work. Curing status never locks
+ * anything: once a base exists in any status, `locked` is false and `warningTitle`/`warningBody`
+ * carry a non-blocking notice for the screen to show beside the wall sections, which stay open,
+ * editable, and saveable regardless of curing. The notice is deliberately not "approved" or
+ * "certified" wording, and never implies the foundation is unsafe.
+ */
 export function describeWallStageLock(base:WallBase|null,legacyWall:boolean):WallStageLock{
-  if(legacyWall&&!base)return{locked:false,legacy:true,reason:'Base not recorded — legacy wall'};
-  if(!base)return{locked:true,legacy:false,reason:'Record the base for this wall before recording wall construction.'};
-  if(base.status==='cured')return{locked:false,legacy:false,reason:`Base confirmed cured on ${base.curedOn}.`};
-  return{locked:true,legacy:false,reason:`Wall construction is locked until the base is confirmed cured. The base is ${baseStatusLabels[base.status].toLocaleLowerCase('en-US')}.`};
+  if(legacyWall&&!base)return{locked:false,legacy:true,curingConfirmed:true,reason:'Base not recorded — legacy wall',warningTitle:null,warningBody:null};
+  if(!base)return{locked:true,legacy:false,curingConfirmed:false,reason:'Record the base for this wall before recording wall construction.',warningTitle:null,warningBody:null};
+  const curingConfirmed=base.status==='cured';
+  return{
+    locked:false,legacy:false,curingConfirmed,
+    reason:curingConfirmed?`Base confirmed cured on ${base.curedOn}.`:`Base is ${baseStatusLabels[base.status].toLocaleLowerCase('en-US')}.`,
+    warningTitle:curingConfirmed?null:CURING_WARNING_TITLE,
+    warningBody:curingConfirmed?null:CURING_WARNING_BODY,
+  };
 }
 
-/** DEC-459. Wall work can never be dated before the base was confirmed cured. */
-export function validateWallWorkDate(usedOn:string,base:WallBase|null,legacyWall:boolean):string|null{
+/** DEC-463. The only thing that still blocks wall work is a missing base; curing chronology never refuses a date. */
+export function validateWallWorkDate(base:WallBase|null,legacyWall:boolean):string|null{
   const lock=describeWallStageLock(base,legacyWall);
-  if(lock.legacy)return null;
-  if(lock.locked)return lock.reason;
-  return base?.curedOn&&usedOn<base.curedOn?`Wall work cannot be dated before the base was confirmed cured on ${base.curedOn}.`:null;
+  return lock.legacy||!lock.locked?null:lock.reason;
+}
+
+/**
+ * DEC-463. A non-blocking, purely informational chronology note: the date is always recorded
+ * exactly as entered regardless of what this returns.
+ */
+export function describeWallWorkDateNotice(usedOn:string,base:WallBase|null):string|null{
+  if(!base||base.status==='cured')return null;
+  return `Base curing not confirmed on this work date (base is ${baseStatusLabels[base.status].toLocaleLowerCase('en-US')}).`;
 }
 
 export function curingDays(base:Pick<WallBase,'curingStartedOn'|'curedOn'>,today:string):number|null{
