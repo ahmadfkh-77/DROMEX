@@ -3,10 +3,12 @@ import {StyleSheet,Text,View} from 'react-native';
 
 import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLiftRepository';
 import type {WallRepository} from '../../data/repositories/WallRepository';
+import {buildCombinedCyclopeanDiagram,stackInputFrom} from '../../domain/cyclopeanLiftDiagram';
 import {baseStatusLabels} from '../../domain/wallBase';
-import type {LiftReconciliation} from '../../domain/wallCyclopeanLift';
+import {reconcileLifts,type CyclopeanLift,type LiftReconciliation} from '../../domain/wallCyclopeanLift';
 import {wallPurposeLabels,wallSystemLabels,type WallDetail} from '../../domain/walls';
 import {AppButton,AppCard,Feedback,PageHeader} from '../components/AppPrimitives';
+import {CyclopeanStackDiagramView} from '../components/CyclopeanStackDiagramView';
 import {LiftReconciliationPanel} from '../components/LiftReconciliationPanel';
 import {ParentContextHeader} from '../components/ParentContextHeader';
 import {colors} from '../theme';
@@ -18,17 +20,42 @@ export function WallOverviewScreen({repository,liftRepository,wallId,trail,onBac
 }){
   const[detail,setDetail]=useState<WallDetail|null>(null);
   const[reconciliation,setReconciliation]=useState<LiftReconciliation|null>(null);
+  const[wallLifts,setWallLifts]=useState<CyclopeanLift[]>([]);
+  const[foundationLifts,setFoundationLifts]=useState<CyclopeanLift[]>([]);
+  const[foundationReconciliation,setFoundationReconciliation]=useState<LiftReconciliation|null>(null);
   const[error,setError]=useState<string|null>(null);
 
   const refresh=useCallback(async()=>{
-    const[nextDetail,nextReconciliation]=await Promise.all([repository.getWall(wallId),liftRepository.reconcileWall(wallId)]);
-    setDetail(nextDetail);setReconciliation(nextReconciliation);
+    const[nextDetail,nextReconciliation,nextWallLifts]=await Promise.all([
+      repository.getWall(wallId),liftRepository.reconcileWall(wallId),liftRepository.listLiftsForWall(wallId),
+    ]);
+    setDetail(nextDetail);setReconciliation(nextReconciliation);setWallLifts(nextWallLifts);
+    const foundationId=nextDetail?.foundation?.id;
+    if(foundationId){
+      const[lifts,reconciled]=await Promise.all([
+        liftRepository.listLiftsForFoundation(foundationId),liftRepository.reconcileFoundation(foundationId),
+      ]);
+      setFoundationLifts(lifts);setFoundationReconciliation(reconciled);
+    }else{setFoundationLifts([]);setFoundationReconciliation(null);}
   },[repository,liftRepository,wallId]);
 
   useEffect(()=>{void refresh().catch(cause=>setError(cause instanceof Error?cause.message:'Could not load this wall.'));},[refresh]);
 
   if(!detail||!reconciliation)return <View style={styles.screen}><Text style={styles.detail} accessibilityLiveRegion="polite">{error??'Loading…'}</Text></View>;
   const{wall,foundation,stage}=detail;
+  // Curing is shown on the drawing as a note and never removes wall content from it (DEC-463).
+  const combinedDiagram=buildCombinedCyclopeanDiagram({
+    foundation:stackInputFrom({
+      title:foundation?.reference??'No linked foundation',contextLabel:null,parentLabel:'Foundation',
+      parentNetVolumeM3:foundation?.netVolumeM3??0,lifts:foundationLifts,
+      reconciliation:foundationReconciliation??reconcileLifts(foundation?.netVolumeM3??0,[]),
+    }),
+    wall:stackInputFrom({
+      title:wall.name,contextLabel:null,parentLabel:'Wall',parentNetVolumeM3:wall.netVolumeM3,
+      lifts:wallLifts,reconciliation,
+      curingNote:!stage.curingConfirmed&&stage.warningBody?stage.warningBody:null,
+    }),
+  });
 
   return <View style={styles.screen}>
     <PageHeader eyebrow="WALL" title={wall.name} onBack={onBack}/>
@@ -42,6 +69,10 @@ export function WallOverviewScreen({repository,liftRepository,wallId,trail,onBac
     </AppCard>
 
     <AppCard title="Structural capacity"><LiftReconciliationPanel netVolumeM3={wall.netVolumeM3} reconciliation={reconciliation}/></AppCard>
+
+    <AppCard title="Wall on its foundation" hint="A combined schematic: wall lifts above the construction joint, foundation lifts below it.">
+      <CyclopeanStackDiagramView diagram={combinedDiagram} compact/>
+    </AppCard>
 
     <View style={styles.actions}>
       <AppButton label="Wall Geometry" tone="secondary" onPress={onOpenGeometry}/>

@@ -7,6 +7,7 @@ import type {Foundation} from '../../domain/foundations';
 import {ConcreteMatrixEditorScreen} from './ConcreteMatrixEditorScreen';
 import {CyclopeanLiftsListScreen} from './CyclopeanLiftsListScreen';
 import {FoundationCuringScreen} from './FoundationCuringScreen';
+import {FoundationDiagramScreen} from './FoundationDiagramScreen';
 import {FoundationGeometryScreen} from './FoundationGeometryScreen';
 import {FoundationOverviewScreen} from './FoundationOverviewScreen';
 import {FoundationSummaryScreen} from './FoundationSummaryScreen';
@@ -19,7 +20,7 @@ import {WallOverviewScreen} from './WallOverviewScreen';
 
 type LiftContext={liftId:string;reference:string;parentType:'foundation'|'wall'};
 type View=
-  |{kind:'overview'}|{kind:'geometry'}|{kind:'lifts'}|{kind:'summary'}|{kind:'curing'}|{kind:'history'}
+  |{kind:'overview'}|{kind:'geometry'}|{kind:'lifts'}|{kind:'summary'}|{kind:'curing'}|{kind:'history'}|{kind:'diagram'}
   |{kind:'wall'}|{kind:'wallGeometry'}|{kind:'wallLifts'}|{kind:'wallMaterials'}|{kind:'wallHistory'}
   |{kind:'stoneEditor';lift:LiftContext}|{kind:'concreteEditor';lift:LiftContext};
 
@@ -51,7 +52,10 @@ export function FoundationConstructionNavigator({repository,liftRepository,found
 
   if(view.kind==='overview')return <AppPage keyboard><FoundationOverviewScreen repository={repository} liftRepository={liftRepository} foundationId={foundationId} section={section} trail={baseTrail} onBack={onBack}
     onOpenGeometry={()=>setView({kind:'geometry'})} onOpenLifts={()=>setView({kind:'lifts'})} onOpenCuring={()=>setView({kind:'curing'})}
-    onOpenHistory={()=>setView({kind:'history'})} onOpenWall={()=>setView({kind:'wall'})} onOpenSummary={()=>setView({kind:'summary'})}/></AppPage>;
+    onOpenHistory={()=>setView({kind:'history'})} onOpenWall={()=>setView({kind:'wall'})} onOpenSummary={()=>setView({kind:'summary'})}
+    onOpenDiagram={()=>setView({kind:'diagram'})}/></AppPage>;
+
+  if(view.kind==='diagram')return <AppPage keyboard><FoundationDiagramScreen repository={repository} liftRepository={liftRepository} foundationId={foundationId} section={section} trail={baseTrail} onBack={()=>setView({kind:'overview'})}/></AppPage>;
 
   if(view.kind==='geometry')return <AppPage keyboard><FoundationGeometryScreen repository={repository} foundationId={foundationId} trail={baseTrail} onBack={()=>setView({kind:'overview'})} onChanged={notify}/></AppPage>;
 

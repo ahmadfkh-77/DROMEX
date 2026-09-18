@@ -2,12 +2,14 @@ import {useCallback,useEffect,useState} from 'react';
 import {Alert,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLiftRepository';
+import {liftDiagramLiftFrom,type LiftDiagramLift} from '../../domain/cyclopeanLiftDiagram';
 import {
-  calculateVolumeSnapshot, concreteMatrixVariance, estimatedConcreteMatrixVolume,
-  type ConcreteCalculationMethod, type CyclopeanLift,
+  calculateVolumeSnapshot, concreteMatrixVariance, deriveLiftStatus, estimatedConcreteMatrixVolume,
+  type ConcreteCalculationMethod, type ConcreteMatrixPhase, type CyclopeanLift,
 } from '../../domain/wallCyclopeanLift';
 import {formatCubicMetres} from '../../domain/walls';
 import {AppButton,AppField,Feedback} from '../components/AppPrimitives';
+import {CyclopeanLiftDiagramView} from '../components/CyclopeanLiftDiagramView';
 import {DatePickerField} from '../components/DatePickerField';
 import {emptyLiftVolumeForm,LiftVolumeCalculator,liftVolumeDimensionsFrom,liftVolumeFormFrom,type LiftVolumeForm} from '../components/LiftVolumeCalculator';
 import {LiftVarianceRow} from '../components/LiftVarianceRow';
@@ -64,6 +66,19 @@ export function ConcreteMatrixEditorScreen({repository,liftId,trail,onBack,onSav
   const useIndependent=()=>{if(independentSnapshot){setQuantity(String(independentSnapshot.netVolumeM3));setManualOverride(false);setDirty(true);}};
   const variance=quantity.trim()?concreteMatrixVariance(method==='independent'&&independentSnapshot?independentSnapshot.netVolumeM3:estimatedMatrixVolumeM3,Number(quantity)):null;
 
+  // The exact same lift the Stone phase drew, now carrying whatever concrete figure is on this form,
+  // so the two editors can never appear to describe different lifts.
+  const draftPhase:ConcreteMatrixPhase={
+    liftId,calculationMethod:method,estimatedMatrixVolumeM3,independentCalculation:independentSnapshot,
+    actualReadyMixQuantityM3:quantity.trim()?Number(quantity):null,manualOverride,purpose,workDate:workDate||null,notes,
+  };
+  const previewLift:LiftDiagramLift={
+    ...liftDiagramLiftFrom(lift),
+    estimatedConcreteM3:method==='independent'&&independentSnapshot?independentSnapshot.netVolumeM3:estimatedMatrixVolumeM3,
+    actualReadyMixM3:draftPhase.actualReadyMixQuantityM3,variance,
+    status:deriveLiftStatus({stonePhase:lift.stonePhase,concretePhase:draftPhase}),
+  };
+
   async function save(){
     setBusy(true);setError(null);
     try{
@@ -91,6 +106,9 @@ export function ConcreteMatrixEditorScreen({repository,liftId,trail,onBack,onSav
     <Text style={styles.detail}>Lift structural volume {formatCubicMetres(lift.netLiftVolumeM3)} − Stone {formatCubicMetres(lift.stonePhase.calculatedStoneVolumeM3)} = estimated matrix {formatCubicMetres(estimatedMatrixVolumeM3)}</Text>
     {error?<Feedback kind="error">{error}</Feedback>:null}
     {saved?<Feedback kind="success">Concrete fill saved. This lift is now complete.</Feedback>:null}
+
+    <CyclopeanLiftDiagramView lift={previewLift} draggable={false}
+      caption="The same Stone lift, with the concrete matrix filling around it. Placement is changed in the Stone phase."/>
 
     <View style={styles.methods}>
       <MethodButton label="Use estimated matrix requirement" active={method==='estimated_matrix'} onPress={()=>{setMethod('estimated_matrix');setDirty(true);}}/>

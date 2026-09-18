@@ -3,10 +3,12 @@ import {StyleSheet,Text,View} from 'react-native';
 
 import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLiftRepository';
 import type {WallRepository} from '../../data/repositories/WallRepository';
+import {buildCyclopeanStackDiagram,stackInputFrom} from '../../domain/cyclopeanLiftDiagram';
 import type {Foundation} from '../../domain/foundations';
-import {deriveLiftStatus,type CyclopeanLift, type LiftReconciliation} from '../../domain/wallCyclopeanLift';
+import {deriveLiftStatus,type CyclopeanLift, type LegacyCompositeStage, type LiftReconciliation} from '../../domain/wallCyclopeanLift';
 import {formatCubicMetres} from '../../domain/walls';
 import {AppCard,Feedback,PageHeader} from '../components/AppPrimitives';
+import {CyclopeanStackDiagramView} from '../components/CyclopeanStackDiagramView';
 import {LiftReconciliationPanel} from '../components/LiftReconciliationPanel';
 import {LiftStatusPill} from '../components/LiftStatusPill';
 import {ParentContextHeader} from '../components/ParentContextHeader';
@@ -19,14 +21,16 @@ export function FoundationSummaryScreen({repository,liftRepository,foundationId,
   const[foundation,setFoundation]=useState<Foundation|null>(null);
   const[lifts,setLifts]=useState<CyclopeanLift[]>([]);
   const[reconciliation,setReconciliation]=useState<LiftReconciliation|null>(null);
+  const[legacyStage,setLegacyStage]=useState<LegacyCompositeStage|null>(null);
   const[error,setError]=useState<string|null>(null);
 
   const refresh=useCallback(async()=>{
-    const[found,nextLifts,nextReconciliation]=await Promise.all([
-      repository.getFoundation(foundationId),liftRepository.listLiftsForFoundation(foundationId),liftRepository.reconcileFoundation(foundationId),
+    const[found,nextLifts,nextReconciliation,legacy]=await Promise.all([
+      repository.getFoundation(foundationId),liftRepository.listLiftsForFoundation(foundationId),
+      liftRepository.reconcileFoundation(foundationId),liftRepository.getLegacyCompositeStage(foundationId),
     ]);
     if(!found)throw new Error('Foundation was not found.');
-    setFoundation(found);setLifts(nextLifts);setReconciliation(nextReconciliation);
+    setFoundation(found);setLifts(nextLifts);setReconciliation(nextReconciliation);setLegacyStage(legacy);
   },[repository,liftRepository,foundationId]);
 
   useEffect(()=>{void refresh().catch(cause=>setError(cause instanceof Error?cause.message:'Could not load this foundation.'));},[refresh]);
@@ -34,6 +38,10 @@ export function FoundationSummaryScreen({repository,liftRepository,foundationId,
   if(!foundation||!reconciliation)return <View style={styles.screen}><Text style={styles.detail} accessibilityLiveRegion="polite">{error??'Loading…'}</Text></View>;
 
   const incomplete=lifts.filter(lift=>deriveLiftStatus(lift)!=='completed');
+  const diagram=buildCyclopeanStackDiagram(stackInputFrom({
+    title:foundation.reference,contextLabel:null,parentLabel:'Foundation',
+    parentNetVolumeM3:foundation.netVolumeM3,lifts,reconciliation,legacyStage,
+  }));
 
   return <View style={styles.screen}>
     <PageHeader eyebrow="FOUNDATION SUMMARY" title={foundation.reference} onBack={onBack}/>
@@ -41,6 +49,10 @@ export function FoundationSummaryScreen({repository,liftRepository,foundationId,
     {error?<Feedback kind="error">{error}</Feedback>:null}
 
     <AppCard title="Reconciliation"><LiftReconciliationPanel netVolumeM3={foundation.netVolumeM3} reconciliation={reconciliation}/></AppCard>
+
+    <AppCard title="Foundation diagram">
+      <CyclopeanStackDiagramView diagram={diagram} caption="Every recorded lift in construction order, with the legend below the drawing. Schematic, not a construction drawing."/>
+    </AppCard>
 
     <AppCard title="Lifts, in order">
       {lifts.length===0?<Text style={styles.detail}>No lifts recorded yet.</Text>:lifts.map(lift=>{

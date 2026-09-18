@@ -5,10 +5,12 @@ import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLif
 import type {WallRepository} from '../../data/repositories/WallRepository';
 import type {ConstructionSection} from '../../domain/constructionSections';
 import type {Foundation} from '../../domain/foundations';
+import {buildCyclopeanStackDiagram,stackInputFrom} from '../../domain/cyclopeanLiftDiagram';
 import {baseStatusLabels,CURING_WARNING_BODY,CURING_WARNING_TITLE} from '../../domain/wallBase';
-import type {LiftReconciliation, LegacyCompositeStage} from '../../domain/wallCyclopeanLift';
+import type {CyclopeanLift,LiftReconciliation, LegacyCompositeStage} from '../../domain/wallCyclopeanLift';
 import {formatCubicMetres,type Wall} from '../../domain/walls';
 import {AppButton,AppCard,Feedback,PageHeader} from '../components/AppPrimitives';
+import {CyclopeanStackDiagramView} from '../components/CyclopeanStackDiagramView';
 import {LiftReconciliationPanel} from '../components/LiftReconciliationPanel';
 import {ParentContextHeader} from '../components/ParentContextHeader';
 import {colors} from '../theme';
@@ -17,11 +19,12 @@ import {colors} from '../theme';
  * DEC-466. The foundation workspace home: summaries only, one action per navigation destination.
  * No calculator, no material-entry form, and no full history ever appear directly on this screen.
  */
-export function FoundationOverviewScreen({repository,liftRepository,foundationId,section,trail,onBack,onOpenGeometry,onOpenLifts,onOpenCuring,onOpenHistory,onOpenWall,onOpenSummary}:{
+export function FoundationOverviewScreen({repository,liftRepository,foundationId,section,trail,onBack,onOpenGeometry,onOpenLifts,onOpenCuring,onOpenHistory,onOpenWall,onOpenSummary,onOpenDiagram}:{
   repository:WallRepository;liftRepository:CyclopeanLiftRepository;foundationId:string;section:ConstructionSection|null;trail:string[];onBack:()=>void;
-  onOpenGeometry:()=>void;onOpenLifts:()=>void;onOpenCuring:()=>void;onOpenHistory:()=>void;onOpenWall:()=>void;onOpenSummary:()=>void;
+  onOpenGeometry:()=>void;onOpenLifts:()=>void;onOpenCuring:()=>void;onOpenHistory:()=>void;onOpenWall:()=>void;onOpenSummary:()=>void;onOpenDiagram:()=>void;
 }){
   const[foundation,setFoundation]=useState<Foundation|null>(null);
+  const[lifts,setLifts]=useState<CyclopeanLift[]>([]);
   const[wall,setWall]=useState<Wall|null>(null);
   const[reconciliation,setReconciliation]=useState<LiftReconciliation|null>(null);
   const[legacy,setLegacy]=useState<LegacyCompositeStage|null>(null);
@@ -30,10 +33,11 @@ export function FoundationOverviewScreen({repository,liftRepository,foundationId
   const refresh=useCallback(async()=>{
     const found=await repository.getFoundation(foundationId);
     if(!found)throw new Error('Foundation was not found.');
-    const[nextReconciliation,nextLegacy,allWalls]=await Promise.all([
-      liftRepository.reconcileFoundation(foundationId),liftRepository.getLegacyCompositeStage(foundationId),repository.listWalls(found.projectId),
+    const[nextReconciliation,nextLegacy,allWalls,nextLifts]=await Promise.all([
+      liftRepository.reconcileFoundation(foundationId),liftRepository.getLegacyCompositeStage(foundationId),
+      repository.listWalls(found.projectId),liftRepository.listLiftsForFoundation(foundationId),
     ]);
-    setFoundation(found);setReconciliation(nextReconciliation);setLegacy(nextLegacy);
+    setFoundation(found);setReconciliation(nextReconciliation);setLegacy(nextLegacy);setLifts(nextLifts);
     setWall(allWalls.find(value=>value.foundationId===foundationId)??null);
   },[repository,liftRepository,foundationId]);
 
@@ -42,6 +46,11 @@ export function FoundationOverviewScreen({repository,liftRepository,foundationId
   if(!foundation||!reconciliation)return <View style={styles.screen}><Text style={styles.detail} accessibilityLiveRegion="polite">{error??'Loading…'}</Text></View>;
 
   const curingConfirmed=foundation.status==='cured';
+  const summaryDiagram=buildCyclopeanStackDiagram(stackInputFrom({
+    title:foundation.reference,contextLabel:section?.name??null,parentLabel:'Foundation',
+    parentNetVolumeM3:foundation.netVolumeM3,lifts,reconciliation,legacyStage:legacy,
+    curingNote:curingConfirmed?null:'Curing not yet confirmed. This is information only and blocks nothing.',
+  }));
   const nextAction=reconciliation.overAllocated?'Resolve lift over-allocation'
     :reconciliation.remainingUnallocatedVolumeM3>0?'Add the next Cyclopean Lift'
     :!wall?'Create or link the wall above this foundation'
@@ -58,6 +67,11 @@ export function FoundationOverviewScreen({repository,liftRepository,foundationId
 
     <AppCard title="Structural capacity">
       <LiftReconciliationPanel netVolumeM3={foundation.netVolumeM3} reconciliation={reconciliation}/>
+    </AppCard>
+
+    <AppCard title="Lifts at a glance" hint="A summary drawing. Open the full diagram to read one lift in detail.">
+      <CyclopeanStackDiagramView diagram={summaryDiagram} compact/>
+      <AppButton label="View Foundation Diagram" tone="secondary" onPress={onOpenDiagram}/>
     </AppCard>
 
     {legacy?<AppCard tone="cream" title="Imported legacy composite stage" hint="Recorded before ordered Cyclopean Lifts existed. Shown for history only -- new work below uses lifts.">

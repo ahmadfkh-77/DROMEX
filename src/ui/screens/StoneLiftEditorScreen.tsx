@@ -2,13 +2,16 @@ import {useCallback,useEffect,useState} from 'react';
 import {Alert,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLiftRepository';
-import {calculateVolumeSnapshot,type CyclopeanLift} from '../../domain/wallCyclopeanLift';
+import {liftDiagramLiftFrom,resetLiftStoneOffsets,type LiftDiagramLift} from '../../domain/cyclopeanLiftDiagram';
+import {calculateVolumeSnapshot,deriveLiftStatus,type CyclopeanLift,type LiftStoneOffsets,type LiftStonePosition} from '../../domain/wallCyclopeanLift';
 import {formatCubicMetres} from '../../domain/walls';
 import {AppButton,AppField,Feedback} from '../components/AppPrimitives';
+import {CyclopeanLiftDiagramView} from '../components/CyclopeanLiftDiagramView';
 import {DatePickerField} from '../components/DatePickerField';
 import {emptyLiftVolumeForm,LiftVolumeCalculator,liftVolumeDimensionsFrom,liftVolumeFormFrom,type LiftVolumeForm} from '../components/LiftVolumeCalculator';
 import {ParentContextHeader} from '../components/ParentContextHeader';
 import {SaveContinueFooter} from '../components/SaveContinueFooter';
+import {StonePlacementControls} from '../components/StonePlacementControls';
 import {colors} from '../theme';
 
 const today=()=>new Date().toISOString().slice(0,10);
@@ -27,6 +30,8 @@ export function StoneLiftEditorScreen({repository,liftId,trail,onBack,onContinue
   const[manualOverride,setManualOverride]=useState(false);
   const[workDate,setWorkDate]=useState(today());
   const[notes,setNotes]=useState('');
+  const[position,setPosition]=useState<LiftStonePosition|null>(null);
+  const[offsets,setOffsets]=useState<LiftStoneOffsets|null>(null);
   const[busy,setBusy]=useState(false);
   const[error,setError]=useState<string|null>(null);
   const[saved,setSaved]=useState(false);
@@ -42,6 +47,8 @@ export function StoneLiftEditorScreen({repository,liftId,trail,onBack,onContinue
     setManualOverride(found.stonePhase.manualOverride);
     setWorkDate(found.stonePhase.workDate??today());
     setNotes(found.stonePhase.notes);
+    setPosition(found.stonePhase.position);
+    setOffsets(found.stonePhase.offsets);
     setDirty(false);
   },[repository,liftId]);
 
@@ -50,15 +57,28 @@ export function StoneLiftEditorScreen({repository,liftId,trail,onBack,onContinue
   if(!lift)return <View style={styles.screen}><Text style={styles.detail} accessibilityLiveRegion="polite">{error??'Loading…'}</Text></View>;
 
   const calculationDimensions=calculatorOn?liftVolumeDimensionsFrom(geometry):null;
+  const calculationSnapshot=calculationDimensions?calculateVolumeSnapshot(calculationDimensions):lift.stonePhase.calculationSnapshot;
   const calculatedVolume=calculationDimensions?calculateVolumeSnapshot(calculationDimensions).netVolumeM3:0;
   const useCalculated=()=>{setQuantity(String(calculatedVolume));setManualOverride(false);setDirty(true);};
+
+  // What the drawing shows is the lift as it stands in this form right now, not the last saved copy,
+  // so the placement being dragged is always the one that will be saved. Every quantity and status on
+  // it still comes from the domain.
+  const actualStoneQuantityM3=quantity.trim()?Number(quantity):null;
+  const previewLift:LiftDiagramLift={
+    ...liftDiagramLiftFrom(lift),
+    calculatedStoneVolumeM3:calculationDimensions?calculatedVolume:lift.stonePhase.calculatedStoneVolumeM3,
+    actualStoneQuantityM3,stoneGeometry:calculationSnapshot,position,offsets,
+    status:deriveLiftStatus({stonePhase:{...lift.stonePhase,actualStoneQuantityM3,workDate:workDate||null},concretePhase:lift.concretePhase}),
+  };
+  const hasStone=(actualStoneQuantityM3??0)>0||calculatedVolume>0;
 
   async function save(continueNext:boolean){
     setBusy(true);setError(null);
     try{
       await repository.saveStonePhase(liftId,{
         calculationDimensions,actualStoneQuantityM3:quantity.trim()?Number(quantity):null,manualOverride,workDate:workDate||null,
-        position:lift!.stonePhase.position,offsets:lift!.stonePhase.offsets,notes,
+        position,offsets,notes,
       });
       setSaved(true);setDirty(false);
       if(continueNext)onContinueToConcrete(liftId);
@@ -89,6 +109,15 @@ export function StoneLiftEditorScreen({repository,liftId,trail,onBack,onContinue
 
     <AppField label="Final Stone quantity (m³) *" value={quantity} onChangeText={value=>{setQuantity(value);setManualOverride(true);setDirty(true);}} keyboardType="decimal-pad"/>
     {manualOverride?<Text style={styles.override}>Manual override -- differs from, or was entered without, the calculator.</Text>:null}
+
+    <CyclopeanLiftDiagramView lift={previewLift} draggable={hasStone}
+      caption="Placement only. Moving the Stone never changes its recorded volume or measured dimensions."
+      onPlacementChange={placement=>{setPosition(placement.position);setOffsets(placement.offsets);setDirty(true);}}/>
+    {hasStone?<StonePlacementControls lift={previewLift} position={position} offsets={offsets}
+      onPosition={value=>{setPosition(value);setDirty(true);}}
+      onOffsets={value=>{setOffsets(value);setDirty(true);}}
+      onSwitchMode={detailed=>{setOffsets(detailed?resetLiftStoneOffsets(previewLift):null);setDirty(true);}}/>:null}
+
     <DatePickerField label="Stone work date" value={workDate} onChange={value=>{setWorkDate(value);setDirty(true);}}/>
     <AppField label="Notes" value={notes} onChangeText={value=>{setNotes(value);setDirty(true);}} multiline/>
 
