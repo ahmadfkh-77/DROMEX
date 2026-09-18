@@ -112,17 +112,17 @@ describe('Wall Construction UI contract',()=>{
     expect(geometry).toContain('Manual quantity override');
   });
 
-  it('DEC-464: gates wall work only on a recorded foundation, and shows a non-blocking curing notice rather than hiding anything',()=>{
+  it('DEC-464/466: gates wall work only on a recorded foundation, and shows a non-blocking curing notice rather than hiding anything',()=>{
     const screen3=source('src/ui/screens/WallConstructionScreen.tsx');
-    const workspace=source('src/ui/screens/FoundationWorkspaceScreen.tsx');
+    const overview=source('src/ui/screens/FoundationOverviewScreen.tsx');
     expect(screen3).not.toContain('<WallBaseWorkflow');
     expect(existsSync(join(__dirname,'..','src/ui/components/WallBaseWorkflow.tsx'))).toBe(false);
-    // DEC-463/464. The only thing ever hidden for is a missing foundation; curing is a warning shown
-    // beside every stage, never a lock on the Wall/Layers/History stages.
-    expect(workspace).toContain('CURING_WARNING_TITLE');
-    expect(workspace).toContain('CURING_WARNING_BODY');
-    expect(workspace).not.toMatch(/locked until|Wall construction is locked/);
-    expect(workspace).toContain('curingConfirmed');
+    // DEC-463/464/466. The only thing ever hidden for is a missing foundation; curing is a warning shown
+    // on the overview, never a lock on any other screen.
+    expect(overview).toContain('CURING_WARNING_TITLE');
+    expect(overview).toContain('CURING_WARNING_BODY');
+    expect(overview).not.toMatch(/locked until|Wall construction is locked/);
+    expect(overview).toContain('curingConfirmed');
   });
 
   it('DEC-464: Project -> Construction Section -> Foundation -> Wall directory, with inline section/foundation creation',()=>{
@@ -137,16 +137,15 @@ describe('Wall Construction UI contract',()=>{
     expect(screen3).toContain('LegacyWallsPanel');
   });
 
-  it('DEC-464: a five-stage, vertical/compact workspace stepper, never a row of tiny horizontal labels, with every stage reachable',()=>{
-    const stepper=source('src/ui/components/FoundationStageStepper.tsx');
-    for(const stage of ['Foundation','Curing','Wall','Layers and Materials','History and Reports'])expect(stepper).toContain(`'${stage}'`);
-    expect(stepper).toContain("flexDirection:'row',alignItems:'center'"); // each row itself, not the whole list, is horizontal
-    expect(stepper).toContain('list:{gap:'); // the stage list stacks vertically
-    expect(stepper).toMatch(/minHeight:(4[4-9]|[5-9]\d)/);
-    expect(stepper).not.toContain('locked'); // stages are organizational only -- never a lock state
-    const workspace=source('src/ui/screens/FoundationWorkspaceScreen.tsx');
-    expect(workspace).toContain('<FoundationStageStepper');
-    expect(workspace).toContain('onSelect={setStage}'); // every stage stays tappable, including completed ones
+  it('DEC-466: opening a foundation reaches a separated-screen navigator, not the old single-page stepper',()=>{
+    const screen3=source('src/ui/screens/WallConstructionScreen.tsx');
+    expect(existsSync(join(__dirname,'..','src/ui/screens/FoundationWorkspaceScreen.tsx'))).toBe(false);
+    expect(existsSync(join(__dirname,'..','src/ui/components/FoundationStageStepper.tsx'))).toBe(false);
+    expect(screen3).not.toContain('FoundationWorkspaceScreen');
+    expect(screen3).toContain('<FoundationConstructionNavigator');
+    const overview=source('src/ui/screens/FoundationOverviewScreen.tsx');
+    for(const action of ['Edit Geometry','Cyclopean Lifts','Foundation Summary','Curing','History'])expect(overview).toContain(action);
+    expect(overview).not.toContain('<FoundationGeometryForm'); // summaries only, no forms on the overview itself
   });
 
   it('DEC-464: one active wall per foundation, selectable in every curing status, with cross-project/section refusal handled by the repository',()=>{

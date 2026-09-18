@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
+import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLiftRepository';
 import type {WallRepository} from '../../data/repositories/WallRepository';
 import type {ConstructionSection} from '../../domain/constructionSections';
 import type {Foundation} from '../../domain/foundations';
@@ -13,7 +14,7 @@ import {emptyWallUseForm,wallDraftFromForm,WallConsumptionForm,wallUseFormFromEn
 import {WallConsumptionHistory} from '../components/WallConsumptionHistory';
 import {WallDiagramView} from '../components/WallDiagramView';
 import {layerRowsFromDrafts,WallLayersEditor,type LayerRowForm} from '../components/WallLayersEditor';
-import {FoundationWorkspaceScreen} from './FoundationWorkspaceScreen';
+import {FoundationConstructionNavigator} from './FoundationConstructionNavigator';
 import {colors, radius} from '../theme';
 
 const f=(value:number,digits=2)=>value.toLocaleString(undefined,{minimumFractionDigits:digits,maximumFractionDigits:digits});
@@ -26,7 +27,7 @@ const pair=(first:number,firstUnit:string,second:number,secondUnit:string)=>[fir
  * Legacy walls (created before DEC-459, with no base/foundation concept at all) keep their original,
  * untouched consumption workflow in their own section below.
  */
-export function WallConstructionScreen({repository,onBack,initialProjectId}:{repository:WallRepository;onBack:()=>void;initialProjectId?:string|null}){
+export function WallConstructionScreen({repository,liftRepository,onBack,initialProjectId}:{repository:WallRepository;liftRepository:CyclopeanLiftRepository;onBack:()=>void;initialProjectId?:string|null}){
   const locked=!!initialProjectId;
   const[projects,setProjects]=useState<{id:string;name:string;customerName:string;location:string;status:string}[]>([]);
   const[projectId,setProjectId]=useState<string|null>(initialProjectId??null);
@@ -72,11 +73,9 @@ export function WallConstructionScreen({repository,onBack,initialProjectId}:{rep
     finally{setBusy(false);}
   }
 
-  if(openFoundationId&&projectId)return <AppPage keyboard>
-    <FoundationWorkspaceScreen repository={repository} foundationId={openFoundationId} projectId={projectId}
-      section={sections.find(value=>value.id===foundations.find(f2=>f2.id===openFoundationId)?.constructionSectionId)??null}
-      onBack={()=>{setOpenFoundationId(null);void refresh();}} onChanged={()=>void refresh()}/>
-  </AppPage>;
+  if(openFoundationId&&projectId)return <FoundationConstructionNavigator repository={repository} liftRepository={liftRepository} foundationId={openFoundationId}
+    section={sections.find(value=>value.id===foundations.find(f2=>f2.id===openFoundationId)?.constructionSectionId)??null}
+    onBack={()=>{setOpenFoundationId(null);void refresh();}} onChanged={()=>void refresh()}/>;
 
   return <AppPage keyboard>
     <PageHeader eyebrow="CONSTRUCTION QUANTITIES" title="Wall Construction" onBack={onBack}/>

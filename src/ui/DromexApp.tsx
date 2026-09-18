@@ -7,6 +7,7 @@ import {SqliteBusinessReportRepository} from '../data/repositories/SqliteBusines
 import {SqliteBackupRepository} from '../data/repositories/SqliteBackupRepository';
 import {SqliteCatalogRepository} from '../data/repositories/SqliteCatalogRepository';
 import {SqliteCloudRepository} from '../data/repositories/SqliteCloudRepository';
+import {SqliteCyclopeanLiftRepository} from '../data/repositories/SqliteCyclopeanLiftRepository';
 import {SqliteFinancialRepository} from '../data/repositories/SqliteFinancialRepository';
 import {SqliteFuelRepository} from '../data/repositories/SqliteFuelRepository';
 import {SqliteLoadRepository} from '../data/repositories/SqliteLoadRepository';
@@ -76,6 +77,7 @@ export function DromexApp(){
   const scheduleRepository=useMemo(()=>new SqliteScheduleRepository(db),[db]);
   const workspaceRepository=useMemo(()=>new SqliteWorkspaceRepository(db),[db]);
   const wallRepository=useMemo(()=>new SqliteWallRepository(db),[db]);
+  const cyclopeanLiftRepository=useMemo(()=>new SqliteCyclopeanLiftRepository(db),[db]);
   const[screen,setScreen]=useState<Screen>('home');
   const[history,setHistory]=useState<Screen[]>([]);
   const[activeProject,setActiveProject]=useState<Project|null>(null);
@@ -128,7 +130,7 @@ export function DromexApp(){
   else if(screen==='projects')content=<ProjectsScreen repository={loadRepository} onBack={()=>goBack('home')} onOpenProject={project=>openProject(project,entryIntent==='issue'?'issues':entryIntent==='photo'?'photos':null)} onProjectStatusChange={(project,status)=>{if(activeProject?.id===project.id&&status==='completed')chooseActiveProject(null);if(commandProject?.id===project.id)setCommandProject({...commandProject,status});}}/>;
   else if(screen==='schedule')content=<ScheduleScreen repository={scheduleRepository} initialProjectId={scheduleProjectId??(searchTarget?.route==='schedule'?searchTarget.projectId:null)} onBack={()=>{setScheduleProjectId(null);goBack('recordsHub');}}/>;
   else if(screen==='pavement')content=<PavementCalculatorScreen repository={pavementRepository} initialProjectId={pavementProjectId} onBack={()=>{setPavementProjectId(null);goBack('recordsHub');}}/>;
-  else if(screen==='walls')content=<WallConstructionScreen repository={wallRepository} initialProjectId={wallProjectId} onBack={()=>{setWallProjectId(null);goBack('recordsHub');}}/>;
+  else if(screen==='walls')content=<WallConstructionScreen repository={wallRepository} liftRepository={cyclopeanLiftRepository} initialProjectId={wallProjectId} onBack={()=>{setWallProjectId(null);goBack('recordsHub');}}/>;
   else if(screen==='financials')content=<FinancialsScreen repository={financialRepository} initialFromDate={dashboardRange?.fromDate} initialToDate={dashboardRange?.toDate} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='waste')content=<WasteDumpScreen repository={wasteRepository} initialProjectId={searchTarget?.route==='waste'?searchTarget.projectId:activeProject?.id} initialDumpId={searchTarget?.route==='waste'?searchTarget.id:null} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='fuel')content=<FuelTrackingScreen repository={fuelRepository} initialProjectId={fuelProjectId??activeProject?.id} lockedProjectId={fuelProjectId} initialTab={entryIntent==='fuelDelivery'?'delivery':entryIntent==='equipmentFill'?'fill':undefined} onBack={()=>{setFuelProjectId(null);goBack('recordsHub');}}/>;
