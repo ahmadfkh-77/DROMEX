@@ -607,8 +607,6 @@ values on its next save.
   separated workflow screens sit under `FoundationConstructionNavigator.tsx`, and
   `src/domain/cyclopeanLiftDiagram.ts` draws one lift, a whole parent's stack, or a combined
   foundation + wall, with real finger dragging of the Stone region in Simple and Detailed modes.
-  **DEC-466 is referenced throughout that code but has no row in `requirements/decisions.md`** —
-  it should be written up there when the owner next reviews this branch.
 - **Cyclopean construction in the Daily Report** (DEC-467): `src/domain/cyclopeanLiftReport.ts`
   projects each lift back to the report's own work date — a later Stone placement, concrete pour or
   correction is removed rather than blanked, a concrete phase is always dropped when its Stone phase
