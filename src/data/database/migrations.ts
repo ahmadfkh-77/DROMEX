@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 42;
+export const DATABASE_VERSION = 43;
 
 type TableColumn = { name: string };
 
@@ -1374,6 +1374,88 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_walls_foundation ON walls(foundation_id) WHERE foundation_id IS NOT NULL;
     `);
     currentVersion = 42;
+  }
+
+  if (currentVersion === 42) {
+    // DEC-466. Corrects the cyclopean construction model: a foundation or wall is built as an
+    // ordered series of lifts (place Stone, then pour the concrete matrix around/through it), not
+    // one Stone core sitting inside a single gross volume. Purely additive -- migrations 37-42 and
+    // the wallFoundation.ts single-core model (foundations.foundation_mode/stone_core_*,
+    // foundation_composition_records) are untouched, still readable, and still the only
+    // representation for any foundation created before this migration. One row is the whole
+    // aggregate (a lift plus its Stone phase plus its concrete matrix phase) so a concrete phase can
+    // never end up paired with the wrong lift through a separate, independently-keyed table.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS cyclopean_lifts (
+        id TEXT PRIMARY KEY NOT NULL,
+        parent_type TEXT NOT NULL CHECK (parent_type IN ('foundation','wall')),
+        foundation_id TEXT REFERENCES foundations(id),
+        wall_id TEXT REFERENCES walls(id),
+        sequence INTEGER NOT NULL CHECK (sequence > 0),
+        reference TEXT NOT NULL CHECK (length(trim(reference)) > 0),
+        start_elevation_m REAL NOT NULL,
+        length_m REAL NOT NULL CHECK (length_m > 0),
+        height_m REAL NOT NULL CHECK (height_m > 0),
+        bottom_thickness_m REAL NOT NULL CHECK (bottom_thickness_m > 0),
+        top_thickness_m REAL NOT NULL CHECK (top_thickness_m > 0),
+        deduction_m3 REAL NOT NULL DEFAULT 0 CHECK (deduction_m3 >= 0),
+        -- A historical structural-volume snapshot, the same convention foundations/wall_bases/walls
+        -- already use for their own net_volume_m3: it is what capacity reconciliation and every past
+        -- report add up, so it must never silently reinterpret itself if the trapezoid formula is
+        -- ever revised. It is always written from calculateVolumeSnapshot, never typed by hand.
+        net_lift_volume_m3 REAL NOT NULL CHECK (net_lift_volume_m3 > 0),
+        -- Lifecycle constrained here too, so an invalid status fails closed even if a caller bypasses the repository.
+        status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','stone_placed','completed')),
+
+        -- Stone phase. A calculation snapshot is null when the Stone quantity was entered directly
+        -- with no calculator, in which case stone_calculated_volume_m3 stays 0 -- never invented.
+        stone_calc_length_m REAL, stone_calc_height_m REAL, stone_calc_bottom_thickness_m REAL, stone_calc_top_thickness_m REAL,
+        stone_calc_deduction_m3 REAL, stone_calc_gross_volume_m3 REAL, stone_calc_net_volume_m3 REAL,
+        stone_calculated_volume_m3 REAL NOT NULL DEFAULT 0 CHECK (stone_calculated_volume_m3 >= 0),
+        stone_actual_quantity_m3 REAL CHECK (stone_actual_quantity_m3 IS NULL OR stone_actual_quantity_m3 >= 0),
+        stone_manual_override INTEGER NOT NULL DEFAULT 0 CHECK (stone_manual_override IN (0, 1)),
+        stone_work_date TEXT,
+        stone_position_x REAL CHECK (stone_position_x IS NULL OR (stone_position_x >= 0 AND stone_position_x <= 1)),
+        stone_position_y REAL CHECK (stone_position_y IS NULL OR (stone_position_y >= 0 AND stone_position_y <= 1)),
+        stone_offsets_json TEXT,
+        stone_notes TEXT,
+
+        -- Concrete matrix phase. Absent (Concrete fill pending) is represented by
+        -- concrete_calculation_method IS NULL across the whole phase -- never a placeholder row.
+        concrete_calculation_method TEXT CHECK (concrete_calculation_method IS NULL OR concrete_calculation_method IN ('estimated_matrix','independent')),
+        concrete_estimated_matrix_volume_m3 REAL CHECK (concrete_estimated_matrix_volume_m3 IS NULL OR concrete_estimated_matrix_volume_m3 >= 0),
+        concrete_calc_length_m REAL, concrete_calc_height_m REAL, concrete_calc_bottom_thickness_m REAL, concrete_calc_top_thickness_m REAL,
+        concrete_calc_deduction_m3 REAL, concrete_calc_gross_volume_m3 REAL, concrete_calc_net_volume_m3 REAL,
+        concrete_actual_ready_mix_m3 REAL CHECK (concrete_actual_ready_mix_m3 IS NULL OR concrete_actual_ready_mix_m3 >= 0),
+        concrete_manual_override INTEGER NOT NULL DEFAULT 0 CHECK (concrete_manual_override IN (0, 1)),
+        concrete_purpose TEXT,
+        concrete_work_date TEXT,
+        concrete_notes TEXT,
+
+        notes TEXT,
+        correction_history_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        -- Exactly one parent, and it must match parent_type -- never both, never neither.
+        CHECK (
+          (parent_type = 'foundation' AND foundation_id IS NOT NULL AND wall_id IS NULL) OR
+          (parent_type = 'wall' AND wall_id IS NOT NULL AND foundation_id IS NULL)
+        ),
+        -- The stored status can never disagree with what the phase columns themselves say, matching
+        -- domain/wallCyclopeanLift.ts's deriveLiftStatus exactly: status is 'planned' only when no
+        -- Stone is recorded, and 'completed' only when the concrete matrix phase itself is recorded.
+        -- Both are single boolean-equality checks because deriveLiftStatus is a pure function of
+        -- exactly these two booleans -- there is no third input for the middle (stone_placed) case.
+        CHECK ((stone_actual_quantity_m3 IS NOT NULL OR stone_work_date IS NOT NULL) = (status <> 'planned')),
+        CHECK ((concrete_actual_ready_mix_m3 IS NOT NULL OR concrete_work_date IS NOT NULL) = (status = 'completed'))
+      );
+      -- Sequence is unique within its exact parent, foundation and wall scoped separately.
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_cyclopean_lifts_foundation_seq ON cyclopean_lifts(foundation_id, sequence) WHERE foundation_id IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_cyclopean_lifts_wall_seq ON cyclopean_lifts(wall_id, sequence) WHERE wall_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_cyclopean_lifts_foundation ON cyclopean_lifts(foundation_id, sequence);
+      CREATE INDEX IF NOT EXISTS idx_cyclopean_lifts_wall ON cyclopean_lifts(wall_id, sequence);
+    `);
+    currentVersion = 43;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);
