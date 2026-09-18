@@ -16,7 +16,7 @@ export type StoneCorePosition={xNorm:number;yNorm:number};
 /** Detailed mode: a real sub-geometry inside the foundation, using the same trapezoid formula as the base itself. */
 export type StoneCoreOffsets={lengthM:number;depthM:number;bottomThicknessM:number;topThicknessM:number;longitudinalOffsetM:number;verticalOffsetM:number;transverseOffsetM:number};
 
-export type FoundationCompositionRecordDraft={baseId:string;wallId:string;materialType:FoundationCompositionMaterial;quantityM3:number;recordedOn:string;notes:string};
+export type FoundationCompositionRecordDraft={foundationId:string;materialType:FoundationCompositionMaterial;quantityM3:number;recordedOn:string;notes:string};
 export type FoundationCompositionCorrectionDraft=FoundationCompositionRecordDraft&{correctionReason:string};
 export type FoundationCompositionRecord=FoundationCompositionRecordDraft&{id:string;cancelledAt:string|null;cancelledReason:string|null;correctionHistory:WallCorrectionEntry[];createdAt:string;updatedAt:string|null};
 
@@ -24,7 +24,7 @@ export type ConcreteVarianceDirection='over'|'under'|'none';
 export type ConcreteVariance={varianceM3:number;direction:ConcreteVarianceDirection};
 
 export type FoundationComposition={
-  baseId:string;wallId:string;mode:FoundationCompositionMode;stoneCoreMode:StoneCoreMode|null;
+  foundationId:string;mode:FoundationCompositionMode;stoneCoreMode:StoneCoreMode|null;
   position:StoneCorePosition|null;offsets:StoneCoreOffsets|null;
   netFoundationVolumeM3:number;records:FoundationCompositionRecord[];
   activeStoneM3:number;activeReadyMixM3:number;estimatedConcreteM3:number;
@@ -118,14 +118,14 @@ export function concreteVariance(estimatedConcreteM3:number,actualReadyMixM3:num
 
 /** Assembles the read-model the screen, diagram, PDF, and workbook all share. */
 export function buildFoundationComposition(input:{
-  baseId:string;wallId:string;mode:FoundationCompositionMode;stoneCoreMode:StoneCoreMode|null;
+  foundationId:string;mode:FoundationCompositionMode;stoneCoreMode:StoneCoreMode|null;
   position:StoneCorePosition|null;offsets:StoneCoreOffsets|null;netFoundationVolumeM3:number;records:FoundationCompositionRecord[];
 }):FoundationComposition{
   const activeStoneM3=aggregateActiveQuantity(input.records,'stone');
   const activeReadyMixM3=aggregateActiveQuantity(input.records,'ready_mix');
   const estimatedConcreteM3=estimatedConcreteVolume(input.netFoundationVolumeM3,activeStoneM3);
   return{
-    baseId:input.baseId,wallId:input.wallId,mode:input.mode,stoneCoreMode:input.stoneCoreMode,position:input.position,offsets:input.offsets,
+    foundationId:input.foundationId,mode:input.mode,stoneCoreMode:input.stoneCoreMode,position:input.position,offsets:input.offsets,
     netFoundationVolumeM3:input.netFoundationVolumeM3,records:input.records,activeStoneM3,activeReadyMixM3,estimatedConcreteM3,
     variance:activeReadyMixM3>0?concreteVariance(estimatedConcreteM3,activeReadyMixM3):null,
   };

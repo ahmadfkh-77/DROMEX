@@ -1,9 +1,10 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { FuelType } from '../../domain/fuel';
-import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedFuelFill, LinkedProjectLoad, LinkedQuarryLoad, LinkedWallWork, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption, WorkerSafetyEntry } from '../../domain/projectReports';
+import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedFoundationActivity, LinkedFuelFill, LinkedProjectLoad, LinkedQuarryLoad, LinkedWallWork, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption, WorkerSafetyEntry } from '../../domain/projectReports';
 import { validateDailyReport } from '../../domain/projectReports';
-import type { BaseStatus, WallBase } from '../../domain/wallBase';
+import type { BaseStatus } from '../../domain/wallBase';
+import type { Foundation } from '../../domain/foundations';
 import { SqliteWallRepository, wallConsumptionFromRow, type WallConsumptionRow } from './SqliteWallRepository';
 import type { ProjectReportRepository } from './ProjectReportRepository';
 
@@ -61,20 +62,20 @@ function fromRow(row: ReportRow): DailyProjectReport {
   };
 }
 
-/** DEC-459. What happened to this base on one work date, in the order it happens on site. */
-function baseEventsOn(base:WallBase,workDate:string):string[]{
+/** DEC-459/464. What happened to this foundation on one work date, in the order it happens on site. */
+function foundationEventsOn(foundation:Foundation,workDate:string):string[]{
   const events:string[]=[];
-  if(base.constructedOn===workDate)events.push('Base constructed or poured');
-  if(base.curingStartedOn===workDate)events.push('Curing started');
-  if(base.curedOn===workDate)events.push('Base confirmed cured');
-  if(base.consumptionDate===workDate)events.push('Base material recorded');
+  if(foundation.constructedOn===workDate)events.push('Foundation constructed or poured');
+  if(foundation.curingStartedOn===workDate)events.push('Curing started');
+  if(foundation.curedOn===workDate)events.push('Foundation confirmed cured');
+  if(foundation.consumptionDate===workDate)events.push('Foundation material recorded');
   return events;
 }
-/** The stage the base had actually reached by that date, never its latest stage. */
-function baseStatusOn(base:WallBase,workDate:string):BaseStatus{
-  if(base.curedOn&&base.curedOn<=workDate)return 'cured';
-  if(base.curingStartedOn&&base.curingStartedOn<=workDate)return 'curing';
-  if(base.constructedOn&&base.constructedOn<=workDate)return 'constructed';
+/** The stage the foundation had actually reached by that date, never its latest stage. */
+function foundationStatusOn(foundation:Foundation,workDate:string):BaseStatus{
+  if(foundation.curedOn&&foundation.curedOn<=workDate)return 'cured';
+  if(foundation.curingStartedOn&&foundation.curingStartedOn<=workDate)return 'curing';
+  if(foundation.constructedOn&&foundation.constructedOn<=workDate)return 'constructed';
   return 'planned';
 }
 
@@ -155,30 +156,53 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
     const rows=await this.db.getAllAsync<WallConsumptionRow&{w_name:string;w_system:LinkedWallWork['system'];w_purpose:LinkedWallWork['purpose'];w_length_m:number;w_height_m:number;w_bottom_thickness_m:number;w_top_thickness_m:number;w_net_volume_m3:number;w_planned_volume_m3:number}>(`SELECT wc.*,w.name w_name,w.system w_system,w.purpose w_purpose,w.length_m w_length_m,w.height_m w_height_m,w.bottom_thickness_m w_bottom_thickness_m,w.top_thickness_m w_top_thickness_m,w.net_volume_m3 w_net_volume_m3,w.planned_volume_m3 w_planned_volume_m3
       FROM wall_consumptions wc JOIN walls w ON w.id=wc.wall_id JOIN projects p ON p.id=w.project_id
       WHERE w.project_id=? AND wc.used_on=? AND p.is_archived=0 ORDER BY w.name COLLATE NOCASE,w.id,wc.created_at`,projectId,workDate);
-    const baseWalls=await this.db.getAllAsync<{wall_id:string}>(`SELECT b.wall_id FROM wall_bases b JOIN walls w ON w.id=b.wall_id JOIN projects p ON p.id=w.project_id
-      WHERE w.project_id=? AND p.is_archived=0 AND (b.constructed_on=? OR b.curing_started_on=? OR b.cured_on=? OR b.consumption_date=?)`,projectId,workDate,workDate,workDate,workDate);
+    // DEC-464. A wall linked to a foundation that had any event on this date, even with no wall
+    // material recorded yet -- the report still shows the foundation's honest progress that day.
+    const foundationWalls=await this.db.getAllAsync<{wall_id:string}>(`SELECT w.id wall_id FROM walls w JOIN foundations f ON f.id=w.foundation_id JOIN projects p ON p.id=w.project_id
+      WHERE w.project_id=? AND p.is_archived=0 AND (f.constructed_on=? OR f.curing_started_on=? OR f.cured_on=? OR f.consumption_date=?)`,projectId,workDate,workDate,workDate,workDate);
     const walls=new SqliteWallRepository(this.db);
     const groups=new Map<string,LinkedWallWork>();
     for(const row of rows){
-      const group=groups.get(row.wall_id)??{wallId:row.wall_id,wallName:row.w_name,system:row.w_system,purpose:row.w_purpose,lengthM:row.w_length_m,heightM:row.w_height_m,bottomThicknessM:row.w_bottom_thickness_m,topThicknessM:row.w_top_thickness_m,netVolumeM3:row.w_net_volume_m3,plannedVolumeM3:row.w_planned_volume_m3,layers:await walls.listLayers(row.wall_id),entries:[],base:null,baseEvents:[],baseStatusAsOf:null};
+      const group=groups.get(row.wall_id)??{wallId:row.wall_id,wallName:row.w_name,system:row.w_system,purpose:row.w_purpose,lengthM:row.w_length_m,heightM:row.w_height_m,bottomThicknessM:row.w_bottom_thickness_m,topThicknessM:row.w_top_thickness_m,netVolumeM3:row.w_net_volume_m3,plannedVolumeM3:row.w_planned_volume_m3,layers:await walls.listLayers(row.wall_id),entries:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null};
       group.entries.push(wallConsumptionFromRow(row));groups.set(row.wall_id,group);
     }
-    for(const row of baseWalls){
+    for(const row of foundationWalls){
       if(groups.has(row.wall_id))continue;
       const wall=await this.db.getFirstAsync<{id:string;name:string;system:LinkedWallWork['system'];purpose:LinkedWallWork['purpose'];length_m:number;height_m:number;bottom_thickness_m:number;top_thickness_m:number;net_volume_m3:number;planned_volume_m3:number}>('SELECT id,name,system,purpose,length_m,height_m,bottom_thickness_m,top_thickness_m,net_volume_m3,planned_volume_m3 FROM walls WHERE id=?',row.wall_id);
       if(!wall)continue;
-      groups.set(row.wall_id,{wallId:wall.id,wallName:wall.name,system:wall.system,purpose:wall.purpose,lengthM:wall.length_m,heightM:wall.height_m,bottomThicknessM:wall.bottom_thickness_m,topThicknessM:wall.top_thickness_m,netVolumeM3:wall.net_volume_m3,plannedVolumeM3:wall.planned_volume_m3,layers:[],entries:[],base:null,baseEvents:[],baseStatusAsOf:null});
+      groups.set(row.wall_id,{wallId:wall.id,wallName:wall.name,system:wall.system,purpose:wall.purpose,lengthM:wall.length_m,heightM:wall.height_m,bottomThicknessM:wall.bottom_thickness_m,topThicknessM:wall.top_thickness_m,netVolumeM3:wall.net_volume_m3,plannedVolumeM3:wall.planned_volume_m3,layers:[],entries:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null});
     }
     const linked=[...groups.values()].sort((first,second)=>first.wallName.localeCompare(second.wallName));
     for(const group of linked){
-      const base=await walls.getBase(group.wallId);
-      group.base=base;
-      group.baseEvents=base?baseEventsOn(base,workDate):[];
-      group.baseStatusAsOf=base?baseStatusOn(base,workDate):null;
-      // A report dated before any wall work shows the base only: no layers, no wall consumption.
+      const wallRow=await this.db.getFirstAsync<{foundation_id:string|null}>('SELECT foundation_id FROM walls WHERE id=?',group.wallId);
+      const foundation=wallRow?.foundation_id?await walls.getFoundation(wallRow.foundation_id):null;
+      group.foundation=foundation;
+      group.foundationEvents=foundation?foundationEventsOn(foundation,workDate):[];
+      group.foundationStatusAsOf=foundation?foundationStatusOn(foundation,workDate):null;
+      group.foundationComposition=foundation?await walls.getFoundationComposition(foundation.id):null;
+      if(foundation){
+        const section=await this.db.getFirstAsync<{name:string}>('SELECT name FROM construction_sections WHERE id=?',foundation.constructionSectionId);
+        group.constructionSectionName=section?.name??null;
+      }
+      // A report dated before any wall work shows the foundation only: no layers, no wall consumption.
       if(!group.entries.length)group.layers=[];
     }
     return linked;
+  }
+
+  /** DEC-464. Foundations with an event on this date that have no wall linked to them yet. */
+  async listLinkedFoundationActivity(projectId: string, workDate: string): Promise<LinkedFoundationActivity[]> {
+    const rows=await this.db.getAllAsync<{id:string}>(`SELECT f.id FROM foundations f JOIN projects p ON p.id=f.project_id
+      WHERE f.project_id=? AND p.is_archived=0 AND f.id NOT IN (SELECT foundation_id FROM walls WHERE foundation_id IS NOT NULL)
+      AND (f.constructed_on=? OR f.curing_started_on=? OR f.cured_on=? OR f.consumption_date=?)`,projectId,workDate,workDate,workDate,workDate);
+    const walls=new SqliteWallRepository(this.db);
+    const activity:LinkedFoundationActivity[]=[];
+    for(const row of rows){
+      const foundation=await walls.getFoundation(row.id);if(!foundation)continue;
+      const section=await this.db.getFirstAsync<{name:string}>('SELECT name FROM construction_sections WHERE id=?',foundation.constructionSectionId);
+      activity.push({foundation,constructionSectionName:section?.name??'',foundationEvents:foundationEventsOn(foundation,workDate),foundationStatusAsOf:foundationStatusOn(foundation,workDate),composition:await walls.getFoundationComposition(foundation.id)});
+    }
+    return activity.sort((first,second)=>first.foundation.reference.localeCompare(second.foundation.reference));
   }
 
   async listLinkedWasteDumps(projectId: string, workDate: string): Promise<LinkedWasteDump[]> {

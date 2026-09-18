@@ -1,5 +1,7 @@
-import { netWorkMinutes, type DailyProjectReport, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
+import { netWorkMinutes, type DailyProjectReport, type LinkedFoundationActivity, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
 import { baseStatusLabels } from '../domain/wallBase';
+import type { Foundation } from '../domain/foundations';
+import type { FoundationComposition } from '../domain/wallFoundation';
 import { concretePurposeLabels, describeWallConsumptionQuantity, supportsVolumeCalculation, wallConsumptionPurposeLabel, wallMaterialLabels, wallSystemLabels } from '../domain/walls';
 import { buildWorkbookFromSheets, localizeWorkbookSheets, type EmbeddedWorkbookImage, type SheetSpec, type WorkbookLocale } from './businessWorkbook';
 
@@ -35,24 +37,49 @@ export function wallLayerRows(walls: LinkedWallWork[]) {
   })));
 }
 
-/** DEC-459. The base of each wall on this work date, with the stage it had reached by then. */
-export function wallBaseRows(walls: LinkedWallWork[]) {
+const compositionColumns=(composition:FoundationComposition|null)=>({
+  'Foundation Mode': composition?composition.mode==='composite'?'Composite (Stone + concrete)':'Single material':null,
+  'Stone Core Mode': composition?.stoneCoreMode==='detailed'?'Detailed':composition?.stoneCoreMode==='simple'?'Simple':null,
+  'Stone Quantity m³': composition?.mode==='composite'?composition.activeStoneM3:null,
+  'Estimated Concrete m³': composition?.mode==='composite'?composition.estimatedConcreteM3:null,
+  'Actual Ready Mix m³': composition&&composition.activeReadyMixM3>0?composition.activeReadyMixM3:null,
+  'Concrete Variance m³': composition?.variance?composition.variance.varianceM3:null,
+});
+
+/** DEC-459/464. The foundation linked to each wall on this work date, with its Construction Section, the stage it had reached by then, and its composite composition. */
+export function wallFoundationRows(walls: LinkedWallWork[]) {
   return walls.flatMap((wall) => {
-    const base = wall.base;
-    if (!base || !wall.baseStatusAsOf) return [];
+    const foundation = wall.foundation;
+    if (!foundation || !wall.foundationStatusAsOf) return [];
     return [{
-      'Wall ID': wall.wallId, Wall: wall.wallName, 'Base Reference': base.reference, Location: base.location.trim() || null,
-      'Base Status': baseStatusLabels[wall.baseStatusAsOf], 'Constructed On': base.constructedOn, 'Curing Started': base.curingStartedOn, 'Cured On': base.curedOn,
-      'Base Length m': base.lengthM, 'Base Height m': base.heightM, 'Base Bottom Thickness m': base.bottomThicknessM, 'Base Top Thickness m': base.topThicknessM,
-      'Base Gross Volume m³': base.grossVolumeM3, 'Base Deduction m³': base.deductionM3, 'Base Net Volume m³': base.netVolumeM3,
-      'Recorded Quantity': base.quantity, 'Quantity Unit': base.quantityUnit === 'tonnes' ? 't' : 'm³', 'Manual Override': base.manualOverride ? 'Yes' : 'No',
-      Material: wallMaterialLabels[base.materialType], Purpose: base.customPurposeLabel ?? (base.concretePurpose ? concretePurposeLabels[base.concretePurpose] : null),
-      'Consumption Date': base.consumptionDate, 'Events On This Date': wall.baseEvents.join('; ') || null, 'Curing Note': base.curingNote.trim() || null, Notes: base.notes.trim() || null,
+      'Wall ID': wall.wallId, Wall: wall.wallName, 'Construction Section': wall.constructionSectionName, 'Foundation Reference': foundation.reference, Location: foundation.location.trim() || null,
+      'Foundation Status': baseStatusLabels[wall.foundationStatusAsOf], 'Constructed On': foundation.constructedOn, 'Curing Started': foundation.curingStartedOn, 'Cured On': foundation.curedOn,
+      'Foundation Length m': foundation.lengthM, 'Foundation Height m': foundation.heightM, 'Foundation Bottom Thickness m': foundation.bottomThicknessM, 'Foundation Top Thickness m': foundation.topThicknessM,
+      'Foundation Gross Volume m³': foundation.grossVolumeM3, 'Foundation Deduction m³': foundation.deductionM3, 'Foundation Net Volume m³': foundation.netVolumeM3,
+      'Recorded Quantity': foundation.quantity, 'Quantity Unit': foundation.quantityUnit === 'tonnes' ? 't' : 'm³', 'Manual Override': foundation.manualOverride ? 'Yes' : 'No',
+      Material: wallMaterialLabels[foundation.materialType], Purpose: foundation.customPurposeLabel ?? (foundation.concretePurpose ? concretePurposeLabels[foundation.concretePurpose] : null),
+      ...compositionColumns(wall.foundationComposition),
+      'Consumption Date': foundation.consumptionDate, 'Events On This Date': wall.foundationEvents.join('; ') || null, 'Curing Note': foundation.curingNote.trim() || null, Notes: foundation.notes.trim() || null,
     }];
   });
 }
 
-export function dailyReportWorkbookSheets(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], images: EmbeddedWorkbookImage[] = [], locale: WorkbookLocale = 'en', wallWork: LinkedWallWork[] = []): SheetSpec[] {
+/** DEC-464. Foundations with activity on this work date but no wall linked to them yet. */
+export function foundationOnlyRows(activity: LinkedFoundationActivity[]) {
+  return activity.map((entry) => {
+    const foundation: Foundation = entry.foundation;
+    return {
+      'Construction Section': entry.constructionSectionName, 'Foundation Reference': foundation.reference, Location: foundation.location.trim() || null,
+      'Foundation Status': baseStatusLabels[entry.foundationStatusAsOf], 'Constructed On': foundation.constructedOn, 'Curing Started': foundation.curingStartedOn, 'Cured On': foundation.curedOn,
+      'Foundation Length m': foundation.lengthM, 'Foundation Height m': foundation.heightM, 'Foundation Bottom Thickness m': foundation.bottomThicknessM, 'Foundation Top Thickness m': foundation.topThicknessM,
+      'Foundation Net Volume m³': foundation.netVolumeM3, 'Recorded Quantity': foundation.quantity, 'Quantity Unit': foundation.quantityUnit === 'tonnes' ? 't' : 'm³',
+      Material: wallMaterialLabels[foundation.materialType], ...compositionColumns(entry.composition),
+      'Events On This Date': entry.foundationEvents.join('; ') || null, Notes: foundation.notes.trim() || null,
+    };
+  });
+}
+
+export function dailyReportWorkbookSheets(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], images: EmbeddedWorkbookImage[] = [], locale: WorkbookLocale = 'en', wallWork: LinkedWallWork[] = [], foundationActivity: LinkedFoundationActivity[] = []): SheetSpec[] {
   const net = netWorkMinutes(report);
   const sheets: SheetSpec[] = [
     { name: 'Report Overview', rows: [
@@ -80,12 +107,13 @@ export function dailyReportWorkbookSheets(report: DailyProjectReport, project: R
     { name: 'Waste Dumps', rows: waste.map((entry) => ({ 'Record ID': entry.id, 'Dumped At': entry.dumpedAt, Material: entry.materialType, Location: entry.dumpLocation, Driver: entry.driverName, 'Truck Plate': entry.truckPlate })) },
     { name: 'Wall Construction', rows: wallConstructionRows(wallWork) },
     { name: 'Wall Layers', rows: wallLayerRows(wallWork) },
-    { name: 'Wall Bases', rows: wallBaseRows(wallWork) },
+    { name: 'Wall Foundations', rows: wallFoundationRows(wallWork) },
+    { name: 'Foundations Without a Wall', rows: foundationOnlyRows(foundationActivity) },
     { name: 'Photos', rows: report.photos.map((uri, index) => ({ Photo: index + 1, 'File name': uri.split('/').pop() ?? `photo-${index + 1}.jpg`, 'Work Date': report.workDate })), images },
   ];
   return localizeWorkbookSheets(sheets, locale);
 }
 
-export function buildDailyReportWorkbook(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], images: EmbeddedWorkbookImage[] = [], locale: WorkbookLocale = 'en', wallWork: LinkedWallWork[] = []) {
-  return buildWorkbookFromSheets(dailyReportWorkbookSheets(report, project, loads, quarry, waste, fuel, company, images, locale, wallWork));
+export function buildDailyReportWorkbook(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], images: EmbeddedWorkbookImage[] = [], locale: WorkbookLocale = 'en', wallWork: LinkedWallWork[] = [], foundationActivity: LinkedFoundationActivity[] = []) {
+  return buildWorkbookFromSheets(dailyReportWorkbookSheets(report, project, loads, quarry, waste, fuel, company, images, locale, wallWork, foundationActivity));
 }

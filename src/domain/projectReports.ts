@@ -1,6 +1,8 @@
 import type {FuelType} from './fuel';
 import type {ConsultingAgencyOption} from './profiles';
-import type {BaseStatus,WallBase} from './wallBase';
+import type {BaseStatus} from './wallBase';
+import type {Foundation} from './foundations';
+import type {FoundationComposition} from './wallFoundation';
 import type {WallLayer} from './wallDiagram';
 import type {WallConsumption,WallPurpose,WallSystem} from './walls';
 export type ReportProjectStatus = 'active' | 'completed';
@@ -102,9 +104,13 @@ export type LinkedWasteDump = { id: string; dumpedAt: string; materialType: stri
 // consumption record whose wall belongs to the report's project and whose used-on date equals the work
 // date, grouped by wall. Corrections therefore appear in the next generated export.
 export type LinkedWallWork = { wallId:string; wallName:string; system:WallSystem; purpose:WallPurpose; lengthM:number; heightM:number; bottomThicknessM:number; topThicknessM:number; netVolumeM3:number; plannedVolumeM3:number; layers:WallLayer[]; entries:WallConsumption[];
-  // DEC-459. The wall's base, the base events that happened on this work date, and the stage the base
-  // had reached by that date, so an earlier report never shows a wall that did not exist yet.
-  base:WallBase|null; baseEvents:string[]; baseStatusAsOf:BaseStatus|null };
+  // DEC-459/464. The wall's linked foundation, its Construction Section name, the foundation events
+  // that happened on this work date, the stage the foundation had reached by that date (so an earlier
+  // report never shows a wall that did not exist yet), and its composite composition as of now.
+  foundation:Foundation|null; constructionSectionName:string|null; foundationEvents:string[]; foundationStatusAsOf:BaseStatus|null; foundationComposition:FoundationComposition|null };
+// DEC-464. A foundation with activity on this work date but no wall linked to it yet -- created,
+// composition recorded, or curing progressed independently of any wall.
+export type LinkedFoundationActivity = { foundation:Foundation; constructionSectionName:string; foundationEvents:string[]; foundationStatusAsOf:BaseStatus; composition:FoundationComposition|null };
 export type ProjectCompletionLoad =LinkedProjectLoad & { workDate: string };
 export type ProjectCompletionWasteDump = LinkedWasteDump & { workDate: string };
 

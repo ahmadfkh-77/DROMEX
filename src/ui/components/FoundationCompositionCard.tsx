@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
-import type {WallBase} from '../../domain/wallBase';
+import type {Foundation} from '../../domain/foundations';
 import {formatCubicMetres} from '../../domain/walls';
 import type {FoundationComposition,FoundationCompositionMaterial,FoundationCompositionMode,FoundationCompositionRecord,StoneCoreMode,StoneCoreOffsets,StoneCorePosition} from '../../domain/wallFoundation';
 import {colors,radius} from '../theme';
@@ -18,7 +18,7 @@ const n=(value:string)=>{const parsed=Number(value.trim().replace(',','.'));retu
  * on top of the base's existing single recorded material -- it never replaces that field.
  */
 export function FoundationCompositionCard({base,composition,busy,onSetMode,onSavePosition,onSaveOffsets,onAddRecord,onCancelRecord,onCorrectRecord}:{
-  base:WallBase;composition:FoundationComposition|null;busy:boolean;
+  base:Foundation;composition:FoundationComposition|null;busy:boolean;
   onSetMode:(mode:FoundationCompositionMode,stoneCoreMode?:StoneCoreMode)=>Promise<void>;
   onSavePosition:(position:StoneCorePosition)=>Promise<void>;
   onSaveOffsets:(offsets:StoneCoreOffsets)=>Promise<void>;
@@ -76,7 +76,9 @@ export function FoundationCompositionCard({base,composition,busy,onSetMode,onSav
         <Result label={`Variance (actual vs. estimate)${composition.variance?.direction==='none'?' — matches':composition.variance?.direction==='over'?' — over':' — under'}`} value={composition.variance?formatCubicMetres(Math.abs(composition.variance.varianceM3)):'—'}/>
       </View>:null}
 
-      <FoundationDiagramView caption={stoneCoreMode==='detailed'?'Detailed geometry, measured from the recorded offsets.':'Schematic placement — not to scale.'} input={{
+      <FoundationDiagramView caption={stoneCoreMode==='detailed'?'Detailed geometry, measured from the recorded offsets.':'Schematic placement — not to scale. Drag the Stone core, or use the nudge buttons below.'}
+        draggable={stoneCoreMode==='simple'} onDragPosition={position=>void run(()=>onSavePosition(position))}
+        input={{
         referenceLabel:base.reference,lengthM:base.lengthM,heightM:base.heightM,bottomThicknessM:base.bottomThicknessM,topThicknessM:base.topThicknessM,
         status:base.status,netFoundationVolumeM3:composition.netFoundationVolumeM3,mode,stoneCoreMode,position:composition.position,offsets:composition.offsets,
         activeStoneM3:composition.activeStoneM3,activeReadyMixM3:composition.activeReadyMixM3,estimatedConcreteM3:composition.estimatedConcreteM3,variance:composition.variance,

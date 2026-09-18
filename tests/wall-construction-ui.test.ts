@@ -100,36 +100,76 @@ describe('Wall Construction UI contract',()=>{
     expect(screen2).toContain('saveLayers(');
   });
 
-  it('stages the base and curing as tracked information, never a lock on wall work',()=>{
-    const base=source('src/ui/components/WallBaseWorkflow.tsx');
-    expect(base).toContain('A · Base and Wall Geometry');
-    for(const stage of ['Base geometry','Base material and volume','Construction and curing','Wall geometry and layers'])expect(base).toContain(stage);
-    expect(base).toContain('Confirm Base Is Cured');
-    expect(base).toContain('inspected and is ready for wall work');
-    expect(base).not.toMatch(/Approved|Certified|certif/i);
-    // DEC-463. Curing is a non-blocking, warning-styled notice, never a lock on the wall sections.
-    expect(base).not.toContain('Wall construction locked until base is cured');
-    expect(base).toContain('CURING_WARNING_TITLE');
-    expect(base).toContain('CURING_WARNING_BODY');
-    expect(base).toContain('validateWallBase(');
-    expect(base).toContain('calculateBaseVolume(');
-    expect(base).toContain('Manual quantity override');
-    expect(base).toContain('Base not recorded');
-    expect(base).toMatch(/minHeight:(4[4-9]|[5-9]\d)/);
-    expect(base).toContain('useReducedMotion');
-    expect(base).toContain('accessibilityLiveRegion');
-    expect(base).not.toContain('—');
+  it('DEC-464: stages the foundation and curing as tracked information, never a lock on wall work',()=>{
+    const curing=source('src/ui/components/FoundationCuringPanel.tsx');
+    expect(curing).toContain('Confirm Foundation Is Cured');
+    expect(curing).toContain('inspected and is ready');
+    expect(curing).not.toMatch(/Approved|Certified|certif/i);
+    expect(curing).not.toContain('locked until');
+    const geometry=source('src/ui/components/FoundationGeometryForm.tsx');
+    expect(geometry).toContain('validateFoundationDraft(');
+    expect(geometry).toContain('calculateFoundationVolume(');
+    expect(geometry).toContain('Manual quantity override');
   });
 
-  it('gates the wall sections only on a recorded base, and shows a non-blocking curing notice rather than hiding anything',()=>{
+  it('DEC-464: gates wall work only on a recorded foundation, and shows a non-blocking curing notice rather than hiding anything',()=>{
     const screen3=source('src/ui/screens/WallConstructionScreen.tsx');
-    expect(screen3).toContain('<WallBaseWorkflow');
-    expect(screen3).toContain('stage.locked');
-    expect(screen3).toContain('selected.stage.reason');
-    // DEC-463. The wall sections are only ever hidden for a missing base; curing produces a warning, not a lock.
-    expect(screen3).toContain('selected.stage.curingConfirmed');
-    expect(screen3).toContain('selected.stage.warningTitle');
-    expect(screen3).toContain('selected.stage.warningBody');
+    const workspace=source('src/ui/screens/FoundationWorkspaceScreen.tsx');
+    expect(screen3).not.toContain('<WallBaseWorkflow');
+    expect(existsSync(join(__dirname,'..','src/ui/components/WallBaseWorkflow.tsx'))).toBe(false);
+    // DEC-463/464. The only thing ever hidden for is a missing foundation; curing is a warning shown
+    // beside every stage, never a lock on the Wall/Layers/History stages.
+    expect(workspace).toContain('CURING_WARNING_TITLE');
+    expect(workspace).toContain('CURING_WARNING_BODY');
+    expect(workspace).not.toMatch(/locked until|Wall construction is locked/);
+    expect(workspace).toContain('curingConfirmed');
+  });
+
+  it('DEC-464: Project -> Construction Section -> Foundation -> Wall directory, with inline section/foundation creation',()=>{
+    const screen3=source('src/ui/screens/WallConstructionScreen.tsx');
+    expect(screen3).toContain('listConstructionSections(');
+    expect(screen3).toContain('createConstructionSection(');
+    expect(screen3).toContain('listFoundations(');
+    expect(screen3).toContain('+ New Construction Section');
+    expect(screen3).toContain('+ New Foundation In This Section');
+    // Legacy walls (no foundation concept) keep their own untouched workflow.
+    expect(screen3).toContain('Legacy walls');
+    expect(screen3).toContain('LegacyWallsPanel');
+  });
+
+  it('DEC-464: a five-stage, vertical/compact workspace stepper, never a row of tiny horizontal labels, with every stage reachable',()=>{
+    const stepper=source('src/ui/components/FoundationStageStepper.tsx');
+    for(const stage of ['Foundation','Curing','Wall','Layers and Materials','History and Reports'])expect(stepper).toContain(`'${stage}'`);
+    expect(stepper).toContain("flexDirection:'row',alignItems:'center'"); // each row itself, not the whole list, is horizontal
+    expect(stepper).toContain('list:{gap:'); // the stage list stacks vertically
+    expect(stepper).toMatch(/minHeight:(4[4-9]|[5-9]\d)/);
+    expect(stepper).not.toContain('locked'); // stages are organizational only -- never a lock state
+    const workspace=source('src/ui/screens/FoundationWorkspaceScreen.tsx');
+    expect(workspace).toContain('<FoundationStageStepper');
+    expect(workspace).toContain('onSelect={setStage}'); // every stage stays tappable, including completed ones
+  });
+
+  it('DEC-464: one active wall per foundation, selectable in every curing status, with cross-project/section refusal handled by the repository',()=>{
+    const repo=source('src/data/repositories/SqliteWallRepository.ts');
+    expect(repo).toContain('walls.foundation_id');
+    expect(repo).toContain('already has a wall linked to it');
+    expect(repo).toContain('different project');
+    const migrations=source('src/data/database/migrations.ts');
+    expect(migrations).toContain('idx_walls_foundation');
+  });
+
+  it('Checkpoint 5: the Stone core supports real touch dragging in Simple mode, with nudge/reset as an accessible alternative',()=>{
+    const diagramView=source('src/ui/components/FoundationDiagramView.tsx');
+    expect(diagramView).toContain('PanResponder');
+    expect(diagramView).toContain('onPanResponderMove');
+    expect(diagramView).toContain('onPanResponderRelease');
+    expect(diagramView).toContain('stoneCorePositionFromViewBoxPoint');
+    expect(diagramView).toContain('viewBoxPointFromTouch');
+    const card=source('src/ui/components/FoundationCompositionCard.tsx');
+    expect(card).toContain('draggable={stoneCoreMode');
+    expect(card).toContain('onDragPosition');
+    expect(card).toContain('Reset to Centre');
+    expect(card).toContain('NudgeButton'); // typed/keyboard-safe alternative to the drag gesture
   });
 
   it('uses no em-dash in new wall-construction copy',()=>{

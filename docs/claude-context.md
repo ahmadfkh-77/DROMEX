@@ -573,24 +573,35 @@ values on its next save.
   show base events on their own date and the stage reached by that date, never a later one, plus a
   concise "Base curing not confirmed on this work date" note beside any wall material recorded
   before the base reached cured — the material is never hidden.
-- **Composite foundation model** (DEC-461, DEC-462, migration 41): `src/domain/wallFoundation.ts`
-  holds the Stone-core/estimated-concrete math (aggregate active quantity, capacity refusal,
-  variance, Simple/Detailed geometry validation); `src/domain/wallFoundationDiagram.ts` draws the
-  Stone core inside the outer foundation boundary, reusing `wallDiagramToSvg` for serialization.
-  `SqliteWallRepository` adds `getFoundationComposition`, `setFoundationMode`,
-  `saveStoneCorePosition`/`saveStoneCoreOffsets`, and `addFoundationCompositionRecord` /
-  `cancelFoundationCompositionRecord` / `correctFoundationCompositionRecord` against the new
-  `wall_base_composition_records` table, and revalidates active Stone against the net volume
-  whenever `correctBase` changes the base's own geometry. `FoundationCompositionCard` and
-  `FoundationDiagramView` mount inside `WallBaseWorkflow`, additive to the existing single-material
-  base field. Every base defaults to `foundation_mode = 'single'`; nothing here changes an existing
-  base's own recorded material. Daily Report PDF/workbook representation of the composite
-  breakdown and the requested 5-stage guided-workflow screen redesign are **not built in this
-  phase** — see DEC-461.
-- **Verification**: typecheck clean and the complete Vitest suite green (743 tests across 64
-  files, including 56 domain/repository tests and 8 diagram tests for the composite foundation
-  model, plus the curing-gate-removal test replacements from DEC-463). The React Native screens
-  were verified by typecheck and source-contract
+- **Composite foundation model** (DEC-461, DEC-462): `src/domain/wallFoundation.ts` holds the
+  Stone-core/estimated-concrete math (aggregate active quantity, capacity refusal, variance,
+  Simple/Detailed geometry validation); `src/domain/wallFoundationDiagram.ts` draws the Stone core
+  inside the outer foundation boundary, reusing `wallDiagramToSvg` for serialization, and exposes
+  `foundationDiagramDragBounds`/`viewBoxPointFromTouch`/`stoneCorePositionFromViewBoxPoint` for the
+  Simple-mode drag gesture (DEC-464). `SqliteWallRepository` addresses composition directly by
+  `foundationId` (`getFoundationComposition`, `setFoundationMode`,
+  `saveStoneCorePosition`/`saveStoneCoreOffsets`, `addFoundationCompositionRecord` /
+  `cancelFoundationCompositionRecord` / `correctFoundationCompositionRecord`) against
+  `foundation_composition_records`, and revalidates active Stone against the net volume whenever
+  `correctFoundation` changes a foundation's own geometry.
+- **Project → Construction Section → Foundation → Wall** (DEC-464, DEC-465, migration 42):
+  `src/domain/constructionSections.ts` and `src/domain/foundations.ts` add the two new entities;
+  `foundations` reuses `wallBase.ts`'s shared volume/status functions (narrowed to `Pick`/`Omit`
+  types so both the legacy per-wall base and the new independent Foundation satisfy them without
+  duplicating the logic). `walls.foundationId` (nullable, unique where set) replaces the old
+  1:1 base-per-wall relationship for anything created after this phase; `wall_bases`/
+  `wall_base_composition_records` are **never dropped or renamed** by migration 42 — see its own
+  comment for why (migrations 37-41's own tests replay against an already-current database,
+  relying on those two tables always being safe to recreate with `IF NOT EXISTS`). The UI:
+  `WallConstructionScreen.tsx` is now a Section/Foundation directory (plus an untouched "Legacy
+  walls" area for `base_required = 0` walls), `FoundationWorkspaceScreen.tsx` is the five-stage
+  workspace (`FoundationStageStepper.tsx`, `FoundationGeometryForm.tsx`,
+  `FoundationCuringPanel.tsx`), and `FoundationDiagramView.tsx` gained a real `PanResponder` drag
+  for the Simple-mode Stone core, committed once per gesture on release. The Daily Report PDF and
+  workbook now group by Construction Section → Foundation → linked wall/activity
+  (`LinkedFoundationActivity` for a foundation with no wall linked yet).
+- **Verification**: typecheck clean and the complete Vitest suite green (773 tests across 65
+  files). The React Native screens were verified by typecheck and source-contract
   tests only. **Not yet verified on a physical device or in Expo Go.**
 
 ## Standing rules this project expects every session to follow

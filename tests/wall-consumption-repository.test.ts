@@ -57,8 +57,10 @@ describe('migration 37: wall consumption area, purposes, and corrections',()=>{
     await migrateDatabase(db as never);
     expect(statements.some(sql=>sql.includes('CREATE TABLE IF NOT EXISTS wall_concrete_purposes'))).toBe(true);
     for(const column of ['custom_purpose_id','custom_purpose_label','area_length_m','area_height_m','area_deduction_m2','area_gross_m2','area_net_m2','correction_history_json','updated_at'])expect(statements.some(sql=>sql.includes(`ALTER TABLE wall_consumptions ADD COLUMN ${column} `))).toBe(true);
-    // Structure only: no data-modifying statement is part of the version 37 step.
-    const step37=statements.slice(statements.findIndex(sql=>sql.includes('wall_concrete_purposes')));
+    // Structure only: no data-modifying statement is part of the version 37 step. Bounded to this
+    // step's own statements -- later migrations (e.g. DEC-464's independent-foundation copy) may
+    // legitimately contain real data-migrating statements of their own.
+    const step37=statements.slice(statements.findIndex(sql=>sql.includes('wall_concrete_purposes')),statements.findIndex(sql=>sql.includes('volume_length_m')));
     expect(step37.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
     expect(statements.at(-1)).toBe(`PRAGMA user_version = ${DATABASE_VERSION}`);
   });
@@ -133,7 +135,11 @@ describe('migration 38: wall consumption volume calculation',()=>{
     await migrateDatabase(db as never);
     for(const column of ['volume_length_m','volume_height_m','volume_bottom_thickness_m','volume_top_thickness_m','volume_deduction_m3','volume_gross_m3','volume_net_m3'])expect(statements.some(sql=>sql.includes(`ALTER TABLE wall_consumptions ADD COLUMN ${column} `))).toBe(true);
     expect(statements.some(sql=>sql.includes('CREATE TABLE IF NOT EXISTS wall_concrete_purposes'))).toBe(false);
-    expect(statements.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
+    // Structure only: no data-modifying statement is part of the version 38 step. Bounded to this
+    // step's own statements -- later migrations (e.g. DEC-464's independent-foundation copy) may
+    // legitimately contain real data-migrating statements of their own.
+    const step38=statements.slice(statements.findIndex(sql=>sql.includes('volume_length_m')),statements.findIndex(sql=>sql.includes('wall_layers')));
+    expect(step38.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
     expect(statements.at(-1)).toBe(`PRAGMA user_version = ${DATABASE_VERSION}`);
   });
 

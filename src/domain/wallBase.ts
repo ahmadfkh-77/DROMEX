@@ -21,6 +21,8 @@ export type WallBaseDraft=BaseGeometry&{wallId:string;reference:string;location:
 export type WallBaseCorrectionDraft=WallBaseDraft&{correctionReason:string};
 export type WallBase=WallBaseDraft&{id:string;customPurposeLabel:string|null;grossVolumeM3:number;netVolumeM3:number;status:BaseStatus;constructedOn:string|null;curingStartedOn:string|null;curedOn:string|null;curingNote:string;correctionHistory:WallCorrectionEntry[];createdAt:string;updatedAt:string|null};
 export type BaseStatusChange={status:BaseStatus;constructedOn?:string|null;curingStartedOn?:string|null;curedOn?:string|null;curingNote?:string;inspected?:boolean};
+/** The status/date shape shared by a legacy wall base and the independent Foundation (DEC-464), so the one set of curing/lifecycle functions below serves both without duplicating the logic. */
+export type CuringLifecycle=Pick<WallBase,'status'|'constructedOn'|'curingStartedOn'|'curedOn'>;
 
 const round=(value:number)=>Number(value.toFixed(9));
 const hasThreeDecimalsAtMost=(value:number)=>Math.abs(value*1000-Math.round(value*1000))<1e-6;
@@ -32,7 +34,7 @@ export function calculateBaseVolume(geometry:BaseGeometry){
   return{grossVolumeM3:result.grossVolumeM3,netVolumeM3:result.netVolumeM3};
 }
 
-export function validateWallBase(draft:WallBaseDraft):string[]{
+export function validateWallBase(draft:Omit<WallBaseDraft,'wallId'>):string[]{
   const issues:string[]=[];
   if(!draft.reference.trim())issues.push('Enter a base reference or description.');
   if(!validPositive(draft.lengthM))issues.push('Base length must be greater than zero with no more than three decimals.');
@@ -60,7 +62,7 @@ export function validateWallBase(draft:WallBaseDraft):string[]{
  * wall work already exists above it: curing chronology is informational and a correction here
  * never invalidates, blocks, or removes any wall record.
  */
-export function validateBaseStatusChange(base:WallBase,change:BaseStatusChange):string[]{
+export function validateBaseStatusChange(base:CuringLifecycle,change:BaseStatusChange):string[]{
   const issues:string[]=[];
   const from=ORDER.indexOf(base.status),to=ORDER.indexOf(change.status);
   const revertingCure=base.status==='cured'&&change.status==='curing';
@@ -106,7 +108,7 @@ export type WallStageLock={locked:boolean;legacy:boolean;curingConfirmed:boolean
  * editable, and saveable regardless of curing. The notice is deliberately not "approved" or
  * "certified" wording, and never implies the foundation is unsafe.
  */
-export function describeWallStageLock(base:WallBase|null,legacyWall:boolean):WallStageLock{
+export function describeWallStageLock(base:CuringLifecycle|null,legacyWall:boolean):WallStageLock{
   if(legacyWall&&!base)return{locked:false,legacy:true,curingConfirmed:true,reason:'Base not recorded — legacy wall',warningTitle:null,warningBody:null};
   if(!base)return{locked:true,legacy:false,curingConfirmed:false,reason:'Record the base for this wall before recording wall construction.',warningTitle:null,warningBody:null};
   const curingConfirmed=base.status==='cured';
@@ -119,7 +121,7 @@ export function describeWallStageLock(base:WallBase|null,legacyWall:boolean):Wal
 }
 
 /** DEC-463. The only thing that still blocks wall work is a missing base; curing chronology never refuses a date. */
-export function validateWallWorkDate(base:WallBase|null,legacyWall:boolean):string|null{
+export function validateWallWorkDate(base:CuringLifecycle|null,legacyWall:boolean):string|null{
   const lock=describeWallStageLock(base,legacyWall);
   return lock.legacy||!lock.locked?null:lock.reason;
 }
@@ -128,7 +130,7 @@ export function validateWallWorkDate(base:WallBase|null,legacyWall:boolean):stri
  * DEC-463. A non-blocking, purely informational chronology note: the date is always recorded
  * exactly as entered regardless of what this returns.
  */
-export function describeWallWorkDateNotice(usedOn:string,base:WallBase|null):string|null{
+export function describeWallWorkDateNotice(usedOn:string,base:CuringLifecycle|null):string|null{
   if(!base||base.status==='cured')return null;
   return `Base curing not confirmed on this work date (base is ${baseStatusLabels[base.status].toLocaleLowerCase('en-US')}).`;
 }

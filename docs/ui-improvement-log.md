@@ -2203,3 +2203,75 @@ What changed:
 
 Full suite (743 Vitest tests, 64 files) and typecheck green. Not yet verified on a physical device
 or in Expo Go.
+
+### Addendum — 2026-09-18, Project -> Construction Section -> Foundation -> Wall (DEC-464)
+
+Re-audited the workflow at `0797dc2`/`371ad8d` against the approved checkpoints and rebuilt the
+foundation model from a per-wall attribute into an independent entity, with a genuinely new
+five-stage workspace, real Stone-core dragging, and Daily Report grouping to match.
+
+**Data model and migration.** `construction_sections` and `foundations` are new tables;
+`walls.foundation_id` (nullable, unique where set) replaces the implicit 1:1 base-per-wall
+relationship for anything created going forward. Migration 42 copies every existing `wall_bases`
+row into `foundations` (keeping its id) under a deterministic per-project "Legacy Section", and
+every `wall_base_composition_records` row into a new `foundation_composition_records` table keyed
+by `foundation_id`. **`wall_bases` and `wall_base_composition_records` are never dropped or
+renamed** — an earlier draft of this migration renamed `wall_base_composition_records` in place and
+dropped `wall_bases`, which passed every wall-specific test but broke several *unrelated* older
+migration tests (37, 38, 39, and two in `migrations.test.ts`) that reset `PRAGMA user_version` on an
+already-fully-migrated database to replay just their own step, relying on every table those steps
+touch being safe to recreate with `IF NOT EXISTS`. Renaming/dropping broke that assumption; using
+new, independently named tables and making every insert idempotent (`INSERT OR IGNORE`) fixed it
+without touching migrations 37-41's own code, and a dedicated regression test now exercises exactly
+that replay scenario.
+
+**Domain.** `wallBase.ts`'s shared curing/volume functions were narrowed to `Pick`/`Omit` parameter
+types (no behavior change) so the new `Foundation` type in `foundations.ts` satisfies them
+structurally and reuses the exact same lifecycle rules as the legacy base, rather than a second copy
+of them. `constructionSections.ts` adds name normalization (trim, collapse internal whitespace,
+case-insensitive comparison) and per-project uniqueness checking.
+
+**Repository.** `SqliteWallRepository` gained Construction Section CRUD, independent Foundation
+CRUD (`createFoundation` takes no wall id), `linkWallToFoundation`, and `saveWall` now accepts an
+optional `foundationId` set at creation. One active wall per foundation is enforced by a database
+partial unique index (`idx_walls_foundation`), with the repository translating the raw SQLite
+constraint message into a stated conflict rather than a bare failure.
+
+**Screens.** `WallConstructionScreen.tsx` is now a directory: Construction Sections (closed by
+default) under the chosen project, each listing its Foundations with inline "+ New..." actions, plus
+an untouched "Legacy walls" area for `base_required = 0` walls using the exact pre-DEC-459 workflow.
+Opening a Foundation enters `FoundationWorkspaceScreen.tsx`'s five-stage guided workspace via
+`FoundationStageStepper.tsx` — a vertical list, not a row of tiny horizontal labels — where every
+stage stays tappable regardless of curing status (DEC-463 extended to this new hierarchy, not
+re-litigated). `FoundationGeometryForm.tsx` and `FoundationCuringPanel.tsx` extract the
+geometry/material and curing-lifecycle fields the old `WallBaseWorkflow.tsx` held, generalized for
+an independent Foundation; `WallBaseWorkflow.tsx` itself is deleted, fully superseded.
+
+**Real dragging (Checkpoint 5).** `FoundationDiagramView.tsx` gained a `PanResponder`-driven drag for
+the Simple-mode Stone core (React Native's own gesture API, no new dependency). The screen-pixel to
+diagram-coordinate to normalized-position conversion is three small pure functions in
+`wallFoundationDiagram.ts` (`foundationDiagramDragBounds`, `viewBoxPointFromTouch`,
+`stoneCorePositionFromViewBoxPoint`), unit-tested directly for boundary clamping, containment,
+volume-preservation, and NaN safety, independent of any renderer. The core only ever moves visually
+during the gesture; the position is written once, on release. Nudge buttons and Reset to Centre are
+unchanged and remain the accessible alternative.
+
+**Reports (Checkpoints 6/7).** `LinkedWallWork` gained `constructionSectionName` and
+`foundationComposition`; a new `LinkedFoundationActivity` type covers a Foundation with recorded
+activity but no wall linked yet. The PDF's Wall Construction section now nests by Construction
+Section, then by wall or standalone foundation block (dashed border, captioned "no wall linked
+yet"). The workbook's "Wall Bases" sheet is renamed "Wall Foundations" (Construction Section and
+composite columns added) and a new "Foundations Without a Wall" sheet mirrors the PDF's standalone
+blocks.
+
+**Deliberately not built further in this phase:** a merged single-tree UI combining sections,
+foundations, and legacy walls into one list (they stay in clearly separated areas instead, which
+matched every visual-verification case reviewed); resume-at-exact-unfinished-substep memory beyond
+the stage the workspace opens on.
+
+### Status
+
+Domain, migration 42, repository, five-stage screens, real Stone-core dragging, and Daily
+Report/workbook grouping implemented on `feature/android-wall-consumption-improvements`. Typecheck
+clean; 773 Vitest tests green across 65 files. Not yet verified on a physical device or in Expo Go —
+the Owner will test the new directory, five-stage workspace, and drag gesture there.

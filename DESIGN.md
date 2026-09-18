@@ -543,14 +543,41 @@ No new colour, component primitive, or motion curve was introduced.
 
 ## Implemented on the composite foundation model (DEC-461)
 
-`src/domain/wallFoundation.ts`, `src/domain/wallFoundationDiagram.ts`, `src/ui/components/FoundationCompositionCard.tsx` and `FoundationDiagramView.tsx`, mounted inside `WallBaseWorkflow` beneath the existing base summary.
+`src/domain/wallFoundation.ts`, `src/domain/wallFoundationDiagram.ts`, `src/ui/components/FoundationCompositionCard.tsx` and `FoundationDiagramView.tsx`, mounted inside a Foundation's own workspace (DEC-464, below) beneath its geometry summary.
 
-- **Additive, never a replacement.** The card only appears once a base exists, and its own "Single material" / "Composite (Stone core + concrete)" toggle defaults to Single. Nothing about the base's existing materialType/quantity field changes if the owner never opens this card.
+- **Additive, never a replacement.** The card only appears once a foundation exists, and its own "Single material" / "Composite (Stone core + concrete)" toggle defaults to Single. Nothing about the foundation's existing materialType/quantity field changes if the owner never opens this card.
 - **Stone is drawn inside concrete, never beside it.** `buildFoundationDiagram` fills the outer foundation trapezoid first — as an empty outline in single mode or before anything is recorded, then as "estimated" or "poured" concrete — and draws the Stone core on top of it, so the figure reads as one volume with a core inside, not two adjacent blocks. A Simple-mode core carries the caption "Schematic placement — not to scale"; a Detailed-mode core is captioned "Detailed geometry".
 - **Estimated is a caption, not a promise.** Estimated concrete is always net foundation volume minus active Stone, shown in the calc-result teal beside "Estimated concrete remaining", and the diagram's own surrounding fill is visibly lighter and labelled "Estimated space — not yet poured" until an actual Ready Mix record exists. Once Ready Mix is recorded, the fill reads as poured and a neutral variance line appears — never colored as a warning or success, since over/under is not, by itself, a business judgement.
-- **Position and quantity are different fields, on purpose.** Simple mode offers four nudge buttons and a "Reset to Centre" action rather than a drag gesture, so it is keyboard- and touch-safe on a small phone and never implies unrecorded 3D precision; moving the core never touches its recorded Stone volume.
 - **Records, not one overwritten number.** Stone and Ready Mix are each their own dated entry with independently visible Cancel (reasoned) and Correct (reasoned, with a before/after audit) actions, matching the wall-consumption correction pattern elsewhere on this screen (DEC-452) rather than introducing a second correction pattern.
-- **Deferred.** The requested 5-stage guided-workflow redesign of the whole Wall Construction screen, and Daily Report PDF/workbook representation of the composite breakdown, are a following phase — see DEC-461.
+- **Position now drags for real (DEC-464/Checkpoint 5).** See "Implemented on real Stone-core dragging" below; the nudge buttons and Reset to Centre remain as the accessible alternative.
+- Daily Report PDF/workbook representation of the composite breakdown and the 5-stage guided-workflow screen redesign, both deferred in DEC-461, are now implemented — see the two sections below.
+
+## Implemented on Project → Construction Section → Foundation → Wall (DEC-464)
+
+`src/ui/screens/WallConstructionScreen.tsx` (directory), `src/ui/screens/FoundationWorkspaceScreen.tsx` (the five-stage workspace), `src/ui/components/FoundationStageStepper.tsx`, `FoundationGeometryForm.tsx`, `FoundationCuringPanel.tsx`.
+
+- **A directory, not a form.** Wall Construction now opens onto Construction Sections grouped under the chosen project, each an `ExpandableMenuSection` (closed by default, matching the rest of the app) listing its Foundations by status and net volume, with "+ New Construction Section" and "+ New Foundation In This Section" as the only two entry actions — never a long standalone creation form up front.
+- **A foundation exists before its wall.** Creating a Foundation needs only a Construction Section and its own geometry/material; a wall is a later, optional action taken from inside the Foundation's own Wall stage, either creating one or linking an existing unlinked wall. The repository enforces one active wall per Foundation and refuses linking across projects, both with a stated reason rather than a silent failure.
+- **Five stages, never a lock.** `FoundationStageStepper` is a vertical list of rows (not a strip of tiny horizontal labels), each showing done/current/upcoming — Foundation, Curing, Wall, Layers and Materials, History and Reports — and every row stays tappable regardless of curing status, matching DEC-463: curing produces the same non-blocking warning banner used elsewhere, never a disabled section.
+- **Legacy walls keep their own place.** Walls that predate a base entirely (`base_required = 0`) are listed and worked on in their own "Legacy walls" area of the directory, using the exact same consumption/layers/history components as before, untouched by any of this.
+
+## Implemented on real Stone-core dragging (Checkpoint 5, DEC-464)
+
+`src/ui/components/FoundationDiagramView.tsx`, using React Native's built-in `PanResponder` (no new dependency).
+
+- **The drawing and the draggable region share one source of truth.** `foundationDiagramDragBounds` computes the Simple-mode core's box in the exact same units `buildFoundationDiagram` draws it in; the drag handler converts a touch point through `viewBoxPointFromTouch` (screen pixels → SVG viewBox units, via the on-screen rendered size from `onLayout`) and `stoneCorePositionFromViewBoxPoint` (viewBox units → normalized position), so the core drawn and the core grabbed can never disagree. Both conversions are pure functions, unit-tested independent of any renderer.
+- **Containment is structural, not checked.** Because the core's on-screen position is `boxLeft + xNorm * (boxWidth - coreWidthPx)`, clamping the normalized value to [0, 1] on each axis is sufficient by construction to keep the whole core inside the outer boundary — there is no separate margin to get wrong.
+- **Committed once, not on every pixel.** The gesture updates a local, visual-only position on every move (so dragging feels immediate) and calls the parent's save only on release, matching "position updates persist after reopen" without flooding the repository with writes mid-gesture.
+- **Grabbed, not stolen.** The pan responder only claims the touch when it starts on or near the currently drawn core (with a small margin for a finger), so the rest of the screen's scrolling is never intercepted.
+- **The keyboard-safe alternative stays first-class.** The existing nudge buttons and Reset to Centre are unchanged and remain fully functional without ever touching the drag gesture, satisfying "retain nudge/numeric controls for accessibility."
+
+## Implemented on the section/foundation-grouped Daily Report PDF and workbook (DEC-464)
+
+`src/services/projectReportWasteTemplate.ts`, `src/services/dailyReportWorkbookCore.ts`.
+
+- **Grouped, not flattened.** Wall Construction's PDF section now nests by Construction Section, then lists each linked wall's block or a standalone Foundation-only block (no wall linked yet) inside it, so a report spanning more than one site segment reads as separate work areas.
+- **A foundation without a wall is shown honestly, not hidden.** A Foundation with recorded activity on the work date but no linked wall gets its own dashed-border block, captioned "no wall linked yet", still with its full geometry, composite composition, and diagram.
+- **The workbook agrees with the PDF.** "Wall Foundations" carries the same per-wall foundation columns as before plus Construction Section and the composite columns (mode, Stone, estimated concrete, actual Ready Mix, variance); a new "Foundations Without a Wall" sheet mirrors the PDF's standalone blocks. Numbers in both always come from the same `FoundationComposition` read-model.
 
 ## Current-vs-Target Gap List
 

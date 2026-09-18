@@ -1,9 +1,30 @@
 import {fuelTypeLabels} from '../domain/fuel';
-import {consultantSignoffState,netWorkMinutes,type DailyProjectReport,type LinkedFuelFill,type LinkedProjectLoad,type LinkedQuarryLoad,type LinkedWallWork,type LinkedWasteDump,type ProjectReportSetup,type ReportProject} from '../domain/projectReports';
+import {consultantSignoffState,netWorkMinutes,type DailyProjectReport,type LinkedFoundationActivity,type LinkedFuelFill,type LinkedProjectLoad,type LinkedQuarryLoad,type LinkedWallWork,type LinkedWasteDump,type ProjectReportSetup,type ReportProject} from '../domain/projectReports';
 import {baseStatusLabels} from '../domain/wallBase';
 import {buildWallDiagram} from '../domain/wallDiagram';
+import {buildFoundationDiagram} from '../domain/wallFoundationDiagram';
+import type {FoundationComposition} from '../domain/wallFoundation';
+import type {Foundation} from '../domain/foundations';
 import {concretePurposeLabels,describeWallConsumptionQuantity,formatCubicMetres,supportsVolumeCalculation,wallConsumptionPurposeLabel,wallMaterialLabels,wallPurposeLabels,wallSystemLabels} from '../domain/walls';
 const concretePurposeLabelOf=(purpose:keyof typeof concretePurposeLabels|null)=>purpose?concretePurposeLabels[purpose]:'';
+const UNASSIGNED_SECTION='Unassigned';
+
+/**
+ * DEC-464/DEC-461. The composite-foundation figure and its numbers, shared by a wall's own block and
+ * a standalone foundation-only block. Never shows Ready Mix as poured, or curing as confirmed, before
+ * it is actually recorded (DEC-463).
+ */
+function foundationCompositionHtml(foundation:Foundation,stage:Foundation['status'],composition:FoundationComposition|null){
+  if(!composition||composition.mode!=='single'&&composition.mode!=='composite')return'';
+  if(composition.mode!=='composite')return'';
+  const figure=buildFoundationDiagram({
+    referenceLabel:foundation.reference,lengthM:foundation.lengthM,heightM:foundation.heightM,bottomThicknessM:foundation.bottomThicknessM,topThicknessM:foundation.topThicknessM,
+    status:stage,netFoundationVolumeM3:composition.netFoundationVolumeM3,mode:composition.mode,stoneCoreMode:composition.stoneCoreMode,position:composition.position,offsets:composition.offsets,
+    activeStoneM3:composition.activeStoneM3,activeReadyMixM3:composition.activeReadyMixM3,estimatedConcreteM3:composition.estimatedConcreteM3,variance:composition.variance,
+  }).svg;
+  const varianceText=composition.variance?`${composition.variance.direction==='none'?'Matches estimate':composition.variance.direction==='over'?'+':'-'}${e(formatCubicMetres(Math.abs(composition.variance.varianceM3)))}`:null;
+  return `<div class="foundation-composition"><span class="sub">Composite foundation &middot; Stone ${composition.activeStoneM3>0?e(formatCubicMetres(composition.activeStoneM3)):'none recorded'} &middot; Estimated concrete ${e(formatCubicMetres(composition.estimatedConcreteM3))}${composition.activeReadyMixM3>0?` &middot; Actual Ready Mix ${e(formatCubicMetres(composition.activeReadyMixM3))}`:''}${varianceText?` &middot; Variance ${varianceText}`:''}</span><div class="wall-figure">${figure}</div></div>`;
+}
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]??c));
 const display=(value:string|null|undefined)=>value?.trim()?e(value):'&mdash;';
@@ -16,12 +37,12 @@ const fmt=(value:number)=>Number.isInteger(value)?String(value):value.toFixed(3)
  * uncalculated quantity reads "Entered directly"; rebar and site mix read "Not applicable". Nothing
  * missing is printed as zero.
  */
-export function wallConstructionSectionHtml(walls:LinkedWallWork[]){
+export function wallConstructionSectionHtml(walls:LinkedWallWork[],foundationActivity:LinkedFoundationActivity[]=[]){
   const head='<thead><tr><th>Material and purpose</th><th>Consumed quantity</th><th>Volume calculation</th><th>Notes</th></tr></thead>';
   const metres=(value:number)=>String(Number(value.toFixed(2)));
-  if(!walls.length)return `<section class="wall-section"><h2>Wall construction that day</h2><table class="wall-table">${head}<tbody><tr><td colspan="4" class="empty">No wall construction recorded for this date</td></tr></tbody></table></section>`;
+  if(!walls.length&&!foundationActivity.length)return `<section class="wall-section"><h2>Wall construction that day</h2><table class="wall-table">${head}<tbody><tr><td colspan="4" class="empty">No wall construction recorded for this date</td></tr></tbody></table></section>`;
   const records=walls.reduce((sum,wall)=>sum+wall.entries.length,0);
-  const blocks=walls.map(wall=>{
+  const wallBlock=(wall:LinkedWallWork)=>{
     const rows=wall.entries.map(entry=>{
       const purpose=wallConsumptionPurposeLabel(entry),last=entry.correctionHistory.at(-1);
       const volume=entry.volume,calculation=!supportsVolumeCalculation(entry.type)
@@ -36,23 +57,36 @@ export function wallConstructionSectionHtml(walls:LinkedWallWork[]){
     const geometry=`${fmt(wall.lengthM)} m long × ${fmt(wall.heightM)} m high &middot; ${thickness} &middot; ${metres(wall.plannedVolumeM3)} m³ planned`;
     // DEC-457. The figure is generated here from the same geometry the table prints; it is inline SVG,
     // so the PDF carries no raster image and fetches nothing.
-    const base=wall.base,stage=wall.baseStatusAsOf;
+    const foundation=wall.foundation,stage=wall.foundationStatusAsOf;
     const figure=buildWallDiagram({wall:{name:wall.wallName,lengthM:wall.lengthM,heightM:wall.heightM,bottomThicknessM:wall.bottomThicknessM,topThicknessM:wall.topThicknessM},layers:wall.layers??[],
-      base:base&&stage?{geometry:{lengthM:base.lengthM,heightM:base.heightM,bottomThicknessM:base.bottomThicknessM,topThicknessM:base.topThicknessM},status:stage,label:base.reference}:null}).svg;
-    // DEC-459/460, refined by DEC-463. The base block states the stage reached by this work date,
-    // never a later one, and — since curing no longer blocks wall work — a concise, honest note when
-    // wall material was recorded that day while curing was not yet confirmed. It never claims the
+      base:foundation&&stage?{geometry:{lengthM:foundation.lengthM,heightM:foundation.heightM,bottomThicknessM:foundation.bottomThicknessM,topThicknessM:foundation.topThicknessM},status:stage,label:foundation.reference}:null}).svg;
+    // DEC-459/460, refined by DEC-463/464. The foundation block states the stage reached by this work
+    // date, never a later one, and — since curing no longer blocks wall work — a concise, honest note
+    // when wall material was recorded that day while curing was not yet confirmed. It never claims the
     // foundation was cured, and never hides the wall material that was actually recorded.
     const curingNote=stage&&stage!=='cured'&&wall.entries.length?'<span class="curing-note">Base curing not confirmed on this work date</span>':'';
-    const baseBlock=base&&stage?`<div class="wall-base"><b>${e(base.reference)}</b> &middot; ${e(baseStatusLabels[stage])}${base.location.trim()?` &middot; ${e(base.location)}`:''}<span class="sub">${fmt(base.lengthM)} m × ${fmt(base.heightM)} m × ${fmt(base.bottomThicknessM)}${base.bottomThicknessM===base.topThicknessM?'':` to ${fmt(base.topThicknessM)}`} m &middot; gross ${e(formatCubicMetres(base.grossVolumeM3))}, deduction ${e(formatCubicMetres(base.deductionM3))}, net ${e(formatCubicMetres(base.netVolumeM3))}</span><span class="sub">Recorded ${base.quantity==null?'not recorded':fmt(base.quantity)} ${base.quantityUnit==='tonnes'?'t':'m³'}${base.manualOverride?' (manual override)':''} &middot; ${e(wallMaterialLabels[base.materialType])}${base.customPurposeLabel??base.concretePurpose?` &middot; ${e(base.customPurposeLabel??concretePurposeLabelOf(base.concretePurpose))}`:''}</span>${base.constructedOn?`<span class="sub">Constructed ${e(base.constructedOn)}${base.curingStartedOn?` &middot; curing from ${e(base.curingStartedOn)}`:''}${base.curedOn?` &middot; cured ${e(base.curedOn)}`:''}</span>`:''}${wall.baseEvents.length?`<span class="base-events">${wall.baseEvents.map(e).join(' &middot; ')}</span>`:''}${curingNote}${base.notes.trim()?`<span class="sub">${e(base.notes)}</span>`:''}</div>`:'';
-    return `<div class="wall-block"><div class="wall-head"><div class="wall-title"><h3>${e(wall.wallName)}</h3><p>${e(wallSystemLabels[wall.system])} &middot; ${e(wallPurposeLabels[wall.purpose])}</p></div><p class="wall-geometry">${geometry}</p></div>${baseBlock}<div class="wall-figure">${figure}</div><table class="wall-table">${head}<tbody>${rows}</tbody></table></div>`;
-  }).join('');
-  return `<section class="wall-section"><h2>Wall construction that day</h2><p class="wall-summary">${walls.length} wall${walls.length===1?'':'s'} &middot; ${records} material record${records===1?'':'s'}. Calculated volumes use the wall's length, height, and thickness less deductions.</p>${blocks}</section>`;
+    const foundationBlock=foundation&&stage?`<div class="wall-base"><b>${e(foundation.reference)}</b> &middot; ${e(baseStatusLabels[stage])}${foundation.location.trim()?` &middot; ${e(foundation.location)}`:''}<span class="sub">${fmt(foundation.lengthM)} m × ${fmt(foundation.heightM)} m × ${fmt(foundation.bottomThicknessM)}${foundation.bottomThicknessM===foundation.topThicknessM?'':` to ${fmt(foundation.topThicknessM)}`} m &middot; gross ${e(formatCubicMetres(foundation.grossVolumeM3))}, deduction ${e(formatCubicMetres(foundation.deductionM3))}, net ${e(formatCubicMetres(foundation.netVolumeM3))}</span><span class="sub">Recorded ${foundation.quantity==null?'not recorded':fmt(foundation.quantity)} ${foundation.quantityUnit==='tonnes'?'t':'m³'}${foundation.manualOverride?' (manual override)':''} &middot; ${e(wallMaterialLabels[foundation.materialType])}${foundation.customPurposeLabel??foundation.concretePurpose?` &middot; ${e(foundation.customPurposeLabel??concretePurposeLabelOf(foundation.concretePurpose))}`:''}</span>${foundation.constructedOn?`<span class="sub">Constructed ${e(foundation.constructedOn)}${foundation.curingStartedOn?` &middot; curing from ${e(foundation.curingStartedOn)}`:''}${foundation.curedOn?` &middot; cured ${e(foundation.curedOn)}`:''}</span>`:''}${wall.foundationEvents.length?`<span class="base-events">${wall.foundationEvents.map(e).join(' &middot; ')}</span>`:''}${curingNote}${foundationCompositionHtml(foundation,stage,wall.foundationComposition)}${foundation.notes.trim()?`<span class="sub">${e(foundation.notes)}</span>`:''}</div>`:'';
+    return `<div class="wall-block"><div class="wall-head"><div class="wall-title"><h3>${e(wall.wallName)}</h3><p>${e(wallSystemLabels[wall.system])} &middot; ${e(wallPurposeLabels[wall.purpose])}</p></div><p class="wall-geometry">${geometry}</p></div>${foundationBlock}<div class="wall-figure">${figure}</div><table class="wall-table">${head}<tbody>${rows}</tbody></table></div>`;
+  };
+  const foundationOnlyBlock=(activity:LinkedFoundationActivity)=>{
+    const foundation=activity.foundation,stage=activity.foundationStatusAsOf;
+    const figure=buildWallDiagram({wall:{name:foundation.reference,lengthM:foundation.lengthM,heightM:foundation.heightM,bottomThicknessM:foundation.bottomThicknessM,topThicknessM:foundation.topThicknessM},layers:[],base:{geometry:{lengthM:foundation.lengthM,heightM:foundation.heightM,bottomThicknessM:foundation.bottomThicknessM,topThicknessM:foundation.topThicknessM},status:stage,label:foundation.reference}}).svg;
+    return `<div class="wall-block foundation-only"><div class="wall-head"><div class="wall-title"><h3>${e(foundation.reference)}</h3><p>Foundation &middot; ${e(baseStatusLabels[stage])} &middot; no wall linked yet</p></div></div><div class="wall-figure">${figure}</div>${foundationCompositionHtml(foundation,stage,activity.composition)}${activity.foundationEvents.length?`<span class="base-events">${activity.foundationEvents.map(e).join(' &middot; ')}</span>`:''}</div>`;
+  };
+  // DEC-464. Grouped by Construction Section, then by foundation/wall inside it, so a report with more
+  // than one site segment reads as separate work areas rather than one flat list.
+  const sections=new Map<string,{walls:LinkedWallWork[];foundations:LinkedFoundationActivity[]}>();
+  for(const wall of walls){const key=wall.constructionSectionName??UNASSIGNED_SECTION;const group=sections.get(key)??{walls:[],foundations:[]};group.walls.push(wall);sections.set(key,group);}
+  for(const activity of foundationActivity){const key=activity.constructionSectionName||UNASSIGNED_SECTION;const group=sections.get(key)??{walls:[],foundations:[]};group.foundations.push(activity);sections.set(key,group);}
+  const sectionBlocks=[...sections.entries()].sort(([first],[second])=>first.localeCompare(second)).map(([name,group])=>
+    `<div class="construction-section"><h3 class="construction-section-title">${name===UNASSIGNED_SECTION?'No Construction Section':e(name)}</h3>${group.walls.map(wallBlock).join('')}${group.foundations.map(foundationOnlyBlock).join('')}</div>`
+  ).join('');
+  return `<section class="wall-section"><h2>Wall construction that day</h2><p class="wall-summary">${walls.length} wall${walls.length===1?'':'s'} &middot; ${records} material record${records===1?'':'s'}${foundationActivity.length?` &middot; ${foundationActivity.length} foundation${foundationActivity.length===1?'':'s'} not yet linked to a wall`:''}. Calculated volumes use the wall's length, height, and thickness less deductions.</p>${sectionBlocks}</section>`;
 }
 
-export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],quarry:LinkedQuarryLoad[],waste:LinkedWasteDump[],fuel:LinkedFuelFill[],company:ProjectReportSetup['company'],logo:string|null,photos:(string|null)[],includePrices?:boolean,ministryLogo?:string|null,wallWork?:LinkedWallWork[]):string;
+export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],quarry:LinkedQuarryLoad[],waste:LinkedWasteDump[],fuel:LinkedFuelFill[],company:ProjectReportSetup['company'],logo:string|null,photos:(string|null)[],includePrices?:boolean,ministryLogo?:string|null,wallWork?:LinkedWallWork[],foundationActivity?:LinkedFoundationActivity[]):string;
 export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],waste:LinkedWasteDump[],company:ProjectReportSetup['company'],logo:string|null,photos:(string|null)[]):string;
-export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],quarryOrWaste:LinkedQuarryLoad[]|LinkedWasteDump[],wasteOrCompany:LinkedWasteDump[]|ProjectReportSetup['company'],fuelOrLogo:LinkedFuelFill[]|string|null,companyOrPhotos:ProjectReportSetup['company']|(string|null)[],logo?:string|null,photosArg?:(string|null)[],includePricesArg=false,ministryLogoArg?:string|null,wallWorkArg:LinkedWallWork[]=[]){
+export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,project:ReportProject,loads:LinkedProjectLoad[],quarryOrWaste:LinkedQuarryLoad[]|LinkedWasteDump[],wasteOrCompany:LinkedWasteDump[]|ProjectReportSetup['company'],fuelOrLogo:LinkedFuelFill[]|string|null,companyOrPhotos:ProjectReportSetup['company']|(string|null)[],logo?:string|null,photosArg?:(string|null)[],includePricesArg=false,ministryLogoArg?:string|null,wallWorkArg:LinkedWallWork[]=[],foundationActivityArg:LinkedFoundationActivity[]=[]){
   const current=Array.isArray(wasteOrCompany);const quarry=current?quarryOrWaste as LinkedQuarryLoad[]:[];const waste=current?wasteOrCompany as LinkedWasteDump[]:quarryOrWaste as LinkedWasteDump[];const fuel=current?fuelOrLogo as LinkedFuelFill[]:[];const company=(current?companyOrPhotos:wasteOrCompany) as ProjectReportSetup['company'];const resolvedLogo=current?logo:fuelOrLogo as string|null;const photos=(current?photosArg:companyOrPhotos) as (string|null)[];
   const includePrices=current&&includePricesArg;
   const minutes=netWorkMinutes(report);
@@ -171,6 +205,11 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
     .wall-base .sub{display:block;margin-top:.6mm;font-size:7.5pt;color:#65717d}
     .wall-base .base-events{display:block;margin-top:1mm;font-size:7.5pt;font-weight:700;color:#173f67}
     .wall-base .curing-note{display:block;margin-top:1mm;font-size:7.5pt;font-weight:700;color:#9a6512}
+    .construction-section{margin-top:3mm}
+    .construction-section-title{font-size:10pt;font-weight:800;color:#173f67;border-bottom:.4pt solid #c9c2b4;padding-bottom:1mm;margin:0 0 2mm}
+    .foundation-composition{margin-top:1.5mm}
+    .foundation-composition .wall-figure{margin-top:1mm}
+    .wall-block.foundation-only{border-left:2pt dashed #c9c2b4}
     .wall-figure{break-inside:avoid;page-break-inside:avoid;margin:2mm 0 2.5mm}
     .wall-figure svg{max-width:100%;height:auto;display:block}
     .source-label{display:flex;align-items:center;gap:2mm;margin:3mm 0 1.5mm}.source-label h3{margin:0;font-size:10pt;font-weight:700;color:#17212b}.source-chip{font-size:7pt;font-weight:700;letter-spacing:.3pt;padding:.6mm 2mm;border-radius:2.5mm;color:#fff}.source-chip-company{background:#c84b31}.source-chip-supplier{background:#173f67}
@@ -222,7 +261,7 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
       <section><h2>Loads delivered that day</h2><div class="source-label"><h3>Company Loads</h3><span class="source-chip source-chip-company">${e(company.name)}</span></div><table class="table-accent-company"><thead><tr><th>Transaction</th><th>Item</th><th>Quantity</th><th>Driver</th><th>Truck</th>${includePrices?'<th>Total</th>':''}</tr></thead><tbody>${loadRows}</tbody></table><div class="source-label"><h3>Supplier Loads</h3><span class="source-chip source-chip-supplier">SUPPLIER</span></div><table class="table-accent-supplier"><thead><tr><th>Reference</th><th>Supplier</th><th>Item</th><th>Quantity</th><th>Delivery</th><th>Truck</th><th>Ticket</th>${includePrices?'<th>Total</th>':''}</tr></thead><tbody>${quarryRows}</tbody></table></section>
       <section><h2>Fuel used that day</h2><table><thead><tr><th>Time</th><th>Equipment</th><th>Fuel type</th><th>Litres</th>${includePrices?'<th>Price</th><th>Cost</th>':''}<th>Odometer</th></tr></thead><tbody>${fuelRows}</tbody></table></section>
       <section><h2>Waste dumps completed that day</h2><div class="two"><div class="card"><strong>${waste.length}</strong><b>TOTAL DUMPS</b><small>Total completed dumps: ${waste.length}</small></div><table class="waste"><thead><tr><th>Material</th><th>Dump location</th><th>Dumps</th></tr></thead><tbody>${wasteRows}</tbody></table></div></section>
-      ${wallConstructionSectionHtml(current?wallWorkArg:[])}
+      ${wallConstructionSectionHtml(current?wallWorkArg:[],current?foundationActivityArg:[])}
       <section><h2>Site notes and follow-up</h2><div class="notes-grid"><div class="panel"><h3>General notes</h3><p>${display(report.notes)}</p></div><div class="panel panel-attention"><h3>Problems, delays, or incidents</h3><p>${display(report.problemsDelaysIncidents)}</p></div><div class="panel"><h3>Next work planned</h3><p>${display(report.nextWorkPlanned)}</p></div><div class="panel"><h3>Daily report status</h3><p>Saved project-day record<br/>Updated ${e(updatedLabel)}</p></div></div></section>
       ${consultantSection}
       <section><h2>Photo evidence</h2><div class="photos">${photoHtml}</div></section>

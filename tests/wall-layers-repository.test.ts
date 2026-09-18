@@ -49,7 +49,11 @@ describe('migration 39: wall layers and construction phases',()=>{
     await migrateDatabase(db as never);
     expect(statements.some(sql=>sql.includes('CREATE TABLE IF NOT EXISTS wall_layers'))).toBe(true);
     expect(statements.some(sql=>sql.includes('idx_wall_layers_phase'))).toBe(true);
-    expect(statements.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
+    // Structure only: no data-modifying statement is part of the version 39 step. Bounded to this
+    // step's own statements -- later migrations (e.g. DEC-464's independent-foundation copy) may
+    // legitimately contain real data-migrating statements of their own.
+    const step39=statements.slice(statements.findIndex(sql=>sql.includes('wall_layers')),statements.findIndex(sql=>sql.includes('wall_bases')));
+    expect(step39.some(sql=>/^\s*(UPDATE|INSERT|DELETE)\b/im.test(sql))).toBe(false);
     expect(statements.at(-1)).toBe(`PRAGMA user_version = ${DATABASE_VERSION}`);
   });
 

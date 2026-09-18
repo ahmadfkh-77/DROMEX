@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 41;
+export const DATABASE_VERSION = 42;
 
 type TableColumn = { name: string };
 
@@ -1244,6 +1244,136 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_wall_base_composition_base ON wall_base_composition_records(base_id, material_type);
     `);
     currentVersion = 41;
+  }
+
+  if (currentVersion === 41) {
+    // DEC-464. Foundations become independent of any single wall: a named, project-scoped
+    // Construction Section groups any number of Foundations, and a Foundation may exist before a
+    // wall is ever linked to it. `wall_bases` (one base per wall, DEC-459/460) is rebuilt as
+    // `foundations` (one row per foundation, addressable on its own), following the same
+    // create-copy-drop-rename technique already used for payment_entries in migration 13. Every
+    // existing wall_bases row keeps its own id, so wall_base_composition_records keeps working once
+    // its own foreign key is repointed the same way. No existing base, curing date, correction, or
+    // composition record is altered -- only where they live changes. Existing walls that already had
+    // a base are linked to their now-independent foundation through the new walls.foundation_id
+    // column; walls that had none (legacy walls, DEC-459) are left exactly as they are, with no
+    // foundation invented for them. A deterministic "Legacy Section" is created per project that had
+    // at least one base, never a real site name, and it may be renamed later like any other section.
+    //
+    // `wall_bases` and `wall_base_composition_records` are deliberately left in place, never dropped
+    // or renamed: migrations 39-41 above assume those exact table names and shapes are always safe to
+    // recreate with IF NOT EXISTS, an assumption their own tests exercise by resetting PRAGMA
+    // user_version on an already-current database and replaying every step. Touching either table's
+    // name or shape here would silently break that replay for every earlier migration. `foundations`
+    // and `foundation_composition_records` are new, independently named tables instead; the old ones
+    // become inert historical remnants once this step runs, superseded but harmless and undeleted.
+    // Every insert below is idempotent (INSERT OR IGNORE, or an addColumnIfMissing/IF NOT EXISTS
+    // index/column), so this whole step is also safe to replay on its own for the same reason.
+    const seededAt = new Date().toISOString();
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS construction_sections (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        name_key TEXT NOT NULL,
+        location TEXT,
+        description TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_construction_sections_name ON construction_sections(project_id, name_key);
+      CREATE INDEX IF NOT EXISTS idx_construction_sections_project ON construction_sections(project_id);
+
+      -- One deterministic legacy section per project that already has at least one base, so every
+      -- migrated foundation has a section to belong to without inventing a real site name.
+      INSERT OR IGNORE INTO construction_sections (id,project_id,name,name_key,location,description,created_at,updated_at)
+        SELECT 'section_legacy_' || w.project_id, w.project_id, 'Legacy Section', 'legacy section', NULL,
+          'Created automatically during migration 42 to hold foundations that existed before Construction Sections. Rename it freely.',
+          '${seededAt}', '${seededAt}'
+        FROM wall_bases wb JOIN walls w ON w.id = wb.wall_id
+        GROUP BY w.project_id;
+
+      CREATE TABLE IF NOT EXISTS foundations (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        construction_section_id TEXT NOT NULL REFERENCES construction_sections(id),
+        -- Set only for a foundation migrated from a pre-DEC-464 wall base; never set by new code,
+        -- which links a wall through walls.foundation_id instead.
+        legacy_wall_id TEXT REFERENCES walls(id),
+        reference TEXT NOT NULL CHECK (length(trim(reference)) > 0),
+        location TEXT,
+        length_m REAL NOT NULL CHECK (length_m > 0),
+        height_m REAL NOT NULL CHECK (height_m > 0),
+        bottom_thickness_m REAL NOT NULL CHECK (bottom_thickness_m > 0),
+        top_thickness_m REAL NOT NULL CHECK (top_thickness_m > 0),
+        deduction_m3 REAL NOT NULL DEFAULT 0 CHECK (deduction_m3 >= 0),
+        gross_volume_m3 REAL NOT NULL CHECK (gross_volume_m3 > 0),
+        net_volume_m3 REAL NOT NULL CHECK (net_volume_m3 > 0 AND net_volume_m3 <= gross_volume_m3),
+        material_type TEXT NOT NULL CHECK (material_type IN ('ready_mix','site_mix','stone')),
+        concrete_purpose TEXT CHECK (concrete_purpose IN ('structural','filling','cyclopean_matrix','mortar','footing','coping')),
+        custom_purpose_id TEXT REFERENCES wall_concrete_purposes(id),
+        custom_purpose_label TEXT,
+        quantity REAL NOT NULL CHECK (quantity > 0),
+        quantity_unit TEXT NOT NULL CHECK (quantity_unit IN ('m3','tonnes')),
+        manual_override INTEGER NOT NULL DEFAULT 0 CHECK (manual_override IN (0, 1)),
+        consumption_date TEXT,
+        status TEXT NOT NULL CHECK (status IN ('planned','constructed','curing','cured')),
+        constructed_on TEXT,
+        curing_started_on TEXT,
+        cured_on TEXT,
+        curing_note TEXT,
+        notes TEXT,
+        correction_history_json TEXT NOT NULL DEFAULT '[]',
+        foundation_mode TEXT NOT NULL DEFAULT 'single' CHECK (foundation_mode IN ('single','composite')),
+        stone_core_mode TEXT CHECK (stone_core_mode IN ('simple','detailed')),
+        stone_core_position_x REAL CHECK (stone_core_position_x IS NULL OR (stone_core_position_x >= 0 AND stone_core_position_x <= 1)),
+        stone_core_position_y REAL CHECK (stone_core_position_y IS NULL OR (stone_core_position_y >= 0 AND stone_core_position_y <= 1)),
+        stone_core_offsets_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        CHECK (constructed_on IS NULL OR curing_started_on IS NULL OR curing_started_on >= constructed_on),
+        CHECK (curing_started_on IS NULL OR cured_on IS NULL OR cured_on >= curing_started_on),
+        CHECK (status = 'planned' OR constructed_on IS NOT NULL),
+        CHECK (status <> 'curing' OR curing_started_on IS NOT NULL),
+        CHECK (status <> 'cured' OR cured_on IS NOT NULL)
+      );
+      CREATE INDEX IF NOT EXISTS idx_foundations_project ON foundations(project_id);
+      CREATE INDEX IF NOT EXISTS idx_foundations_section ON foundations(construction_section_id);
+      CREATE INDEX IF NOT EXISTS idx_foundations_legacy_wall ON foundations(legacy_wall_id);
+
+      INSERT OR IGNORE INTO foundations (id,project_id,construction_section_id,legacy_wall_id,reference,location,length_m,height_m,bottom_thickness_m,top_thickness_m,deduction_m3,gross_volume_m3,net_volume_m3,material_type,concrete_purpose,custom_purpose_id,custom_purpose_label,quantity,quantity_unit,manual_override,consumption_date,status,constructed_on,curing_started_on,cured_on,curing_note,notes,correction_history_json,foundation_mode,stone_core_mode,stone_core_position_x,stone_core_position_y,stone_core_offsets_json,created_at,updated_at)
+        SELECT wb.id, w.project_id, 'section_legacy_' || w.project_id, wb.wall_id, wb.reference, wb.location, wb.length_m, wb.height_m, wb.bottom_thickness_m, wb.top_thickness_m, wb.deduction_m3, wb.gross_volume_m3, wb.net_volume_m3, wb.material_type, wb.concrete_purpose, wb.custom_purpose_id, wb.custom_purpose_label, wb.quantity, wb.quantity_unit, wb.manual_override, wb.consumption_date, wb.status, wb.constructed_on, wb.curing_started_on, wb.cured_on, wb.curing_note, wb.notes, wb.correction_history_json, wb.foundation_mode, wb.stone_core_mode, wb.stone_core_position_x, wb.stone_core_position_y, wb.stone_core_offsets_json, wb.created_at, wb.updated_at
+        FROM wall_bases wb JOIN walls w ON w.id = wb.wall_id;
+
+      -- A new, independently named table -- see the note above on why wall_base_composition_records
+      -- itself is left untouched rather than repointed or renamed in place.
+      CREATE TABLE IF NOT EXISTS foundation_composition_records (
+        id TEXT PRIMARY KEY NOT NULL,
+        foundation_id TEXT NOT NULL REFERENCES foundations(id),
+        material_type TEXT NOT NULL CHECK (material_type IN ('stone','ready_mix')),
+        quantity_m3 REAL NOT NULL CHECK (quantity_m3 > 0),
+        recorded_on TEXT NOT NULL,
+        notes TEXT,
+        cancelled_at TEXT,
+        cancelled_reason TEXT,
+        correction_history_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        CHECK (cancelled_at IS NULL OR cancelled_reason IS NOT NULL)
+      );
+      CREATE INDEX IF NOT EXISTS idx_foundation_composition_foundation ON foundation_composition_records(foundation_id, material_type);
+      INSERT OR IGNORE INTO foundation_composition_records (id,foundation_id,material_type,quantity_m3,recorded_on,notes,cancelled_at,cancelled_reason,correction_history_json,created_at,updated_at)
+        SELECT id, base_id, material_type, quantity_m3, recorded_on, notes, cancelled_at, cancelled_reason, correction_history_json, created_at, updated_at
+        FROM wall_base_composition_records;
+    `);
+    await addColumnIfMissing(db, 'walls', 'foundation_id', 'TEXT REFERENCES foundations(id)');
+    await db.execAsync(`
+      UPDATE walls SET foundation_id = (SELECT f.id FROM foundations f WHERE f.legacy_wall_id = walls.id)
+        WHERE EXISTS (SELECT 1 FROM foundations f WHERE f.legacy_wall_id = walls.id);
+      -- One active wall per foundation (Checkpoint 2), enforced at the database level.
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_walls_foundation ON walls(foundation_id) WHERE foundation_id IS NOT NULL;
+    `);
+    currentVersion = 42;
   }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);

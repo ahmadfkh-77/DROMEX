@@ -1,96 +1,179 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 import type {WallRepository} from '../../data/repositories/WallRepository';
-import {calculateWallVolume,summarizeWallConsumption,wallPurposeLabels,wallSystemLabels,type SavedConcretePurpose,type Wall,type WallDetail,type WallDraft,type WallSetup,type WallSystem} from '../../domain/walls';
+import type {ConstructionSection} from '../../domain/constructionSections';
+import type {Foundation} from '../../domain/foundations';
+import {baseStatusLabels} from '../../domain/wallBase';
+import {formatCubicMetres,summarizeWallConsumption,wallSystemLabels,type SavedConcretePurpose,type Wall,type WallDetail} from '../../domain/walls';
 import {AppButton,AppCard,AppField,AppPage,EmptyState,Feedback,MetricCard,PageHeader} from '../components/AppPrimitives';
 import {ExpandableMenuSection} from '../components/ExpandableMenu';
+import {emptyFoundationForm,foundationDraftFrom,type FoundationGeometryFormValues,FoundationGeometryForm} from '../components/FoundationGeometryForm';
 import {SearchableSelect} from '../components/SearchableSelect';
 import {emptyWallUseForm,wallDraftFromForm,WallConsumptionForm,wallUseFormFromEntry} from '../components/WallConsumptionForm';
-import {WallBaseWorkflow} from '../components/WallBaseWorkflow';
 import {WallConsumptionHistory} from '../components/WallConsumptionHistory';
 import {WallDiagramView} from '../components/WallDiagramView';
-import {emptyLayerRow,layerRowsFromDrafts,WallLayersEditor,type LayerRowForm} from '../components/WallLayersEditor';
-import type {BaseStatusChange,WallBaseDraft} from '../../domain/wallBase';
-import type {WallLayerDraft} from '../../domain/wallDiagram';
-import type {FoundationComposition,FoundationCompositionMaterial,FoundationCompositionMode,StoneCoreMode,StoneCoreOffsets,StoneCorePosition} from '../../domain/wallFoundation';
-import {colors} from '../theme';
+import {layerRowsFromDrafts,WallLayersEditor,type LayerRowForm} from '../components/WallLayersEditor';
+import {FoundationWorkspaceScreen} from './FoundationWorkspaceScreen';
+import {colors, radius} from '../theme';
 
-type WallForm={projectId:string;name:string;system:WallSystem;purpose:WallDraft['purpose'];length:string;height:string;bottom:string;top:string;deduction:string;allowance:string;notes:string};
-const n=(value:string)=>{const parsed=Number(value.replace(',','.'));return Number.isFinite(parsed)?parsed:0;},f=(value:number,digits=2)=>value.toLocaleString(undefined,{minimumFractionDigits:digits,maximumFractionDigits:digits});
-const emptyWall=(projectId=''):WallForm=>({projectId,name:'',system:'reinforced_concrete',purpose:'retaining',length:'',height:'',bottom:'',top:'',deduction:'0',allowance:'0',notes:''});
+const f=(value:number,digits=2)=>value.toLocaleString(undefined,{minimumFractionDigits:digits,maximumFractionDigits:digits});
 const pair=(first:number,firstUnit:string,second:number,secondUnit:string)=>[first?`${f(first)} ${firstUnit}`:null,second?`${f(second)} ${secondUnit}`:null].filter(Boolean).join(' · ');
 
+/**
+ * DEC-464. Project -> Construction Section -> Foundation -> Wall. This screen is the directory:
+ * choose (or lock to) a project, browse its Construction Sections and the Foundations inside each
+ * one, create a Foundation independently of any wall, and open a Foundation's five-stage workspace.
+ * Legacy walls (created before DEC-459, with no base/foundation concept at all) keep their original,
+ * untouched consumption workflow in their own section below.
+ */
 export function WallConstructionScreen({repository,onBack,initialProjectId}:{repository:WallRepository;onBack:()=>void;initialProjectId?:string|null}){
-  const[setup,setSetup]=useState<WallSetup|null>(null),[walls,setWalls]=useState<Wall[]>([]),[purposes,setPurposes]=useState<SavedConcretePurpose[]>([]),[wallForm,setWallForm]=useState<WallForm>(()=>emptyWall(initialProjectId??'')),[editingId,setEditingId]=useState<string|null>(null),[selected,setSelected]=useState<WallDetail|null>(null),[composition,setComposition]=useState<FoundationComposition|null>(null),[formKey,setFormKey]=useState(0),[layerRows,setLayerRows]=useState<LayerRowForm[]>([]),[open,setOpen]=useState<Set<string>>(()=>new Set()),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[message,setMessage]=useState<string|null>(null);
-  const locked=!!initialProjectId,toggle=(key:string)=>setOpen(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});
-  const refresh=useCallback(async()=>{const[nextSetup,nextWalls,nextPurposes]=await Promise.all([repository.getSetup(),repository.listWalls(initialProjectId??null),repository.listConcretePurposes()]);setSetup(nextSetup);setWalls(nextWalls);setPurposes(nextPurposes);if(selected){const current=nextWalls.find(value=>value.id===selected.wall.id);if(current){setSelected(await repository.getWall(current.id));setComposition(await repository.getFoundationComposition(current.id));}else{setSelected(null);setComposition(null);}}},[initialProjectId,repository,selected?.wall.id]);
-  useEffect(()=>{setLoading(true);void refresh().catch(cause=>setError(cause instanceof Error?cause.message:'Could not load wall construction records.')).finally(()=>setLoading(false));},[initialProjectId,repository]);
-  const wallResult=useMemo(()=>calculateWallVolume(n(wallForm.length),n(wallForm.height),n(wallForm.bottom),n(wallForm.top),n(wallForm.deduction),n(wallForm.allowance)),[wallForm]);
-  const projects=setup?.projects??[],activeProjects=projects.filter(value=>value.status==='active'),visible=initialProjectId?walls:wallForm.projectId?walls.filter(value=>value.projectId===wallForm.projectId):walls;
-  const wallDraft=():WallDraft=>({projectId:wallForm.projectId,name:wallForm.name,system:wallForm.system,purpose:wallForm.purpose,lengthM:n(wallForm.length),heightM:n(wallForm.height),bottomThicknessM:n(wallForm.bottom),topThicknessM:n(wallForm.top),deductionM3:n(wallForm.deduction),allowancePercent:n(wallForm.allowance),notes:wallForm.notes});
-  async function run(action:()=>Promise<void>,success:string){setBusy(true);setError(null);setMessage(null);try{await action();setMessage(success);}catch(cause){setError(cause instanceof Error?cause.message:'The wall record could not be saved.');}finally{setBusy(false);}}
-  function saveWall(){void run(async()=>{const saved=await repository.saveWall(wallDraft(),editingId??undefined);setEditingId(null);setWallForm(emptyWall(initialProjectId??wallForm.projectId));setSetup(await repository.getSetup());setWalls(await repository.listWalls(initialProjectId??null));const detail=await repository.getWall(saved.id);setSelected(detail);setComposition(await repository.getFoundationComposition(saved.id));setLayerRows(layerRowsFromDrafts(detail.layers));setFormKey(key=>key+1);setOpen(current=>new Set([...current,'preview','consumption','history']));},editingId?'Wall updated.':'Wall saved under the project.');}
-  function editWall(value:Wall){setEditingId(value.id);setWallForm({projectId:value.projectId,name:value.name,system:value.system,purpose:value.purpose,length:String(value.lengthM),height:String(value.heightM),bottom:String(value.bottomThicknessM),top:String(value.topThicknessM),deduction:String(value.deductionM3),allowance:String(value.allowancePercent),notes:value.notes});setOpen(current=>new Set([...current,'wall']));}
-  async function chooseWall(value:Wall){setBusy(true);setError(null);setMessage(null);try{const detail=await repository.getWall(value.id);setSelected(detail);setComposition(await repository.getFoundationComposition(value.id));setLayerRows(layerRowsFromDrafts(detail.layers));setFormKey(key=>key+1);setOpen(current=>new Set([...current,'preview','consumption','history']));}catch(cause){setError(cause instanceof Error?cause.message:'Could not open the wall.');}finally{setBusy(false);}}
-  async function reloadSelected(wallId:string){const[detail,nextWalls,nextComposition]=await Promise.all([repository.getWall(wallId),repository.listWalls(initialProjectId??null),repository.getFoundationComposition(wallId)]);setSelected(detail);setWalls(nextWalls);setComposition(nextComposition);setLayerRows(layerRowsFromDrafts(detail.layers));}
-  function saveBase(draft:WallBaseDraft){if(!selected)return Promise.resolve();return runQuiet(async()=>{await repository.saveBase(draft);await reloadSelected(selected.wall.id);},'Base saved.');}
-  function changeBaseStatus(change:BaseStatusChange){if(!selected)return Promise.resolve();return runQuiet(async()=>{await repository.changeBaseStatus(selected.wall.id,change);await reloadSelected(selected.wall.id);},change.status==='cured'?'Base confirmed cured. Wall construction is unlocked.':`Base marked ${change.status}.`);}
-  function correctBase(draft:WallBaseDraft,reason:string){if(!selected)return Promise.resolve();return runQuiet(async()=>{await repository.correctBase(selected.wall.id,{...draft,correctionReason:reason});await reloadSelected(selected.wall.id);},'Base corrected. The change is in its history.');}
-  /** Lets the base workflow surface its own error inline while the screen still shows the success note. */
-  async function runQuiet(action:()=>Promise<void>,success:string){setBusy(true);setError(null);setMessage(null);try{await action();setMessage(success);}finally{setBusy(false);}}
-  function saveLayers(drafts:WallLayerDraft[]){if(!selected)return;void run(async()=>{await repository.saveLayers(selected.wall.id,drafts);await reloadSelected(selected.wall.id);},drafts.length?'Wall layers saved. The diagram now shows them.':'Layers cleared. The diagram shows the wall geometry only.');}
-  async function createPurpose(label:string){const created=await repository.createConcretePurpose(label);setPurposes(await repository.listConcretePurposes());return created;}
-  function setFoundationMode(mode:FoundationCompositionMode,stoneCoreMode?:StoneCoreMode){if(!selected)return Promise.resolve();return runQuiet(async()=>{await repository.setFoundationMode(selected.wall.id,mode,stoneCoreMode);await reloadSelected(selected.wall.id);},mode==='composite'?'Switched to the composite Stone-core model.':'Switched to a single recorded material.');}
-  function saveStoneCorePosition(position:StoneCorePosition){if(!selected)return Promise.resolve();return runQuiet(async()=>{await repository.saveStoneCorePosition(selected.wall.id,position);await reloadSelected(selected.wall.id);},'Stone-core position updated.');}
-  function saveStoneCoreOffsets(offsets:StoneCoreOffsets){if(!selected)return Promise.resolve();return runQuiet(async()=>{await repository.saveStoneCoreOffsets(selected.wall.id,offsets);await reloadSelected(selected.wall.id);},'Stone-core geometry saved.');}
-  function addFoundationRecord(materialType:FoundationCompositionMaterial,quantityM3:number,recordedOn:string,notes:string){if(!selected)return Promise.resolve();return runQuiet(async()=>{await repository.addFoundationCompositionRecord({baseId:'',wallId:selected.wall.id,materialType,quantityM3,recordedOn,notes});await reloadSelected(selected.wall.id);},`${materialType==='stone'?'Stone':'Ready Mix'} recorded.`);}
-  function cancelFoundationRecord(recordId:string,reason:string){if(!selected)return Promise.resolve();return runQuiet(async()=>{await repository.cancelFoundationCompositionRecord(recordId,reason);await reloadSelected(selected.wall.id);},'Record cancelled.');}
-  function correctFoundationRecord(recordId:string,quantityM3:number,recordedOn:string,notes:string,reason:string){if(!selected)return Promise.resolve();return runQuiet(async()=>{await repository.correctFoundationCompositionRecord(recordId,{baseId:'',wallId:selected.wall.id,materialType:composition?.records.find(record=>record.id===recordId)?.materialType??'stone',quantityM3,recordedOn,notes,correctionReason:reason});await reloadSelected(selected.wall.id);},'Correction saved.');}
+  const locked=!!initialProjectId;
+  const[projects,setProjects]=useState<{id:string;name:string;customerName:string;location:string;status:string}[]>([]);
+  const[projectId,setProjectId]=useState<string|null>(initialProjectId??null);
+  const[sections,setSections]=useState<ConstructionSection[]>([]);
+  const[foundations,setFoundations]=useState<Foundation[]>([]);
+  const[legacyWalls,setLegacyWalls]=useState<Wall[]>([]);
+  const[openSections,setOpenSections]=useState<Set<string>>(()=>new Set());
+  const[openFoundationId,setOpenFoundationId]=useState<string|null>(null);
+  const[creatingFoundationSection,setCreatingFoundationSection]=useState<string|null>(null);
+  const[foundationForm,setFoundationForm]=useState<FoundationGeometryFormValues>(emptyFoundationForm());
+  const[creatingSection,setCreatingSection]=useState(false);
+  const[sectionName,setSectionName]=useState('');
+  const[sectionLocation,setSectionLocation]=useState('');
+  const[sectionDescription,setSectionDescription]=useState('');
+  const[purposes,setPurposes]=useState<SavedConcretePurpose[]>([]);
+  const[loading,setLoading]=useState(true);
+  const[busy,setBusy]=useState(false);
+  const[error,setError]=useState<string|null>(null);
+  const[message,setMessage]=useState<string|null>(null);
 
-  const totals=useMemo(()=>summarizeWallConsumption(selected?.entries??[]),[selected]);
-  const rebarBySize=useMemo(()=>{const grouped=new Map<number,{bars:number;metres:number;kg:number}>();for(const value of selected?.entries??[]){if(value.type!=='rebar'||value.rebarDiameterMm===null)continue;const current=grouped.get(value.rebarDiameterMm)??{bars:0,metres:0,kg:0};current.bars+=value.rebarCount??0;current.metres+=value.totalRebarLengthM??0;current.kg+=value.totalRebarKg??0;grouped.set(value.rebarDiameterMm,current);}return[...grouped.entries()].sort((a,b)=>a[0]-b[0]);},[selected]);
-  // Only totals that were actually recorded are shown; a material never used on this wall is omitted rather than shown as zero.
-  const metrics=[
-    {label:'Structural concrete used',value:totals.structural?`${f(totals.structural)} m³`:''},
-    {label:'Filling / mortar used',value:totals.filling?`${f(totals.filling)} m³`:''},
-    {label:'Other purposes',value:totals.otherConcrete?`${f(totals.otherConcrete)} m³`:''},
-    {label:'Cement consumed',value:totals.cement?`${f(totals.cement,0)} bags${totals.cementKg?` · ${f(totals.cementKg,0)} kg`:''}`:''},
-    {label:'Rebar installed',value:totals.rebarKg?`${f(totals.rebarKg,1)} kg`:''},
-    {label:'Stone consumed',value:pair(totals.stoneM3,'m³',totals.stoneT,'t')},
-    {label:'Sand consumed',value:pair(totals.sandM3,'m³',totals.sandT,'t')},
-    {label:'Gravel consumed',value:pair(totals.gravelM3,'m³',totals.gravelT,'t')},
-    {label:'Water recorded',value:totals.water?`${f(totals.water,0)} L`:''},
-  ].filter(metric=>metric.value);
+  const refresh=useCallback(async()=>{
+    const setup=await repository.getSetup();
+    setProjects(setup.projects.filter(value=>value.status==='active').map(value=>({id:value.id,name:value.name,customerName:value.customerName,location:value.location,status:value.status})));
+    if(projectId){
+      const[nextSections,nextFoundations,allWalls,nextPurposes]=await Promise.all([
+        repository.listConstructionSections(projectId),repository.listFoundations(projectId),repository.listWalls(projectId),repository.listConcretePurposes(),
+      ]);
+      setSections(nextSections);setFoundations(nextFoundations);setLegacyWalls(allWalls.filter(value=>!value.baseRequired));setPurposes(nextPurposes);
+    }else{setSections([]);setFoundations([]);setLegacyWalls([]);}
+  },[repository,projectId]);
 
-  return <AppPage keyboard><PageHeader eyebrow="CONSTRUCTION QUANTITIES" title="Wall Construction" onBack={onBack}/><AppCard tone="navy" title="Calculate, then record actual consumption" hint="Each wall stays under its project."><Text style={styles.disclaimer}>Dimensions, reinforcement, material proportions, drainage, and stability come from approved drawings or the project engineer. DROMEX tracks quantities only.</Text></AppCard>{error?<Feedback kind="error">{error}</Feedback>:null}{message?<Feedback kind="success">{message}</Feedback>:null}
-    <ExpandableMenuSection title="1 · Wall and geometry" hint="Project, wall system, tapered dimensions, deductions, and planned volume." tone="orange" open={open.has('wall')} onToggle={()=>toggle('wall')}><AppCard>{locked?<View style={styles.locked}><Text style={styles.small}>PROJECT LOCKED</Text><Text style={styles.lockedValue}>{projects.find(v=>v.id===wallForm.projectId)?.name??'Selected project'}</Text></View>:<SearchableSelect label="Project *" options={activeProjects.map(v=>({id:v.id,label:v.name,detail:`${v.customerName} · ${v.location}`}))} selectedId={wallForm.projectId} onSelect={projectId=>setWallForm({...wallForm,projectId})} placeholder="Choose an active project"/>}<AppField label="Wall or section name *" value={wallForm.name} onChangeText={name=>setWallForm({...wallForm,name})} placeholder="Example: Retaining wall · Section A"/><SearchableSelect label="Wall system *" options={(Object.keys(wallSystemLabels) as WallSystem[]).map(id=>({id,label:wallSystemLabels[id]}))} selectedId={wallForm.system} onSelect={system=>setWallForm({...wallForm,system:system as WallSystem})}/><SearchableSelect label="Wall purpose" options={(Object.keys(wallPurposeLabels) as WallDraft['purpose'][]).map(id=>({id,label:wallPurposeLabels[id]}))} selectedId={wallForm.purpose} onSelect={purpose=>setWallForm({...wallForm,purpose:purpose as WallDraft['purpose']})}/><Pair><AppField label="Length (m) *" value={wallForm.length} onChangeText={length=>setWallForm({...wallForm,length})} keyboardType="decimal-pad"/><AppField label="Height (m) *" value={wallForm.height} onChangeText={height=>setWallForm({...wallForm,height})} keyboardType="decimal-pad"/></Pair><Pair><AppField label="Bottom thickness (m) *" value={wallForm.bottom} onChangeText={bottom=>setWallForm({...wallForm,bottom})} keyboardType="decimal-pad"/><AppField label="Top thickness (m) *" value={wallForm.top} onChangeText={top=>setWallForm({...wallForm,top})} keyboardType="decimal-pad"/></Pair><Pair><AppField label="Volume deductions (m³)" value={wallForm.deduction} onChangeText={deduction=>setWallForm({...wallForm,deduction})} keyboardType="decimal-pad"/><AppField label="Allowance (%)" value={wallForm.allowance} onChangeText={allowance=>setWallForm({...wallForm,allowance})} keyboardType="decimal-pad"/></Pair><View style={styles.metrics}><MetricCard label="Net wall volume" value={`${f(wallResult.netVolumeM3)} m³`} result/><MetricCard label="Planned with allowance" value={`${f(wallResult.plannedVolumeM3)} m³`} result/></View>{wallResult.netVolumeM3>0?<WallDiagramView input={{wall:{name:wallForm.name.trim()||'New wall',lengthM:n(wallForm.length),heightM:n(wallForm.height),bottomThicknessM:n(wallForm.bottom),topThicknessM:n(wallForm.top)},layers:[],base:null}} caption="Live preview of the dimensions entered above."/>:null}<AppField label="Notes" value={wallForm.notes} onChangeText={notes=>setWallForm({...wallForm,notes})} multiline/><AppButton label={editingId?'Update Wall':'Save Wall Under Project'} busy={busy} disabled={!wallForm.projectId||!wallForm.name.trim()||wallResult.netVolumeM3<=0} onPress={saveWall}/>{editingId?<AppButton label="Cancel Editing" tone="secondary" onPress={()=>{setEditingId(null);setWallForm(emptyWall(initialProjectId??wallForm.projectId));}}/>:null}</AppCard></ExpandableMenuSection>
-    <AppCard title="Saved project walls" hint="Open a wall to record and review its actual material consumption.">{loading?<Text style={styles.detail} accessibilityLiveRegion="polite">Loading saved walls…</Text>:visible.length?visible.map(value=>{const isSelected=selected?.wall.id===value.id;return <View key={value.id} style={[styles.wallRow,isSelected&&styles.wallSelected]}><TouchableOpacity style={styles.wallOpen} onPress={()=>void chooseWall(value)} accessibilityRole="button" accessibilityState={{selected:isSelected}} accessibilityHint="Opens this wall's consumption log"><Text style={styles.project}>{value.projectName.toUpperCase()}</Text><Text style={styles.wallName}>{value.name}</Text><Text style={styles.detail}>{wallSystemLabels[value.system]} · {f(value.plannedVolumeM3)} m³ planned</Text></TouchableOpacity><TouchableOpacity style={styles.editButton} onPress={()=>editWall(value)} accessibilityRole="button" accessibilityLabel={`Edit ${value.name}`}><Text style={styles.edit}>Edit</Text></TouchableOpacity></View>;}):<EmptyState title="No saved walls" body="Open section 1 to create the first project wall."/>}</AppCard>
-    {selected?<>
-      {metrics.length?<View style={styles.metrics}>{metrics.map(metric=><MetricCard key={metric.label} label={metric.label} value={metric.value} result/>)}</View>:<AppCard tone="cream"><Text style={styles.detail}>No consumption recorded under {selected.wall.name} yet. Totals appear here once materials are recorded.</Text></AppCard>}
-      {rebarBySize.length?<AppCard title="Steel reinforcement by size" hint="Every diameter remains separate.">{rebarBySize.map(([diameter,value])=><View key={diameter} style={styles.rebarSummary}><Text style={styles.rebarDiameter}>Ø{f(diameter,0)} mm</Text><Text style={styles.rebarValue}>{f(value.bars,0)} bars · {f(value.metres)} m · {f(value.kg,1)} kg</Text></View>)}</AppCard>:null}
-      <WallBaseWorkflow wall={selected.wall} base={selected.base} legacy={selected.stage.legacy} savedPurposes={purposes} busy={busy} onCreatePurpose={createPurpose} onSaveBase={saveBase} onChangeStatus={changeBaseStatus} onCorrectBase={correctBase}
-        composition={composition} onSetFoundationMode={setFoundationMode} onSaveStoneCorePosition={saveStoneCorePosition} onSaveStoneCoreOffsets={saveStoneCoreOffsets}
-        onAddFoundationRecord={addFoundationRecord} onCancelFoundationRecord={cancelFoundationRecord} onCorrectFoundationRecord={correctFoundationRecord}/>
-      {selected.stage.locked?<AppCard tone="cream"><Text style={styles.stageLocked}>{selected.stage.reason}</Text><Text style={styles.detail}>Wall drawing, layers, and material consumption open as soon as the base above is recorded — curing is tracked separately and does not need to be confirmed first.</Text></AppCard>:null}
-      {!selected.stage.locked&&!selected.stage.curingConfirmed?<AppCard tone="cream"><Text style={styles.stageLocked}>{selected.stage.warningTitle}</Text><Text style={styles.detail}>{selected.stage.warningBody}</Text></AppCard>:null}
-      {selected.stage.locked?null:<>
-      <ExpandableMenuSection title="2 · Wall drawing, layers, and phases" hint={`${selected.layers.length?`${selected.layers.length} layer${selected.layers.length===1?'':'s'} recorded`:'No layers recorded yet'}. The drawing is generated from the saved dimensions.`} tone="cream" open={open.has('preview')} onToggle={()=>toggle('preview')}>
-        <AppCard>
-          <WallDiagramView input={{wall:{name:selected.wall.name,lengthM:selected.wall.lengthM,heightM:selected.wall.heightM,bottomThicknessM:selected.wall.bottomThicknessM,topThicknessM:selected.wall.topThicknessM},layers:layerRows.length?layerDraftsPreview(layerRows):selected.layers,base:null}} caption="Elevation, cross-section, and phase legend, generated from this wall's own data."/>
-          <WallLayersEditor rows={layerRows} wall={selected.wall} busy={busy} onChange={setLayerRows} onSave={saveLayers}/>
-        </AppCard>
-      </ExpandableMenuSection>
-      <ExpandableMenuSection title="3 · Record consumed materials" hint={`Add concrete, site-mixed ingredients, rebar, or stone to ${selected.wall.name}. Stone and ready mix can be calculated from wall dimensions.`} open={open.has('consumption')} onToggle={()=>toggle('consumption')}><AppCard><WallConsumptionForm key={`${selected.wall.id}-${formKey}`} mode="add" initial={emptyWallUseForm()} wall={selected.wall} savedPurposes={purposes} onCreatePurpose={createPurpose} onSubmit={async form=>{setMessage(null);await repository.addConsumption(wallDraftFromForm(form,selected.wall.id));await reloadSelected(selected.wall.id);setMessage('Wall consumption recorded.');}}/></AppCard></ExpandableMenuSection>
-      <ExpandableMenuSection title="4 · Consumption history" hint={`${selected.entries.length} saved entr${selected.entries.length===1?'y':'ies'} under this wall. Open an entry to see its details or correct it.`} tone="cream" open={open.has('history')} onToggle={()=>toggle('history')}><WallConsumptionHistory entries={selected.entries} renderCorrection={(entry,close)=><WallConsumptionForm mode="correct" initial={wallUseFormFromEntry(entry)} wall={selected.wall} savedPurposes={purposes} onCreatePurpose={createPurpose} onDiscard={close} onSubmit={async form=>{setMessage(null);await repository.correctConsumption(entry.id,{...wallDraftFromForm(form,entry.wallId),correctionReason:form.reason});close();await reloadSelected(entry.wallId);setMessage('Correction saved. The record keeps its identity and the change is in its history.');}}/>}/></ExpandableMenuSection>
-      </>}
-    </>:null}
+  useEffect(()=>{setLoading(true);void refresh().catch(cause=>setError(cause instanceof Error?cause.message:'Could not load wall construction records.')).finally(()=>setLoading(false));},[projectId]);
+
+  const toggleSection=(id:string)=>setOpenSections(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next;});
+
+  async function createFoundation(){
+    if(!projectId||!creatingFoundationSection)return;
+    setBusy(true);setError(null);setMessage(null);
+    try{
+      const created=await repository.createFoundation(foundationDraftFrom(foundationForm,projectId,creatingFoundationSection));
+      await refresh();setCreatingFoundationSection(null);setFoundationForm(emptyFoundationForm());setMessage('Foundation created.');setOpenFoundationId(created.id);
+    }catch(cause){setError(cause instanceof Error?cause.message:'The foundation could not be saved.');}
+    finally{setBusy(false);}
+  }
+
+  if(openFoundationId&&projectId)return <AppPage keyboard>
+    <FoundationWorkspaceScreen repository={repository} foundationId={openFoundationId} projectId={projectId}
+      section={sections.find(value=>value.id===foundations.find(f2=>f2.id===openFoundationId)?.constructionSectionId)??null}
+      onBack={()=>{setOpenFoundationId(null);void refresh();}} onChanged={()=>void refresh()}/>
+  </AppPage>;
+
+  return <AppPage keyboard>
+    <PageHeader eyebrow="CONSTRUCTION QUANTITIES" title="Wall Construction" onBack={onBack}/>
+    <AppCard tone="navy" title="Organized by Construction Section and Foundation" hint="A foundation is created before its wall, and can be recorded regardless of curing status.">
+      <Text style={styles.disclaimer}>Dimensions, reinforcement, material proportions, drainage, and stability come from approved drawings or the project engineer. DROMEX tracks quantities only.</Text>
+    </AppCard>
+    {error?<Feedback kind="error">{error}</Feedback>:null}
+    {message?<Feedback kind="success">{message}</Feedback>:null}
+
+    {!locked?<AppCard title="Project"><SearchableSelect label="Project *" options={projects.map(value=>({id:value.id,label:value.name,detail:`${value.customerName} · ${value.location}`}))} selectedId={projectId??''} onSelect={setProjectId} placeholder="Choose an active project"/></AppCard>:null}
+
+    {!projectId?<EmptyState title="Choose a project" body="Select a project above to see its Construction Sections and Foundations."/>:loading?<Text style={styles.detail} accessibilityLiveRegion="polite">Loading…</Text>:<>
+      <AppCard title="Construction Sections" hint="Each section can hold several independent foundations.">
+        {!creatingSection?<AppButton label="+ New Construction Section" tone="secondary" onPress={()=>setCreatingSection(true)}/>:<View style={styles.createForm}>
+          <AppField label="Section name *" value={sectionName} onChangeText={setSectionName} placeholder="Example: Section A, North Retaining Wall"/>
+          <AppField label="Location (optional)" value={sectionLocation} onChangeText={setSectionLocation} placeholder="Example: Km 3+000"/>
+          <AppField label="Description (optional)" value={sectionDescription} onChangeText={setSectionDescription} multiline/>
+          <View style={styles.metrics}>
+            <AppButton label="Save Section" tone="navy" busy={busy} disabled={!sectionName.trim()} onPress={()=>void(async()=>{
+              setBusy(true);setError(null);
+              try{await repository.createConstructionSection({projectId,name:sectionName,location:sectionLocation,description:sectionDescription});await refresh();setCreatingSection(false);setSectionName('');setSectionLocation('');setSectionDescription('');}
+              catch(cause){setError(cause instanceof Error?cause.message:'The Construction Section could not be created.');}
+              finally{setBusy(false);}
+            })()}/>
+            <AppButton label="Cancel" tone="secondary" onPress={()=>setCreatingSection(false)}/>
+          </View>
+        </View>}
+      </AppCard>
+
+      {sections.length===0?<EmptyState title="No Construction Sections yet" body="Create one above to start recording independent foundations under this project."/>:
+        sections.map(section=>{
+          const sectionFoundations=foundations.filter(value=>value.constructionSectionId===section.id);
+          const linkedCount=sectionFoundations.filter(value=>value.legacyWallId).length;
+          return <ExpandableMenuSection key={section.id} title={section.name} hint={`${sectionFoundations.length} foundation${sectionFoundations.length===1?'':'s'}${section.location?` · ${section.location}`:''}`} tone="cream" open={openSections.has(section.id)} onToggle={()=>toggleSection(section.id)}>
+            <AppCard>
+              {sectionFoundations.length===0?<Text style={styles.detail}>No foundations recorded in this section yet.</Text>:sectionFoundations.map(foundation=>
+                <TouchableOpacity key={foundation.id} style={styles.foundationRow} onPress={()=>setOpenFoundationId(foundation.id)} accessibilityRole="button">
+                  <Text style={styles.foundationName}>{foundation.reference}</Text>
+                  <Text style={styles.detail}>{baseStatusLabels[foundation.status]} · net {formatCubicMetres(foundation.netVolumeM3)}{foundation.location?` · ${foundation.location}`:''}</Text>
+                </TouchableOpacity>)}
+              {creatingFoundationSection===section.id?<View style={styles.createForm}>
+                <FoundationGeometryForm form={foundationForm} onChange={patch=>setFoundationForm({...foundationForm,...patch})} savedPurposes={purposes} busy={busy} error={null} saveLabel="Save Foundation"
+                  onCreatePurpose={async label=>{const created=await repository.createConcretePurpose(label);setPurposes(await repository.listConcretePurposes());return created;}}
+                  onSave={()=>void createFoundation()}/>
+                <AppButton label="Cancel" tone="secondary" onPress={()=>setCreatingFoundationSection(null)}/>
+              </View>:<AppButton label="+ New Foundation In This Section" tone="secondary" onPress={()=>{setFoundationForm(emptyFoundationForm());setCreatingFoundationSection(section.id);}}/>}
+            </AppCard>
+          </ExpandableMenuSection>;
+        })}
+
+      {legacyWalls.length?<ExpandableMenuSection title="Legacy walls" hint="Created before Construction Sections and foundations existed. Their own workflow is unchanged." tone="navy" open={openSections.has('legacy')} onToggle={()=>toggleSection('legacy')}>
+        <LegacyWallsPanel repository={repository} walls={legacyWalls} purposes={purposes} onPurposesChanged={async()=>setPurposes(await repository.listConcretePurposes())}/>
+      </ExpandableMenuSection>:null}
+    </>}
   </AppPage>;
 }
 
-function layerDraftsPreview(rows:LayerRowForm[]){
-  return rows
-    .map((row,index)=>({name:row.name.trim()||`Layer ${index+1}`,phaseOrder:index+1,bottomThicknessM:Number(row.bottom.replace(',','.')),topThicknessM:Number((row.uniform?row.bottom:row.top).replace(',','.')),note:row.note,materialKey:null}))
-    .filter(layer=>Number.isFinite(layer.bottomThicknessM)&&layer.bottomThicknessM>0&&Number.isFinite(layer.topThicknessM)&&layer.topThicknessM>0);
+/** Unchanged pre-DEC-459 consumption workflow, kept exactly as it worked before -- these walls have no base or foundation concept. */
+function LegacyWallsPanel({repository,walls,purposes,onPurposesChanged}:{repository:WallRepository;walls:Wall[];purposes:SavedConcretePurpose[];onPurposesChanged:()=>Promise<void>}){
+  const[selected,setSelected]=useState<WallDetail|null>(null);
+  const[layerRows,setLayerRows]=useState<LayerRowForm[]>([]);
+  const[formKey,setFormKey]=useState(0);
+  const[busy,setBusy]=useState(false);
+  const[message,setMessage]=useState<string|null>(null);
+
+  async function chooseWall(value:Wall){setBusy(true);try{const detail=await repository.getWall(value.id);setSelected(detail);setLayerRows(layerRowsFromDrafts(detail.layers));setFormKey(key=>key+1);}finally{setBusy(false);}}
+  async function reloadSelected(wallId:string){const detail=await repository.getWall(wallId);setSelected(detail);setLayerRows(layerRowsFromDrafts(detail.layers));}
+  async function createPurpose(label:string){const created=await repository.createConcretePurpose(label);await onPurposesChanged();return created;}
+  function saveLayers(drafts:Parameters<WallRepository['saveLayers']>[1]){if(!selected)return;void repository.saveLayers(selected.wall.id,drafts).then(()=>reloadSelected(selected.wall.id)).then(()=>setMessage('Wall layers saved.'));}
+
+  const totals=useMemo(()=>summarizeWallConsumption(selected?.entries??[]),[selected]);
+  const metrics=[
+    {label:'Structural concrete used',value:totals.structural?`${f(totals.structural)} m³`:''},
+    {label:'Filling / mortar used',value:totals.filling?`${f(totals.filling)} m³`:''},
+    {label:'Stone consumed',value:pair(totals.stoneM3,'m³',totals.stoneT,'t')},
+  ].filter(metric=>metric.value);
+
+  return <View style={styles.legacyWrap}>
+    <AppCard>{walls.map(value=>{const isSelected=selected?.wall.id===value.id;return <TouchableOpacity key={value.id} style={[styles.foundationRow,isSelected&&styles.legacySelected]} onPress={()=>void chooseWall(value)} accessibilityRole="button" accessibilityState={{selected:isSelected}}><Text style={styles.foundationName}>{value.name}</Text><Text style={styles.detail}>{wallSystemLabels[value.system]} · {f(value.plannedVolumeM3)} m³ planned</Text></TouchableOpacity>;})}</AppCard>
+    {message?<Feedback kind="success">{message}</Feedback>:null}
+    {selected?<>
+      {metrics.length?<View style={styles.metrics}>{metrics.map(metric=><MetricCard key={metric.label} label={metric.label} value={metric.value} result/>)}</View>:null}
+      <AppCard title="Wall drawing and layers"><WallDiagramView input={{wall:{name:selected.wall.name,lengthM:selected.wall.lengthM,heightM:selected.wall.heightM,bottomThicknessM:selected.wall.bottomThicknessM,topThicknessM:selected.wall.topThicknessM},layers:selected.layers,base:null}} caption="Generated from this wall's own data."/>
+        <WallLayersEditor rows={layerRows} wall={selected.wall} busy={busy} onChange={setLayerRows} onSave={saveLayers}/></AppCard>
+      <AppCard title="Record consumed materials"><WallConsumptionForm key={`${selected.wall.id}-${formKey}`} mode="add" initial={emptyWallUseForm()} wall={selected.wall} savedPurposes={purposes} onCreatePurpose={createPurpose} onSubmit={async form=>{await repository.addConsumption(wallDraftFromForm(form,selected.wall.id));await reloadSelected(selected.wall.id);setMessage('Wall consumption recorded.');}}/></AppCard>
+      <AppCard title="Consumption history"><WallConsumptionHistory entries={selected.entries} renderCorrection={(entry,close)=><WallConsumptionForm mode="correct" initial={wallUseFormFromEntry(entry)} wall={selected.wall} savedPurposes={purposes} onCreatePurpose={createPurpose} onDiscard={close} onSubmit={async form=>{await repository.correctConsumption(entry.id,{...wallDraftFromForm(form,entry.wallId),correctionReason:form.reason});close();await reloadSelected(entry.wallId);setMessage('Correction saved.');}}/>}/></AppCard>
+    </>:null}
+  </View>;
 }
-function Pair({children}:{children:React.ReactNode}){return <View style={styles.pair}>{Array.isArray(children)?children.map((child,index)=><View key={index} style={styles.half}>{child}</View>):children}</View>;}
-const styles=StyleSheet.create({stageLocked:{color:colors.warning,fontSize:13,fontWeight:'900',lineHeight:18},disclaimer:{color:'#FFF8ED',fontSize:12,lineHeight:18,fontWeight:'700'},locked:{backgroundColor:colors.cream,borderRadius:12,padding:12},small:{color:colors.brandDark,fontSize:8,fontWeight:'900'},lockedValue:{color:colors.ink,fontSize:16,fontWeight:'900'},pair:{flexDirection:'row',gap:10},half:{flex:1,minWidth:0},metrics:{flexDirection:'row',flexWrap:'wrap',gap:8},wallRow:{backgroundColor:colors.cream,borderRadius:13,flexDirection:'row',alignItems:'center',borderLeftWidth:4,borderLeftColor:colors.navy},wallSelected:{borderLeftColor:colors.result,backgroundColor:colors.resultSoft},wallOpen:{flex:1,minWidth:0,padding:13,minHeight:64},project:{color:colors.brand,fontSize:8,fontWeight:'900'},wallName:{color:colors.ink,fontSize:16,fontWeight:'900'},detail:{color:colors.muted,fontSize:12,lineHeight:17},editButton:{minHeight:48,minWidth:56,alignItems:'center',justifyContent:'center',paddingHorizontal:10},edit:{color:colors.navy,fontWeight:'900'},rebarSummary:{backgroundColor:colors.resultSoft,borderRadius:10,padding:11,flexDirection:'row',alignItems:'center',gap:10},rebarDiameter:{color:colors.resultDark,fontSize:14,fontWeight:'900',minWidth:68},rebarValue:{color:colors.ink,fontSize:11,fontWeight:'800',flex:1}});
+
+const styles=StyleSheet.create({
+  disclaimer:{color:'#FFF8ED',fontSize:12,lineHeight:18,fontWeight:'700'},
+  detail:{color:colors.muted,fontSize:12,lineHeight:17},
+  metrics:{flexDirection:'row',flexWrap:'wrap',gap:8},
+  foundationRow:{backgroundColor:colors.surface,borderRadius:radius.md,padding:12,marginBottom:8,borderLeftWidth:4,borderLeftColor:colors.navy},
+  legacySelected:{borderLeftColor:colors.result,backgroundColor:colors.resultSoft},
+  foundationName:{color:colors.ink,fontSize:15,fontWeight:'900'},
+  createForm:{gap:10,marginTop:10,backgroundColor:colors.cream,borderRadius:radius.md,padding:10},
+  legacyWrap:{gap:10},
+});

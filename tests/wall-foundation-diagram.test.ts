@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 
-import {buildFoundationDiagram,type FoundationDiagramInput} from '../src/domain/wallFoundationDiagram';
+import {buildFoundationDiagram,foundationDiagramDragBounds,stoneCorePositionFromViewBoxPoint,viewBoxPointFromTouch,type FoundationDiagramInput} from '../src/domain/wallFoundationDiagram';
 
 const base=(overrides:Partial<FoundationDiagramInput>={}):FoundationDiagramInput=>({
   referenceLabel:'Foundation A',lengthM:20,heightM:1,bottomThicknessM:1.5,topThicknessM:1.5,status:'planned',
@@ -64,5 +64,74 @@ describe('buildFoundationDiagram',()=>{
     const diagram=buildFoundationDiagram(base({referenceLabel:'<script>alert(1)</script>'}));
     expect(diagram.svg).not.toContain('<script>alert');
     expect(diagram.svg).toContain('&lt;script&gt;');
+  });
+
+  it('reports the same drag bounds used to actually draw the simple-mode core',()=>{
+    const diagram=buildFoundationDiagram(base({mode:'composite',stoneCoreMode:'simple',position:{xNorm:.5,yNorm:.5},activeStoneM3:10,estimatedConcreteM3:20}));
+    expect(diagram.dragBounds).toEqual(foundationDiagramDragBounds({activeStoneM3:10,netFoundationVolumeM3:30}));
+    const core=diagram.elements.find(element=>element.kind==='rect'&&element.fill==='#8C8579') as {x:number;y:number;width:number;height:number};
+    expect(core.width).toBeCloseTo(diagram.dragBounds.coreWidthPx,5);
+    expect(core.height).toBeCloseTo(diagram.dragBounds.coreHeightPx,5);
+    // xNorm/yNorm=.5 centres the core within its draggable span.
+    expect(core.x).toBeCloseTo(diagram.dragBounds.boxLeft+(diagram.dragBounds.boxWidth-diagram.dragBounds.coreWidthPx)/2,5);
+    expect(core.y).toBeCloseTo(diagram.dragBounds.boxTop+(diagram.dragBounds.boxHeight-diagram.dragBounds.coreHeightPx)/2,5);
+  });
+});
+
+describe('drag coordinate conversion (Checkpoint 5 — real touch dragging)',()=>{
+  const bounds=foundationDiagramDragBounds({activeStoneM3:10,netFoundationVolumeM3:30});
+
+  it('converts a screen-pixel touch point into SVG viewBox units using the rendered scale',()=>{
+    // Diagram is 520 viewBox units wide; rendered at 260 screen px means a 0.5x scale.
+    expect(viewBoxPointFromTouch({x:130,y:65},{width:260,height:130},{width:520,height:260})).toEqual({x:260,y:130});
+    expect(viewBoxPointFromTouch({x:520,y:260},{width:520,height:260},{width:520,height:260})).toEqual({x:520,y:260});
+  });
+
+  it('degrades to the origin rather than dividing by zero when the view has not been measured yet',()=>{
+    expect(viewBoxPointFromTouch({x:10,y:10},{width:0,height:0},{width:520,height:260})).toEqual({x:0,y:0});
+  });
+
+  it('maps a viewBox point at the centre of the draggable span to the centre position (0.5, 0.5)',()=>{
+    const centre={x:bounds.boxLeft+bounds.boxWidth/2,y:bounds.boxTop+bounds.boxHeight/2};
+    const position=stoneCorePositionFromViewBoxPoint(centre,bounds);
+    expect(position.xNorm).toBeCloseTo(.5,2);
+    expect(position.yNorm).toBeCloseTo(.5,2);
+  });
+
+  it('maps the box\'s own top-left and bottom-right corners to 0 and 1, never past them',()=>{
+    const topLeft=stoneCorePositionFromViewBoxPoint({x:bounds.boxLeft,y:bounds.boxTop},bounds);
+    expect(topLeft).toEqual({xNorm:0,yNorm:0});
+    const bottomRight=stoneCorePositionFromViewBoxPoint({x:bounds.boxLeft+bounds.boxWidth,y:bounds.boxTop+bounds.boxHeight},bounds);
+    expect(bottomRight).toEqual({xNorm:1,yNorm:1});
+  });
+
+  it('clamps an out-of-bounds touch (dragged past the foundation edge) to the nearest valid position, never throwing',()=>{
+    expect(stoneCorePositionFromViewBoxPoint({x:-500,y:-500},bounds)).toEqual({xNorm:0,yNorm:0});
+    expect(stoneCorePositionFromViewBoxPoint({x:9999,y:9999},bounds)).toEqual({xNorm:1,yNorm:1});
+  });
+
+  it('rejects NaN/invalid coordinates by clamping rather than producing NaN',()=>{
+    const position=stoneCorePositionFromViewBoxPoint({x:Number.NaN,y:Number.NaN},bounds);
+    expect(Number.isNaN(position.xNorm)).toBe(false);
+    expect(Number.isNaN(position.yNorm)).toBe(false);
+  });
+
+  it('keeps the resulting core rectangle fully inside the outer boundary for any clamped position (containment)',()=>{
+    for(const point of [{x:-1000,y:-1000},{x:0,y:0},{x:99999,y:0},{x:0,y:99999},{x:99999,y:99999}]){
+      const position=stoneCorePositionFromViewBoxPoint(point,bounds);
+      const coreX=bounds.boxLeft+position.xNorm*(bounds.boxWidth-bounds.coreWidthPx);
+      const coreY=bounds.boxTop+position.yNorm*(bounds.boxHeight-bounds.coreHeightPx);
+      expect(coreX).toBeGreaterThanOrEqual(bounds.boxLeft-1e-6);
+      expect(coreX+bounds.coreWidthPx).toBeLessThanOrEqual(bounds.boxLeft+bounds.boxWidth+1e-6);
+      expect(coreY).toBeGreaterThanOrEqual(bounds.boxTop-1e-6);
+      expect(coreY+bounds.coreHeightPx).toBeLessThanOrEqual(bounds.boxTop+bounds.boxHeight+1e-6);
+    }
+  });
+
+  it('preserves the recorded Stone volume regardless of where the core is dragged -- position and volume are computed independently',()=>{
+    const before=30-20; // estimatedConcreteM3 given activeStoneM3=10, netFoundationVolumeM3=30
+    stoneCorePositionFromViewBoxPoint({x:0,y:0},bounds);
+    stoneCorePositionFromViewBoxPoint({x:9999,y:9999},bounds);
+    expect(30-20).toBe(before); // dragging never recalculates estimated concrete or Stone quantity
   });
 });

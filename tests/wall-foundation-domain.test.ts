@@ -9,7 +9,7 @@ import {
 
 const foundation={lengthM:20,heightM:1,bottomThicknessM:1.5,topThicknessM:1.5};
 const record=(overrides:Partial<FoundationCompositionRecord>={}):FoundationCompositionRecord=>({
-  id:'rec',baseId:'base',wallId:'wall',materialType:'stone',quantityM3:5,recordedOn:'2026-09-01',notes:'',
+  id:'rec',foundationId:'foundation',materialType:'stone',quantityM3:5,recordedOn:'2026-09-01',notes:'',
   cancelledAt:null,cancelledReason:null,correctionHistory:[],createdAt:'2026-09-01T00:00:00.000Z',updatedAt:null,...overrides,
 });
 const offsets=(overrides:Partial<StoneCoreOffsets>={}):StoneCoreOffsets=>({lengthM:10,depthM:.5,bottomThicknessM:.8,topThicknessM:.8,longitudinalOffsetM:5,verticalOffsetM:.25,transverseOffsetM:0,...overrides});
@@ -140,7 +140,7 @@ describe('composition record draft validation',()=>{
 });
 
 describe('buildFoundationComposition — the read-model shared by screen, diagram, and reports',()=>{
-  const base={baseId:'base',wallId:'wall',mode:'composite' as const,stoneCoreMode:'simple' as const,position:{xNorm:.5,yNorm:.5},offsets:null,netFoundationVolumeM3:30};
+  const base={foundationId:'foundation',mode:'composite' as const,stoneCoreMode:'simple' as const,position:{xNorm:.5,yNorm:.5},offsets:null,netFoundationVolumeM3:30};
 
   it('has no variance until Ready Mix is actually recorded',()=>{
     const result=buildFoundationComposition({...base,records:[record({quantityM3:10})]});
