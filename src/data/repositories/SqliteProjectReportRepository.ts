@@ -5,6 +5,8 @@ import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, 
 import { validateDailyReport } from '../../domain/projectReports';
 import type { BaseStatus } from '../../domain/wallBase';
 import type { Foundation } from '../../domain/foundations';
+import { buildLiftReportGroup, liftHasActivityOn } from '../../domain/cyclopeanLiftReport';
+import { SqliteCyclopeanLiftRepository } from './SqliteCyclopeanLiftRepository';
 import { SqliteWallRepository, wallConsumptionFromRow, type WallConsumptionRow } from './SqliteWallRepository';
 import type { ProjectReportRepository } from './ProjectReportRepository';
 
@@ -161,16 +163,29 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
     const foundationWalls=await this.db.getAllAsync<{wall_id:string}>(`SELECT w.id wall_id FROM walls w JOIN foundations f ON f.id=w.foundation_id JOIN projects p ON p.id=w.project_id
       WHERE w.project_id=? AND p.is_archived=0 AND (f.constructed_on=? OR f.curing_started_on=? OR f.cured_on=? OR f.consumption_date=?)`,projectId,workDate,workDate,workDate,workDate);
     const walls=new SqliteWallRepository(this.db);
+    const lifts=new SqliteCyclopeanLiftRepository(this.db);
     const groups=new Map<string,LinkedWallWork>();
     for(const row of rows){
-      const group=groups.get(row.wall_id)??{wallId:row.wall_id,wallName:row.w_name,system:row.w_system,purpose:row.w_purpose,lengthM:row.w_length_m,heightM:row.w_height_m,bottomThicknessM:row.w_bottom_thickness_m,topThicknessM:row.w_top_thickness_m,netVolumeM3:row.w_net_volume_m3,plannedVolumeM3:row.w_planned_volume_m3,layers:await walls.listLayers(row.wall_id),entries:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null};
+      const group=groups.get(row.wall_id)??{wallId:row.wall_id,wallName:row.w_name,system:row.w_system,purpose:row.w_purpose,lengthM:row.w_length_m,heightM:row.w_height_m,bottomThicknessM:row.w_bottom_thickness_m,topThicknessM:row.w_top_thickness_m,netVolumeM3:row.w_net_volume_m3,plannedVolumeM3:row.w_planned_volume_m3,layers:await walls.listLayers(row.wall_id),entries:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null,foundationLifts:null,wallLifts:null,foundationLegacyStage:null};
       group.entries.push(wallConsumptionFromRow(row));groups.set(row.wall_id,group);
     }
     for(const row of foundationWalls){
       if(groups.has(row.wall_id))continue;
       const wall=await this.db.getFirstAsync<{id:string;name:string;system:LinkedWallWork['system'];purpose:LinkedWallWork['purpose'];length_m:number;height_m:number;bottom_thickness_m:number;top_thickness_m:number;net_volume_m3:number;planned_volume_m3:number}>('SELECT id,name,system,purpose,length_m,height_m,bottom_thickness_m,top_thickness_m,net_volume_m3,planned_volume_m3 FROM walls WHERE id=?',row.wall_id);
       if(!wall)continue;
-      groups.set(row.wall_id,{wallId:wall.id,wallName:wall.name,system:wall.system,purpose:wall.purpose,lengthM:wall.length_m,heightM:wall.height_m,bottomThicknessM:wall.bottom_thickness_m,topThicknessM:wall.top_thickness_m,netVolumeM3:wall.net_volume_m3,plannedVolumeM3:wall.planned_volume_m3,layers:[],entries:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null});
+      groups.set(row.wall_id,{wallId:wall.id,wallName:wall.name,system:wall.system,purpose:wall.purpose,lengthM:wall.length_m,heightM:wall.height_m,bottomThicknessM:wall.bottom_thickness_m,topThicknessM:wall.top_thickness_m,netVolumeM3:wall.net_volume_m3,plannedVolumeM3:wall.planned_volume_m3,layers:[],entries:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null,foundationLifts:null,wallLifts:null,foundationLegacyStage:null});
+    }
+    // DEC-467. A wall whose only activity that day was a Cyclopean Lift still belongs in the report,
+    // the same way a foundation's own construction or curing date already brings it in.
+    for(const row of await this.db.getAllAsync<{wall_id:string}>(`SELECT DISTINCT w.id wall_id FROM walls w JOIN projects p ON p.id=w.project_id
+      LEFT JOIN cyclopean_lifts cw ON cw.wall_id=w.id LEFT JOIN cyclopean_lifts cf ON cf.foundation_id=w.foundation_id
+      WHERE w.project_id=? AND p.is_archived=0 AND (cw.id IS NOT NULL OR cf.id IS NOT NULL)`,projectId)){
+      if(groups.has(row.wall_id))continue;
+      const wall=await this.db.getFirstAsync<{id:string;name:string;system:LinkedWallWork['system'];purpose:LinkedWallWork['purpose'];length_m:number;height_m:number;bottom_thickness_m:number;top_thickness_m:number;net_volume_m3:number;planned_volume_m3:number;foundation_id:string|null}>('SELECT id,name,system,purpose,length_m,height_m,bottom_thickness_m,top_thickness_m,net_volume_m3,planned_volume_m3,foundation_id FROM walls WHERE id=?',row.wall_id);
+      if(!wall)continue;
+      const candidates=[...await lifts.listLiftsForWall(wall.id),...(wall.foundation_id?await lifts.listLiftsForFoundation(wall.foundation_id):[])];
+      if(!candidates.some(lift=>liftHasActivityOn(lift,workDate)))continue;
+      groups.set(wall.id,{wallId:wall.id,wallName:wall.name,system:wall.system,purpose:wall.purpose,lengthM:wall.length_m,heightM:wall.height_m,bottomThicknessM:wall.bottom_thickness_m,topThicknessM:wall.top_thickness_m,netVolumeM3:wall.net_volume_m3,plannedVolumeM3:wall.planned_volume_m3,layers:[],entries:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null,foundationLifts:null,wallLifts:null,foundationLegacyStage:null});
     }
     const linked=[...groups.values()].sort((first,second)=>first.wallName.localeCompare(second.wallName));
     for(const group of linked){
@@ -184,6 +199,13 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
         const section=await this.db.getFirstAsync<{name:string}>('SELECT name FROM construction_sections WHERE id=?',foundation.constructionSectionId);
         group.constructionSectionName=section?.name??null;
       }
+      // DEC-467. Both lift groups are projected to this work date, so a Stone placement or concrete
+      // pour recorded later never appears in an earlier report.
+      group.wallLifts=buildLiftReportGroup({parentType:'wall',parentId:group.wallId,parentReference:group.wallName,
+        parentNetVolumeM3:group.netVolumeM3,lifts:await lifts.listLiftsForWall(group.wallId),asOf:workDate});
+      group.foundationLifts=foundation?buildLiftReportGroup({parentType:'foundation',parentId:foundation.id,parentReference:foundation.reference,
+        parentNetVolumeM3:foundation.netVolumeM3,lifts:await lifts.listLiftsForFoundation(foundation.id),asOf:workDate}):null;
+      group.foundationLegacyStage=foundation?await lifts.getLegacyCompositeStage(foundation.id):null;
       // A report dated before any wall work shows the foundation only: no layers, no wall consumption.
       if(!group.entries.length)group.layers=[];
     }
@@ -192,15 +214,24 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
 
   /** DEC-464. Foundations with an event on this date that have no wall linked to them yet. */
   async listLinkedFoundationActivity(projectId: string, workDate: string): Promise<LinkedFoundationActivity[]> {
-    const rows=await this.db.getAllAsync<{id:string}>(`SELECT f.id FROM foundations f JOIN projects p ON p.id=f.project_id
+    // DEC-467. A foundation with no wall belongs in the report either because of its own lifecycle
+    // dates or because one of its Cyclopean Lifts did something that day.
+    const rows=await this.db.getAllAsync<{id:string}>(`SELECT DISTINCT f.id FROM foundations f JOIN projects p ON p.id=f.project_id
+      LEFT JOIN cyclopean_lifts c ON c.foundation_id=f.id
       WHERE f.project_id=? AND p.is_archived=0 AND f.id NOT IN (SELECT foundation_id FROM walls WHERE foundation_id IS NOT NULL)
-      AND (f.constructed_on=? OR f.curing_started_on=? OR f.cured_on=? OR f.consumption_date=?)`,projectId,workDate,workDate,workDate,workDate);
+      AND (f.constructed_on=? OR f.curing_started_on=? OR f.cured_on=? OR f.consumption_date=? OR c.id IS NOT NULL)`,projectId,workDate,workDate,workDate,workDate);
     const walls=new SqliteWallRepository(this.db);
+    const lifts=new SqliteCyclopeanLiftRepository(this.db);
     const activity:LinkedFoundationActivity[]=[];
     for(const row of rows){
       const foundation=await walls.getFoundation(row.id);if(!foundation)continue;
+      const foundationLifts=await lifts.listLiftsForFoundation(foundation.id);
+      const lifecycleEvents=foundationEventsOn(foundation,workDate);
+      if(!lifecycleEvents.length&&!foundationLifts.some(lift=>liftHasActivityOn(lift,workDate)))continue;
       const section=await this.db.getFirstAsync<{name:string}>('SELECT name FROM construction_sections WHERE id=?',foundation.constructionSectionId);
-      activity.push({foundation,constructionSectionName:section?.name??'',foundationEvents:foundationEventsOn(foundation,workDate),foundationStatusAsOf:foundationStatusOn(foundation,workDate),composition:await walls.getFoundationComposition(foundation.id)});
+      activity.push({foundation,constructionSectionName:section?.name??'',foundationEvents:lifecycleEvents,foundationStatusAsOf:foundationStatusOn(foundation,workDate),composition:await walls.getFoundationComposition(foundation.id),
+        lifts:buildLiftReportGroup({parentType:'foundation',parentId:foundation.id,parentReference:foundation.reference,parentNetVolumeM3:foundation.netVolumeM3,lifts:foundationLifts,asOf:workDate}),
+        legacyStage:await lifts.getLegacyCompositeStage(foundation.id)});
     }
     return activity.sort((first,second)=>first.foundation.reference.localeCompare(second.foundation.reference));
   }

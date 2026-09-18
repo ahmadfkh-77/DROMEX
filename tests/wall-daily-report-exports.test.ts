@@ -12,11 +12,11 @@ const company:ProjectReportSetup['company']={name:'DROMEX Paving',logoUri:null,a
 
 const entry=(overrides:Partial<WallConsumption>):WallConsumption=>({id:'use',wallId:'wall-a',usedOn:'2026-09-10',type:'ready_mix',concretePurpose:null,customPurposeId:null,customPurposeLabel:null,finishedVolumeM3:null,cementBags:null,cementBagKg:null,sandQuantity:null,sandUnit:null,gravelQuantity:null,gravelUnit:null,waterLitres:null,admixtureQuantity:null,admixtureUnit:null,stoneQuantity:null,stoneUnit:null,rebarDiameterMm:null,rebarCount:null,rebarLengthEachM:null,rebarGrade:'',notes:'',volume:null,totalRebarLengthM:null,totalRebarKg:null,correctionHistory:[],createdAt:'2026-09-10T08:00:00Z',updatedAt:null,...overrides});
 const layers=[{id:'l1',wallId:'wall-a',phaseOrder:1,name:'Structural core',materialKey:null,bottomThicknessM:.6,topThicknessM:.3,note:'',createdAt:'2026-09-10T08:00:00Z',updatedAt:null},{id:'l2',wallId:'wall-a',phaseOrder:2,name:'Stone facing',materialKey:null,bottomThicknessM:.2,topThicknessM:.1,note:'Quarry stone',createdAt:'2026-09-10T08:00:00Z',updatedAt:null}];
-const wallA:LinkedWallWork={wallId:'wall-a',wallName:'Retaining wall A',system:'rubble_masonry',purpose:'retaining',lengthM:20,heightM:4,bottomThicknessM:.8,topThicknessM:.4,netVolumeM3:48,plannedVolumeM3:48,layers,foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null,entries:[
+const wallA:LinkedWallWork={wallId:'wall-a',wallName:'Retaining wall A',system:'rubble_masonry',purpose:'retaining',lengthM:20,heightM:4,bottomThicknessM:.8,topThicknessM:.4,netVolumeM3:48,plannedVolumeM3:48,layers,foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null,foundationLifts:null,wallLifts:null,foundationLegacyStage:null,entries:[
   entry({id:'mix',concretePurpose:'structural',finishedVolumeM3:10,volume:{lengthM:10,heightM:2,bottomThicknessM:.5,topThicknessM:.5,deductionM3:0,grossVolumeM3:10,netVolumeM3:10}}),
   entry({id:'stone',type:'stone',stoneQuantity:54.2,stoneUnit:'m3',volume:{lengthM:18,heightM:4.5,bottomThicknessM:.9,topThicknessM:.5,deductionM3:2.5,grossVolumeM3:56.7,netVolumeM3:54.2},notes:'Face course',correctionHistory:[{correctedAt:'2026-09-11T09:00:00Z',correctedBy:'Owner',reason:'Truck count re-checked',changes:[{field:'Stone',originalValue:'50 m³',newValue:'54.2 m³'}]}],updatedAt:'2026-09-11T09:00:00Z'}),
 ]};
-const wallB:LinkedWallWork={wallId:'wall-b',wallName:'Boundary wall B',system:'reinforced_concrete',purpose:'boundary',lengthM:12,heightM:2.5,bottomThicknessM:.3,topThicknessM:.3,netVolumeM3:9,plannedVolumeM3:9.45,layers:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null,entries:[
+const wallB:LinkedWallWork={wallId:'wall-b',wallName:'Boundary wall B',system:'reinforced_concrete',purpose:'boundary',lengthM:12,heightM:2.5,bottomThicknessM:.3,topThicknessM:.3,netVolumeM3:9,plannedVolumeM3:9.45,layers:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null,foundationLifts:null,wallLifts:null,foundationLegacyStage:null,entries:[
   entry({id:'custom',wallId:'wall-b',customPurposeId:'p1',customPurposeLabel:'Parapet cap concrete',finishedVolumeM3:1.25}),
   entry({id:'plain-stone',wallId:'wall-b',type:'stone',stoneQuantity:3,stoneUnit:'tonnes'}),
   entry({id:'steel',wallId:'wall-b',type:'rebar',rebarDiameterMm:12,rebarCount:40,rebarLengthEachM:6,totalRebarLengthM:240,totalRebarKg:213.1}),
@@ -123,7 +123,7 @@ describe('Daily Report workbook: Wall Construction sheet',()=>{
   const rows=()=>sheets().find(sheet=>sheet.name==='Wall Construction')!.rows;
 
   it('adds the wall sheets after Waste Dumps and before Photos',()=>{
-    expect(sheets().map(sheet=>sheet.name)).toEqual(['Report Overview','Work Details','Presence','Worker Safety','Materials','Linked Loads','Supplier Loads','Fuel Used','Waste Dumps','Wall Construction','Wall Layers','Wall Foundations','Foundations Without a Wall','Photos']);
+    expect(sheets().map(sheet=>sheet.name)).toEqual(['Report Overview','Work Details','Presence','Worker Safety','Materials','Linked Loads','Supplier Loads','Fuel Used','Waste Dumps','Wall Construction','Wall Layers','Wall Foundations','Cyclopean Lifts','Foundations Without a Wall','Photos']);
   });
 
   it('lists every layer with its phase order and thicknesses, agreeing with the PDF legend',()=>{

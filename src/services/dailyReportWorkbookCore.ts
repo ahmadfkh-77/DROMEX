@@ -1,4 +1,7 @@
 import { netWorkMinutes, type DailyProjectReport, type LinkedFoundationActivity, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
+import { liftHasManualOverride, type CyclopeanLiftReportGroup } from '../domain/cyclopeanLiftReport';
+import { liftStatusText } from '../domain/cyclopeanLiftDiagram';
+import { concreteMatrixVariance } from '../domain/wallCyclopeanLift';
 import { baseStatusLabels } from '../domain/wallBase';
 import type { Foundation } from '../domain/foundations';
 import type { FoundationComposition } from '../domain/wallFoundation';
@@ -79,6 +82,59 @@ export function foundationOnlyRows(activity: LinkedFoundationActivity[]) {
   });
 }
 
+/**
+ * DEC-467. One row per Cyclopean Lift visible on the report date, for both foundation and wall
+ * parents, flat enough to filter and total in a spreadsheet. Every quantity stays a real number and a
+ * quantity that has not been recorded yet stays empty rather than becoming a misleading zero; the
+ * lift diagram deliberately has no cell, because a drawing embedded in a grid cannot be filtered.
+ */
+export function cyclopeanLiftRows(walls: LinkedWallWork[], foundationActivity: LinkedFoundationActivity[], project: ReportProject, workDate: string) {
+  const fromGroup = (group: CyclopeanLiftReportGroup | null, context: {sectionName: string | null; sectionLocation: string | null; foundationReference: string | null; wallReference: string | null; curingStatus: string | null}) =>
+    (group?.lifts ?? []).map((lift) => {
+      const concreteVariance = lift.concretePhase?.actualReadyMixQuantityM3 == null ? null
+        : concreteMatrixVariance(lift.concretePhase.estimatedMatrixVolumeM3, lift.concretePhase.actualReadyMixQuantityM3).varianceM3;
+      const actualStone = lift.stonePhase.actualStoneQuantityM3;
+      return {
+        Project: project.name, 'Report Work Date': workDate,
+        'Construction Section': context.sectionName, 'Section Location': context.sectionLocation,
+        'Foundation Reference': context.foundationReference, 'Wall Reference': context.wallReference,
+        'Parent Type': group!.parentType === 'foundation' ? 'Foundation' : 'Wall', 'Parent Reference': group!.parentReference,
+        'Lift Sequence': lift.sequence, 'Lift Reference': lift.reference, 'Lift Status': liftStatusText[lift.status],
+        'Stone Work Date': lift.stonePhase.workDate, 'Concrete Work Date': lift.concretePhase?.workDate ?? null,
+        'Structural Volume m³': lift.netLiftVolumeM3,
+        'Estimated Stone m³': lift.stonePhase.calculatedStoneVolumeM3,
+        'Actual Stone m³': actualStone,
+        'Stone Variance m³': actualStone == null ? null : Number((actualStone - lift.stonePhase.calculatedStoneVolumeM3).toFixed(9)),
+        'Estimated Concrete Matrix m³': lift.concretePhase?.estimatedMatrixVolumeM3 ?? null,
+        'Actual Ready Mix m³': lift.concretePhase?.actualReadyMixQuantityM3 ?? null,
+        'Concrete Variance m³': concreteVariance,
+        'Remaining Volume m³': group!.reconciliation.remainingUnallocatedVolumeM3,
+        'Over-Allocation Warning': group!.reconciliation.overAllocated ? `Over-allocated by ${group!.reconciliation.overAllocationM3} m³` : null,
+        'Manual Override': liftHasManualOverride(lift) ? 'Yes' : 'No',
+        'Concrete Purpose': lift.concretePhase?.purpose || null,
+        Corrections: lift.correctionHistory.length,
+        'Last Correction Reason': lift.correctionHistory.at(-1)?.reason ?? null,
+        'Curing Status': context.curingStatus, Notes: lift.notes.trim() || null,
+      };
+    });
+
+  return [
+    ...walls.flatMap((wall) => {
+      const context = {
+        sectionName: wall.constructionSectionName, sectionLocation: wall.foundation?.location.trim() || null,
+        foundationReference: wall.foundation?.reference ?? null, wallReference: wall.wallName,
+        curingStatus: wall.foundationStatusAsOf ? baseStatusLabels[wall.foundationStatusAsOf] : null,
+      };
+      return [...fromGroup(wall.foundationLifts, context), ...fromGroup(wall.wallLifts, context)];
+    }),
+    ...foundationActivity.flatMap((activity) => fromGroup(activity.lifts, {
+      sectionName: activity.constructionSectionName || null, sectionLocation: activity.foundation.location.trim() || null,
+      foundationReference: activity.foundation.reference, wallReference: null,
+      curingStatus: baseStatusLabels[activity.foundationStatusAsOf],
+    })),
+  ];
+}
+
 export function dailyReportWorkbookSheets(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], images: EmbeddedWorkbookImage[] = [], locale: WorkbookLocale = 'en', wallWork: LinkedWallWork[] = [], foundationActivity: LinkedFoundationActivity[] = []): SheetSpec[] {
   const net = netWorkMinutes(report);
   const sheets: SheetSpec[] = [
@@ -108,6 +164,7 @@ export function dailyReportWorkbookSheets(report: DailyProjectReport, project: R
     { name: 'Wall Construction', rows: wallConstructionRows(wallWork) },
     { name: 'Wall Layers', rows: wallLayerRows(wallWork) },
     { name: 'Wall Foundations', rows: wallFoundationRows(wallWork) },
+    { name: 'Cyclopean Lifts', rows: cyclopeanLiftRows(wallWork, foundationActivity, project, report.workDate) },
     { name: 'Foundations Without a Wall', rows: foundationOnlyRows(foundationActivity) },
     { name: 'Photos', rows: report.photos.map((uri, index) => ({ Photo: index + 1, 'File name': uri.split('/').pop() ?? `photo-${index + 1}.jpg`, 'Work Date': report.workDate })), images },
   ];

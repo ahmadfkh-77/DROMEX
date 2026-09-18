@@ -600,8 +600,29 @@ values on its next save.
   for the Simple-mode Stone core, committed once per gesture on release. The Daily Report PDF and
   workbook now group by Construction Section → Foundation → linked wall/activity
   (`LinkedFoundationActivity` for a foundation with no wall linked yet).
+- **Cyclopean lift model** (DEC-466, migration 43, commits `a7ec062`, `7581799`, `5894039`): a
+  foundation or wall is built as an ordered series of lifts — place Stone, then pour the concrete
+  matrix around that same Stone — in `src/domain/wallCyclopeanLift.ts`, persisted one row per
+  aggregate in `cyclopean_lifts` so a concrete phase can never pair with the wrong lift. The
+  separated workflow screens sit under `FoundationConstructionNavigator.tsx`, and
+  `src/domain/cyclopeanLiftDiagram.ts` draws one lift, a whole parent's stack, or a combined
+  foundation + wall, with real finger dragging of the Stone region in Simple and Detailed modes.
+  **DEC-466 is referenced throughout that code but has no row in `requirements/decisions.md`** —
+  it should be written up there when the owner next reviews this branch.
+- **Cyclopean construction in the Daily Report** (DEC-467): `src/domain/cyclopeanLiftReport.ts`
+  projects each lift back to the report's own work date — a later Stone placement, concrete pour or
+  correction is removed rather than blanked, a concrete phase is always dropped when its Stone phase
+  is not yet visible, and status/totals are then re-derived with Phase 1's own `deriveLiftStatus`
+  and `reconcileLifts`, so the report holds no arithmetic of its own. The PDF gains
+  `Foundation Cyclopean Lifts` and `Wall Cyclopean Lifts` groups inside the existing
+  `Wall construction that day` section, each lift carrying its own Phase 4 figure; the workbook gains
+  a `Cyclopean Lifts` sheet (numeric cells, frozen filterable header, empty is never written as
+  zero). Curing stays informational, and a pre-lift foundation keeps its
+  `Imported legacy composite stage` block with nothing invented for it.
 - **Verification**: typecheck clean and the complete Vitest suite green (773 tests across 65
-  files). The React Native screens were verified by typecheck and source-contract
+  files) as of DEC-465. The cyclopean phases added their own suites and were verified by targeted
+  sequential runs rather than a full-suite run, to stay inside the build machine's disk budget. The
+  React Native screens were verified by typecheck and source-contract
   tests only. **Not yet verified on a physical device or in Expo Go.**
 
 ## Standing rules this project expects every session to follow

@@ -3,6 +3,8 @@ import type {ConsultingAgencyOption} from './profiles';
 import type {BaseStatus} from './wallBase';
 import type {Foundation} from './foundations';
 import type {FoundationComposition} from './wallFoundation';
+import type {CyclopeanLiftReportGroup} from './cyclopeanLiftReport';
+import type {LegacyCompositeStage} from './wallCyclopeanLift';
 import type {WallLayer} from './wallDiagram';
 import type {WallConsumption,WallPurpose,WallSystem} from './walls';
 export type ReportProjectStatus = 'active' | 'completed';
@@ -107,10 +109,16 @@ export type LinkedWallWork = { wallId:string; wallName:string; system:WallSystem
   // DEC-459/464. The wall's linked foundation, its Construction Section name, the foundation events
   // that happened on this work date, the stage the foundation had reached by that date (so an earlier
   // report never shows a wall that did not exist yet), and its composite composition as of now.
-  foundation:Foundation|null; constructionSectionName:string|null; foundationEvents:string[]; foundationStatusAsOf:BaseStatus|null; foundationComposition:FoundationComposition|null };
+  foundation:Foundation|null; constructionSectionName:string|null; foundationEvents:string[]; foundationStatusAsOf:BaseStatus|null; foundationComposition:FoundationComposition|null;
+  // DEC-467. The ordered Cyclopean Lifts of the foundation and of the wall itself, each already
+  // projected to this report's work date so a later Stone placement or concrete pour is never shown,
+  // plus the read-only legacy composite stage of a foundation that predates the lift model.
+  foundationLifts:CyclopeanLiftReportGroup|null; wallLifts:CyclopeanLiftReportGroup|null; foundationLegacyStage:LegacyCompositeStage|null };
 // DEC-464. A foundation with activity on this work date but no wall linked to it yet -- created,
 // composition recorded, or curing progressed independently of any wall.
-export type LinkedFoundationActivity = { foundation:Foundation; constructionSectionName:string; foundationEvents:string[]; foundationStatusAsOf:BaseStatus; composition:FoundationComposition|null };
+export type LinkedFoundationActivity = { foundation:Foundation; constructionSectionName:string; foundationEvents:string[]; foundationStatusAsOf:BaseStatus; composition:FoundationComposition|null;
+  // DEC-467. The same date-projected lift group for a foundation that has no wall yet.
+  lifts:CyclopeanLiftReportGroup|null; legacyStage:LegacyCompositeStage|null };
 export type ProjectCompletionLoad =LinkedProjectLoad & { workDate: string };
 export type ProjectCompletionWasteDump = LinkedWasteDump & { workDate: string };
 
