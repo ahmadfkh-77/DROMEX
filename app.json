@@ -2,7 +2,7 @@
   "expo": {
     "name": "DROMEX",
     "slug": "dromex",
-    "version": "0.16.0",
+    "version": "0.17.0",
     "icon": "./assets/dromex-icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.dromex.management",
-      "versionCode": 19,
+      "versionCode": 20,
       "adaptiveIcon": {
         "foregroundImage": "./assets/dromex-icon.png",
         "backgroundColor": "#082D63"
