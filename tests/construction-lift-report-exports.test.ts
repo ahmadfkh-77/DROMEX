@@ -1,13 +1,13 @@
 import {describe,expect,it} from 'vitest';
 
-import {buildLiftReportGroup} from '../src/domain/cyclopeanLiftReport';
+import {buildLiftReportGroup} from '../src/domain/constructionLiftReport';
 import type {Foundation} from '../src/domain/foundations';
 import type {DailyProjectReport,LinkedFoundationActivity,LinkedWallWork,ProjectReportSetup,ReportProject} from '../src/domain/projectReports';
-import type {CyclopeanLift} from '../src/domain/wallCyclopeanLift';
-import {cyclopeanLiftRows,dailyReportWorkbookSheets} from '../src/services/dailyReportWorkbookCore';
+import type {ConstructionLift} from '../src/domain/wallConstructionLift';
+import {constructionLiftRows,dailyReportWorkbookSheets} from '../src/services/dailyReportWorkbookCore';
 import {buildProjectReportHtmlWithWaste} from '../src/services/projectReportWasteTemplate';
 
-const report:DailyProjectReport={id:'report-1',projectId:'road',workDate:'2026-09-12',workDescription:'Cyclopean works',workers:[],workerSafety:[],drivers:[],truckPlates:[],machines:[],materials:[],photos:[],notes:'',problemsDelaysIncidents:'',weatherSiteConditions:'',workStartTime:'',workEndTime:'',breakMinutes:'',nextWorkPlanned:'',consultantSignoffEnabled:false,consultantName:'',consultantSignaturePaths:[],showMinistryHeader:true,showConsultingAgency:true,showCustomHeader:false,consultingAgencyId:'agency',consultingAgencyNameEn:'Cedar Consulting',consultingAgencyNameAr:'استشارات الأرز',createdAt:'2026-09-12T17:00:00Z',updatedAt:'2026-09-12T17:00:00Z'};
+const report:DailyProjectReport={id:'report-1',projectId:'road',workDate:'2026-09-12',workDescription:'Lift works',workers:[],workerSafety:[],drivers:[],truckPlates:[],machines:[],materials:[],photos:[],notes:'',problemsDelaysIncidents:'',weatherSiteConditions:'',workStartTime:'',workEndTime:'',breakMinutes:'',nextWorkPlanned:'',consultantSignoffEnabled:false,consultantName:'',consultantSignaturePaths:[],showMinistryHeader:true,showConsultingAgency:true,showCustomHeader:false,consultingAgencyId:'agency',consultingAgencyNameEn:'Cedar Consulting',consultingAgencyNameAr:'استشارات الأرز',createdAt:'2026-09-12T17:00:00Z',updatedAt:'2026-09-12T17:00:00Z'};
 const project:ReportProject={id:'road',name:'Mountain Road',customerName:'Road Co',location:'Aley',status:'active'};
 const company:ProjectReportSetup['company']={name:'DROMEX Paving',logoUri:null,address:null,phone:null,email:null,taxVatNumber:null,ministryName:'Ministry of Public Works',ministryNameAr:'وزارة الأشغال العامة',ministryLogoUri:null,consultingAgencyName:null,consultingAgencyNameAr:null,customHeaderEn:null,customHeaderAr:null};
 
@@ -17,17 +17,17 @@ const foundation:Foundation={id:'f1',projectId:'road',constructionSectionId:'sec
   constructedOn:'2026-09-08',curingStartedOn:'2026-09-09',curedOn:null,curingNote:'',notes:'',correctionHistory:[],createdAt:'2026-09-08T08:00:00Z',updatedAt:null};
 
 const snapshot=(net:number)=>({lengthM:5,heightM:.4,bottomThicknessM:.5,topThicknessM:.5,deductionM3:0,grossVolumeM3:net,netVolumeM3:net});
-const lift=(overrides:Partial<CyclopeanLift>={}):CyclopeanLift=>({
+const lift=(overrides:Partial<ConstructionLift>={}):ConstructionLift=>({
   id:'lift-1',parentType:'foundation',parentId:'f1',sequence:1,reference:'Lift 1',startElevationM:0,
   geometry:{lengthM:10,heightM:.5,bottomThicknessM:1,topThicknessM:1,deductionM3:0},netLiftVolumeM3:5,
   stonePhase:{calculationSnapshot:snapshot(2),calculatedStoneVolumeM3:2,actualStoneQuantityM3:2.1,manualOverride:true,
     workDate:'2026-09-10',position:{xNorm:.5,yNorm:.5},offsets:null,notes:''},
   concretePhase:null,status:'stone_placed',notes:'',correctionHistory:[],createdAt:'2026-09-09T08:00:00Z',updatedAt:null,...overrides});
-const completedLift=(overrides:Partial<CyclopeanLift>={})=>lift({id:'lift-2',sequence:2,reference:'Lift 2',status:'completed',
+const completedLift=(overrides:Partial<ConstructionLift>={})=>lift({id:'lift-2',sequence:2,reference:'Lift 2',status:'completed',
   concretePhase:{liftId:'lift-2',calculationMethod:'estimated_matrix',estimatedMatrixVolumeM3:3,independentCalculation:null,
     actualReadyMixQuantityM3:3.4,manualOverride:false,purpose:'Matrix fill',workDate:'2026-09-11',notes:''},...overrides});
 
-const group=(lifts:CyclopeanLift[],asOf=report.workDate,net=30,parentType:'foundation'|'wall'='foundation')=>
+const group=(lifts:ConstructionLift[],asOf=report.workDate,net=30,parentType:'foundation'|'wall'='foundation')=>
   buildLiftReportGroup({parentType,parentId:parentType==='foundation'?'f1':'wall-a',parentReference:parentType==='foundation'?'Foundation F1':'Retaining wall A',parentNetVolumeM3:net,lifts,asOf});
 
 const wall=(overrides:Partial<LinkedWallWork>={}):LinkedWallWork=>({
@@ -42,13 +42,13 @@ const pdf=(walls:LinkedWallWork[],activity:LinkedFoundationActivity[]=[])=>
   buildProjectReportHtmlWithWaste(report,project,[],[],[],[],company,null,[],false,null,walls,activity);
 const wallSection=(html:string)=>html.slice(html.indexOf('<section class="wall-section"'),html.indexOf('</section>',html.indexOf('<section class="wall-section"')));
 
-describe('Daily Report PDF: Cyclopean lift hierarchy',()=>{
+describe('Daily Report PDF: Lift hierarchy',()=>{
   it('nests lifts under their own parent, foundation lifts before the wall and its lifts',()=>{
     const section=wallSection(pdf([wall()]));
     expect(section).toContain('Section A');
-    expect(section).toContain('Foundation Cyclopean Lifts');
-    expect(section).toContain('Wall Cyclopean Lifts');
-    expect(section.indexOf('Foundation Cyclopean Lifts')).toBeLessThan(section.indexOf('Wall Cyclopean Lifts'));
+    expect(section).toContain('Foundation Lifts');
+    expect(section).toContain('Wall Lifts');
+    expect(section.indexOf('Foundation Lifts')).toBeLessThan(section.indexOf('Wall Lifts'));
   });
 
   it('gives every lift its sequence, reference, status and quantities',()=>{
@@ -98,7 +98,7 @@ describe('Daily Report PDF: Cyclopean lift hierarchy',()=>{
 
   it('says so plainly when a foundation has no lifts recorded yet, rather than printing an empty grid',()=>{
     const section=wallSection(pdf([wall({foundationLifts:group([]),wallLifts:group([],report.workDate,48,'wall')})]));
-    expect(section).toContain('No Cyclopean Lifts recorded on or before this date');
+    expect(section).toContain('No Lifts recorded on or before this date');
   });
 
   it('escapes hostile lift text so no markup survives into the report',()=>{
@@ -124,9 +124,9 @@ describe('Daily Report PDF: Cyclopean lift hierarchy',()=>{
     const section=wallSection(pdf([wall({foundationLifts:group([]),wallLifts:group([],report.workDate,48,'wall'),
       foundationLegacyStage:{foundationId:'f1',label:'Imported legacy composite stage',netFoundationVolumeM3:30,activeStoneM3:9,estimatedConcreteM3:21,activeReadyMixM3:0,variance:null}})]));
     expect(section).toContain('Imported legacy composite stage');
-    expect(section).toContain('Recorded before ordered Cyclopean Lifts');
+    expect(section).toContain('Recorded before ordered Lifts');
     // Nothing is fabricated for it: the lift group stays honestly empty rather than inventing a sequence.
-    expect(section).toContain('No Cyclopean Lifts recorded on or before this date');
+    expect(section).toContain('No Lifts recorded on or before this date');
     expect(section).not.toContain('class="lift-row"');
   });
 
@@ -136,8 +136,8 @@ describe('Daily Report PDF: Cyclopean lift hierarchy',()=>{
   });
 });
 
-describe('Daily Report workbook: Cyclopean Lifts sheet',()=>{
-  const rows=()=>cyclopeanLiftRows([wall()],[],project,report.workDate);
+describe('Daily Report workbook: Lifts sheet',()=>{
+  const rows=()=>constructionLiftRows([wall()],[],project,report.workDate);
 
   it('emits one row per visible lift, for both foundation and wall parents',()=>{
     expect(rows()).toHaveLength(3);
@@ -181,20 +181,20 @@ describe('Daily Report workbook: Cyclopean Lifts sheet',()=>{
   it('registers the sheet in the workbook with readable headers and no other sheet disturbed',()=>{
     const before=dailyReportWorkbookSheets(report,project,[],[],[],[],company,[],'en',[],[]).map(sheet=>sheet.name);
     const after=dailyReportWorkbookSheets(report,project,[],[],[],[],company,[],'en',[wall()],[]).map(sheet=>sheet.name);
-    expect(after).toContain('Cyclopean Lifts');
-    expect(after.filter(name=>name!=='Cyclopean Lifts')).toEqual(before.filter(name=>name!=='Cyclopean Lifts'));
-    expect(before).toContain('Cyclopean Lifts');
+    expect(after).toContain('Lifts');
+    expect(after.filter(name=>name!=='Lifts')).toEqual(before.filter(name=>name!=='Lifts'));
+    expect(before).toContain('Lifts');
   });
 
   it('never emits a lift that had not happened by the report date',()=>{
     const future=group([lift({id:'later',reference:'Later lift',createdAt:'2026-09-30T08:00:00Z'})]);
-    expect(cyclopeanLiftRows([wall({foundationLifts:future,wallLifts:group([],report.workDate,48,'wall')})],[],project,report.workDate)).toHaveLength(0);
+    expect(constructionLiftRows([wall({foundationLifts:future,wallLifts:group([],report.workDate,48,'wall')})],[],project,report.workDate)).toHaveLength(0);
   });
 
   it('includes a foundation that has lifts but no wall linked to it yet',()=>{
     const activity:LinkedFoundationActivity={foundation,constructionSectionName:'Section A',foundationEvents:[],foundationStatusAsOf:'curing',composition:null,
       lifts:group([lift()]),legacyStage:null};
-    const rowsWithActivity=cyclopeanLiftRows([],[activity],project,report.workDate);
+    const rowsWithActivity=constructionLiftRows([],[activity],project,report.workDate);
     expect(rowsWithActivity).toHaveLength(1);
     expect(rowsWithActivity[0]!['Wall Reference']).toBeNull();
     expect(rowsWithActivity[0]!['Parent Type']).toBe('Foundation');

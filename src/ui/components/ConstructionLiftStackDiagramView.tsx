@@ -1,6 +1,6 @@
 import {StyleSheet,Text,View} from 'react-native';
 
-import type {StackDiagram} from '../../domain/cyclopeanLiftDiagram';
+import type {StackDiagram} from '../../domain/constructionLiftDiagram';
 import {colors,radius} from '../theme';
 import {DiagramCanvas} from './DiagramCanvas';
 
@@ -9,7 +9,7 @@ import {DiagramCanvas} from './DiagramCanvas';
  * placement is only ever changed in the Stone editor, never from an overview, so nothing here claims
  * a touch gesture.
  */
-export function CyclopeanStackDiagramView({diagram,caption,compact=false}:{
+export function ConstructionLiftStackDiagramView({diagram,caption,compact=false}:{
   diagram:StackDiagram;caption?:string;
   /** A summary on an overview screen: the drawing only, with the surrounding explanation left to the screen. */
   compact?:boolean;

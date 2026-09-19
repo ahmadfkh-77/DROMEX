@@ -2,9 +2,9 @@ import {DatabaseSync} from 'node:sqlite';
 import {afterEach, describe, expect, it} from 'vitest';
 
 import {migrateDatabase} from '../src/data/database/migrations';
-import {cyclopeanLiftFromRow, SqliteCyclopeanLiftRepository, type LiftRow} from '../src/data/repositories/SqliteCyclopeanLiftRepository';
+import {constructionLiftFromRow, SqliteConstructionLiftRepository, type LiftRow} from '../src/data/repositories/SqliteConstructionLiftRepository';
 import {SqliteWallRepository} from '../src/data/repositories/SqliteWallRepository';
-import type {CyclopeanLiftDraft, ConcreteMatrixPhaseDraft, StonePhaseDraft} from '../src/domain/wallCyclopeanLift';
+import type {ConstructionLiftDraft, ConcreteMatrixPhaseDraft, StonePhaseDraft} from '../src/domain/wallConstructionLift';
 
 class TestDatabase {
   readonly raw: DatabaseSync;
@@ -30,7 +30,7 @@ async function setup() {
     INSERT INTO projects (id,customer_id,name,location,status,created_at,updated_at,is_archived) VALUES ('bridge','customer','River Bridge','Zahle','active','${NOW}','${NOW}',0);
   `);
   const walls = new SqliteWallRepository(db as never);
-  const lifts = new SqliteCyclopeanLiftRepository(db as never);
+  const lifts = new SqliteConstructionLiftRepository(db as never);
   const section = await walls.createConstructionSection({projectId: 'road', name: 'Section A', location: '', description: ''});
   const otherSection = await walls.createConstructionSection({projectId: 'bridge', name: 'Section B', location: '', description: ''});
   const foundation = await walls.createFoundation({
@@ -50,7 +50,7 @@ async function setup() {
   return {db, walls, lifts, section, foundation, otherFoundation, wall};
 }
 
-const liftDraft = (parentType: 'foundation' | 'wall', parentId: string, overrides: Partial<CyclopeanLiftDraft> = {}): CyclopeanLiftDraft => ({
+const liftDraft = (parentType: 'foundation' | 'wall', parentId: string, overrides: Partial<ConstructionLiftDraft> = {}): ConstructionLiftDraft => ({
   parentType, parentId, sequence: 1, reference: 'Lift 1', startElevationM: 0,
   geometry: {lengthM: 20, heightM: 1, bottomThicknessM: 1.5, topThicknessM: 1.5, deductionM3: 0}, notes: '', ...overrides,
 });
@@ -208,7 +208,7 @@ describe('transaction rollback', () => {
     const lift = await lifts.createLift(liftDraft('foundation', foundation.id));
     await expect(lifts.saveStonePhase(lift.id, stoneDraft({calculationDimensions: {lengthM: 20, heightM: 10, bottomThicknessM: 1.5, topThicknessM: 1.5, deductionM3: 0}})))
       .rejects.toThrow(/cannot exceed this lift's net structural volume/);
-    const row = db.raw.prepare('SELECT stone_calculated_volume_m3 FROM cyclopean_lifts WHERE id=?').get(lift.id) as {stone_calculated_volume_m3: number};
+    const row = db.raw.prepare('SELECT stone_calculated_volume_m3 FROM construction_lifts WHERE id=?').get(lift.id) as {stone_calculated_volume_m3: number};
     expect(row.stone_calculated_volume_m3).toBe(0);
   });
 });
@@ -277,17 +277,17 @@ describe('hydration fails closed on a stored status that disagrees with the phas
     concrete_actual_ready_mix_m3: null, concrete_manual_override: 0, concrete_purpose: null, concrete_work_date: null, concrete_notes: null,
     notes: null, correction_history_json: '[]', created_at: NOW, updated_at: null, ...overrides,
   });
-  it('accepts a genuinely consistent planned row', () => { expect(() => cyclopeanLiftFromRow(row())).not.toThrow(); });
-  it('accepts a genuinely consistent stone_placed row', () => { expect(() => cyclopeanLiftFromRow(row({status: 'stone_placed', stone_actual_quantity_m3: 6}))).not.toThrow(); });
-  it('accepts a genuinely consistent completed row', () => { expect(() => cyclopeanLiftFromRow(row({status: 'completed', stone_actual_quantity_m3: 6, concrete_calculation_method: 'estimated_matrix', concrete_actual_ready_mix_m3: 4}))).not.toThrow(); });
+  it('accepts a genuinely consistent planned row', () => { expect(() => constructionLiftFromRow(row())).not.toThrow(); });
+  it('accepts a genuinely consistent stone_placed row', () => { expect(() => constructionLiftFromRow(row({status: 'stone_placed', stone_actual_quantity_m3: 6}))).not.toThrow(); });
+  it('accepts a genuinely consistent completed row', () => { expect(() => constructionLiftFromRow(row({status: 'completed', stone_actual_quantity_m3: 6, concrete_calculation_method: 'estimated_matrix', concrete_actual_ready_mix_m3: 4}))).not.toThrow(); });
   it('throws (fails closed) for a row stored as planned but carrying Stone fields', () => {
-    expect(() => cyclopeanLiftFromRow(row({status: 'planned', stone_actual_quantity_m3: 6}))).toThrow(/disagrees with the Stone\/concrete phase data/);
+    expect(() => constructionLiftFromRow(row({status: 'planned', stone_actual_quantity_m3: 6}))).toThrow(/disagrees with the Stone\/concrete phase data/);
   });
   it('throws (fails closed) for a row stored as stone_placed with no Stone recorded', () => {
-    expect(() => cyclopeanLiftFromRow(row({status: 'stone_placed'}))).toThrow(/disagrees with the Stone\/concrete phase data/);
+    expect(() => constructionLiftFromRow(row({status: 'stone_placed'}))).toThrow(/disagrees with the Stone\/concrete phase data/);
   });
   it('throws (fails closed) for a row stored as completed with no concrete phase recorded', () => {
-    expect(() => cyclopeanLiftFromRow(row({status: 'completed', stone_actual_quantity_m3: 6}))).toThrow(/disagrees with the Stone\/concrete phase data/);
+    expect(() => constructionLiftFromRow(row({status: 'completed', stone_actual_quantity_m3: 6}))).toThrow(/disagrees with the Stone\/concrete phase data/);
   });
 });
 

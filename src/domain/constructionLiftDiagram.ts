@@ -1,14 +1,14 @@
 import {wallDiagramToSvg,type DiagramElement,type DiagramPatternDef,type LayerPattern} from './wallDiagram';
 import {
   concreteMatrixVariance,estimatedConcreteMatrixVolume,orderLiftsBySequence,
-  type ConcreteVariance,type CyclopeanLift,type LegacyCompositeStage,type LiftReconciliation,
+  type ConcreteVariance,type ConstructionLift,type LegacyCompositeStage,type LiftReconciliation,
   type LiftStoneOffsets,type LiftStonePosition,type LiftStatus,type VolumeDimensions,
-} from './wallCyclopeanLift';
+} from './wallConstructionLift';
 
 /**
- * DEC-466 Phase 4. The technical drawing for the cyclopean lift model: one lift, a whole foundation or
+ * DEC-466 Phase 4. The technical drawing for the Lift model: one lift, a whole foundation or
  * wall, or a foundation with its linked wall. Nothing here computes a business quantity -- every
- * volume, status, variance and reconciliation total arrives already derived by wallCyclopeanLift.ts,
+ * volume, status, variance and reconciliation total arrives already derived by wallConstructionLift.ts,
  * and this module only decides where it is drawn and how it is labelled. The output is deterministic,
  * self-contained SVG: no script, no external reference, no raster, no model-generated image.
  */
@@ -29,8 +29,21 @@ export const STONE_FILL='#8C8579';
 export const CONCRETE_POURED_FILL='#B9B2A2';
 export const CONCRETE_ESTIMATE_FILL='#DDD7C9';
 const INK='#17212b',MUTED='#65717d',RESULT='#04545d',ALERT='#8e2e1b';
-const STONE_PATTERN_ID='stoneHatch',CONCRETE_PATTERN_ID='concreteHatch';
-const PATTERNS:DiagramPatternDef[]=[{id:STONE_PATTERN_ID,fill:'none',pattern:'diagonal'},{id:CONCRETE_PATTERN_ID,fill:'none',pattern:'dots'}];
+export const STONE_PATTERN_ID='stoneHatch';
+/** Concrete still to be poured. */
+export const CONCRETE_PATTERN_ID='concreteHatch';
+/**
+ * DEC-469. Concrete that has actually been poured carries its own, denser pattern. Before this a
+ * poured lift was drawn as a flat colour with no pattern at all, which left colour as the only thing
+ * separating "poured" from "estimated" -- unreadable in grayscale and for a colour-vision deficiency.
+ */
+export const CONCRETE_POURED_PATTERN_ID='concretePouredHatch';
+const PATTERNS:DiagramPatternDef[]=[
+  {id:STONE_PATTERN_ID,fill:'none',pattern:'diagonal'},
+  {id:CONCRETE_PATTERN_ID,fill:'none',pattern:'dots'},
+  {id:CONCRETE_POURED_PATTERN_ID,fill:'none',pattern:'cross'},
+];
+const concretePatternFor=(poured:boolean)=>poured?CONCRETE_POURED_PATTERN_ID:CONCRETE_PATTERN_ID;
 
 /**
  * The single 2D plane every lift drawing represents. Stated on the figure itself so a longitudinal
@@ -73,10 +86,10 @@ const averageThickness=(geometry:VolumeDimensions)=>(geometry.bottomThicknessM+g
 
 /**
  * Projects one persisted lift into the presentation shape. Every number is read from the record or
- * from wallCyclopeanLift.ts -- the estimated matrix volume comes from the recorded concrete phase when
+ * from wallConstructionLift.ts -- the estimated matrix volume comes from the recorded concrete phase when
  * one exists and otherwise from the domain's own formula, and the variance from its own comparison.
  */
-export function liftDiagramLiftFrom(lift:CyclopeanLift):LiftDiagramLift{
+export function liftDiagramLiftFrom(lift:ConstructionLift):LiftDiagramLift{
   const estimatedConcreteM3=lift.concretePhase
     ?lift.concretePhase.estimatedMatrixVolumeM3
     :estimatedConcreteMatrixVolume(lift.netLiftVolumeM3,lift.stonePhase.calculatedStoneVolumeM3);
@@ -94,6 +107,48 @@ export function liftDiagramLiftFrom(lift:CyclopeanLift):LiftDiagramLift{
   };
 }
 
+/**
+ * DEC-469. The lift as an editor is previewing it, with the estimated concrete matrix **re-derived**
+ * from the Stone being previewed. The Stone editor previously overrode the Stone volume but kept the
+ * saved lift's estimate, so entering 4.5 m³ of Stone in a 9 m³ lift drew "Stone 4.5" beside
+ * "Concrete estimated 9" -- 13.5 m³ of material in a 9 m³ lift. A recorded concrete phase keeps its
+ * own estimate, because that figure is history rather than a live derivation.
+ */
+export function withPreviewedStone(lift:LiftDiagramLift,preview:{
+  calculatedStoneVolumeM3:number;actualStoneQuantityM3:number|null;stoneGeometry:LiftStoneGeometry|null;
+  position:LiftStonePosition|null;offsets:LiftStoneOffsets|null;status:LiftStatus;
+}):LiftDiagramLift{
+  return{
+    ...lift,...preview,
+    estimatedConcreteM3:lift.actualReadyMixM3!=null
+      ?lift.estimatedConcreteM3
+      :estimatedConcreteMatrixVolume(lift.netLiftVolumeM3,preview.calculatedStoneVolumeM3),
+  };
+}
+
+/**
+ * DEC-469. Parses a typed offset, accepting a partially typed decimal. The controls keep the raw text
+ * and only commit the parsed number, because re-rendering `String(Number(text))` on every keystroke
+ * destroyed the decimal point the moment it was typed -- `Number('0.')` is `0`, which renders as
+ * `"0"`, so `0.5` could never be entered at all. A comma is accepted as a decimal separator, matching
+ * the rest of the app's numeric fields.
+ */
+export function parseOffsetText(text:string):number{
+  const trimmed=text.trim().replace(',','.');
+  if(!trimmed)return Number.NaN;
+  return /^-?(\d+\.?\d*|\.\d+)$/.test(trimmed)?Number(trimmed):Number.NaN;
+}
+
+/**
+ * Whether typed text already represents this committed value, so a value arriving back from the
+ * parent (a nudge, a reset, a clamp) only replaces the text when it genuinely differs -- which is what
+ * lets a half-typed `"0."` survive.
+ */
+export function offsetTextMatchesValue(text:string,value:number):boolean{
+  const parsed=parseOffsetText(text);
+  return Number.isFinite(parsed)&&Number.isFinite(value)&&round(parsed)===round(value);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Drag geometry. All of it is pure arithmetic on the diagram's own coordinate space, so the gesture
 // handler in the UI and the drawing itself can never disagree about where the Stone region is.
@@ -106,18 +161,32 @@ export type LiftDragBounds={boxLeft:number;boxTop:number;boxWidth:number;boxHeig
  * -- so a Stone region anywhere inside it is inside the structural envelope too, with no separate
  * safety margin to keep in step.
  */
+/**
+ * DEC-469. How much of each axis the Stone region occupies, so that the **drawn area** matches the
+ * Stone's share of the lift volume: scaling both axes by the square root of the volume ratio makes
+ * area proportional to volume. The previous code fixed the width at 32% of the envelope whatever the
+ * volume and halved the height again, so a Stone filling half a lift was drawn at roughly a tenth of
+ * it -- the Owner spotted this on the device. Capped below the full width so a concrete margin is
+ * always visible, and floored so a very small Stone stays findable (disclosed as exaggerated).
+ */
+export function stoneLinearFraction(lift:LiftDiagramLift):number{
+  const volume=stoneVolumeOf(lift);
+  if(!(volume>0))return 0;
+  const ratio=clamp(volume/Math.max(lift.netLiftVolumeM3,.001),0,1);
+  return Math.min(.92,Math.sqrt(ratio));
+}
+
 export function liftDragBounds(lift:LiftDiagramLift):LiftDragBounds{
   const maxThickness=Math.max(lift.geometry.bottomThicknessM,lift.geometry.topThicknessM)||1;
   const scale=(BOX_SPAN-30)/maxThickness;
   const narrowHalf=(Math.min(lift.geometry.bottomThicknessM,lift.geometry.topThicknessM)*scale)/2;
   const centreX=BOX_LEFT+BOX_SPAN/2;
   const boxWidth=Math.max(48,narrowHalf*2),boxLeft=centreX-boxWidth/2;
-  const ratio=Math.max(.02,stoneVolumeOf(lift)/Math.max(lift.netLiftVolumeM3,.001));
-  const fraction=Math.min(.85,Math.sqrt(ratio));
+  const fraction=stoneLinearFraction(lift);
   return{
     boxLeft:round(boxLeft),boxTop:BOX_TOP,boxWidth:round(boxWidth),boxHeight:BOX_HEIGHT,
-    stoneWidthPx:round(Math.min(boxWidth*.9,Math.max(24,boxWidth*.32))),
-    stoneHeightPx:round(Math.min(BOX_HEIGHT*.9,Math.max(20,BOX_HEIGHT*fraction*.5))),
+    stoneWidthPx:round(Math.max(MIN_REGION_PX,boxWidth*fraction)),
+    stoneHeightPx:round(Math.max(MIN_REGION_PX,BOX_HEIGHT*fraction)),
   };
 }
 
@@ -272,7 +341,7 @@ export function describeStonePlacement(lift:LiftDiagramLift):string{
 // Drawing
 // ---------------------------------------------------------------------------------------------
 
-export type LiftDiagramLegendEntry={marker:string;label:string;value:string;fill:string;pattern:LayerPattern};
+export type LiftDiagramLegendEntry={marker:string;label:string;value:string;fill:string;pattern:LayerPattern;patternId:string};
 export type LiftDiagram={
   width:number;height:number;elements:DiagramElement[];patterns:DiagramPatternDef[];
   legend:LiftDiagramLegendEntry[];svg:string;dragBounds:LiftDragBounds;exaggerated:boolean;
@@ -356,7 +425,9 @@ export function buildLiftDiagram(lift:LiftDiagramLift,options:{contextLabel?:str
   // of it always reads as sitting inside the matrix rather than as a slab standing beside it.
   const envelope:[number,number][]=[[centreX-bottomHalf,boxBottom],[centreX+bottomHalf,boxBottom],[centreX+topHalf,BOX_TOP],[centreX-topHalf,BOX_TOP]];
   page.polygon(envelope,concreteFillFor(lift));
-  if(hasStone&&!poured)page.polygon(envelope,`url(#${CONCRETE_PATTERN_ID})`,'none');
+  // Concrete always carries a pattern once it exists, a different one poured than estimated, so the
+  // two never rely on colour alone (DEC-469).
+  if(lift.status!=='planned')page.polygon(envelope,`url(#${concretePatternFor(poured)})`,'none');
 
   const exaggerated=hasStone?drawStoneRegion(page,lift,bounds,String(lift.sequence)):false;
   if(hasStone&&!isDetailed(lift))page.write('Schematic placement — not to scale',bounds.boxLeft,BOX_TOP-8,{size:8,fill:RESULT});
@@ -368,8 +439,8 @@ export function buildLiftDiagram(lift:LiftDiagramLift,options:{contextLabel?:str
 
   const legend:LiftDiagramLegendEntry[]=[];
   // A planned lift has no Stone swatch to show: nothing has been recorded, so nothing is coloured in.
-  legend.push({marker:String(lift.sequence),label:'Stone recorded',value:hasStone?cubic(stoneVolumeOf(lift)):'None recorded',fill:hasStone?STONE_FILL:'none',pattern:'diagonal'});
-  legend.push({marker:`${lift.sequence}C`,label:poured?'Concrete matrix recorded':'Concrete matrix estimated',value:cubic(poured?lift.actualReadyMixM3!:lift.estimatedConcreteM3),fill:poured?CONCRETE_POURED_FILL:CONCRETE_ESTIMATE_FILL,pattern:'dots'});
+  legend.push({marker:String(lift.sequence),label:'Stone recorded',value:hasStone?cubic(stoneVolumeOf(lift)):'None recorded',fill:hasStone?STONE_FILL:'none',pattern:'diagonal',patternId:STONE_PATTERN_ID});
+  legend.push({marker:`${lift.sequence}C`,label:poured?'Concrete matrix recorded':'Concrete matrix estimated',value:cubic(poured?lift.actualReadyMixM3!:lift.estimatedConcreteM3),fill:poured?CONCRETE_POURED_FILL:CONCRETE_ESTIMATE_FILL,pattern:poured?'cross':'dots',patternId:concretePatternFor(poured)});
 
   // The legend sits under the drawing, one row per phase, with the value right-aligned so the
   // numbers form a readable column on a narrow screen.
@@ -384,7 +455,7 @@ export function buildLiftDiagram(lift:LiftDiagramLift,options:{contextLabel?:str
   legendLine('Lift structural volume',cubic(lift.netLiftVolumeM3));
   for(const entry of legend){
     page.rect(PADDING,cursor-9,12,11,entry.fill,INK,entry.fill==='none'?'3 2':undefined);
-    if(entry.fill!=='none')page.rect(PADDING,cursor-9,12,11,`url(#${entry.pattern==='diagonal'?STONE_PATTERN_ID:CONCRETE_PATTERN_ID})`,null);
+    if(entry.fill!=='none')page.rect(PADDING,cursor-9,12,11,`url(#${entry.patternId})`,null);
     page.write(entry.marker,PADDING+18,cursor,{size:8,weight:700,fill:RESULT});
     page.write(entry.label,PADDING+36,cursor,{size:9,fill:MUTED});
     page.write(entry.value,WIDTH-PADDING,cursor,{size:10,weight:700,anchor:'end'});
@@ -414,7 +485,7 @@ export type StackDiagramInput={
   curingNote?:string|null;legacyStage?:LegacyCompositeStage|null;selectedLiftId?:string|null;
 };
 /** Projects a parent's persisted lifts into the stack input, so no screen has to map them itself. */
-export function stackInputFrom(params:Omit<StackDiagramInput,'lifts'>&{lifts:CyclopeanLift[]}):StackDiagramInput{
+export function stackInputFrom(params:Omit<StackDiagramInput,'lifts'>&{lifts:ConstructionLift[]}):StackDiagramInput{
   return{...params,lifts:params.lifts.map(liftDiagramLiftFrom)};
 }
 
@@ -448,7 +519,7 @@ function layoutStack(page:Canvas,input:StackDiagramInput,bottomY:number,compact:
       stoneWidthPx:Math.max(14,width*.32),stoneHeightPx:Math.max(6,bandHeight*.45)};
     const poured=lift.actualReadyMixM3!=null;
     page.rect(left,top,width,bandHeight,concreteFillFor(lift),INK,lift.status==='planned'?'4 3':undefined);
-    if(lift.status!=='planned'&&!poured)page.rect(left,top,width,bandHeight,`url(#${CONCRETE_PATTERN_ID})`,null);
+    if(lift.status!=='planned')page.rect(left,top,width,bandHeight,`url(#${concretePatternFor(poured)})`,null);
     if(stoneVolumeOf(lift)>0&&lift.status!=='planned'){
       if(drawStoneRegion(page,lift,bounds,String(lift.sequence),{markers:!compact}))exaggerated=true;
     }
@@ -482,9 +553,9 @@ function layoutStack(page:Canvas,input:StackDiagramInput,bottomY:number,compact:
 function stackLegendEntries(bands:StackBand[]):LiftDiagramLegendEntry[]{
   const anyPoured=bands.some(band=>band.status==='completed');
   return[
-    {marker:'▦',label:'Stone',value:'Placed inside its lift',fill:STONE_FILL,pattern:'diagonal'},
-    {marker:'▩',label:anyPoured?'Concrete matrix (recorded)':'Concrete matrix (estimated)',value:'Fills around the Stone',fill:anyPoured?CONCRETE_POURED_FILL:CONCRETE_ESTIMATE_FILL,pattern:'dots'},
-    {marker:'▢',label:'Planned lift',value:'Envelope only',fill:'none',pattern:'solid'},
+    {marker:'▦',label:'Stone',value:'Placed inside its lift',fill:STONE_FILL,pattern:'diagonal',patternId:STONE_PATTERN_ID},
+    {marker:'▩',label:anyPoured?'Concrete matrix (recorded)':'Concrete matrix (estimated)',value:'Fills around the Stone',fill:anyPoured?CONCRETE_POURED_FILL:CONCRETE_ESTIMATE_FILL,pattern:anyPoured?'cross':'dots',patternId:concretePatternFor(anyPoured)},
+    {marker:'▢',label:'Planned lift',value:'Envelope only',fill:'none',pattern:'solid',patternId:CONCRETE_PATTERN_ID},
   ];
 }
 
@@ -495,7 +566,7 @@ function drawLegend(page:Canvas,entries:LiftDiagramLegendEntry[],x:number,startY
   for(const entry of entries){
     cursor+=17;
     page.rect(x,cursor-9,12,11,entry.fill==='none'?'none':entry.fill,INK,entry.fill==='none'?'3 2':undefined);
-    if(entry.fill!=='none')page.rect(x,cursor-9,12,11,`url(#${entry.pattern==='diagonal'?STONE_PATTERN_ID:CONCRETE_PATTERN_ID})`,null);
+    if(entry.fill!=='none')page.rect(x,cursor-9,12,11,`url(#${entry.patternId})`,null);
     page.write(entry.marker,x+18,cursor,{size:8,weight:700,fill:RESULT});
     page.write(entry.label,x+30,cursor,{size:8,weight:700});
     page.write(entry.value,x+30,cursor+10,{size:8,fill:MUTED});
@@ -547,7 +618,7 @@ function drawStackHeader(page:Canvas,input:StackDiagramInput,y:number):number{
   return y+47;
 }
 
-export function buildCyclopeanStackDiagram(input:StackDiagramInput):StackDiagram{
+export function buildConstructionLiftStackDiagram(input:StackDiagramInput):StackDiagram{
   const page=canvas();
   const compact=input.lifts.length>COMPACT_THRESHOLD;
   const headerBottom=drawStackHeader(page,input,26);
@@ -567,7 +638,7 @@ export type CombinedDiagramInput={foundation:StackDiagramInput;wall:StackDiagram
  * The foundation with the wall standing on it: one drawing, two clearly separated parents, so a lift
  * can never be read as belonging to the wrong one.
  */
-export function buildCombinedCyclopeanDiagram(input:CombinedDiagramInput):StackDiagram{
+export function buildCombinedConstructionLiftDiagram(input:CombinedDiagramInput):StackDiagram{
   const page=canvas();
   const foundationCompact=input.foundation.lifts.length>COMPACT_THRESHOLD;
   const wallCompact=(input.wall?.lifts.length??0)>COMPACT_THRESHOLD;

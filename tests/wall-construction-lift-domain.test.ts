@@ -1,11 +1,11 @@
 import {describe, expect, it} from 'vitest';
 
 import {
-  calculateVolumeSnapshot, concreteMatrixVariance, deriveLiftStatus, diffCyclopeanLift, estimatedConcreteMatrixVolume,
+  calculateVolumeSnapshot, concreteMatrixVariance, deriveLiftStatus, diffConstructionLift, estimatedConcreteMatrixVolume,
   orderLiftsBySequence, reconcileLifts, validateConcretePhaseLink, validateEstimatedConcreteMatrixVolume,
   validateLiftAllocation, validateLiftSequence, validateStatusConsistency, validateStoneAgainstLiftEnvelope, validateVolumeDimensions,
-  type ConcreteMatrixPhase, type CyclopeanLift, type StonePhase, type VolumeDimensions,
-} from '../src/domain/wallCyclopeanLift';
+  type ConcreteMatrixPhase, type ConstructionLift, type StonePhase, type VolumeDimensions,
+} from '../src/domain/wallConstructionLift';
 
 const dims = (overrides: Partial<VolumeDimensions> = {}): VolumeDimensions => ({
   lengthM: 10, heightM: 1, bottomThicknessM: 1, topThicknessM: 1, deductionM3: 0, ...overrides,
@@ -21,7 +21,7 @@ const concretePhase = (liftId: string, overrides: Partial<ConcreteMatrixPhase> =
   actualReadyMixQuantityM3: null, manualOverride: false, purpose: 'structural', workDate: null, notes: '', ...overrides,
 });
 
-const lift = (overrides: Partial<CyclopeanLift> = {}): CyclopeanLift => ({
+const lift = (overrides: Partial<ConstructionLift> = {}): ConstructionLift => ({
   id: 'lift-1', parentType: 'foundation', parentId: 'foundation-1', sequence: 1, reference: 'Lift 1',
   startElevationM: 0, geometry: dims(), netLiftVolumeM3: 10, stonePhase: stonePhase(), concretePhase: null, status: 'planned',
   notes: '', correctionHistory: [], createdAt: '2026-09-18T00:00:00.000Z', updatedAt: null, ...overrides,
@@ -266,12 +266,12 @@ describe('parent reconciliation: wall', () => {
 describe('correction-ready before/after values', () => {
   it('produces no diff when nothing changed', () => {
     const a = lift();
-    expect(diffCyclopeanLift(a, a)).toEqual([]);
+    expect(diffConstructionLift(a, a)).toEqual([]);
   });
   it('reports field-level before/after changes without mutating the original lift', () => {
     const before = lift({reference: 'Lift 1', notes: 'original'});
     const after = {...before, reference: 'Lift 1 (corrected)', notes: 'updated'};
-    const diff = diffCyclopeanLift(before, after);
+    const diff = diffConstructionLift(before, after);
     expect(diff).toEqual(expect.arrayContaining([
       {field: 'Reference', originalValue: 'Lift 1', newValue: 'Lift 1 (corrected)'},
       {field: 'Notes', originalValue: 'original', newValue: 'updated'},
@@ -282,7 +282,7 @@ describe('correction-ready before/after values', () => {
   it('reports a Stone quantity correction', () => {
     const before = lift({stonePhase: stonePhase({actualStoneQuantityM3: 5})});
     const after = {...before, stonePhase: stonePhase({actualStoneQuantityM3: 6})};
-    expect(diffCyclopeanLift(before, after)).toEqual(expect.arrayContaining([
+    expect(diffConstructionLift(before, after)).toEqual(expect.arrayContaining([
       {field: 'Stone actual quantity (m³)', originalValue: '5', newValue: '6'},
     ]));
   });

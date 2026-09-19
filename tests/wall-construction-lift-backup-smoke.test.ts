@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
 
 import {migrateDatabase} from '../src/data/database/migrations';
-import {SqliteCyclopeanLiftRepository} from '../src/data/repositories/SqliteCyclopeanLiftRepository';
+import {SqliteConstructionLiftRepository} from '../src/data/repositories/SqliteConstructionLiftRepository';
 import {SqliteWallRepository} from '../src/data/repositories/SqliteWallRepository';
 
 class TestDatabase {
@@ -28,9 +28,9 @@ afterEach(() => { for (const file of tempFiles.splice(0)) { try { fs.rmSync(file
  * backupDatabaseAsync -- a whole-file binary copy, the same operation SQLite's own `VACUUM INTO`
  * performs and the same one this smoke test exercises here (expo-sqlite is unavailable under this
  * Node test runtime). Because it is a whole-database copy, no table-specific backup code was needed
- * for migration 43 -- this test only confirms that expectation holds for cyclopean_lifts specifically.
+ * for migration 43 -- this test only confirms that expectation holds for construction_lifts specifically.
  */
-describe('backup/restore smoke test: whole-database copy preserves Cyclopean Lifts', () => {
+describe('backup/restore smoke test: whole-database copy preserves Lifts', () => {
   it('a full database copy round-trips every part of the lift aggregate', async () => {
     const db = new TestDatabase();
     await migrateDatabase(db as never);
@@ -39,7 +39,7 @@ describe('backup/restore smoke test: whole-database copy preserves Cyclopean Lif
       INSERT INTO projects (id,customer_id,name,location,status,created_at,updated_at,is_archived) VALUES ('road','customer','Mountain Road','Aley','active','${NOW}','${NOW}',0);
     `);
     const walls = new SqliteWallRepository(db as never);
-    const lifts = new SqliteCyclopeanLiftRepository(db as never);
+    const lifts = new SqliteConstructionLiftRepository(db as never);
     const section = await walls.createConstructionSection({projectId: 'road', name: 'Section A', location: '', description: ''});
     const foundation = await walls.createFoundation({
       projectId: 'road', constructionSectionId: section.id, reference: 'Foundation A', location: '', lengthM: 20, heightM: 3,
@@ -52,13 +52,13 @@ describe('backup/restore smoke test: whole-database copy preserves Cyclopean Lif
     await lifts.correctLift(lift.id, {reference: 'Lift 1 (corrected)', startElevationM: 0, geometry: lift.geometry, notes: 'renamed after survey', correctionReason: 'Reference corrected after site survey'});
     const before = await lifts.getLift(lift.id);
 
-    const backupPath = path.join(os.tmpdir(), `dromex-cyclopean-lift-backup-smoke-${Date.now()}.sqlite`);
+    const backupPath = path.join(os.tmpdir(), `dromex-construction-lift-backup-smoke-${Date.now()}.sqlite`);
     tempFiles.push(backupPath);
     db.raw.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`);
     db.close();
 
     const restored = new TestDatabase(backupPath);
-    const restoredLifts = new SqliteCyclopeanLiftRepository(restored as never);
+    const restoredLifts = new SqliteConstructionLiftRepository(restored as never);
     const after = await restoredLifts.getLift(lift.id);
     restored.close();
 

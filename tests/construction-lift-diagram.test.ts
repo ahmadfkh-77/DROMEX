@@ -1,12 +1,12 @@
 import {describe,expect,it} from 'vitest';
 
 import {
-  buildCombinedCyclopeanDiagram,buildCyclopeanStackDiagram,buildLiftDiagram,liftDiagramLiftFrom,
+  buildCombinedConstructionLiftDiagram,buildConstructionLiftStackDiagram,buildLiftDiagram,liftDiagramLiftFrom,
   LIFT_DIAGRAM_PLANE_LABEL,STONE_FILL,CONCRETE_POURED_FILL,CONCRETE_ESTIMATE_FILL,
   type LiftDiagramLift,type StackDiagramInput,
-} from '../src/domain/cyclopeanLiftDiagram';
+} from '../src/domain/constructionLiftDiagram';
 import type {DiagramElement} from '../src/domain/wallDiagram';
-import {reconcileLifts,type CyclopeanLift,type LiftStonePosition} from '../src/domain/wallCyclopeanLift';
+import {reconcileLifts,type ConstructionLift,type LiftStonePosition} from '../src/domain/wallConstructionLift';
 
 const lift=(overrides:Partial<LiftDiagramLift>={}):LiftDiagramLift=>({
   id:'lift-1',sequence:1,reference:'Lift 1',startElevationM:0,
@@ -31,7 +31,7 @@ type Polygon=Extract<DiagramElement,{kind:'polygon'}>;
 const envelopeOf=(diagram:{elements:DiagramElement[]}):Polygon=>
   diagram.elements.find((element):element is Polygon=>element.kind==='polygon')!;
 
-describe('buildLiftDiagram — a single Cyclopean Lift',()=>{
+describe('buildLiftDiagram — a single Lift',()=>{
   it('draws a planned lift as an empty structural envelope with no fabricated Stone or concrete',()=>{
     const diagram=buildLiftDiagram(lift());
     expect(envelopeOf(diagram)).toMatchObject({fill:'none'});
@@ -122,7 +122,7 @@ describe('buildLiftDiagram — a single Cyclopean Lift',()=>{
 });
 
 describe('liftDiagramLiftFrom — the domain stays authoritative',()=>{
-  const source=(overrides:Partial<CyclopeanLift>={}):CyclopeanLift=>({
+  const source=(overrides:Partial<ConstructionLift>={}):ConstructionLift=>({
     id:'lift-a',parentType:'foundation',parentId:'f1',sequence:2,reference:'Lift 2',startElevationM:.5,
     geometry:{lengthM:10,heightM:.5,bottomThicknessM:1,topThicknessM:1,deductionM3:0},netLiftVolumeM3:5,
     stonePhase:{calculationSnapshot:{lengthM:5,heightM:.4,bottomThicknessM:.5,topThicknessM:.5,deductionM3:0,grossVolumeM3:1,netVolumeM3:1},
@@ -160,18 +160,18 @@ const reconcileFor=(parentNetVolumeM3:number,lifts:LiftDiagramLift[])=>
     netLiftVolumeM3:value.netLiftVolumeM3,
     stonePhase:{calculatedStoneVolumeM3:value.calculatedStoneVolumeM3,actualStoneQuantityM3:value.actualStoneQuantityM3},
     concretePhase:value.actualReadyMixM3==null&&value.status!=='completed'?null:{estimatedMatrixVolumeM3:value.estimatedConcreteM3,actualReadyMixQuantityM3:value.actualReadyMixM3},
-  })) as unknown as CyclopeanLift[]);
+  })) as unknown as ConstructionLift[]);
 
-describe('buildCyclopeanStackDiagram — every lift in a foundation or wall',()=>{
+describe('buildConstructionLiftStackDiagram — every lift in a foundation or wall',()=>{
   const three=[completed({id:'l1',sequence:1,reference:'Lift 1'}),stonePlaced({id:'l2',sequence:2,reference:'Lift 2'}),lift({id:'l3',sequence:3,reference:'Lift 3'})];
 
   it('renders lifts in construction order regardless of the array order given',()=>{
-    const shuffled=buildCyclopeanStackDiagram(stack([three[2]!,three[0]!,three[1]!],{reconciliation:reconcileFor(20,three)}));
+    const shuffled=buildConstructionLiftStackDiagram(stack([three[2]!,three[0]!,three[1]!],{reconciliation:reconcileFor(20,three)}));
     expect(shuffled.bands.map(band=>band.sequence)).toEqual([1,2,3]);
   });
 
   it('never overlaps two lift envelopes',()=>{
-    const diagram=buildCyclopeanStackDiagram(stack(three,{reconciliation:reconcileFor(20,three)}));
+    const diagram=buildConstructionLiftStackDiagram(stack(three,{reconciliation:reconcileFor(20,three)}));
     const ordered=[...diagram.bands].sort((a,b)=>a.top-b.top);
     for(const[index,band]of ordered.entries()){
       const next=ordered[index+1];
@@ -180,32 +180,32 @@ describe('buildCyclopeanStackDiagram — every lift in a foundation or wall',()=
   });
 
   it('stacks later lifts above earlier ones, matching how they are built',()=>{
-    const diagram=buildCyclopeanStackDiagram(stack(three,{reconciliation:reconcileFor(20,three)}));
+    const diagram=buildConstructionLiftStackDiagram(stack(three,{reconciliation:reconcileFor(20,three)}));
     const first=diagram.bands.find(band=>band.sequence===1)!,last=diagram.bands.find(band=>band.sequence===3)!;
     expect(last.top).toBeLessThan(first.top);
   });
 
   it('shows each lift honestly with its own status, including incomplete ones',()=>{
-    const diagram=buildCyclopeanStackDiagram(stack(three,{reconciliation:reconcileFor(20,three)}));
+    const diagram=buildConstructionLiftStackDiagram(stack(three,{reconciliation:reconcileFor(20,three)}));
     expect(diagram.svg).toContain('Concrete fill pending');
     expect(diagram.svg).toContain('Planned');
   });
 
   it('shows unallocated structural volume separately from the lifts',()=>{
-    const diagram=buildCyclopeanStackDiagram(stack(three,{reconciliation:reconcileFor(20,three)}));
+    const diagram=buildConstructionLiftStackDiagram(stack(three,{reconciliation:reconcileFor(20,three)}));
     expect(diagram.svg).toContain('Unallocated');
     expect(diagram.unallocated).toBeGreaterThan(0);
   });
 
   it('renders parent over-allocation as an explicit error state',()=>{
-    const diagram=buildCyclopeanStackDiagram(stack(three,{parentNetVolumeM3:4,reconciliation:reconcileFor(4,three)}));
+    const diagram=buildConstructionLiftStackDiagram(stack(three,{parentNetVolumeM3:4,reconciliation:reconcileFor(4,three)}));
     expect(diagram.overAllocated).toBe(true);
     expect(diagram.svg).toContain('Over-allocated');
   });
 
   it('switches to a compact representation when there are many lifts, instead of full-size cards',()=>{
     const many=Array.from({length:24},(_,index)=>stonePlaced({id:`l${index}`,sequence:index+1,reference:`Lift ${index+1}`}));
-    const diagram=buildCyclopeanStackDiagram(stack(many,{parentNetVolumeM3:200,reconciliation:reconcileFor(200,many)}));
+    const diagram=buildConstructionLiftStackDiagram(stack(many,{parentNetVolumeM3:200,reconciliation:reconcileFor(200,many)}));
     expect(diagram.compact).toBe(true);
     expect(diagram.height).toBeLessThan(1400);
     expect(diagram.bands).toHaveLength(24);
@@ -213,23 +213,23 @@ describe('buildCyclopeanStackDiagram — every lift in a foundation or wall',()=
 
   it('keeps a selected lift legible alongside the compact overview',()=>{
     const many=Array.from({length:24},(_,index)=>stonePlaced({id:`l${index}`,sequence:index+1,reference:`Lift ${index+1}`}));
-    const diagram=buildCyclopeanStackDiagram(stack(many,{parentNetVolumeM3:200,reconciliation:reconcileFor(200,many),selectedLiftId:'l5'}));
+    const diagram=buildConstructionLiftStackDiagram(stack(many,{parentNetVolumeM3:200,reconciliation:reconcileFor(200,many),selectedLiftId:'l5'}));
     expect(diagram.selected?.sequence).toBe(6);
     expect(diagram.svg).toContain('Lift 6');
   });
 
   it('keeps the Construction Section context visible',()=>{
-    expect(buildCyclopeanStackDiagram(stack(three,{reconciliation:reconcileFor(20,three)})).svg).toContain('Section A');
+    expect(buildConstructionLiftStackDiagram(stack(three,{reconciliation:reconcileFor(20,three)})).svg).toContain('Section A');
   });
 
   it('shows curing as information only and never as a gate on the drawing',()=>{
-    const diagram=buildCyclopeanStackDiagram(stack(three,{reconciliation:reconcileFor(20,three),curingNote:'Curing since 1 September'}));
+    const diagram=buildConstructionLiftStackDiagram(stack(three,{reconciliation:reconcileFor(20,three),curingNote:'Curing since 1 September'}));
     expect(diagram.svg).toContain('Curing since 1 September');
     expect(diagram.bands).toHaveLength(3);
   });
 
   it('labels an imported legacy composite stage instead of inventing lifts for it',()=>{
-    const diagram=buildCyclopeanStackDiagram(stack([],{
+    const diagram=buildConstructionLiftStackDiagram(stack([],{
       reconciliation:reconcileFor(20,[]),
       legacyStage:{foundationId:'f1',label:'Imported legacy composite stage',netFoundationVolumeM3:20,activeStoneM3:6,estimatedConcreteM3:14,activeReadyMixM3:0,variance:null},
     }));
@@ -239,7 +239,7 @@ describe('buildCyclopeanStackDiagram — every lift in a foundation or wall',()=
 
   it('does not clip a long lift reference',()=>{
     const long=stonePlaced({reference:'Retaining foundation lift with an extremely long descriptive reference name'});
-    const diagram=buildCyclopeanStackDiagram(stack([long],{reconciliation:reconcileFor(20,[long])}));
+    const diagram=buildConstructionLiftStackDiagram(stack([long],{reconciliation:reconcileFor(20,[long])}));
     const texts=diagram.elements.filter((element):element is Extract<typeof element,{kind:'text'}>=>element.kind==='text');
     for(const item of texts)expect(item.x).toBeLessThanOrEqual(diagram.width);
     expect(diagram.svg).toContain('…');
@@ -247,7 +247,7 @@ describe('buildCyclopeanStackDiagram — every lift in a foundation or wall',()=
 
   it('draws right-to-left references from their own right edge',()=>{
     const arabic=stonePlaced({reference:'أساس الجدار الاستنادي'});
-    const diagram=buildCyclopeanStackDiagram(stack([arabic],{reconciliation:reconcileFor(20,[arabic])}));
+    const diagram=buildConstructionLiftStackDiagram(stack([arabic],{reconciliation:reconcileFor(20,[arabic])}));
     const rtl=diagram.elements.find(element=>element.kind==='text'&&element.rtl);
     expect(rtl).toMatchObject({anchor:'end'});
     expect(diagram.svg).toContain('direction="rtl"');
@@ -255,18 +255,18 @@ describe('buildCyclopeanStackDiagram — every lift in a foundation or wall',()=
 
   it('keeps mixed direction text inside the drawing',()=>{
     const mixed=stonePlaced({reference:'Lift 1 — أساس A'});
-    const diagram=buildCyclopeanStackDiagram(stack([mixed],{reconciliation:reconcileFor(20,[mixed])}));
+    const diagram=buildConstructionLiftStackDiagram(stack([mixed],{reconciliation:reconcileFor(20,[mixed])}));
     expect(diagram.svg).toContain('أساس');
     expect(diagram.elements.every(element=>element.kind!=='text'||element.x<=diagram.width)).toBe(true);
   });
 });
 
-describe('buildCombinedCyclopeanDiagram — foundation and its linked wall',()=>{
+describe('buildCombinedConstructionLiftDiagram — foundation and its linked wall',()=>{
   const foundationLifts=[completed({id:'f1',sequence:1,reference:'F Lift 1'})];
   const wallLifts=[stonePlaced({id:'w1',sequence:1,reference:'W Lift 1'})];
 
   it('distinguishes the foundation from the wall and draws the wall above it',()=>{
-    const diagram=buildCombinedCyclopeanDiagram({
+    const diagram=buildCombinedConstructionLiftDiagram({
       foundation:stack(foundationLifts,{reconciliation:reconcileFor(20,foundationLifts)}),
       wall:stack(wallLifts,{title:'Wall W1',parentLabel:'Wall',reconciliation:reconcileFor(20,wallLifts)}),
     });
@@ -278,13 +278,13 @@ describe('buildCombinedCyclopeanDiagram — foundation and its linked wall',()=>
   });
 
   it('draws the foundation alone when no wall is linked yet',()=>{
-    const diagram=buildCombinedCyclopeanDiagram({foundation:stack(foundationLifts,{reconciliation:reconcileFor(20,foundationLifts)}),wall:null});
+    const diagram=buildCombinedConstructionLiftDiagram({foundation:stack(foundationLifts,{reconciliation:reconcileFor(20,foundationLifts)}),wall:null});
     expect(diagram.bands.every(band=>band.parentLabel==='Foundation')).toBe(true);
     expect(diagram.svg).toContain('No wall linked');
   });
 
   it('shows a foundation curing warning without hiding any wall content',()=>{
-    const diagram=buildCombinedCyclopeanDiagram({
+    const diagram=buildCombinedConstructionLiftDiagram({
       foundation:stack(foundationLifts,{reconciliation:reconcileFor(20,foundationLifts),curingNote:'Foundation still curing'}),
       wall:stack(wallLifts,{title:'Wall W1',parentLabel:'Wall',reconciliation:reconcileFor(20,wallLifts)}),
     });
@@ -312,14 +312,14 @@ describe('diagram text and SVG safety',()=>{
 
   it('escapes hostile text in the stack diagram and its legend too',()=>{
     const hostileLift=stonePlaced({reference:'<script>alert(1)</script>'});
-    const svg=buildCyclopeanStackDiagram(stack([hostileLift],{title:'<b>F</b>',contextLabel:'"A"&B',reconciliation:reconcileFor(20,[hostileLift])})).svg;
+    const svg=buildConstructionLiftStackDiagram(stack([hostileLift],{title:'<b>F</b>',contextLabel:'"A"&B',reconciliation:reconcileFor(20,[hostileLift])})).svg;
     expect(svg).not.toContain('<script');
     expect(svg).not.toContain('<b>');
     expect(svg).toContain('&amp;');
   });
 
   it('contains no JavaScript, no external URL, and no external font or image',()=>{
-    const svg=buildCyclopeanStackDiagram(stack([completed()],{reconciliation:reconcileFor(20,[completed()])})).svg;
+    const svg=buildConstructionLiftStackDiagram(stack([completed()],{reconciliation:reconcileFor(20,[completed()])})).svg;
     expect(svg).not.toMatch(/https?:\/\/(?!www\.w3\.org)/);
     expect(svg).not.toContain('<image');
     expect(svg).not.toContain('@import');
@@ -329,7 +329,7 @@ describe('diagram text and SVG safety',()=>{
 
   it('is deterministic and self-contained for the same input',()=>{
     const input=stack([completed()],{reconciliation:reconcileFor(20,[completed()])});
-    expect(buildCyclopeanStackDiagram(input).svg).toBe(buildCyclopeanStackDiagram(input).svg);
+    expect(buildConstructionLiftStackDiagram(input).svg).toBe(buildConstructionLiftStackDiagram(input).svg);
     expect(buildLiftDiagram(completed()).svg).toBe(buildLiftDiagram(completed()).svg);
   });
 });
@@ -349,7 +349,7 @@ describe('grayscale and colour-vision safety',()=>{
   });
 
   it('uses no gradient, no 3D effect and no photographic texture',()=>{
-    const svg=buildCyclopeanStackDiagram(stack([completed()],{reconciliation:reconcileFor(20,[completed()])})).svg;
+    const svg=buildConstructionLiftStackDiagram(stack([completed()],{reconciliation:reconcileFor(20,[completed()])})).svg;
     expect(svg).not.toContain('Gradient');
     expect(svg).not.toContain('filter');
     expect(svg).not.toContain('feGaussian');
@@ -358,7 +358,7 @@ describe('grayscale and colour-vision safety',()=>{
 
 describe('accessible placement description',()=>{
   it('describes the current Stone placement in words for a screen reader',async()=>{
-    const {describeStonePlacement}=await import('../src/domain/cyclopeanLiftDiagram');
+    const {describeStonePlacement}=await import('../src/domain/constructionLiftDiagram');
     const description=describeStonePlacement(stonePlaced({position:{xNorm:0,yNorm:0} as LiftStonePosition}));
     expect(description).toContain('Stone');
     expect(description.toLowerCase()).toContain('left');

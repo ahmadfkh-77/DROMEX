@@ -2,12 +2,12 @@ import {describe,expect,it} from 'vitest';
 
 import {
   buildLiftReportGroup,liftHasActivityOn,liftsAsOf,projectLiftAsOf,
-} from '../src/domain/cyclopeanLiftReport';
-import type {CyclopeanLift} from '../src/domain/wallCyclopeanLift';
+} from '../src/domain/constructionLiftReport';
+import type {ConstructionLift} from '../src/domain/wallConstructionLift';
 
 const snapshot=(net:number)=>({lengthM:5,heightM:.4,bottomThicknessM:.5,topThicknessM:.5,deductionM3:0,grossVolumeM3:net,netVolumeM3:net});
 
-const lift=(overrides:Partial<CyclopeanLift>={}):CyclopeanLift=>({
+const lift=(overrides:Partial<ConstructionLift>={}):ConstructionLift=>({
   id:'lift-1',parentType:'foundation',parentId:'f1',sequence:1,reference:'Lift 1',startElevationM:0,
   geometry:{lengthM:10,heightM:.5,bottomThicknessM:1,topThicknessM:1,deductionM3:0},netLiftVolumeM3:5,
   stonePhase:{calculationSnapshot:snapshot(2),calculatedStoneVolumeM3:2,actualStoneQuantityM3:2,manualOverride:false,
@@ -16,7 +16,7 @@ const lift=(overrides:Partial<CyclopeanLift>={}):CyclopeanLift=>({
   createdAt:'2026-09-09T08:00:00.000Z',updatedAt:null,...overrides,
 });
 
-const completed=(overrides:Partial<CyclopeanLift>={})=>lift({
+const completed=(overrides:Partial<ConstructionLift>={})=>lift({
   status:'completed',
   concretePhase:{liftId:'lift-1',calculationMethod:'estimated_matrix',estimatedMatrixVolumeM3:3,independentCalculation:null,
     actualReadyMixQuantityM3:3.4,manualOverride:false,purpose:'Matrix fill',workDate:'2026-09-12',notes:''},
@@ -110,7 +110,7 @@ describe('liftsAsOf and activity detection',()=>{
 });
 
 describe('buildLiftReportGroup — totals come from the existing domain reconciliation',()=>{
-  const group=(asOf:string,lifts:CyclopeanLift[],net=20)=>
+  const group=(asOf:string,lifts:ConstructionLift[],net=20)=>
     buildLiftReportGroup({parentType:'foundation',parentId:'f1',parentReference:'Foundation F1',parentNetVolumeM3:net,lifts,asOf});
 
   it('reconciles only the lifts visible on the report date',()=>{

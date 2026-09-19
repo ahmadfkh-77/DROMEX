@@ -1,7 +1,7 @@
 import type {WallCorrectionChange, WallCorrectionEntry} from './walls';
 
 /**
- * DEC-466. The corrected cyclopean construction model. A foundation or wall is built as an ordered
+ * DEC-466. The corrected Lift construction model. A foundation or wall is built as an ordered
  * series of lifts, not one Stone core sitting inside a single gross volume. Each lift is: place a
  * Stone phase, then pour a concrete matrix fill around/through that same Stone phase. The concrete
  * phase always belongs to its lift through the lift's stable id, never through array position, so a
@@ -10,7 +10,7 @@ import type {WallCorrectionChange, WallCorrectionEntry} from './walls';
  * migration phase is responsible for representing old single-core records as an imported legacy
  * composite stage, not as a precisely-dimensioned lift.
  */
-export type CyclopeanLiftParentType = 'foundation' | 'wall';
+export type ConstructionLiftParentType = 'foundation' | 'wall';
 export type ConcreteCalculationMethod = 'estimated_matrix' | 'independent';
 /**
  * 'stone_placed' is the honest "Concrete fill pending" state: Stone is recorded, no concrete phase
@@ -51,9 +51,9 @@ export type ConcreteMatrixPhase = {
   notes: string;
 };
 
-export type CyclopeanLift = {
+export type ConstructionLift = {
   id: string;
-  parentType: CyclopeanLiftParentType;
+  parentType: ConstructionLiftParentType;
   parentId: string;
   sequence: number;
   reference: string;
@@ -140,7 +140,7 @@ export function concreteMatrixVariance(estimatedOrCalculatedM3: number, actualRe
 }
 
 /** Honest lift status: Stone-before-concrete, and a Stone-only lift is never shown as complete. */
-export function deriveLiftStatus(lift: Pick<CyclopeanLift, 'stonePhase' | 'concretePhase'>): LiftStatus {
+export function deriveLiftStatus(lift: Pick<ConstructionLift, 'stonePhase' | 'concretePhase'>): LiftStatus {
   const stoneRecorded = lift.stonePhase.actualStoneQuantityM3 != null || lift.stonePhase.workDate != null;
   if (!stoneRecorded) return 'planned';
   const concreteRecorded = lift.concretePhase != null && (lift.concretePhase.actualReadyMixQuantityM3 != null || lift.concretePhase.workDate != null);
@@ -154,16 +154,16 @@ export function deriveLiftStatus(lift: Pick<CyclopeanLift, 'stonePhase' | 'concr
  * reachable through data corruption, since every write always derives status through
  * deriveLiftStatus rather than accepting one from a caller.
  */
-export function validateStatusConsistency(lift: Pick<CyclopeanLift, 'status' | 'stonePhase' | 'concretePhase'>): string[] {
+export function validateStatusConsistency(lift: Pick<ConstructionLift, 'status' | 'stonePhase' | 'concretePhase'>): string[] {
   const expected = deriveLiftStatus(lift);
   if (lift.status !== expected) {
-    return [`Cyclopean Lift data is inconsistent: stored status '${lift.status}' disagrees with the Stone/concrete phase data, which implies '${expected}'.`];
+    return [`Lift data is inconsistent: stored status '${lift.status}' disagrees with the Stone/concrete phase data, which implies '${expected}'.`];
   }
   return [];
 }
 
 /** Sequence numbers must be unique within one parent; duplicates are refused rather than silently reordered. */
-export function validateLiftSequence(lifts: Pick<CyclopeanLift, 'id' | 'sequence'>[]): string[] {
+export function validateLiftSequence(lifts: Pick<ConstructionLift, 'id' | 'sequence'>[]): string[] {
   const seen = new Map<number, string>();
   const issues: string[] = [];
   for (const lift of lifts) {
@@ -175,12 +175,12 @@ export function validateLiftSequence(lifts: Pick<CyclopeanLift, 'id' | 'sequence
 }
 
 /** Deterministic order by sequence number, independent of the array order the lifts were stored or loaded in. */
-export function orderLiftsBySequence<T extends Pick<CyclopeanLift, 'sequence'>>(lifts: T[]): T[] {
+export function orderLiftsBySequence<T extends Pick<ConstructionLift, 'sequence'>>(lifts: T[]): T[] {
   return [...lifts].sort((a, b) => a.sequence - b.sequence);
 }
 
 /** A concrete matrix phase must attach to the exact lift id it was poured for, never inferred from position. */
-export function validateConcretePhaseLink(concretePhase: Pick<ConcreteMatrixPhase, 'liftId'>, lift: Pick<CyclopeanLift, 'id'>): string[] {
+export function validateConcretePhaseLink(concretePhase: Pick<ConcreteMatrixPhase, 'liftId'>, lift: Pick<ConstructionLift, 'id'>): string[] {
   if (concretePhase.liftId === lift.id) return [];
   return [`This concrete matrix phase is linked to lift ${concretePhase.liftId}, not lift ${lift.id}. Attach it to the correct Stone lift.`];
 }
@@ -196,7 +196,7 @@ export function validateLiftAllocation(parentNetVolumeM3: number, existingLiftVo
 }
 
 /** Rolls a foundation's or wall's full set of lifts up into the capacity/quantity totals the summary screen, PDF, and workbook all share. */
-export function reconcileLifts(parentNetVolumeM3: number, lifts: CyclopeanLift[]): LiftReconciliation {
+export function reconcileLifts(parentNetVolumeM3: number, lifts: ConstructionLift[]): LiftReconciliation {
   const totalAllocatedLiftVolumeM3 = round(lifts.reduce((sum, lift) => sum + lift.netLiftVolumeM3, 0));
   const remainingUnallocatedVolumeM3 = round(parentNetVolumeM3 - totalAllocatedLiftVolumeM3);
   const totalCalculatedStoneM3 = round(lifts.reduce((sum, lift) => sum + lift.stonePhase.calculatedStoneVolumeM3, 0));
@@ -218,7 +218,7 @@ export function reconcileLifts(parentNetVolumeM3: number, lifts: CyclopeanLift[]
 }
 
 const text = (value: unknown): string | null => (value === null || value === undefined || value === '' ? null : String(value));
-function correctionFields(lift: CyclopeanLift): [string, string | null][] {
+function correctionFields(lift: ConstructionLift): [string, string | null][] {
   return [
     ['Reference', text(lift.reference)], ['Start elevation (m)', text(lift.startElevationM)],
     ['Length (m)', text(lift.geometry.lengthM)], ['Height (m)', text(lift.geometry.heightM)],
@@ -236,7 +236,7 @@ function correctionFields(lift: CyclopeanLift): [string, string | null][] {
   ];
 }
 /** Field-level before/after diff for a reasoned lift correction, following the same audit shape used by loads, supplier loads, and wall consumption. */
-export function diffCyclopeanLift(before: CyclopeanLift, after: CyclopeanLift): WallCorrectionChange[] {
+export function diffConstructionLift(before: ConstructionLift, after: ConstructionLift): WallCorrectionChange[] {
   const next = new Map(correctionFields(after));
   return correctionFields(before).flatMap(([field, originalValue]) => {
     const newValue = next.get(field) ?? null;
@@ -248,11 +248,11 @@ export function diffCyclopeanLift(before: CyclopeanLift, after: CyclopeanLift): 
 // calculated volume itself -- it always resolves a draft through these functions first, the same
 // separation the foundation/wall repositories already keep from wallFoundation.ts/walls.ts.
 
-export type CyclopeanLiftDraft = {parentType: CyclopeanLiftParentType; parentId: string; sequence: number; reference: string; startElevationM: number; geometry: VolumeDimensions; notes: string};
+export type ConstructionLiftDraft = {parentType: ConstructionLiftParentType; parentId: string; sequence: number; reference: string; startElevationM: number; geometry: VolumeDimensions; notes: string};
 export type StonePhaseDraft = {calculationDimensions: VolumeDimensions | null; actualStoneQuantityM3: number | null; manualOverride: boolean; workDate: string | null; position: LiftStonePosition | null; offsets: LiftStoneOffsets | null; notes: string};
 export type ConcreteMatrixPhaseDraft = {calculationMethod: ConcreteCalculationMethod; independentDimensions: VolumeDimensions | null; actualReadyMixQuantityM3: number | null; manualOverride: boolean; purpose: string; workDate: string | null; notes: string};
 
-export function validateCyclopeanLiftDraft(draft: Pick<CyclopeanLiftDraft, 'reference' | 'geometry' | 'sequence'>): string[] {
+export function validateConstructionLiftDraft(draft: Pick<ConstructionLiftDraft, 'reference' | 'geometry' | 'sequence'>): string[] {
   const issues: string[] = [];
   if (!draft.reference.trim()) issues.push('Lift reference/name is required.');
   if (!Number.isInteger(draft.sequence) || draft.sequence < 1) issues.push('Sequence must be a positive whole number.');

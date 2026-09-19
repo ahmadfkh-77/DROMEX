@@ -5,7 +5,7 @@ import {
   liftDragBounds,liftStoneOffsetsFromViewBoxPoint,liftStonePositionFromViewBoxPoint,LIFT_NUDGE_STEP_M,LIFT_NUDGE_STEP_NORM,
   nudgeLiftStoneOffsets,nudgeLiftStonePosition,resetLiftStoneOffsets,resetLiftStonePosition,shouldClaimDragGesture,
   stoneTouchesRegion,validateLiftStoneOffsets,viewBoxPointFromTouch,buildLiftDiagram,type LiftDiagramLift,
-} from '../src/domain/cyclopeanLiftDiagram';
+} from '../src/domain/constructionLiftDiagram';
 
 const lift=(overrides:Partial<LiftDiagramLift>={}):LiftDiagramLift=>({
   id:'lift-1',sequence:1,reference:'Lift 1',startElevationM:0,

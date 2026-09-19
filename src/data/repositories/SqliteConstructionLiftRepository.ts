@@ -4,14 +4,14 @@ import {
 } from '../../domain/wallFoundation';
 import {
   buildConcreteMatrixPhase, buildStonePhase, calculateVolumeSnapshot, concreteMatrixVariance, deriveLiftStatus,
-  diffCyclopeanLift, orderLiftsBySequence, reconcileLifts, validateCyclopeanLiftDraft, validateConcreteMatrixPhaseDraft,
+  diffConstructionLift, orderLiftsBySequence, reconcileLifts, validateConstructionLiftDraft, validateConcreteMatrixPhaseDraft,
   validateLiftAllocation, validateStatusConsistency, validateStonePhaseDraft, validateVolumeDimensions,
-  type ConcreteMatrixPhase, type ConcreteMatrixPhaseDraft, type CyclopeanLift, type CyclopeanLiftDraft,
+  type ConcreteMatrixPhase, type ConcreteMatrixPhaseDraft, type ConstructionLift, type ConstructionLiftDraft,
   type LegacyCompositeStage, type LiftReconciliation, type LiftStoneOffsets, type LiftStonePosition,
   type StonePhase, type StonePhaseDraft, type VolumeDimensions, type VolumeSnapshot,
-} from '../../domain/wallCyclopeanLift';
+} from '../../domain/wallConstructionLift';
 import type {WallCorrectionEntry} from '../../domain/walls';
-import type {CyclopeanLiftRepository} from './CyclopeanLiftRepository';
+import type {ConstructionLiftRepository} from './ConstructionLiftRepository';
 
 export type LiftRow = {
   id: string; parent_type: 'foundation' | 'wall'; foundation_id: string | null; wall_id: string | null;
@@ -45,14 +45,14 @@ const snapshotFromColumns = (length: number | null, height: number | null, botto
  * regardless of how such a row came to exist (a hand-edited database, a future bug, a downgraded
  * app reading data written by a newer one, etc.).
  */
-export function cyclopeanLiftFromRow(row: LiftRow): CyclopeanLift {
+export function constructionLiftFromRow(row: LiftRow): ConstructionLift {
   const lift = liftFromRow(row);
   const issue = validateStatusConsistency(lift)[0];
   if (issue) throw new Error(issue);
   return lift;
 }
 
-function liftFromRow(row: LiftRow): CyclopeanLift {
+function liftFromRow(row: LiftRow): ConstructionLift {
   const stonePhase: StonePhase = {
     calculationSnapshot: snapshotFromColumns(row.stone_calc_length_m, row.stone_calc_height_m, row.stone_calc_bottom_thickness_m, row.stone_calc_top_thickness_m, row.stone_calc_deduction_m3, row.stone_calc_gross_volume_m3, row.stone_calc_net_volume_m3),
     calculatedStoneVolumeM3: row.stone_calculated_volume_m3, actualStoneQuantityM3: row.stone_actual_quantity_m3,
@@ -66,7 +66,7 @@ function liftFromRow(row: LiftRow): CyclopeanLift {
     actualReadyMixQuantityM3: row.concrete_actual_ready_mix_m3, manualOverride: row.concrete_manual_override === 1,
     purpose: row.concrete_purpose ?? '', workDate: row.concrete_work_date, notes: row.concrete_notes ?? '',
   };
-  const lift: CyclopeanLift = {
+  const lift: ConstructionLift = {
     id: row.id, parentType: row.parent_type, parentId: (row.parent_type === 'foundation' ? row.foundation_id : row.wall_id)!,
     sequence: row.sequence, reference: row.reference, startElevationM: row.start_elevation_m,
     geometry: {lengthM: row.length_m, heightM: row.height_m, bottomThicknessM: row.bottom_thickness_m, topThicknessM: row.top_thickness_m, deductionM3: row.deduction_m3},
@@ -76,24 +76,24 @@ function liftFromRow(row: LiftRow): CyclopeanLift {
   return lift;
 }
 
-export class SqliteCyclopeanLiftRepository implements CyclopeanLiftRepository {
+export class SqliteConstructionLiftRepository implements ConstructionLiftRepository {
   constructor(private readonly db: SQLiteDatabase) {}
 
-  async listLiftsForFoundation(foundationId: string): Promise<CyclopeanLift[]> {
-    const rows = await this.db.getAllAsync<LiftRow>('SELECT * FROM cyclopean_lifts WHERE foundation_id=?', foundationId);
-    return orderLiftsBySequence(rows.map(cyclopeanLiftFromRow));
+  async listLiftsForFoundation(foundationId: string): Promise<ConstructionLift[]> {
+    const rows = await this.db.getAllAsync<LiftRow>('SELECT * FROM construction_lifts WHERE foundation_id=?', foundationId);
+    return orderLiftsBySequence(rows.map(constructionLiftFromRow));
   }
-  async listLiftsForWall(wallId: string): Promise<CyclopeanLift[]> {
-    const rows = await this.db.getAllAsync<LiftRow>('SELECT * FROM cyclopean_lifts WHERE wall_id=?', wallId);
-    return orderLiftsBySequence(rows.map(cyclopeanLiftFromRow));
+  async listLiftsForWall(wallId: string): Promise<ConstructionLift[]> {
+    const rows = await this.db.getAllAsync<LiftRow>('SELECT * FROM construction_lifts WHERE wall_id=?', wallId);
+    return orderLiftsBySequence(rows.map(constructionLiftFromRow));
   }
-  async getLift(liftId: string): Promise<CyclopeanLift | null> {
-    const row = await this.db.getFirstAsync<LiftRow>('SELECT * FROM cyclopean_lifts WHERE id=?', liftId);
-    return row ? cyclopeanLiftFromRow(row) : null;
+  async getLift(liftId: string): Promise<ConstructionLift | null> {
+    const row = await this.db.getFirstAsync<LiftRow>('SELECT * FROM construction_lifts WHERE id=?', liftId);
+    return row ? constructionLiftFromRow(row) : null;
   }
   private async requireLiftRow(liftId: string): Promise<LiftRow> {
-    const row = await this.db.getFirstAsync<LiftRow>('SELECT * FROM cyclopean_lifts WHERE id=?', liftId);
-    if (!row) throw new Error('Cyclopean Lift was not found.');
+    const row = await this.db.getFirstAsync<LiftRow>('SELECT * FROM construction_lifts WHERE id=?', liftId);
+    if (!row) throw new Error('Lift was not found.');
     return row;
   }
   private async parentNetVolume(parentType: 'foundation' | 'wall', parentId: string): Promise<number> {
@@ -107,8 +107,8 @@ export class SqliteCyclopeanLiftRepository implements CyclopeanLiftRepository {
     return row.net_volume_m3;
   }
 
-  async createLift(draft: CyclopeanLiftDraft): Promise<CyclopeanLift> {
-    const issue = validateCyclopeanLiftDraft(draft)[0]; if (issue) throw new Error(issue);
+  async createLift(draft: ConstructionLiftDraft): Promise<ConstructionLift> {
+    const issue = validateConstructionLiftDraft(draft)[0]; if (issue) throw new Error(issue);
     const parentNetVolumeM3 = await this.parentNetVolume(draft.parentType, draft.parentId);
     const snapshot = calculateVolumeSnapshot(draft.geometry);
     const existing = draft.parentType === 'foundation' ? await this.listLiftsForFoundation(draft.parentId) : await this.listLiftsForWall(draft.parentId);
@@ -118,16 +118,16 @@ export class SqliteCyclopeanLiftRepository implements CyclopeanLiftRepository {
     try {
       await this.db.withTransactionAsync(async () => {
         await this.db.runAsync(
-          `INSERT INTO cyclopean_lifts (id,parent_type,foundation_id,wall_id,sequence,reference,start_elevation_m,length_m,height_m,bottom_thickness_m,top_thickness_m,deduction_m3,net_lift_volume_m3,status,created_at,updated_at)
+          `INSERT INTO construction_lifts (id,parent_type,foundation_id,wall_id,sequence,reference,start_elevation_m,length_m,height_m,bottom_thickness_m,top_thickness_m,deduction_m3,net_lift_volume_m3,status,created_at,updated_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'planned',?,?)`,
           recordId, draft.parentType, draft.parentType === 'foundation' ? draft.parentId : null, draft.parentType === 'wall' ? draft.parentId : null,
           draft.sequence, draft.reference.trim(), draft.startElevationM, snapshot.lengthM, snapshot.heightM, snapshot.bottomThicknessM, snapshot.topThicknessM,
           snapshot.deductionM3, snapshot.netVolumeM3, now, now,
         );
-        await this.enqueue('cyclopeanLift', recordId, {id: recordId, ...draft, ...snapshot, updatedAt: now}, now);
+        await this.enqueue('constructionLift', recordId, {id: recordId, ...draft, ...snapshot, updatedAt: now}, now);
       });
     } catch (cause) {
-      if (cause instanceof Error && /idx_cyclopean_lifts_(foundation|wall)_seq/.test(cause.message)) {
+      if (cause instanceof Error && /idx_construction_lifts_(foundation|wall)_seq/.test(cause.message)) {
         throw new Error(`Sequence ${draft.sequence} is already used by another lift on this ${draft.parentType}.`);
       }
       throw cause;
@@ -135,9 +135,9 @@ export class SqliteCyclopeanLiftRepository implements CyclopeanLiftRepository {
     return this.requireLift(recordId);
   }
 
-  private async requireLift(liftId: string): Promise<CyclopeanLift> { return cyclopeanLiftFromRow(await this.requireLiftRow(liftId)); }
+  private async requireLift(liftId: string): Promise<ConstructionLift> { return constructionLiftFromRow(await this.requireLiftRow(liftId)); }
 
-  async correctLift(liftId: string, draft: {reference: string; startElevationM: number; geometry: VolumeDimensions; notes: string; correctionReason: string}): Promise<CyclopeanLift> {
+  async correctLift(liftId: string, draft: {reference: string; startElevationM: number; geometry: VolumeDimensions; notes: string; correctionReason: string}): Promise<ConstructionLift> {
     const reason = draft.correctionReason.trim(); if (!reason) throw new Error('A correction reason is required.');
     const before = await this.requireLift(liftId);
     const dimensionIssue = validateVolumeDimensions(draft.geometry)[0]; if (dimensionIssue) throw new Error(dimensionIssue);
@@ -146,29 +146,29 @@ export class SqliteCyclopeanLiftRepository implements CyclopeanLiftRepository {
     const siblings = (before.parentType === 'foundation' ? await this.listLiftsForFoundation(before.parentId) : await this.listLiftsForWall(before.parentId)).filter(l => l.id !== liftId);
     const allocationIssue = validateLiftAllocation(parentNetVolumeM3, siblings.map(l => l.netLiftVolumeM3), snapshot.netVolumeM3)[0];
     if (allocationIssue) throw new Error(allocationIssue);
-    const after: CyclopeanLift = {...before, reference: draft.reference.trim(), startElevationM: draft.startElevationM, geometry: draft.geometry, netLiftVolumeM3: snapshot.netVolumeM3, notes: draft.notes.trim()};
-    const changes = diffCyclopeanLift(before, after);
+    const after: ConstructionLift = {...before, reference: draft.reference.trim(), startElevationM: draft.startElevationM, geometry: draft.geometry, netLiftVolumeM3: snapshot.netVolumeM3, notes: draft.notes.trim()};
+    const changes = diffConstructionLift(before, after);
     if (!changes.length) throw new Error('Nothing changed. Edit at least one value before saving a correction.');
     const now = new Date().toISOString(), history = [...before.correctionHistory, {correctedAt: now, correctedBy: 'Owner', reason, changes}];
     await this.db.withTransactionAsync(async () => {
       await this.db.runAsync(
-        `UPDATE cyclopean_lifts SET reference=?,start_elevation_m=?,length_m=?,height_m=?,bottom_thickness_m=?,top_thickness_m=?,deduction_m3=?,net_lift_volume_m3=?,notes=?,correction_history_json=?,updated_at=? WHERE id=?`,
+        `UPDATE construction_lifts SET reference=?,start_elevation_m=?,length_m=?,height_m=?,bottom_thickness_m=?,top_thickness_m=?,deduction_m3=?,net_lift_volume_m3=?,notes=?,correction_history_json=?,updated_at=? WHERE id=?`,
         after.reference, after.startElevationM, snapshot.lengthM, snapshot.heightM, snapshot.bottomThicknessM, snapshot.topThicknessM, snapshot.deductionM3, snapshot.netVolumeM3, after.notes || null, JSON.stringify(history), now, liftId,
       );
-      await this.enqueue('cyclopeanLift', liftId, {...after, correctionHistory: history, updatedAt: now}, now);
+      await this.enqueue('constructionLift', liftId, {...after, correctionHistory: history, updatedAt: now}, now);
     });
     return this.requireLift(liftId);
   }
 
-  async saveStonePhase(liftId: string, draft: StonePhaseDraft): Promise<CyclopeanLift> {
+  async saveStonePhase(liftId: string, draft: StonePhaseDraft): Promise<ConstructionLift> {
     const row = await this.requireLiftRow(liftId);
-    const before = cyclopeanLiftFromRow(row);
+    const before = constructionLiftFromRow(row);
     const issue = validateStonePhaseDraft(draft, before.netLiftVolumeM3)[0]; if (issue) throw new Error(issue);
     const phase = buildStonePhase(draft);
     const now = new Date().toISOString();
     await this.db.withTransactionAsync(async () => {
       await this.db.runAsync(
-        `UPDATE cyclopean_lifts SET
+        `UPDATE construction_lifts SET
           stone_calc_length_m=?,stone_calc_height_m=?,stone_calc_bottom_thickness_m=?,stone_calc_top_thickness_m=?,stone_calc_deduction_m3=?,stone_calc_gross_volume_m3=?,stone_calc_net_volume_m3=?,
           stone_calculated_volume_m3=?,stone_actual_quantity_m3=?,stone_manual_override=?,stone_work_date=?,stone_position_x=?,stone_position_y=?,stone_offsets_json=?,stone_notes=?,
           status=?,updated_at=? WHERE id=?`,
@@ -178,14 +178,14 @@ export class SqliteCyclopeanLiftRepository implements CyclopeanLiftRepository {
         phase.position?.xNorm ?? null, phase.position?.yNorm ?? null, phase.offsets ? JSON.stringify(phase.offsets) : null, phase.notes || null,
         deriveLiftStatus({stonePhase: phase, concretePhase: before.concretePhase}), now, liftId,
       );
-      await this.enqueue('cyclopeanLiftStonePhase', liftId, {liftId, ...phase, updatedAt: now}, now);
+      await this.enqueue('constructionLiftStonePhase', liftId, {liftId, ...phase, updatedAt: now}, now);
     });
     return this.requireLift(liftId);
   }
 
-  async saveConcreteMatrixPhase(liftId: string, draft: ConcreteMatrixPhaseDraft): Promise<CyclopeanLift> {
+  async saveConcreteMatrixPhase(liftId: string, draft: ConcreteMatrixPhaseDraft): Promise<ConstructionLift> {
     const row = await this.requireLiftRow(liftId);
-    const before = cyclopeanLiftFromRow(row);
+    const before = constructionLiftFromRow(row);
     if (before.stonePhase.actualStoneQuantityM3 == null && before.stonePhase.workDate == null) {
       throw new Error('Record this lift\'s Stone phase before its concrete matrix fill.');
     }
@@ -194,7 +194,7 @@ export class SqliteCyclopeanLiftRepository implements CyclopeanLiftRepository {
     const now = new Date().toISOString();
     await this.db.withTransactionAsync(async () => {
       await this.db.runAsync(
-        `UPDATE cyclopean_lifts SET
+        `UPDATE construction_lifts SET
           concrete_calculation_method=?,concrete_estimated_matrix_volume_m3=?,
           concrete_calc_length_m=?,concrete_calc_height_m=?,concrete_calc_bottom_thickness_m=?,concrete_calc_top_thickness_m=?,concrete_calc_deduction_m3=?,concrete_calc_gross_volume_m3=?,concrete_calc_net_volume_m3=?,
           concrete_actual_ready_mix_m3=?,concrete_manual_override=?,concrete_purpose=?,concrete_work_date=?,concrete_notes=?,
@@ -205,7 +205,7 @@ export class SqliteCyclopeanLiftRepository implements CyclopeanLiftRepository {
         phase.actualReadyMixQuantityM3, phase.manualOverride ? 1 : 0, phase.purpose || null, phase.workDate, phase.notes || null,
         deriveLiftStatus({stonePhase: before.stonePhase, concretePhase: phase}), now, liftId,
       );
-      await this.enqueue('cyclopeanLiftConcretePhase', liftId, {...phase, updatedAt: now}, now);
+      await this.enqueue('constructionLiftConcretePhase', liftId, {...phase, updatedAt: now}, now);
     });
     return this.requireLift(liftId);
   }
@@ -216,7 +216,7 @@ export class SqliteCyclopeanLiftRepository implements CyclopeanLiftRepository {
    * is refused unless every currently-planned lift for this parent is named, so none can be silently
    * displaced by an incomplete list.
    */
-  async reorderPlannedLifts(parentType: 'foundation' | 'wall', parentId: string, orderedLiftIds: string[]): Promise<CyclopeanLift[]> {
+  async reorderPlannedLifts(parentType: 'foundation' | 'wall', parentId: string, orderedLiftIds: string[]): Promise<ConstructionLift[]> {
     const all = parentType === 'foundation' ? await this.listLiftsForFoundation(parentId) : await this.listLiftsForWall(parentId);
     const planned = all.filter(l => l.status === 'planned');
     const plannedIds = new Set(planned.map(l => l.id));
@@ -232,12 +232,12 @@ export class SqliteCyclopeanLiftRepository implements CyclopeanLiftRepository {
       // sequence mid-loop (the unique index is per-statement, not deferred), so every lift is first
       // moved to a placeholder sequence no real lift on this parent uses, then given its real new one.
       for (const [index, liftId] of orderedLiftIds.entries()) {
-        await this.db.runAsync('UPDATE cyclopean_lifts SET sequence=?,updated_at=? WHERE id=?', placeholderBase + index + 1, now, liftId);
+        await this.db.runAsync('UPDATE construction_lifts SET sequence=?,updated_at=? WHERE id=?', placeholderBase + index + 1, now, liftId);
       }
       for (const [index, liftId] of orderedLiftIds.entries()) {
-        await this.db.runAsync('UPDATE cyclopean_lifts SET sequence=?,updated_at=? WHERE id=?', availableSequences[index]!, now, liftId);
+        await this.db.runAsync('UPDATE construction_lifts SET sequence=?,updated_at=? WHERE id=?', availableSequences[index]!, now, liftId);
       }
-      await this.enqueue('cyclopeanLiftReorder', parentId, {parentType, parentId, orderedLiftIds, updatedAt: now}, now);
+      await this.enqueue('constructionLiftReorder', parentId, {parentType, parentId, orderedLiftIds, updatedAt: now}, now);
     });
     return parentType === 'foundation' ? this.listLiftsForFoundation(parentId) : this.listLiftsForWall(parentId);
   }

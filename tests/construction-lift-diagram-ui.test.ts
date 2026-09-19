@@ -6,21 +6,21 @@ import {describe,expect,it} from 'vitest';
  * Phase 4 UI contracts. There is no React Native renderer in this test stack, so where a behaviour
  * cannot be exercised directly these read component source to pin structure, wiring and wording.
  * The behaviour itself -- every coordinate conversion, clamp, nudge, reset, validation message and
- * drawn region -- is covered for real by tests/cyclopean-lift-diagram.test.ts and
- * tests/cyclopean-lift-drag.test.ts against the pure presentation functions those components call.
+ * drawn region -- is covered for real by tests/construction-lift-diagram.test.ts and
+ * tests/construction-lift-drag.test.ts against the pure presentation functions those components call.
  * A contract test here is therefore evidence of wiring, never of calculation.
  */
 const source=(path:string)=>readFileSync(join(__dirname,'..',path),'utf8');
 const exists=(path:string)=>existsSync(join(__dirname,'..',path));
 
-const LIFT_VIEW='src/ui/components/CyclopeanLiftDiagramView.tsx';
-const STACK_VIEW='src/ui/components/CyclopeanStackDiagramView.tsx';
+const LIFT_VIEW='src/ui/components/ConstructionLiftDiagramView.tsx';
+const STACK_VIEW='src/ui/components/ConstructionLiftStackDiagramView.tsx';
 const CONTROLS='src/ui/components/StonePlacementControls.tsx';
 const DIAGRAM_SCREEN='src/ui/screens/FoundationDiagramScreen.tsx';
 
 describe('Phase 4 components exist and add no dependency',()=>{
   it('registers every new diagram component and screen',()=>{
-    for(const path of [LIFT_VIEW,STACK_VIEW,CONTROLS,DIAGRAM_SCREEN,'src/domain/cyclopeanLiftDiagram.ts'])expect(exists(path)).toBe(true);
+    for(const path of [LIFT_VIEW,STACK_VIEW,CONTROLS,DIAGRAM_SCREEN,'src/domain/constructionLiftDiagram.ts'])expect(exists(path)).toBe(true);
   });
 
   it('draws with the react-native-svg and PanResponder the app already uses, adding no new package',()=>{
@@ -65,7 +65,7 @@ describe('Simple and Detailed dragging are wired to the tested pure functions',(
 
   it('shows the schematic disclosure in Simple mode and the plane in Detailed mode',()=>{
     expect(view).toContain('LIFT_DIAGRAM_PLANE_LABEL');
-    expect(source('src/domain/cyclopeanLiftDiagram.ts')).toContain('Schematic placement — not to scale');
+    expect(source('src/domain/constructionLiftDiagram.ts')).toContain('Schematic placement — not to scale');
   });
 
   it('gives visible feedback while a region is selected or being dragged',()=>{
@@ -109,41 +109,41 @@ describe('Dragging is never the only way to place Stone',()=>{
 describe('Diagrams are placed on the right screens, at the right size',()=>{
   it('puts a compact summary diagram and a View Foundation Diagram action on Foundation Overview',()=>{
     const overview=source('src/ui/screens/FoundationOverviewScreen.tsx');
-    expect(overview).toContain('CyclopeanStackDiagramView');
+    expect(overview).toContain('ConstructionLiftStackDiagramView');
     expect(overview).toContain('View Foundation Diagram');
     expect(overview).toContain('compact');
   });
 
   it('keeps the lifts list to a compact status indicator, never a full diagram per row',()=>{
-    const list=source('src/ui/screens/CyclopeanLiftsListScreen.tsx');
-    expect(list).not.toContain('CyclopeanStackDiagramView');
-    expect(list).not.toContain('CyclopeanLiftDiagramView');
+    const list=source('src/ui/screens/ConstructionLiftsListScreen.tsx');
+    expect(list).not.toContain('ConstructionLiftStackDiagramView');
+    expect(list).not.toContain('ConstructionLiftDiagramView');
     expect(list).toContain('LiftStatusPill');
   });
 
   it('shows the selected lift with drag controls in the Stone editor',()=>{
     const stone=source('src/ui/screens/StoneLiftEditorScreen.tsx');
-    expect(stone).toContain('CyclopeanLiftDiagramView');
+    expect(stone).toContain('ConstructionLiftDiagramView');
     expect(stone).toContain('StonePlacementControls');
     expect(stone).toMatch(/draggable/);
   });
 
   it('shows the same lift in the Concrete editor, with its concrete state and no dragging',()=>{
     const concrete=source('src/ui/screens/ConcreteMatrixEditorScreen.tsx');
-    expect(concrete).toContain('CyclopeanLiftDiagramView');
+    expect(concrete).toContain('ConstructionLiftDiagramView');
     expect(concrete).not.toContain('StonePlacementControls');
     expect(concrete).toMatch(/draggable=\{false\}|draggable={false}/);
   });
 
   it('shows the full ordered diagram and legend on Foundation Summary',()=>{
     const summary=source('src/ui/screens/FoundationSummaryScreen.tsx');
-    expect(summary).toContain('CyclopeanStackDiagramView');
+    expect(summary).toContain('ConstructionLiftStackDiagramView');
     expect(summary).not.toContain('compact={true}');
   });
 
   it('shows a combined foundation and wall schematic on Wall Overview',()=>{
     const wall=source('src/ui/screens/WallOverviewScreen.tsx');
-    expect(wall).toContain('buildCombinedCyclopeanDiagram');
+    expect(wall).toContain('buildCombinedConstructionLiftDiagram');
   });
 
   it('keeps History to a static representation with no interactive dragging',()=>{
@@ -154,7 +154,7 @@ describe('Diagrams are placed on the right screens, at the right size',()=>{
 
   it('adds no diagram to unrelated screens',()=>{
     for(const path of ['src/ui/screens/FoundationGeometryScreen.tsx','src/ui/screens/FoundationCuringScreen.tsx','src/ui/screens/WallLinkOrCreateScreen.tsx']){
-      expect(source(path)).not.toContain('CyclopeanLiftDiagramView');
+      expect(source(path)).not.toContain('ConstructionLiftDiagramView');
     }
   });
 });
@@ -168,8 +168,11 @@ describe('Navigation stays complete and honest',()=>{
     expect(source('src/ui/screens/FoundationOverviewScreen.tsx')).toContain('onOpenDiagram');
   });
 
-  it('returns the diagram screen to the foundation overview, not to a dead end',()=>{
-    expect(navigator).toMatch(/view\.kind==='diagram'[\s\S]{0,400}onBack=\{\(\)=>setView\(\{kind:'overview'\}\)\}/);
+  it('returns the diagram screen to where it was opened from, not to a dead end',()=>{
+    // DEC-469 replaced the hardcoded parent with a navigation stack, so Back retraces the real path.
+    // The stack rules themselves are unit-tested in tests/phase6-device-fixes.test.ts.
+    expect(navigator).toMatch(/view\.kind==='diagram'[\s\S]{0,400}onBack=\{goBack\}/);
+    expect(navigator).toContain('foundationViewStack');
   });
 
   it('never routes to a screen that was deleted in Phase 3',()=>{
@@ -193,7 +196,7 @@ describe('Existing behaviour the diagrams must not remove',()=>{
   });
 
   it('keeps the legacy composite stage visible and labelled, not redrawn as lifts',()=>{
-    expect(source('src/domain/cyclopeanLiftDiagram.ts')).toContain('legacyStage');
+    expect(source('src/domain/constructionLiftDiagram.ts')).toContain('legacyStage');
     const summary=source('src/ui/screens/FoundationSummaryScreen.tsx');
     expect(summary).toMatch(/legacyStage|legacy/i);
   });

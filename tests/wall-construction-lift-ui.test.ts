@@ -8,20 +8,20 @@ import {describe,expect,it} from 'vitest';
 const source=(path:string)=>readFileSync(join(__dirname,'..',path),'utf8');
 const exists=(path:string)=>existsSync(join(__dirname,'..',path));
 
-describe('Cyclopean Lift UI: route/screen registration',()=>{
-  it('wires a Cyclopean Lift repository alongside the wall repository, all the way to the screen',()=>{
+describe('Lift UI: route/screen registration',()=>{
+  it('wires a Lift repository alongside the wall repository, all the way to the screen',()=>{
     const app=source('src/ui/DromexApp.tsx');
-    expect(app).toContain('SqliteCyclopeanLiftRepository');
-    expect(app).toContain('cyclopeanLiftRepository');
-    expect(app).toMatch(/<WallConstructionScreen[^;]*liftRepository=\{cyclopeanLiftRepository\}/);
+    expect(app).toContain('SqliteConstructionLiftRepository');
+    expect(app).toContain('constructionLiftRepository');
+    expect(app).toMatch(/<WallConstructionScreen[^;]*liftRepository=\{constructionLiftRepository\}/);
     const screen=source('src/ui/screens/WallConstructionScreen.tsx');
-    expect(screen).toContain('liftRepository:CyclopeanLiftRepository');
+    expect(screen).toContain('liftRepository:ConstructionLiftRepository');
     expect(screen).toContain('<FoundationConstructionNavigator');
   });
   it('registers every dedicated screen file the approved architecture requires',()=>{
     for(const path of [
       'src/ui/screens/FoundationOverviewScreen.tsx','src/ui/screens/FoundationGeometryScreen.tsx',
-      'src/ui/screens/CyclopeanLiftsListScreen.tsx','src/ui/screens/StoneLiftEditorScreen.tsx',
+      'src/ui/screens/ConstructionLiftsListScreen.tsx','src/ui/screens/StoneLiftEditorScreen.tsx',
       'src/ui/screens/ConcreteMatrixEditorScreen.tsx','src/ui/screens/FoundationSummaryScreen.tsx',
       'src/ui/screens/FoundationCuringScreen.tsx','src/ui/screens/WallOverviewScreen.tsx',
       'src/ui/screens/WallGeometryScreen.tsx','src/ui/screens/WallMaterialsScreen.tsx',
@@ -42,7 +42,7 @@ describe('Construction Section -> Foundation navigation stays intact',()=>{
 describe('Foundation Overview actions',()=>{
   const overview=source('src/ui/screens/FoundationOverviewScreen.tsx');
   it('shows summaries only, with one action per destination',()=>{
-    for(const label of ['Edit Geometry','Cyclopean Lifts','Foundation Summary','Curing','History'])expect(overview).toContain(label);
+    for(const label of ['Edit Geometry','Lifts','Foundation Summary','Curing','History'])expect(overview).toContain(label);
     expect(overview).not.toContain('<LiftVolumeCalculator');
     expect(overview).not.toContain('<StoneLiftEditorScreen');
   });
@@ -59,14 +59,14 @@ describe('Foundation Overview actions',()=>{
 describe('Wall Overview actions',()=>{
   const overview=source('src/ui/screens/WallOverviewScreen.tsx');
   it('shows summaries and separate navigation to Geometry, Lifts, Materials, and History',()=>{
-    for(const label of ['Wall Geometry','Wall Cyclopean Lifts','Layers and Materials','History and Corrections'])expect(overview).toContain(label);
+    for(const label of ['Wall Geometry','Wall Lifts','Layers and Materials','History and Corrections'])expect(overview).toContain(label);
     expect(overview).toContain('reconcileWall(');
     expect(overview).toContain('<LiftReconciliationPanel');
   });
 });
 
 describe('Dedicated geometry screens never mix in material or lift calculators',()=>{
-  it('Foundation Geometry has no Cyclopean Lift calculator or Stone/Concrete phase forms',()=>{
+  it('Foundation Geometry has no Lift calculator or Stone/Concrete phase forms',()=>{
     const geometry=source('src/ui/screens/FoundationGeometryScreen.tsx');
     expect(geometry).toContain('<FoundationGeometryForm');
     expect(geometry).not.toContain('<LiftVolumeCalculator');
@@ -81,12 +81,12 @@ describe('Dedicated geometry screens never mix in material or lift calculators',
   });
 });
 
-describe('Cyclopean Lifts list ordering and pending-concrete next action',()=>{
-  const list=source('src/ui/screens/CyclopeanLiftsListScreen.tsx');
+describe('Lifts list ordering and pending-concrete next action',()=>{
+  const list=source('src/ui/screens/ConstructionLiftsListScreen.tsx');
   it('lists lifts through the repository, which orders them deterministically by sequence',()=>{
     expect(list).toContain('listLiftsForFoundation(');
     expect(list).toContain('listLiftsForWall(');
-    const repo=source('src/data/repositories/SqliteCyclopeanLiftRepository.ts');
+    const repo=source('src/data/repositories/SqliteConstructionLiftRepository.ts');
     expect(repo).toContain('orderLiftsBySequence(');
   });
   it('shows one clear primary action per lift, matching its honest status',()=>{
@@ -167,7 +167,7 @@ describe('Curing remains non-blocking',()=>{
     const actionsBlock=overview.slice(overview.indexOf('<View style={styles.actions}>'),overview.indexOf('</View>\n  </View>;'));
     expect(actionsBlock).not.toContain('curingConfirmed');
     expect(actionsBlock).not.toContain('disabled=');
-    for(const label of ['Edit Geometry','Cyclopean Lifts','Foundation Summary','Curing','History'])expect(actionsBlock).toContain(label);
+    for(const label of ['Edit Geometry','Lifts','Foundation Summary','Curing','History'])expect(actionsBlock).toContain(label);
   });
 });
 
@@ -187,7 +187,7 @@ describe('Touch targets, keyboard-safe layout, and reduced motion',()=>{
   it('shared interactive components keep comfortable touch targets',()=>{
     // SaveContinueFooter composes AppButton, whose own minHeight:48 (AppPrimitives.tsx) already guarantees the target size.
     expect(source('src/ui/components/SaveContinueFooter.tsx')).toContain('<AppButton');
-    for(const path of ['src/ui/screens/CyclopeanLiftsListScreen.tsx','src/ui/screens/StoneLiftEditorScreen.tsx'])
+    for(const path of ['src/ui/screens/ConstructionLiftsListScreen.tsx','src/ui/screens/StoneLiftEditorScreen.tsx'])
       expect(source(path)).toMatch(/minHeight:(4[4-9]|[5-9]\d)/);
   });
 });
@@ -208,7 +208,7 @@ describe('uses no em-dash in new wall-construction copy',()=>{
     const paths=[
       'src/ui/components/LiftVolumeCalculator.tsx','src/ui/components/LiftStatusPill.tsx','src/ui/components/LiftVarianceRow.tsx',
       'src/ui/components/ParentContextHeader.tsx','src/ui/components/SaveContinueFooter.tsx','src/ui/components/LiftReconciliationPanel.tsx',
-      'src/ui/screens/CyclopeanLiftsListScreen.tsx','src/ui/screens/StoneLiftEditorScreen.tsx','src/ui/screens/ConcreteMatrixEditorScreen.tsx',
+      'src/ui/screens/ConstructionLiftsListScreen.tsx','src/ui/screens/StoneLiftEditorScreen.tsx','src/ui/screens/ConcreteMatrixEditorScreen.tsx',
       'src/ui/screens/FoundationOverviewScreen.tsx','src/ui/screens/FoundationGeometryScreen.tsx','src/ui/screens/FoundationSummaryScreen.tsx',
       'src/ui/screens/FoundationCuringScreen.tsx','src/ui/screens/WallOverviewScreen.tsx','src/ui/screens/WallGeometryScreen.tsx',
       'src/ui/screens/WallMaterialsScreen.tsx','src/ui/screens/WallLinkOrCreateScreen.tsx','src/ui/screens/HistoryAndCorrectionsScreen.tsx',

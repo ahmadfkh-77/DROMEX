@@ -5,21 +5,21 @@ import {
   buildLiftDiagram,describeStonePlacement,liftDragBounds,liftStoneOffsetsFromViewBoxPoint,
   liftStonePositionFromViewBoxPoint,shouldClaimDragGesture,stoneTouchesRegion,viewBoxPointFromTouch,
   DEFAULT_LIFT_STONE_POSITION,LIFT_DIAGRAM_PLANE_LABEL,type LiftDiagramLift,
-} from '../../domain/cyclopeanLiftDiagram';
-import type {LiftStoneOffsets,LiftStonePosition} from '../../domain/wallCyclopeanLift';
+} from '../../domain/constructionLiftDiagram';
+import type {LiftStoneOffsets,LiftStonePosition} from '../../domain/wallConstructionLift';
 import {colors,radius} from '../theme';
 import {DiagramCanvas} from './DiagramCanvas';
 
 export type StonePlacement={position:LiftStonePosition|null;offsets:LiftStoneOffsets|null};
 
 /**
- * DEC-466 Phase 4. One Cyclopean Lift drawn on screen, optionally with its Stone region draggable by
- * finger. Every conversion from touch to placement lives in domain/cyclopeanLiftDiagram.ts, so the
+ * DEC-466 Phase 4. One Lift drawn on screen, optionally with its Stone region draggable by
+ * finger. Every conversion from touch to placement lives in domain/constructionLiftDiagram.ts, so the
  * drawn region and the draggable region are computed once and cannot drift apart, and the arithmetic
  * is unit-tested without a renderer. Dragging changes only where the Stone is drawn -- never its
  * recorded volume, and never its measured dimensions in Detailed mode.
  */
-export function CyclopeanLiftDiagramView({lift,contextLabel,caption,draggable=false,onPlacementChange}:{
+export function ConstructionLiftDiagramView({lift,contextLabel,caption,draggable=false,onPlacementChange}:{
   lift:LiftDiagramLift;contextLabel?:string|null;caption?:string;
   /** True only in an editor, once the lift actually has Stone to place. */
   draggable?:boolean;
