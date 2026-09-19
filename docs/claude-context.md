@@ -617,11 +617,35 @@ values on its next save.
   a `Cyclopean Lifts` sheet (numeric cells, frozen filterable header, empty is never written as
   zero). Curing stays informational, and a pre-lift foundation keeps its
   `Imported legacy composite stage` block with nothing invented for it.
-- **Verification**: typecheck clean and the complete Vitest suite green (773 tests across 65
-  files) as of DEC-465. The cyclopean phases added their own suites and were verified by targeted
-  sequential runs rather than a full-suite run, to stay inside the build machine's disk budget. The
-  React Native screens were verified by typecheck and source-contract
-  tests only. **Not yet verified on a physical device or in Expo Go.**
+- **Foundation records capacity, not consumption** (DEC-468, migration 44): found during Phase 6
+  device testing — a `planned` foundation could not be saved without claiming a consumed quantity,
+  because `foundations.quantity` was `NOT NULL CHECK (quantity > 0)`, and the form additionally
+  validated a *substituted* calculated volume so Save looked enabled while the repository refused the
+  real `null`. Migration 44 rebuilds only `foundations` so `material_type`/`quantity`/`quantity_unit`
+  are nullable and all-or-nothing (enforced by a table CHECK); the material selector, consumed
+  quantity, unit, purpose, consumption date, manual override and "Use Calculated" are removed from the
+  Foundation screens; the result is labelled **Structural envelope volume**; and actual Stone and
+  concrete are recorded only through Cyclopean Lift phases. An existing populated record survives
+  untouched and is shown read-only as **Legacy foundation material record**.
+- **Nine device-testing corrections** (DEC-469): found by the Owner using the workflow on a real
+  phone, all invisible to typecheck and the automated suite. Stone was drawn at ~11% of the envelope
+  area instead of its true volume share (both axes now scale by `sqrt(ratio)`); poured concrete lost
+  its hatch so colour alone distinguished it; the Stone editor showed a stale estimated concrete
+  (9 m³ beside 4.5 m³ of Stone in a 9 m³ lift); Detailed-mode offsets could not accept a decimal at
+  all and lagged while typing; Back could not return from the Concrete Matrix to the Stone phase
+  (replaced by the unit-tested `ui/navigation/foundationViewStack.ts` history stack); History was
+  permanently empty because it read only corrections; and `correctLift` had no UI entry point at all,
+  which is why no correction could ever be written. Plus the Owner's wording change
+  ("Cyclopean Lifts" → "Lifts" in-app) and an explanation of the Structural capacity figures.
+- **Verification**: typecheck clean and the complete Vitest suite green — **1172 tests across 82
+  files** after DEC-475. The React Native screens are verified by typecheck and source-contract tests
+  plus the Owner's own Expo Go session, which confirmed the DEC-468 foundation fix and the
+  Stone → Concrete flow end to end. The Owner confirmed the DEC-469 fixes, the
+  DEC-473 rename, migration 45, the DEC-474 Foundation structural-envelope diagram and the corrected
+  PDF wording in an Expo Go session on 2026-09-19, including that existing Lift records survived the
+  `cyclopean_lifts` → `construction_lifts` rename. **That acceptance covers Expo Go only. No APK has
+  been built or installed, so upgrade-install behaviour against the Owner's real on-phone database is
+  still unverified — Expo Go uses its own separate database.**
 
 ## Standing rules this project expects every session to follow
 

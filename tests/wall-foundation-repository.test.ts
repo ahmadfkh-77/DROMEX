@@ -35,7 +35,7 @@ async function setup(){
 }
 
 describe('migration 42: independent foundations',()=>{
-  it('is at least version 42 (migration 43 adds Cyclopean Lifts on top, additively)',()=>{expect(DATABASE_VERSION).toBeGreaterThanOrEqual(42);});
+  it('is at least version 42 (migration 43 adds Lifts on top, additively)',()=>{expect(DATABASE_VERSION).toBeGreaterThanOrEqual(42);});
 
   it('creates a foundation independently of any wall',async()=>{
     const {foundation}=await setup();

@@ -34,7 +34,13 @@ export function calculateBaseVolume(geometry:BaseGeometry){
   return{grossVolumeM3:result.grossVolumeM3,netVolumeM3:result.netVolumeM3};
 }
 
-export function validateWallBase(draft:Omit<WallBaseDraft,'wallId'>):string[]{
+/**
+ * DEC-468. The dimension rules alone, with no material opinion, so a wall base and a Foundation can
+ * share exactly one copy of the geometry checks while keeping their own material policy: a legacy
+ * per-wall base still requires a recorded consumption, a Foundation records a structural envelope
+ * and leaves its materials to the Lift phases.
+ */
+export function validateBaseDimensions(draft:BaseGeometry&{reference:string}):string[]{
   const issues:string[]=[];
   if(!draft.reference.trim())issues.push('Enter a base reference or description.');
   if(!validPositive(draft.lengthM))issues.push('Base length must be greater than zero with no more than three decimals.');
@@ -42,9 +48,21 @@ export function validateWallBase(draft:Omit<WallBaseDraft,'wallId'>):string[]{
   if(!validPositive(draft.bottomThicknessM))issues.push('Base bottom thickness must be greater than zero with no more than three decimals.');
   if(!validPositive(draft.topThicknessM))issues.push('Base top thickness must be greater than zero with no more than three decimals.');
   if(!Number.isFinite(draft.deductionM3)||draft.deductionM3<0||!hasThreeDecimalsAtMost(draft.deductionM3))issues.push('Base deductions must be zero or more with no more than three decimals.');
+  return issues;
+}
+
+/** Only meaningful once `validateBaseDimensions` is clean, which is why it is kept separate. */
+export function validateBaseDeduction(draft:BaseGeometry):string[]{
+  const {grossVolumeM3}=calculateBaseVolume(draft);
+  return draft.deductionM3>=grossVolumeM3?['Base deductions must be smaller than the gross base volume.']:[];
+}
+
+/** The legacy per-wall base, unchanged: it has always required a recorded material consumption. */
+export function validateWallBase(draft:Omit<WallBaseDraft,'wallId'>):string[]{
+  const issues:string[]=validateBaseDimensions(draft);
   if(issues.length)return issues;
-  const {grossVolumeM3,netVolumeM3}=calculateBaseVolume(draft);
-  if(draft.deductionM3>=grossVolumeM3)issues.push('Base deductions must be smaller than the gross base volume.');
+  const {netVolumeM3}=calculateBaseVolume(draft);
+  issues.push(...validateBaseDeduction(draft));
   const concrete=draft.materialType!=='stone';
   if(concrete&&!draft.concretePurpose&&!draft.customPurposeId)issues.push('Choose the concrete / mortar purpose for the base.');
   if(draft.concretePurpose&&draft.customPurposeId)issues.push('Choose one concrete / mortar purpose.');

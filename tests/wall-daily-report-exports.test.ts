@@ -123,7 +123,7 @@ describe('Daily Report workbook: Wall Construction sheet',()=>{
   const rows=()=>sheets().find(sheet=>sheet.name==='Wall Construction')!.rows;
 
   it('adds the wall sheets after Waste Dumps and before Photos',()=>{
-    expect(sheets().map(sheet=>sheet.name)).toEqual(['Report Overview','Work Details','Presence','Worker Safety','Materials','Linked Loads','Supplier Loads','Fuel Used','Waste Dumps','Wall Construction','Wall Layers','Wall Foundations','Cyclopean Lifts','Foundations Without a Wall','Photos']);
+    expect(sheets().map(sheet=>sheet.name)).toEqual(['Report Overview','Work Details','Presence','Worker Safety','Materials','Linked Loads','Supplier Loads','Fuel Used','Waste Dumps','Wall Construction','Wall Layers','Wall Foundations','Lifts','Foundations Without a Wall','Photos']);
   });
 
   it('lists every layer with its phase order and thicknesses, agreeing with the PDF legend',()=>{

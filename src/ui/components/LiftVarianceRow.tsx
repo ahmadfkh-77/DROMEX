@@ -1,6 +1,6 @@
 import {StyleSheet,Text,View} from 'react-native';
 
-import type {ConcreteVariance} from '../../domain/wallCyclopeanLift';
+import type {ConcreteVariance} from '../../domain/wallConstructionLift';
 import {formatCubicMetres} from '../../domain/walls';
 import {colors} from '../theme';
 

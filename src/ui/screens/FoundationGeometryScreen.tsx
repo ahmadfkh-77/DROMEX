@@ -10,10 +10,9 @@ import {ParentContextHeader} from '../components/ParentContextHeader';
 import {colors} from '../theme';
 
 /**
- * DEC-466. Geometry only, live-calculated. Correcting it still goes through repository.correctFoundation,
- * which (a pre-existing repository contract this UI phase does not change) also carries the
- * foundation's own single recorded material/quantity field -- a separate, older concept from the
- * Cyclopean Lift material calculators, which never appear on this screen.
+ * DEC-466/468. Geometry only, live-calculated. A correction carries the foundation's pre-DEC-468
+ * top-level material record through untouched rather than editing or clearing it; actual Stone and
+ * concrete are recorded only through the Lift phases, never on this screen.
  */
 export function FoundationGeometryScreen({repository,foundationId,trail,onBack,onChanged}:{
   repository:WallRepository;foundationId:string;trail:string[];onBack:()=>void;onChanged?:()=>void;
@@ -21,16 +20,15 @@ export function FoundationGeometryScreen({repository,foundationId,trail,onBack,o
   const[foundation,setFoundation]=useState<Foundation|null>(null);
   const[editing,setEditing]=useState(false);
   const[form,setForm]=useState<FoundationGeometryFormValues>(emptyFoundationForm());
-  const[purposes,setPurposes]=useState<Awaited<ReturnType<WallRepository['listConcretePurposes']>>>([]);
   const[correctionReason,setCorrectionReason]=useState('');
   const[busy,setBusy]=useState(false);
   const[error,setError]=useState<string|null>(null);
   const[message,setMessage]=useState<string|null>(null);
 
   const refresh=useCallback(async()=>{
-    const[found,nextPurposes]=await Promise.all([repository.getFoundation(foundationId),repository.listConcretePurposes()]);
+    const found=await repository.getFoundation(foundationId);
     if(!found)throw new Error('Foundation was not found.');
-    setFoundation(found);setPurposes(nextPurposes);
+    setFoundation(found);
     setForm(current=>editing?current:foundationFormFrom(found));
   },[repository,foundationId,editing]);
 
@@ -55,8 +53,7 @@ export function FoundationGeometryScreen({repository,foundationId,trail,onBack,o
       <AppButton label="Edit Geometry" tone="secondary" onPress={()=>{setForm(foundationFormFrom(foundation));setEditing(true);}}/>
     </AppCard>:<AppCard title="Correct geometry">
       <AppField label="Correction reason *" value={correctionReason} onChangeText={setCorrectionReason} multiline placeholder="Example: site survey re-measured"/>
-      <FoundationGeometryForm form={form} onChange={patch=>setForm({...form,...patch})} savedPurposes={purposes} busy={busy} error={null} saveLabel="Save Correction"
-        onCreatePurpose={async label=>{const created=await repository.createConcretePurpose(label);setPurposes(await repository.listConcretePurposes());return created;}}
+      <FoundationGeometryForm form={form} onChange={patch=>setForm({...form,...patch})} busy={busy} error={null} saveLabel="Save Correction"
         onSave={()=>{
           setBusy(true);setError(null);
           void repository.correctFoundation(foundationId,{...foundationDraftFrom(form,foundation.projectId,foundation.constructionSectionId),correctionReason})

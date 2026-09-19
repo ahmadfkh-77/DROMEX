@@ -1,12 +1,12 @@
-import {useCallback,useEffect,useState} from 'react';
+import {useCallback,useEffect,useMemo,useState} from 'react';
 import {Alert,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
-import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLiftRepository';
-import {liftDiagramLiftFrom,resetLiftStoneOffsets,type LiftDiagramLift} from '../../domain/cyclopeanLiftDiagram';
-import {calculateVolumeSnapshot,deriveLiftStatus,type CyclopeanLift,type LiftStoneOffsets,type LiftStonePosition} from '../../domain/wallCyclopeanLift';
+import type {ConstructionLiftRepository} from '../../data/repositories/ConstructionLiftRepository';
+import {liftDiagramLiftFrom,resetLiftStoneOffsets,withPreviewedStone,type LiftDiagramLift} from '../../domain/constructionLiftDiagram';
+import {calculateVolumeSnapshot,deriveLiftStatus,type ConstructionLift,type LiftStoneOffsets,type LiftStonePosition} from '../../domain/wallConstructionLift';
 import {formatCubicMetres} from '../../domain/walls';
 import {AppButton,AppField,Feedback} from '../components/AppPrimitives';
-import {CyclopeanLiftDiagramView} from '../components/CyclopeanLiftDiagramView';
+import {ConstructionLiftDiagramView} from '../components/ConstructionLiftDiagramView';
 import {DatePickerField} from '../components/DatePickerField';
 import {emptyLiftVolumeForm,LiftVolumeCalculator,liftVolumeDimensionsFrom,liftVolumeFormFrom,type LiftVolumeForm} from '../components/LiftVolumeCalculator';
 import {ParentContextHeader} from '../components/ParentContextHeader';
@@ -21,9 +21,9 @@ const today=()=>new Date().toISOString().slice(0,10);
  * dedicated screen reached only after this one is saved, so the two phases are never confused.
  */
 export function StoneLiftEditorScreen({repository,liftId,trail,onBack,onContinueToConcrete}:{
-  repository:CyclopeanLiftRepository;liftId:string;trail:string[];onBack:()=>void;onContinueToConcrete:(liftId:string)=>void;
+  repository:ConstructionLiftRepository;liftId:string;trail:string[];onBack:()=>void;onContinueToConcrete:(liftId:string)=>void;
 }){
-  const[lift,setLift]=useState<CyclopeanLift|null>(null);
+  const[lift,setLift]=useState<ConstructionLift|null>(null);
   const[calculatorOn,setCalculatorOn]=useState(false);
   const[geometry,setGeometry]=useState<LiftVolumeForm>(emptyLiftVolumeForm());
   const[quantity,setQuantity]=useState('');
@@ -39,7 +39,7 @@ export function StoneLiftEditorScreen({repository,liftId,trail,onBack,onContinue
 
   const refresh=useCallback(async()=>{
     const found=await repository.getLift(liftId);
-    if(!found)throw new Error('Cyclopean Lift was not found.');
+    if(!found)throw new Error('Lift was not found.');
     setLift(found);
     if(found.stonePhase.calculationSnapshot)setGeometry(liftVolumeFormFrom(found.stonePhase.calculationSnapshot));
     setCalculatorOn(!!found.stonePhase.calculationSnapshot);
@@ -54,23 +54,26 @@ export function StoneLiftEditorScreen({repository,liftId,trail,onBack,onContinue
 
   useEffect(()=>{void refresh().catch(cause=>setError(cause instanceof Error?cause.message:'Could not load this lift.'));},[refresh]);
 
-  if(!lift)return <View style={styles.screen}><Text style={styles.detail} accessibilityLiveRegion="polite">{error??'Loading…'}</Text></View>;
-
+  // Everything derived stays above the loading guard: a hook must never sit after an early return, or
+  // the hook count changes between the loading render and the loaded one (DEC-469).
   const calculationDimensions=calculatorOn?liftVolumeDimensionsFrom(geometry):null;
-  const calculationSnapshot=calculationDimensions?calculateVolumeSnapshot(calculationDimensions):lift.stonePhase.calculationSnapshot;
+  const calculationSnapshot=calculationDimensions?calculateVolumeSnapshot(calculationDimensions):lift?.stonePhase.calculationSnapshot??null;
   const calculatedVolume=calculationDimensions?calculateVolumeSnapshot(calculationDimensions).netVolumeM3:0;
-  const useCalculated=()=>{setQuantity(String(calculatedVolume));setManualOverride(false);setDirty(true);};
+  const actualStoneQuantityM3=quantity.trim()?Number(quantity):null;
 
   // What the drawing shows is the lift as it stands in this form right now, not the last saved copy,
-  // so the placement being dragged is always the one that will be saved. Every quantity and status on
-  // it still comes from the domain.
-  const actualStoneQuantityM3=quantity.trim()?Number(quantity):null;
-  const previewLift:LiftDiagramLift={
-    ...liftDiagramLiftFrom(lift),
+  // so the placement being dragged is always the one that will be saved. `withPreviewedStone`
+  // re-derives the estimated concrete matrix from the previewed Stone, and the memo keeps typing in an
+  // unrelated field (notes, date) from rebuilding the whole figure (DEC-469).
+  const previewLift=useMemo(()=>lift?withPreviewedStone(liftDiagramLiftFrom(lift),{
     calculatedStoneVolumeM3:calculationDimensions?calculatedVolume:lift.stonePhase.calculatedStoneVolumeM3,
     actualStoneQuantityM3,stoneGeometry:calculationSnapshot,position,offsets,
     status:deriveLiftStatus({stonePhase:{...lift.stonePhase,actualStoneQuantityM3,workDate:workDate||null},concretePhase:lift.concretePhase}),
-  };
+  }):null,[lift,calculationDimensions,calculatedVolume,actualStoneQuantityM3,calculationSnapshot,position,offsets,workDate]);
+
+  if(!lift||!previewLift)return <View style={styles.screen}><Text style={styles.detail} accessibilityLiveRegion="polite">{error??'Loading…'}</Text></View>;
+
+  const useCalculated=()=>{setQuantity(String(calculatedVolume));setManualOverride(false);setDirty(true);};
   const hasStone=(actualStoneQuantityM3??0)>0||calculatedVolume>0;
 
   async function save(continueNext:boolean){
@@ -110,7 +113,7 @@ export function StoneLiftEditorScreen({repository,liftId,trail,onBack,onContinue
     <AppField label="Final Stone quantity (m³) *" value={quantity} onChangeText={value=>{setQuantity(value);setManualOverride(true);setDirty(true);}} keyboardType="decimal-pad"/>
     {manualOverride?<Text style={styles.override}>Manual override -- differs from, or was entered without, the calculator.</Text>:null}
 
-    <CyclopeanLiftDiagramView lift={previewLift} draggable={hasStone}
+    <ConstructionLiftDiagramView lift={previewLift} draggable={hasStone}
       caption="Placement only. Moving the Stone never changes its recorded volume or measured dimensions."
       onPlacementChange={placement=>{setPosition(placement.position);setOffsets(placement.offsets);setDirty(true);}}/>
     {hasStone?<StonePlacementControls lift={previewLift} position={position} offsets={offsets}

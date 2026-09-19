@@ -10,7 +10,7 @@ import {WallDiagramView} from '../components/WallDiagramView';
 import type {SavedConcretePurpose,Wall,WallConsumption} from '../../domain/walls';
 import {colors} from '../theme';
 
-/** DEC-466. The wall's own layers and recorded materials -- unchanged from the pre-Cyclopean-Lift workflow, now its own dedicated screen. */
+/** DEC-466. The wall's own layers and recorded materials -- unchanged from the pre-Lift workflow, now its own dedicated screen. */
 export function WallMaterialsScreen({repository,wallId,trail,onBack}:{repository:WallRepository;wallId:string;trail:string[];onBack:()=>void}){
   const[wall,setWall]=useState<Wall|null>(null);
   const[entries,setEntries]=useState<WallConsumption[]>([]);

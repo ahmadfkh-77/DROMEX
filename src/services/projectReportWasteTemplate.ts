@@ -1,13 +1,14 @@
 import {fuelTypeLabels} from '../domain/fuel';
 import {consultantSignoffState,netWorkMinutes,type DailyProjectReport,type LinkedFoundationActivity,type LinkedFuelFill,type LinkedProjectLoad,type LinkedQuarryLoad,type LinkedWallWork,type LinkedWasteDump,type ProjectReportSetup,type ReportProject} from '../domain/projectReports';
-import {buildLiftDiagram,liftDiagramLiftFrom,liftStatusText} from '../domain/cyclopeanLiftDiagram';
-import {liftHasManualOverride,reportStoneVolume,type CyclopeanLiftReportGroup} from '../domain/cyclopeanLiftReport';
-import {concreteMatrixVariance,type LegacyCompositeStage} from '../domain/wallCyclopeanLift';
+import {buildLiftDiagram,liftDiagramLiftFrom,liftStatusText} from '../domain/constructionLiftDiagram';
+import {liftHasManualOverride,reportStoneVolume,type ConstructionLiftReportGroup} from '../domain/constructionLiftReport';
+import {concreteMatrixVariance,type LegacyCompositeStage} from '../domain/wallConstructionLift';
 import {baseStatusLabels} from '../domain/wallBase';
 import {buildWallDiagram} from '../domain/wallDiagram';
+import {buildFoundationEnvelopeDiagram} from '../domain/foundationEnvelopeDiagram';
 import {buildFoundationDiagram} from '../domain/wallFoundationDiagram';
 import type {FoundationComposition} from '../domain/wallFoundation';
-import type {Foundation} from '../domain/foundations';
+import {describeFoundationQuantity,hasLegacyMaterialRecord,type Foundation} from '../domain/foundations';
 import {concretePurposeLabels,describeWallConsumptionQuantity,formatCubicMetres,supportsVolumeCalculation,wallConsumptionPurposeLabel,wallMaterialLabels,wallPurposeLabels,wallSystemLabels} from '../domain/walls';
 const concretePurposeLabelOf=(purpose:keyof typeof concretePurposeLabels|null)=>purpose?concretePurposeLabels[purpose]:'';
 const UNASSIGNED_SECTION='Unassigned';
@@ -35,13 +36,13 @@ const list=(values:string[])=>values.length?values.map(e).join('; '):'&mdash;';
 const fmt=(value:number)=>Number.isInteger(value)?String(value):value.toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
 
 /**
- * DEC-467. One parent's Cyclopean Lifts, in construction order, each with its own deterministic
+ * DEC-467. One parent's Lifts, in construction order, each with its own deterministic
  * Phase 4 figure beside its own numbers. Every quantity and status arrives already projected to this
  * report's work date, so nothing here filters or recalculates: a lift prints "Concrete fill pending"
  * because that is the status the projection derived, not because this template decided it.
  * `dir="auto"` lets an Arabic or mixed reference lay itself out without the template guessing.
  */
-function liftGroupHtml(group:CyclopeanLiftReportGroup|null,heading:string){
+function liftGroupHtml(group:ConstructionLiftReportGroup|null,heading:string){
   if(!group)return '';
   const totals=group.reconciliation;
   const summary=[`Allocated ${e(formatCubicMetres(totals.totalAllocatedLiftVolumeM3))} of ${e(formatCubicMetres(group.parentNetVolumeM3))}`,
@@ -66,14 +67,37 @@ function liftGroupHtml(group:CyclopeanLiftReportGroup|null,heading:string){
     ].filter(Boolean).join('');
     const dates=[lift.stonePhase.workDate?`Stone ${e(lift.stonePhase.workDate)}`:'',concrete?.workDate?`Concrete ${e(concrete.workDate)}`:''].filter(Boolean).join(' &middot; ');
     return `<div class="lift-row"><div class="lift-main"><p class="lift-title"><span class="lift-seq">${e(lift.sequence)}</span><b dir="auto">${e(lift.reference)}</b><span class="lift-status">${e(liftStatusText[lift.status])}</span></p>${dates?`<span class="sub">${dates}</span>`:''}${details}</div><div class="lift-figure">${figure}</div></div>`;
-  }).join('')||'<p class="empty">No Cyclopean Lifts recorded on or before this date</p>';
+  }).join('')||'<p class="empty">No Lifts recorded on or before this date</p>';
   return `<div class="lift-group"><h4 class="lift-head">${e(heading)}</h4><p class="lift-summary">${summary}</p>${warning}${rows}</div>`;
+}
+
+/**
+ * DEC-474. What this foundation's own material position actually is.
+ *
+ * Two independent records can exist and they are never merged or added together. A genuine top-level
+ * record made before ordered Lifts existed is a "Legacy foundation material record". The Stone and
+ * concrete actually built are recorded through Lifts, and are reported with the number of Lifts they
+ * came from so the reader can tie the figures back to the Lift block printed below. When both exist
+ * they print as two clearly separated lines, so no quantity is ever double-counted into one total.
+ */
+function foundationMaterialLineHtml(foundation:Foundation,lifts:ConstructionLiftReportGroup|null){
+  const parts:string[]=[];
+  if(hasLegacyMaterialRecord(foundation))
+    parts.push(`<span class="sub legacy-material">Legacy foundation material record: ${e(describeFoundationQuantity(foundation))}${foundation.manualOverride?' (manual override)':''} &middot; ${e(wallMaterialLabels[foundation.materialType!])}${foundation.customPurposeLabel??foundation.concretePurpose?` &middot; ${e(foundation.customPurposeLabel??concretePurposeLabelOf(foundation.concretePurpose))}`:''}</span>`);
+  const totals=lifts?.reconciliation;
+  const stone=totals?totals.totalActualStoneM3||totals.totalCalculatedStoneM3:0;
+  const concrete=totals?totals.totalActualReadyMixM3||totals.totalEstimatedConcreteM3:0;
+  const liftCount=lifts?.lifts.length??0;
+  parts.push(liftCount>0&&(stone>0||concrete>0)
+    ?`<span class="sub">Materials recorded through ${liftCount} ${liftCount===1?'Lift':'Lifts'}: Stone ${e(formatCubicMetres(stone))} &middot; Concrete ${e(formatCubicMetres(concrete))}</span>`
+    :'<span class="sub">No Lift materials recorded yet.</span>');
+  return parts.join('');
 }
 
 /** DEC-466/467. A foundation recorded before ordered lifts existed, shown as exactly that and never re-drawn as invented lifts. */
 function legacyStageHtml(stage:LegacyCompositeStage|null){
   if(!stage)return '';
-  return `<div class="legacy-stage"><b>${e(stage.label)}</b><span class="sub">Stone ${e(formatCubicMetres(stage.activeStoneM3))} &middot; estimated concrete ${e(formatCubicMetres(stage.estimatedConcreteM3))}${stage.activeReadyMixM3>0?` &middot; actual Ready Mix ${e(formatCubicMetres(stage.activeReadyMixM3))}`:''}</span><span class="sub">Recorded before ordered Cyclopean Lifts. Shown for history only.</span></div>`;
+  return `<div class="legacy-stage"><b>${e(stage.label)}</b><span class="sub">Stone ${e(formatCubicMetres(stage.activeStoneM3))} &middot; estimated concrete ${e(formatCubicMetres(stage.estimatedConcreteM3))}${stage.activeReadyMixM3>0?` &middot; actual Ready Mix ${e(formatCubicMetres(stage.activeReadyMixM3))}`:''}</span><span class="sub">Recorded before ordered Lifts. Shown for history only.</span></div>`;
 }
 
 /**
@@ -110,15 +134,22 @@ export function wallConstructionSectionHtml(walls:LinkedWallWork[],foundationAct
     // when wall material was recorded that day while curing was not yet confirmed. It never claims the
     // foundation was cured, and never hides the wall material that was actually recorded.
     const curingNote=stage&&stage!=='cured'&&wall.entries.length?'<span class="curing-note">Base curing not confirmed on this work date</span>':'';
-    const foundationBlock=foundation&&stage?`<div class="wall-base"><b>${e(foundation.reference)}</b> &middot; ${e(baseStatusLabels[stage])}${foundation.location.trim()?` &middot; ${e(foundation.location)}`:''}<span class="sub">${fmt(foundation.lengthM)} m × ${fmt(foundation.heightM)} m × ${fmt(foundation.bottomThicknessM)}${foundation.bottomThicknessM===foundation.topThicknessM?'':` to ${fmt(foundation.topThicknessM)}`} m &middot; gross ${e(formatCubicMetres(foundation.grossVolumeM3))}, deduction ${e(formatCubicMetres(foundation.deductionM3))}, net ${e(formatCubicMetres(foundation.netVolumeM3))}</span><span class="sub">Recorded ${foundation.quantity==null?'not recorded':fmt(foundation.quantity)} ${foundation.quantityUnit==='tonnes'?'t':'m³'}${foundation.manualOverride?' (manual override)':''} &middot; ${e(wallMaterialLabels[foundation.materialType])}${foundation.customPurposeLabel??foundation.concretePurpose?` &middot; ${e(foundation.customPurposeLabel??concretePurposeLabelOf(foundation.concretePurpose))}`:''}</span>${foundation.constructedOn?`<span class="sub">Constructed ${e(foundation.constructedOn)}${foundation.curingStartedOn?` &middot; curing from ${e(foundation.curingStartedOn)}`:''}${foundation.curedOn?` &middot; cured ${e(foundation.curedOn)}`:''}</span>`:''}${wall.foundationEvents.length?`<span class="base-events">${wall.foundationEvents.map(e).join(' &middot; ')}</span>`:''}${curingNote}${foundationCompositionHtml(foundation,stage,wall.foundationComposition)}${foundation.notes.trim()?`<span class="sub">${e(foundation.notes)}</span>`:''}</div>`:'';
+    const foundationBlock=foundation&&stage?`<div class="wall-base"><b>${e(foundation.reference)}</b> &middot; ${e(baseStatusLabels[stage])}${foundation.location.trim()?` &middot; ${e(foundation.location)}`:''}<span class="sub">${fmt(foundation.lengthM)} m × ${fmt(foundation.heightM)} m × ${fmt(foundation.bottomThicknessM)}${foundation.bottomThicknessM===foundation.topThicknessM?'':` to ${fmt(foundation.topThicknessM)}`} m &middot; gross ${e(formatCubicMetres(foundation.grossVolumeM3))}, deduction ${e(formatCubicMetres(foundation.deductionM3))}, net ${e(formatCubicMetres(foundation.netVolumeM3))}</span>${foundationMaterialLineHtml(foundation,wall.foundationLifts)}${foundation.constructedOn?`<span class="sub">Constructed ${e(foundation.constructedOn)}${foundation.curingStartedOn?` &middot; curing from ${e(foundation.curingStartedOn)}`:''}${foundation.curedOn?` &middot; cured ${e(foundation.curedOn)}`:''}</span>`:''}${wall.foundationEvents.length?`<span class="base-events">${wall.foundationEvents.map(e).join(' &middot; ')}</span>`:''}${curingNote}${foundationCompositionHtml(foundation,stage,wall.foundationComposition)}${foundation.notes.trim()?`<span class="sub">${e(foundation.notes)}</span>`:''}</div>`:'';
     // DEC-467. Foundation first with its own lifts, then the wall and its lifts, so the hierarchy
     // reads Construction Section -> Foundation -> its lifts -> linked Wall -> its lifts.
-    return `<div class="wall-block"><div class="wall-head"><div class="wall-title"><h3>${e(wall.wallName)}</h3><p>${e(wallSystemLabels[wall.system])} &middot; ${e(wallPurposeLabels[wall.purpose])}</p></div><p class="wall-geometry">${geometry}</p></div>${foundationBlock}${legacyStageHtml(wall.foundationLegacyStage)}${liftGroupHtml(wall.foundationLifts,'Foundation Cyclopean Lifts')}<div class="wall-figure">${figure}</div>${liftGroupHtml(wall.wallLifts,'Wall Cyclopean Lifts')}<table class="wall-table">${head}<tbody>${rows}</tbody></table></div>`;
+    return `<div class="wall-block"><div class="wall-head"><div class="wall-title"><h3>${e(wall.wallName)}</h3><p>${e(wallSystemLabels[wall.system])} &middot; ${e(wallPurposeLabels[wall.purpose])}</p></div><p class="wall-geometry">${geometry}</p></div>${foundationBlock}${legacyStageHtml(wall.foundationLegacyStage)}${liftGroupHtml(wall.foundationLifts,'Foundation Lifts')}<div class="wall-figure">${figure}</div>${liftGroupHtml(wall.wallLifts,'Wall Lifts')}<table class="wall-table">${head}<tbody>${rows}</tbody></table></div>`;
   };
   const foundationOnlyBlock=(activity:LinkedFoundationActivity)=>{
     const foundation=activity.foundation,stage=activity.foundationStatusAsOf;
-    const figure=buildWallDiagram({wall:{name:foundation.reference,lengthM:foundation.lengthM,heightM:foundation.heightM,bottomThicknessM:foundation.bottomThicknessM,topThicknessM:foundation.topThicknessM},layers:[],base:{geometry:{lengthM:foundation.lengthM,heightM:foundation.heightM,bottomThicknessM:foundation.bottomThicknessM,topThicknessM:foundation.topThicknessM},status:stage,label:foundation.reference}}).svg;
-    return `<div class="wall-block foundation-only"><div class="wall-head"><div class="wall-title"><h3>${e(foundation.reference)}</h3><p>Foundation &middot; ${e(baseStatusLabels[stage])} &middot; no wall linked yet</p></div></div><div class="wall-figure">${figure}</div>${foundationCompositionHtml(foundation,stage,activity.composition)}${legacyStageHtml(activity.legacyStage)}${liftGroupHtml(activity.lifts,'Foundation Cyclopean Lifts')}${activity.foundationEvents.length?`<span class="base-events">${activity.foundationEvents.map(e).join(' &middot; ')}</span>`:''}</div>`;
+    // DEC-474. The Foundation structural envelope, not the wall diagram. Calling buildWallDiagram with
+    // an empty layer list used to print "No layers recorded" here, which applied wall-layer vocabulary
+    // to a foundation and read as though its materials were missing. The envelope figure states the
+    // geometry only; the Lift diagrams below state the Stone and concrete actually placed.
+    const figure=buildFoundationEnvelopeDiagram({referenceLabel:foundation.reference,geometry:{lengthM:foundation.lengthM,heightM:foundation.heightM,bottomThicknessM:foundation.bottomThicknessM,topThicknessM:foundation.topThicknessM},status:stage,grossVolumeM3:foundation.grossVolumeM3,deductionM3:foundation.deductionM3,netVolumeM3:foundation.netVolumeM3}).svg;
+    // DEC-470/474. A foundation with no wall states its material position too, so the reader is never
+    // left guessing whether it was simply omitted.
+    const material=foundationMaterialLineHtml(foundation,activity.lifts);
+    return `<div class="wall-block foundation-only"><div class="wall-head"><div class="wall-title"><h3>${e(foundation.reference)}</h3><p>Foundation &middot; ${e(baseStatusLabels[stage])} &middot; no wall linked yet</p></div></div><span class="sub">${fmt(foundation.lengthM)} m × ${fmt(foundation.heightM)} m × ${fmt(foundation.bottomThicknessM)}${foundation.bottomThicknessM===foundation.topThicknessM?'':` to ${fmt(foundation.topThicknessM)}`} m &middot; structural envelope ${e(formatCubicMetres(foundation.netVolumeM3))}</span>${material}<div class="wall-figure">${figure}</div>${foundationCompositionHtml(foundation,stage,activity.composition)}${legacyStageHtml(activity.legacyStage)}${liftGroupHtml(activity.lifts,'Foundation Lifts')}${activity.foundationEvents.length?`<span class="base-events">${activity.foundationEvents.map(e).join(' &middot; ')}</span>`:''}</div>`;
   };
   // DEC-464. Grouped by Construction Section, then by foundation/wall inside it, so a report with more
   // than one site segment reads as separate work areas rather than one flat list.
@@ -254,22 +285,29 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
     .wall-base .curing-note{display:block;margin-top:1mm;font-size:7.5pt;font-weight:700;color:#9a6512}
     .construction-section{margin-top:3mm}
     .construction-section-title{font-size:10pt;font-weight:800;color:#173f67;border-bottom:.4pt solid #c9c2b4;padding-bottom:1mm;margin:0 0 2mm}
-    /* DEC-467. Cyclopean lifts read as a list of records, not a dense grid: each lift keeps its own
+    /* DEC-467. Lifts read as a list of records, not a dense grid: each lift keeps its own
        figure beside its numbers and never splits across a page, and a group heading never strands
        itself at the foot of one. Status and override are carried by text and a border, never colour. */
     .lift-group{margin:2mm 0 0;padding-left:2.5mm;border-left:1.5pt solid #173f67;break-inside:auto}
     .lift-head{break-after:avoid;page-break-after:avoid;margin:0 0 1mm;font-size:8.6pt;letter-spacing:.3pt;text-transform:uppercase;color:#173f67}
     .lift-summary{margin:0 0 1.5mm;font-size:8pt;color:#4a4a4a}
     .lift-warning{margin:0 0 1.5mm;padding:1mm 2mm;font-size:8pt;font-weight:700;color:#8e2e1b;border:1pt solid #8e2e1b}
-    .lift-row{break-inside:avoid;page-break-inside:avoid;display:flex;gap:3mm;align-items:flex-start;padding:1.5mm 0;border-bottom:.5pt dotted #d8d2c6}
+    /* DEC-472. Each detail is its own line. These spans sit outside .wall-base and .wall-table, whose
+       rules previously supplied display:block, so without this every line printed as one run-on
+       paragraph — which is exactly how it came out on the device. */
+    .lift-main .sub,.foundation-only .sub{display:block;margin-top:.6mm}
+    /* DEC-472. The figure sits under its own numbers rather than in a 46mm side column: at that width
+       a 360-unit drawing rendered its labels at roughly 4pt, which is unreadable in a printed record.
+       Still inside .lift-row, so a lift and its drawing never separate across a page. */
+    .lift-row{break-inside:avoid;page-break-inside:avoid;padding:1.5mm 0;border-bottom:.5pt dotted #d8d2c6}
     .lift-row:last-child{border-bottom:0}
-    .lift-main{flex:1 1 auto;min-width:0}
+    .lift-main{min-width:0}
     .lift-title{margin:0 0 .8mm;display:flex;gap:2mm;align-items:baseline;flex-wrap:wrap}
     .lift-title b{overflow-wrap:anywhere}
     .lift-seq{display:inline-block;min-width:5mm;padding:0 1mm;font-size:8pt;font-weight:700;text-align:center;border:1pt solid #17212b}
     .lift-status{font-size:8pt;font-weight:700;color:#04545d}
     .lift-override{display:block;font-size:8pt;font-weight:700;color:#8e2e1b}
-    .lift-figure{flex:0 0 46mm;width:46mm}
+    .lift-figure{width:118mm;max-width:100%;margin:1.5mm 0 0}
     .lift-figure svg{width:100%;height:auto}
     .legacy-stage{margin:1.5mm 0;padding:1.5mm 2mm;border:1pt dashed #9a927f;font-size:8pt}
     .legacy-stage .sub{display:block;color:#5c5c5c}

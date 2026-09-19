@@ -1,6 +1,6 @@
 import {StyleSheet,Text,View} from 'react-native';
 
-import type {LiftReconciliation} from '../../domain/wallCyclopeanLift';
+import type {LiftReconciliation} from '../../domain/wallConstructionLift';
 import {formatCubicMetres} from '../../domain/walls';
 import {colors,radius} from '../theme';
 import {Feedback,MetricCard} from './AppPrimitives';
@@ -11,6 +11,11 @@ import {Feedback,MetricCard} from './AppPrimitives';
  */
 export function LiftReconciliationPanel({netVolumeM3,reconciliation}:{netVolumeM3:number;reconciliation:LiftReconciliation}){
   return <View style={styles.wrap}>
+    <Text style={styles.explainer}>
+      The envelope is the space this foundation or wall occupies. Allocated is how much of it the lifts
+      account for, and remaining is what is not yet assigned to a lift. Stone and concrete below are
+      what has actually gone in: they are recorded per lift, never taken from the envelope.
+    </Text>
     <View style={styles.metrics}>
       <MetricCard label="Structural envelope" value={formatCubicMetres(netVolumeM3)} accent/>
       <MetricCard label="Allocated to lifts" value={formatCubicMetres(reconciliation.totalAllocatedLiftVolumeM3)}/>
@@ -31,6 +36,7 @@ export function LiftReconciliationPanel({netVolumeM3,reconciliation}:{netVolumeM
 
 const styles=StyleSheet.create({
   wrap:{gap:8},
+  explainer:{color:colors.muted,fontSize:12,lineHeight:17},
   metrics:{flexDirection:'row',flexWrap:'wrap',gap:8},
   variance:{color:colors.ink,fontSize:12,fontWeight:'800',borderRadius:radius.sm,padding:8,backgroundColor:colors.surface},
 });

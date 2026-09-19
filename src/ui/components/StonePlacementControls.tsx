@@ -1,13 +1,22 @@
+import {useEffect,useState} from 'react';
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import {
-  describeStonePlacement,nudgeLiftStoneOffsets,nudgeLiftStonePosition,resetLiftStoneOffsets,resetLiftStonePosition,
-  validateLiftStoneOffsets,LIFT_DIAGRAM_PLANE_LABEL,LIFT_NUDGE_STEP_M,LIFT_NUDGE_STEP_NORM,
+  describeStonePlacement,nudgeLiftStoneOffsets,nudgeLiftStonePosition,offsetTextMatchesValue,parseOffsetText,
+  resetLiftStoneOffsets,resetLiftStonePosition,validateLiftStoneOffsets,
+  LIFT_DIAGRAM_PLANE_LABEL,LIFT_NUDGE_STEP_M,LIFT_NUDGE_STEP_NORM,
   type LiftDiagramLift,type NudgeDirection,
-} from '../../domain/cyclopeanLiftDiagram';
-import type {LiftStoneOffsets,LiftStonePosition} from '../../domain/wallCyclopeanLift';
+} from '../../domain/constructionLiftDiagram';
+import type {LiftStoneOffsets,LiftStonePosition} from '../../domain/wallConstructionLift';
 import {AppField,Feedback} from './AppPrimitives';
 import {colors,radius} from '../theme';
+
+const offsetText=(value:number)=>Number.isFinite(value)?String(value):'';
+const offsetTexts=(offsets:LiftStoneOffsets|null)=>({
+  longitudinalOffsetM:offsetText(offsets?.longitudinalOffsetM??Number.NaN),
+  verticalOffsetM:offsetText(offsets?.verticalOffsetM??Number.NaN),
+  transverseOffsetM:offsetText(offsets?.transverseOffsetM??Number.NaN),
+});
 
 const directions:{direction:NudgeDirection;glyph:string;label:string}[]=[
   {direction:'left',glyph:'←',label:'Move Stone left'},
@@ -32,14 +41,27 @@ export function StonePlacementControls({lift,position,offsets,onPosition,onOffse
   const current={...lift,position,offsets};
   const issues=detailed?validateLiftStoneOffsets(offsets,current):[];
 
+  // DEC-469. The typed offsets are held as text and only committed once parsed. Re-rendering
+  // String(Number(text)) on every keystroke used to erase the decimal point as soon as it was typed,
+  // which made a value like 0.5 impossible to enter at all.
+  const[text,setText]=useState(()=>offsetTexts(offsets));
+  useEffect(()=>{
+    if(!offsets)return;
+    setText(currentText=>({
+      longitudinalOffsetM:offsetTextMatchesValue(currentText.longitudinalOffsetM,offsets.longitudinalOffsetM)?currentText.longitudinalOffsetM:offsetText(offsets.longitudinalOffsetM),
+      verticalOffsetM:offsetTextMatchesValue(currentText.verticalOffsetM,offsets.verticalOffsetM)?currentText.verticalOffsetM:offsetText(offsets.verticalOffsetM),
+      transverseOffsetM:offsetTextMatchesValue(currentText.transverseOffsetM,offsets.transverseOffsetM)?currentText.transverseOffsetM:offsetText(offsets.transverseOffsetM),
+    }));
+  },[offsets]);
+
   const nudge=(direction:NudgeDirection)=>{
     if(detailed)onOffsets(nudgeLiftStoneOffsets(offsets,direction,current));
     else onPosition(nudgeLiftStonePosition(position??{xNorm:.5,yNorm:.5},direction));
   };
   const reset=()=>{if(detailed)onOffsets(resetLiftStoneOffsets(current));else onPosition(resetLiftStonePosition());};
   const editOffset=(key:keyof LiftStoneOffsets)=>(value:string)=>{
-    const parsed=value.trim()===''?Number.NaN:Number(value);
-    onOffsets({...offsets!,[key]:parsed});
+    setText(current=>({...current,[key]:value}));
+    onOffsets({...offsets!,[key]:parseOffsetText(value)});
   };
   const stepLabel=detailed?`${LIFT_NUDGE_STEP_M} m`:`${Math.round(LIFT_NUDGE_STEP_NORM*100)}%`;
 
@@ -67,12 +89,9 @@ export function StonePlacementControls({lift,position,offsets,onPosition,onOffse
 
     {detailed?<View style={styles.fields}>
       <Text style={styles.plane}>{LIFT_DIAGRAM_PLANE_LABEL}</Text>
-      <AppField label="Offset along the lift (m)" value={Number.isFinite(offsets.longitudinalOffsetM)?String(offsets.longitudinalOffsetM):''}
-        onChangeText={editOffset('longitudinalOffsetM')} keyboardType="decimal-pad"/>
-      <AppField label="Offset above the lift base (m)" value={Number.isFinite(offsets.verticalOffsetM)?String(offsets.verticalOffsetM):''}
-        onChangeText={editOffset('verticalOffsetM')} keyboardType="decimal-pad"/>
-      <AppField label="Transverse offset (m) — not shown on this plane" value={Number.isFinite(offsets.transverseOffsetM)?String(offsets.transverseOffsetM):''}
-        onChangeText={editOffset('transverseOffsetM')} keyboardType="decimal-pad"/>
+      <AppField label="Offset along the lift (m)" value={text.longitudinalOffsetM} onChangeText={editOffset('longitudinalOffsetM')} keyboardType="decimal-pad"/>
+      <AppField label="Offset above the lift base (m)" value={text.verticalOffsetM} onChangeText={editOffset('verticalOffsetM')} keyboardType="decimal-pad"/>
+      <AppField label="Transverse offset (m) — not shown on this plane" value={text.transverseOffsetM} onChangeText={editOffset('transverseOffsetM')} keyboardType="decimal-pad"/>
       {issues.length?<Feedback kind="error">{issues.join(' ')}</Feedback>:null}
       <Text style={styles.note}>Measured Stone dimensions are never changed by placing it.</Text>
     </View>:null}

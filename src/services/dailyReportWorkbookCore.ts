@@ -1,9 +1,9 @@
 import { netWorkMinutes, type DailyProjectReport, type LinkedFoundationActivity, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
-import { liftHasManualOverride, type CyclopeanLiftReportGroup } from '../domain/cyclopeanLiftReport';
-import { liftStatusText } from '../domain/cyclopeanLiftDiagram';
-import { concreteMatrixVariance } from '../domain/wallCyclopeanLift';
+import { liftHasManualOverride, type ConstructionLiftReportGroup } from '../domain/constructionLiftReport';
+import { liftStatusText } from '../domain/constructionLiftDiagram';
+import { concreteMatrixVariance } from '../domain/wallConstructionLift';
 import { baseStatusLabels } from '../domain/wallBase';
-import type { Foundation } from '../domain/foundations';
+import { foundationQuantityUnitSymbol, type Foundation } from '../domain/foundations';
 import type { FoundationComposition } from '../domain/wallFoundation';
 import { concretePurposeLabels, describeWallConsumptionQuantity, supportsVolumeCalculation, wallConsumptionPurposeLabel, wallMaterialLabels, wallSystemLabels } from '../domain/walls';
 import { buildWorkbookFromSheets, localizeWorkbookSheets, type EmbeddedWorkbookImage, type SheetSpec, type WorkbookLocale } from './businessWorkbook';
@@ -59,8 +59,8 @@ export function wallFoundationRows(walls: LinkedWallWork[]) {
       'Foundation Status': baseStatusLabels[wall.foundationStatusAsOf], 'Constructed On': foundation.constructedOn, 'Curing Started': foundation.curingStartedOn, 'Cured On': foundation.curedOn,
       'Foundation Length m': foundation.lengthM, 'Foundation Height m': foundation.heightM, 'Foundation Bottom Thickness m': foundation.bottomThicknessM, 'Foundation Top Thickness m': foundation.topThicknessM,
       'Foundation Gross Volume m³': foundation.grossVolumeM3, 'Foundation Deduction m³': foundation.deductionM3, 'Foundation Net Volume m³': foundation.netVolumeM3,
-      'Recorded Quantity': foundation.quantity, 'Quantity Unit': foundation.quantityUnit === 'tonnes' ? 't' : 'm³', 'Manual Override': foundation.manualOverride ? 'Yes' : 'No',
-      Material: wallMaterialLabels[foundation.materialType], Purpose: foundation.customPurposeLabel ?? (foundation.concretePurpose ? concretePurposeLabels[foundation.concretePurpose] : null),
+      'Recorded Quantity': foundation.quantity, 'Quantity Unit': foundationQuantityUnitSymbol(foundation), 'Manual Override': foundation.manualOverride ? 'Yes' : 'No',
+      Material: foundation.materialType ? wallMaterialLabels[foundation.materialType] : null, Purpose: foundation.customPurposeLabel ?? (foundation.concretePurpose ? concretePurposeLabels[foundation.concretePurpose] : null),
       ...compositionColumns(wall.foundationComposition),
       'Consumption Date': foundation.consumptionDate, 'Events On This Date': wall.foundationEvents.join('; ') || null, 'Curing Note': foundation.curingNote.trim() || null, Notes: foundation.notes.trim() || null,
     }];
@@ -75,21 +75,21 @@ export function foundationOnlyRows(activity: LinkedFoundationActivity[]) {
       'Construction Section': entry.constructionSectionName, 'Foundation Reference': foundation.reference, Location: foundation.location.trim() || null,
       'Foundation Status': baseStatusLabels[entry.foundationStatusAsOf], 'Constructed On': foundation.constructedOn, 'Curing Started': foundation.curingStartedOn, 'Cured On': foundation.curedOn,
       'Foundation Length m': foundation.lengthM, 'Foundation Height m': foundation.heightM, 'Foundation Bottom Thickness m': foundation.bottomThicknessM, 'Foundation Top Thickness m': foundation.topThicknessM,
-      'Foundation Net Volume m³': foundation.netVolumeM3, 'Recorded Quantity': foundation.quantity, 'Quantity Unit': foundation.quantityUnit === 'tonnes' ? 't' : 'm³',
-      Material: wallMaterialLabels[foundation.materialType], ...compositionColumns(entry.composition),
+      'Foundation Net Volume m³': foundation.netVolumeM3, 'Recorded Quantity': foundation.quantity, 'Quantity Unit': foundationQuantityUnitSymbol(foundation),
+      Material: foundation.materialType ? wallMaterialLabels[foundation.materialType] : null, ...compositionColumns(entry.composition),
       'Events On This Date': entry.foundationEvents.join('; ') || null, Notes: foundation.notes.trim() || null,
     };
   });
 }
 
 /**
- * DEC-467. One row per Cyclopean Lift visible on the report date, for both foundation and wall
+ * DEC-467. One row per Lift visible on the report date, for both foundation and wall
  * parents, flat enough to filter and total in a spreadsheet. Every quantity stays a real number and a
  * quantity that has not been recorded yet stays empty rather than becoming a misleading zero; the
  * lift diagram deliberately has no cell, because a drawing embedded in a grid cannot be filtered.
  */
-export function cyclopeanLiftRows(walls: LinkedWallWork[], foundationActivity: LinkedFoundationActivity[], project: ReportProject, workDate: string) {
-  const fromGroup = (group: CyclopeanLiftReportGroup | null, context: {sectionName: string | null; sectionLocation: string | null; foundationReference: string | null; wallReference: string | null; curingStatus: string | null}) =>
+export function constructionLiftRows(walls: LinkedWallWork[], foundationActivity: LinkedFoundationActivity[], project: ReportProject, workDate: string) {
+  const fromGroup = (group: ConstructionLiftReportGroup | null, context: {sectionName: string | null; sectionLocation: string | null; foundationReference: string | null; wallReference: string | null; curingStatus: string | null}) =>
     (group?.lifts ?? []).map((lift) => {
       const concreteVariance = lift.concretePhase?.actualReadyMixQuantityM3 == null ? null
         : concreteMatrixVariance(lift.concretePhase.estimatedMatrixVolumeM3, lift.concretePhase.actualReadyMixQuantityM3).varianceM3;
@@ -164,7 +164,7 @@ export function dailyReportWorkbookSheets(report: DailyProjectReport, project: R
     { name: 'Wall Construction', rows: wallConstructionRows(wallWork) },
     { name: 'Wall Layers', rows: wallLayerRows(wallWork) },
     { name: 'Wall Foundations', rows: wallFoundationRows(wallWork) },
-    { name: 'Cyclopean Lifts', rows: cyclopeanLiftRows(wallWork, foundationActivity, project, report.workDate) },
+    { name: 'Lifts', rows: constructionLiftRows(wallWork, foundationActivity, project, report.workDate) },
     { name: 'Foundations Without a Wall', rows: foundationOnlyRows(foundationActivity) },
     { name: 'Photos', rows: report.photos.map((uri, index) => ({ Photo: index + 1, 'File name': uri.split('/').pop() ?? `photo-${index + 1}.jpg`, 'Work Date': report.workDate })), images },
   ];

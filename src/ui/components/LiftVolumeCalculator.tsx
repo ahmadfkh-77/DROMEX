@@ -1,6 +1,6 @@
 import {StyleSheet,Text,View} from 'react-native';
 
-import {calculateVolumeSnapshot, validateVolumeDimensions, type VolumeDimensions} from '../../domain/wallCyclopeanLift';
+import {calculateVolumeSnapshot, validateVolumeDimensions, type VolumeDimensions} from '../../domain/wallConstructionLift';
 import {formatCubicMetres} from '../../domain/walls';
 import {colors,radius} from '../theme';
 import {AppField} from './AppPrimitives';
@@ -12,9 +12,9 @@ const n=(value:string):number=>{const parsed=Number(value.trim().replace(',','.'
 export function liftVolumeDimensionsFrom(form:LiftVolumeForm):VolumeDimensions{return{lengthM:n(form.length),heightM:n(form.height),bottomThicknessM:n(form.bottom),topThicknessM:n(form.top),deductionM3:form.deduction.trim()?n(form.deduction):0};}
 
 /**
- * DEC-466. The one structural-volume calculator every Cyclopean Lift screen uses -- lift geometry,
+ * DEC-466. The one structural-volume calculator every Lift screen uses -- lift geometry,
  * the Stone simple calculator, and the independent Ready Mix calculator -- so the trapezoid formula
- * itself lives only in domain/wallCyclopeanLift.ts's calculateVolumeSnapshot, never duplicated here.
+ * itself lives only in domain/wallConstructionLift.ts's calculateVolumeSnapshot, never duplicated here.
  */
 export function LiftVolumeCalculator({label,helper,value,onChange,resultLabel='Net volume'}:{
   label:string;helper?:string;value:LiftVolumeForm;onChange:(value:LiftVolumeForm)=>void;resultLabel?:string;

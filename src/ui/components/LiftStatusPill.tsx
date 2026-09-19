@@ -1,6 +1,6 @@
 import {StyleSheet,Text,View} from 'react-native';
 
-import type {LiftStatus} from '../../domain/wallCyclopeanLift';
+import type {LiftStatus} from '../../domain/wallConstructionLift';
 import {colors,radius} from '../theme';
 
 /** DEC-466. The three approved, honest lift states -- never an invented fourth "inspected/approved" step. */

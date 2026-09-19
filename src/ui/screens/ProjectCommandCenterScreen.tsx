@@ -92,7 +92,7 @@ export function ProjectCommandCenterScreen({project,repository,financialReposito
       <Text style={styles.groupLabel}>PLAN &amp; CALCULATE</Text>
       <MenuAction refined polished number="01" title="Project Schedule" body="All tasks stay locked under this project." onPress={routes.onSchedule}/>
       <MenuAction refined polished number="02" title="Asphalt Pavement Calculator" body="Choose kg/m² and save this project's layer quantities." onPress={routes.onPavement}/>
-      <MenuAction refined polished number="03" title="Wall Construction" body="Calculate walls and record actual concrete, steel, stone, and site-mix consumption." onPress={routes.onWalls}/>
+      <MenuAction refined polished number="03" title="Wall + Foundation Construction" body="Construction Sections, foundations and their walls: structural envelopes first, then actual Stone and concrete recorded per Lift." onPress={routes.onWalls}/>
       <Text style={styles.groupLabel}>RECORD TODAY</Text>
       <MenuAction refined polished number="04" title="Make Daily Report" body="Record work, people, materials, issues, time, and photos." onPress={routes.onDailyReport}/>
       <MenuAction refined polished number="05" title="Make Receipt" body="Start a load with this project already selected." onPress={routes.onReceipt}/>

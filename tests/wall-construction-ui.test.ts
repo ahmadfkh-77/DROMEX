@@ -63,12 +63,17 @@ describe('Wall Construction UI contract',()=>{
   it('adds a linked Wall Construction section to the Daily Report editor and both exports',()=>{
     const reports=source('src/ui/screens/ReportsScreen.tsx');
     expect(reports).toMatch(/<LedgerSection number="08" title="Wall Construction"/);
-    expect(reports).toMatch(/<LedgerSection number="09" title="Site Notes"/);
-    expect(reports).toMatch(/<LedgerSection number="13" title="PDF Headers"/);
-    expect(reports).toContain('of 11</Text>');
+    // DEC-470 inserted Foundation Construction as its own section 09, shifting the rest up by one.
+    expect(reports).toMatch(/<LedgerSection number="09" title="Foundation Construction"/);
+    expect(reports).toMatch(/<LedgerSection number="10" title="Site Notes"/);
+    expect(reports).toMatch(/<LedgerSection number="14" title="PDF Headers"/);
+    expect(reports).toContain('of 12</Text>');
     expect(reports.match(/repository\.listLinkedWallWork\(project\.id,\s*report\.workDate\)/g)).toHaveLength(2);
-    expect(reports).toMatch(/exportAndShareProjectReport\([^;]*,includePrices,wallWork\)/);
-    expect(reports).toMatch(/exportAndShareDailyReportWorkbook\([^;]*onProgress:setExportProgress\},wallWork\)/);
+    // DEC-470 appends the foundation activity so a foundation with no wall linked also reaches both
+    // exports; DEC-471 gates it behind the Owner's include switch. The exact gated shape is pinned in
+    // tests/report-section-preferences.test.ts.
+    expect(reports).toMatch(/exportAndShareProjectReport\([^;]*,includePrices,wallWork,/);
+    expect(reports).toMatch(/exportAndShareDailyReportWorkbook\([^;]*onProgress:setExportProgress\},wallWork,/);
     expect(reports).toContain('formatVolumeCalculation(entry)');
     expect(reports).not.toContain('formatWallArea');
   });
@@ -109,7 +114,9 @@ describe('Wall Construction UI contract',()=>{
     const geometry=source('src/ui/components/FoundationGeometryForm.tsx');
     expect(geometry).toContain('validateFoundationDraft(');
     expect(geometry).toContain('calculateFoundationVolume(');
-    expect(geometry).toContain('Manual quantity override');
+    // DEC-468 removed the foundation's own material-consumption controls, the manual quantity
+    // override among them: a foundation records a structural envelope, and actual Stone and concrete
+    // belong to the Lift phases. Their absence is asserted in foundation-material-ui.test.ts.
   });
 
   it('DEC-464/466: gates wall work only on a recorded foundation, and shows a non-blocking curing notice rather than hiding anything',()=>{
@@ -144,7 +151,7 @@ describe('Wall Construction UI contract',()=>{
     expect(screen3).not.toContain('FoundationWorkspaceScreen');
     expect(screen3).toContain('<FoundationConstructionNavigator');
     const overview=source('src/ui/screens/FoundationOverviewScreen.tsx');
-    for(const action of ['Edit Geometry','Cyclopean Lifts','Foundation Summary','Curing','History'])expect(overview).toContain(action);
+    for(const action of ['Edit Geometry','Lifts','Foundation Summary','Curing','History'])expect(overview).toContain(action);
     expect(overview).not.toContain('<FoundationGeometryForm'); // summaries only, no forms on the overview itself
   });
 

@@ -1,14 +1,14 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {ScrollView,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
-import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLiftRepository';
+import type {ConstructionLiftRepository} from '../../data/repositories/ConstructionLiftRepository';
 import type {WallRepository} from '../../data/repositories/WallRepository';
 import type {ConstructionSection} from '../../domain/constructionSections';
-import {buildCyclopeanStackDiagram,stackInputFrom} from '../../domain/cyclopeanLiftDiagram';
+import {buildConstructionLiftStackDiagram,stackInputFrom} from '../../domain/constructionLiftDiagram';
 import type {Foundation} from '../../domain/foundations';
-import type {CyclopeanLift,LegacyCompositeStage,LiftReconciliation} from '../../domain/wallCyclopeanLift';
+import type {ConstructionLift,LegacyCompositeStage,LiftReconciliation} from '../../domain/wallConstructionLift';
 import {AppCard,Feedback,PageHeader} from '../components/AppPrimitives';
-import {CyclopeanStackDiagramView} from '../components/CyclopeanStackDiagramView';
+import {ConstructionLiftStackDiagramView} from '../components/ConstructionLiftStackDiagramView';
 import {ParentContextHeader} from '../components/ParentContextHeader';
 import {colors,radius} from '../theme';
 
@@ -18,10 +18,10 @@ import {colors,radius} from '../theme';
  * turning into a wall of full-size cards.
  */
 export function FoundationDiagramScreen({repository,liftRepository,foundationId,section,trail,onBack}:{
-  repository:WallRepository;liftRepository:CyclopeanLiftRepository;foundationId:string;section:ConstructionSection|null;trail:string[];onBack:()=>void;
+  repository:WallRepository;liftRepository:ConstructionLiftRepository;foundationId:string;section:ConstructionSection|null;trail:string[];onBack:()=>void;
 }){
   const[foundation,setFoundation]=useState<Foundation|null>(null);
-  const[lifts,setLifts]=useState<CyclopeanLift[]>([]);
+  const[lifts,setLifts]=useState<ConstructionLift[]>([]);
   const[reconciliation,setReconciliation]=useState<LiftReconciliation|null>(null);
   const[legacyStage,setLegacyStage]=useState<LegacyCompositeStage|null>(null);
   const[selectedLiftId,setSelectedLiftId]=useState<string|null>(null);
@@ -40,7 +40,7 @@ export function FoundationDiagramScreen({repository,liftRepository,foundationId,
 
   const diagram=useMemo(()=>{
     if(!foundation||!reconciliation)return null;
-    return buildCyclopeanStackDiagram(stackInputFrom({
+    return buildConstructionLiftStackDiagram(stackInputFrom({
       title:foundation.reference,contextLabel:section?.name??null,parentLabel:'Foundation',
       parentNetVolumeM3:foundation.netVolumeM3,lifts,reconciliation,
       curingNote:foundation.curingStartedOn?`Curing recorded from ${foundation.curingStartedOn}. Curing is informational and never blocks this drawing.`:null,
@@ -55,7 +55,7 @@ export function FoundationDiagramScreen({repository,liftRepository,foundationId,
     <ParentContextHeader trail={[...trail,'Diagram']}/>
     {error?<Feedback kind="error">{error}</Feedback>:null}
 
-    <CyclopeanStackDiagramView diagram={diagram} caption="Generated from the recorded geometry and phase data. Schematic, not a construction drawing."/>
+    <ConstructionLiftStackDiagramView diagram={diagram} caption="Generated from the recorded geometry and phase data. Schematic, not a construction drawing."/>
 
     {lifts.length?<AppCard title="Show one lift in detail">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>

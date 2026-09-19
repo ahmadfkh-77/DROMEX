@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
-import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLiftRepository';
+import type {ConstructionLiftRepository} from '../../data/repositories/ConstructionLiftRepository';
 import type {WallRepository} from '../../data/repositories/WallRepository';
 import type {ConstructionSection} from '../../domain/constructionSections';
 import type {Foundation} from '../../domain/foundations';
@@ -27,7 +27,7 @@ const pair=(first:number,firstUnit:string,second:number,secondUnit:string)=>[fir
  * Legacy walls (created before DEC-459, with no base/foundation concept at all) keep their original,
  * untouched consumption workflow in their own section below.
  */
-export function WallConstructionScreen({repository,liftRepository,onBack,initialProjectId}:{repository:WallRepository;liftRepository:CyclopeanLiftRepository;onBack:()=>void;initialProjectId?:string|null}){
+export function WallConstructionScreen({repository,liftRepository,onBack,initialProjectId}:{repository:WallRepository;liftRepository:ConstructionLiftRepository;onBack:()=>void;initialProjectId?:string|null}){
   const locked=!!initialProjectId;
   const[projects,setProjects]=useState<{id:string;name:string;customerName:string;location:string;status:string}[]>([]);
   const[projectId,setProjectId]=useState<string|null>(initialProjectId??null);
@@ -117,8 +117,7 @@ export function WallConstructionScreen({repository,liftRepository,onBack,initial
                   <Text style={styles.detail}>{baseStatusLabels[foundation.status]} · net {formatCubicMetres(foundation.netVolumeM3)}{foundation.location?` · ${foundation.location}`:''}</Text>
                 </TouchableOpacity>)}
               {creatingFoundationSection===section.id?<View style={styles.createForm}>
-                <FoundationGeometryForm form={foundationForm} onChange={patch=>setFoundationForm({...foundationForm,...patch})} savedPurposes={purposes} busy={busy} error={null} saveLabel="Save Foundation"
-                  onCreatePurpose={async label=>{const created=await repository.createConcretePurpose(label);setPurposes(await repository.listConcretePurposes());return created;}}
+                <FoundationGeometryForm form={foundationForm} onChange={patch=>setFoundationForm({...foundationForm,...patch})} busy={busy} error={null} saveLabel="Save Foundation"
                   onSave={()=>void createFoundation()}/>
                 <AppButton label="Cancel" tone="secondary" onPress={()=>setCreatingFoundationSection(null)}/>
               </View>:<AppButton label="+ New Foundation In This Section" tone="secondary" onPress={()=>{setFoundationForm(emptyFoundationForm());setCreatingFoundationSection(section.id);}}/>}

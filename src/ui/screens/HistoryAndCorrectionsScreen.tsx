@@ -1,30 +1,34 @@
 import {useCallback,useEffect,useState} from 'react';
 import {StyleSheet,Text,View} from 'react-native';
 
-import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLiftRepository';
+import type {ConstructionLiftRepository} from '../../data/repositories/ConstructionLiftRepository';
 import type {WallRepository} from '../../data/repositories/WallRepository';
-import type {CyclopeanLiftParentType} from '../../domain/wallCyclopeanLift';
+import {liftHistoryEvents,type LiftHistoryEvent,type LiftHistoryEventKind} from '../../domain/constructionLiftReport';
+import type {ConstructionLiftParentType} from '../../domain/wallConstructionLift';
 import type {WallCorrectionEntry} from '../../domain/walls';
 import {AppCard,EmptyState,Feedback,PageHeader} from '../components/AppPrimitives';
 import {ParentContextHeader} from '../components/ParentContextHeader';
 import {colors,radius} from '../theme';
 
 type Entry={source:string;entry:WallCorrectionEntry};
+const kindLabels:Record<LiftHistoryEventKind,string>={created:'Lift created',stone:'Stone phase',concrete:'Concrete matrix',correction:'Correction'};
 
 /**
- * DEC-466. One chronological timeline of every correction recorded against this foundation's or
- * wall's Cyclopean Lifts, its legacy composite records (if any), and (for a wall) its own material
- * corrections -- kept separate from every entry form, never mixed into them.
+ * DEC-466/469. One chronological timeline for this foundation or wall: when each lift was created,
+ * when its Stone was placed, when its concrete matrix was poured, plus every reasoned correction to a
+ * lift, a legacy composite record, or (for a wall) its own material records. Kept separate from every
+ * entry form, never mixed into them. Before DEC-469 this screen read only correction history, so a
+ * lift with a recorded Stone and concrete phase still showed an empty History.
  */
 export function HistoryAndCorrectionsScreen({liftRepository,wallRepository,parentType,parentId,trail,onBack}:{
-  liftRepository:CyclopeanLiftRepository;wallRepository:WallRepository;parentType:CyclopeanLiftParentType;parentId:string;trail:string[];onBack:()=>void;
+  liftRepository:ConstructionLiftRepository;wallRepository:WallRepository;parentType:ConstructionLiftParentType;parentId:string;trail:string[];onBack:()=>void;
 }){
-  const[entries,setEntries]=useState<Entry[]|null>(null);
+  const[events,setEvents]=useState<LiftHistoryEvent[]|null>(null);
   const[error,setError]=useState<string|null>(null);
 
   const refresh=useCallback(async()=>{
     const lifts=parentType==='foundation'?await liftRepository.listLiftsForFoundation(parentId):await liftRepository.listLiftsForWall(parentId);
-    const liftEntries:Entry[]=lifts.flatMap(lift=>lift.correctionHistory.map(entry=>({source:`Lift ${lift.reference}`,entry})));
+    const liftEvents=liftHistoryEvents(lifts);
     let materialEntries:Entry[]=[];
     if(parentType==='foundation'){
       const composition=await wallRepository.getFoundationComposition(parentId);
@@ -33,8 +37,11 @@ export function HistoryAndCorrectionsScreen({liftRepository,wallRepository,paren
       const detail=await wallRepository.getWall(parentId);
       materialEntries=detail.entries.flatMap(consumption=>consumption.correctionHistory.map(entry=>({source:'Wall material record',entry})));
     }
-    const all=[...liftEntries,...materialEntries].sort((a,b)=>b.entry.correctedAt.localeCompare(a.entry.correctedAt));
-    setEntries(all);
+    const materialEvents:LiftHistoryEvent[]=materialEntries.map(item=>({
+      at:item.entry.correctedAt,source:item.source,kind:'correction',summary:`Corrected: ${item.entry.reason}`,
+      changes:item.entry.changes.map(change=>({field:change.field,originalValue:change.originalValue,newValue:change.newValue})),
+    }));
+    setEvents([...liftEvents,...materialEvents].sort((first,second)=>second.at.localeCompare(first.at)));
   },[liftRepository,wallRepository,parentType,parentId]);
 
   useEffect(()=>{void refresh().catch(cause=>setError(cause instanceof Error?cause.message:'Could not load history.'));},[refresh]);
@@ -43,11 +50,11 @@ export function HistoryAndCorrectionsScreen({liftRepository,wallRepository,paren
     <PageHeader eyebrow="HISTORY AND CORRECTIONS" title={parentType==='foundation'?'Foundation History':'Wall History'} onBack={onBack}/>
     <ParentContextHeader trail={[...trail,'History']}/>
     {error?<Feedback kind="error">{error}</Feedback>:null}
-    {entries===null?null:entries.length===0?<EmptyState title="No corrections recorded" body="Reasoned corrections to lifts and materials will appear here, chronologically, with before/after values."/>:
-      entries.map((item,index)=><AppCard key={`${item.entry.correctedAt}-${index}`}>
-        <Text style={styles.source}>{item.source} · {item.entry.correctedAt}</Text>
-        <Text style={styles.reason}>{item.entry.reason}</Text>
-        {item.entry.changes.map(change=><View key={change.field} style={styles.changeRow}>
+    {events===null?null:events.length===0?<EmptyState title="Nothing recorded yet" body="Once a lift is created and its Stone and concrete phases are recorded, they appear here in order, together with any reasoned corrections and their before/after values."/>:
+      events.map((event,index)=><AppCard key={`${event.at}-${index}`}>
+        <Text style={styles.source}>{event.source} · {kindLabels[event.kind]} · {event.at.slice(0,10)}</Text>
+        <Text style={styles.reason}>{event.summary}</Text>
+        {event.changes.map(change=><View key={change.field} style={styles.changeRow}>
           <Text style={styles.field}>{change.field}</Text>
           <Text style={styles.detail}>{change.originalValue??'(none)'} → {change.newValue??'(none)'}</Text>
         </View>)}

@@ -1,27 +1,27 @@
 import {useCallback,useEffect,useState} from 'react';
 import {StyleSheet,Text,View} from 'react-native';
 
-import type {CyclopeanLiftRepository} from '../../data/repositories/CyclopeanLiftRepository';
+import type {ConstructionLiftRepository} from '../../data/repositories/ConstructionLiftRepository';
 import type {WallRepository} from '../../data/repositories/WallRepository';
-import {buildCombinedCyclopeanDiagram,stackInputFrom} from '../../domain/cyclopeanLiftDiagram';
+import {buildCombinedConstructionLiftDiagram,stackInputFrom} from '../../domain/constructionLiftDiagram';
 import {baseStatusLabels} from '../../domain/wallBase';
-import {reconcileLifts,type CyclopeanLift,type LiftReconciliation} from '../../domain/wallCyclopeanLift';
+import {reconcileLifts,type ConstructionLift,type LiftReconciliation} from '../../domain/wallConstructionLift';
 import {wallPurposeLabels,wallSystemLabels,type WallDetail} from '../../domain/walls';
 import {AppButton,AppCard,Feedback,PageHeader} from '../components/AppPrimitives';
-import {CyclopeanStackDiagramView} from '../components/CyclopeanStackDiagramView';
+import {ConstructionLiftStackDiagramView} from '../components/ConstructionLiftStackDiagramView';
 import {LiftReconciliationPanel} from '../components/LiftReconciliationPanel';
 import {ParentContextHeader} from '../components/ParentContextHeader';
 import {colors} from '../theme';
 
 /** DEC-466. The wall workspace home, organized the same way as the Foundation Overview: summaries and navigation only. */
 export function WallOverviewScreen({repository,liftRepository,wallId,trail,onBack,onOpenGeometry,onOpenLifts,onOpenMaterials,onOpenHistory}:{
-  repository:WallRepository;liftRepository:CyclopeanLiftRepository;wallId:string;trail:string[];onBack:()=>void;
+  repository:WallRepository;liftRepository:ConstructionLiftRepository;wallId:string;trail:string[];onBack:()=>void;
   onOpenGeometry:()=>void;onOpenLifts:()=>void;onOpenMaterials:()=>void;onOpenHistory:()=>void;
 }){
   const[detail,setDetail]=useState<WallDetail|null>(null);
   const[reconciliation,setReconciliation]=useState<LiftReconciliation|null>(null);
-  const[wallLifts,setWallLifts]=useState<CyclopeanLift[]>([]);
-  const[foundationLifts,setFoundationLifts]=useState<CyclopeanLift[]>([]);
+  const[wallLifts,setWallLifts]=useState<ConstructionLift[]>([]);
+  const[foundationLifts,setFoundationLifts]=useState<ConstructionLift[]>([]);
   const[foundationReconciliation,setFoundationReconciliation]=useState<LiftReconciliation|null>(null);
   const[error,setError]=useState<string|null>(null);
 
@@ -44,7 +44,7 @@ export function WallOverviewScreen({repository,liftRepository,wallId,trail,onBac
   if(!detail||!reconciliation)return <View style={styles.screen}><Text style={styles.detail} accessibilityLiveRegion="polite">{error??'Loading…'}</Text></View>;
   const{wall,foundation,stage}=detail;
   // Curing is shown on the drawing as a note and never removes wall content from it (DEC-463).
-  const combinedDiagram=buildCombinedCyclopeanDiagram({
+  const combinedDiagram=buildCombinedConstructionLiftDiagram({
     foundation:stackInputFrom({
       title:foundation?.reference??'No linked foundation',contextLabel:null,parentLabel:'Foundation',
       parentNetVolumeM3:foundation?.netVolumeM3??0,lifts:foundationLifts,
@@ -71,12 +71,12 @@ export function WallOverviewScreen({repository,liftRepository,wallId,trail,onBac
     <AppCard title="Structural capacity"><LiftReconciliationPanel netVolumeM3={wall.netVolumeM3} reconciliation={reconciliation}/></AppCard>
 
     <AppCard title="Wall on its foundation" hint="A combined schematic: wall lifts above the construction joint, foundation lifts below it.">
-      <CyclopeanStackDiagramView diagram={combinedDiagram} compact/>
+      <ConstructionLiftStackDiagramView diagram={combinedDiagram} compact/>
     </AppCard>
 
     <View style={styles.actions}>
       <AppButton label="Wall Geometry" tone="secondary" onPress={onOpenGeometry}/>
-      <AppButton label="Wall Cyclopean Lifts" tone="navy" onPress={onOpenLifts}/>
+      <AppButton label="Wall Lifts" tone="navy" onPress={onOpenLifts}/>
       <AppButton label="Layers and Materials" tone="secondary" onPress={onOpenMaterials}/>
       <AppButton label="History and Corrections" tone="secondary" onPress={onOpenHistory}/>
     </View>

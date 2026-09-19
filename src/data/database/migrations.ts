@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 43;
+export const DATABASE_VERSION = 45;
 
 type TableColumn = { name: string };
 
@@ -1457,6 +1457,131 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     `);
     currentVersion = 43;
   }
+
+  if (currentVersion === 43) {
+    // DEC-468. Corrects a data-integrity defect found during device testing: a Foundation records a
+    // structural envelope (capacity), not a material consumption, so its pre-DEC-468 top-level
+    // material_type/quantity/quantity_unit must be allowed to be absent rather than forcing the
+    // calculated volume — or an invented number — to be stored as though material had been consumed.
+    // Actual Stone and concrete belong to the Lift phases (migration 43).
+    //
+    // SQLite cannot drop a NOT NULL in place, so this rebuilds `foundations` and only `foundations`.
+    // Every column, CHECK, index and value is otherwise carried across byte-for-byte; wall_bases,
+    // cyclopean_lifts, foundation_composition_records and migrations 1-43 are untouched. Foreign keys
+    // are suspended for the swap because `walls.foundation_id` references this table; the rebuild is
+    // outside any transaction (the runner uses sequential execAsync), which is what allows the pragma
+    // to take effect. Replaying this step on an already-rebuilt table simply rebuilds it again from
+    // its own current rows, so it is safe to re-run.
+    await db.execAsync(`PRAGMA foreign_keys = OFF;`);
+    await db.execAsync(`
+      CREATE TABLE foundations_dec468 (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        construction_section_id TEXT NOT NULL REFERENCES construction_sections(id),
+        legacy_wall_id TEXT REFERENCES walls(id),
+        reference TEXT NOT NULL CHECK (length(trim(reference)) > 0),
+        location TEXT,
+        length_m REAL NOT NULL CHECK (length_m > 0),
+        height_m REAL NOT NULL CHECK (height_m > 0),
+        bottom_thickness_m REAL NOT NULL CHECK (bottom_thickness_m > 0),
+        top_thickness_m REAL NOT NULL CHECK (top_thickness_m > 0),
+        deduction_m3 REAL NOT NULL DEFAULT 0 CHECK (deduction_m3 >= 0),
+        gross_volume_m3 REAL NOT NULL CHECK (gross_volume_m3 > 0),
+        net_volume_m3 REAL NOT NULL CHECK (net_volume_m3 > 0 AND net_volume_m3 <= gross_volume_m3),
+        -- DEC-468: optional, and all-or-nothing (see the table CHECK below). The allowed values and
+        -- the greater-than-zero rule are unchanged for a record that IS present.
+        material_type TEXT CHECK (material_type IS NULL OR material_type IN ('ready_mix','site_mix','stone')),
+        concrete_purpose TEXT CHECK (concrete_purpose IS NULL OR concrete_purpose IN ('structural','filling','cyclopean_matrix','mortar','footing','coping')),
+        custom_purpose_id TEXT REFERENCES wall_concrete_purposes(id),
+        custom_purpose_label TEXT,
+        quantity REAL CHECK (quantity IS NULL OR quantity > 0),
+        quantity_unit TEXT CHECK (quantity_unit IS NULL OR quantity_unit IN ('m3','tonnes')),
+        manual_override INTEGER NOT NULL DEFAULT 0 CHECK (manual_override IN (0, 1)),
+        consumption_date TEXT,
+        status TEXT NOT NULL CHECK (status IN ('planned','constructed','curing','cured')),
+        constructed_on TEXT,
+        curing_started_on TEXT,
+        cured_on TEXT,
+        curing_note TEXT,
+        notes TEXT,
+        correction_history_json TEXT NOT NULL DEFAULT '[]',
+        foundation_mode TEXT NOT NULL DEFAULT 'single' CHECK (foundation_mode IN ('single','composite')),
+        stone_core_mode TEXT CHECK (stone_core_mode IN ('simple','detailed')),
+        stone_core_position_x REAL CHECK (stone_core_position_x IS NULL OR (stone_core_position_x >= 0 AND stone_core_position_x <= 1)),
+        stone_core_position_y REAL CHECK (stone_core_position_y IS NULL OR (stone_core_position_y >= 0 AND stone_core_position_y <= 1)),
+        stone_core_offsets_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        CHECK (constructed_on IS NULL OR curing_started_on IS NULL OR curing_started_on >= constructed_on),
+        CHECK (curing_started_on IS NULL OR cured_on IS NULL OR cured_on >= curing_started_on),
+        CHECK (status = 'planned' OR constructed_on IS NOT NULL),
+        CHECK (status <> 'curing' OR curing_started_on IS NOT NULL),
+        CHECK (status <> 'cured' OR cured_on IS NOT NULL),
+        -- A foundation either carries a complete top-level material record, or none at all. A partial
+        -- combination is refused at the database, not merely in the app.
+        CHECK (
+          (material_type IS NULL AND quantity IS NULL AND quantity_unit IS NULL) OR
+          (material_type IS NOT NULL AND quantity IS NOT NULL AND quantity_unit IS NOT NULL)
+        )
+      );
+      INSERT INTO foundations_dec468 (id,project_id,construction_section_id,legacy_wall_id,reference,location,length_m,height_m,bottom_thickness_m,top_thickness_m,deduction_m3,gross_volume_m3,net_volume_m3,material_type,concrete_purpose,custom_purpose_id,custom_purpose_label,quantity,quantity_unit,manual_override,consumption_date,status,constructed_on,curing_started_on,cured_on,curing_note,notes,correction_history_json,foundation_mode,stone_core_mode,stone_core_position_x,stone_core_position_y,stone_core_offsets_json,created_at,updated_at)
+        SELECT id,project_id,construction_section_id,legacy_wall_id,reference,location,length_m,height_m,bottom_thickness_m,top_thickness_m,deduction_m3,gross_volume_m3,net_volume_m3,material_type,concrete_purpose,custom_purpose_id,custom_purpose_label,quantity,quantity_unit,manual_override,consumption_date,status,constructed_on,curing_started_on,cured_on,curing_note,notes,correction_history_json,foundation_mode,stone_core_mode,stone_core_position_x,stone_core_position_y,stone_core_offsets_json,created_at,updated_at
+        FROM foundations;
+      DROP TABLE foundations;
+      ALTER TABLE foundations_dec468 RENAME TO foundations;
+      CREATE INDEX IF NOT EXISTS idx_foundations_project ON foundations(project_id);
+      CREATE INDEX IF NOT EXISTS idx_foundations_section ON foundations(construction_section_id);
+      CREATE INDEX IF NOT EXISTS idx_foundations_legacy_wall ON foundations(legacy_wall_id);
+    `);
+    await db.execAsync(`PRAGMA foreign_keys = ON;`);
+    currentVersion = 44;
+  }
+
+  if (currentVersion === 44) {
+    // DEC-473. Pre-release internal rename of the Lift entity. The construction term "Cyclopean"
+    // describes only one way of building a lift -- stone displacers set in a concrete matrix -- but
+    // the entity itself now carries ordinary Wall and Foundation lifts too, so the stored name was
+    // narrower than the thing it stores. The visible name in the app stays simply "Lift"; the
+    // internal name becomes ConstructionLift and this table becomes construction_lifts.
+    //
+    // This is a pure rename, not a rebuild: ALTER TABLE ... RENAME TO carries every row, column,
+    // CHECK and foreign key across untouched, so every Lift recorded during Expo development
+    // survives exactly as it is. Only the four index names have to be recreated, because SQLite has
+    // no ALTER INDEX ... RENAME; dropping and recreating an index never touches table data.
+    //
+    // Migration 43 still creates the table as cyclopean_lifts and is deliberately left alone: it is
+    // the historical record of what that migration actually did, and a database that already ran it
+    // arrives here and is renamed forward. Nothing reads cyclopean_lifts after this point.
+    // A replay is possible: several migration tests reset user_version to an older number and run
+    // the chain again. On that second pass migration 43's CREATE TABLE IF NOT EXISTS makes a fresh,
+    // empty cyclopean_lifts beside the already-renamed construction_lifts, so the rename is chosen
+    // here rather than assumed. The empty leftover is dropped only after confirming it holds no
+    // rows, so a replay can never discard a real Lift.
+    // The table names are inlined rather than bound: the migration runner is also driven by minimal
+    // adapters (the demo-backup generator among them) whose getFirstAsync forwards no parameters, and
+    // both names here are compile-time constants.
+    const table=async(name:string)=>!!(await db.getFirstAsync<{name:string}>(`SELECT name FROM sqlite_master WHERE type='table' AND name='${name}'`));
+    const renamed=await table('construction_lifts'),legacy=await table('cyclopean_lifts');
+    if(legacy&&!renamed){
+      await db.execAsync(`ALTER TABLE cyclopean_lifts RENAME TO construction_lifts;`);
+    }else if(legacy&&renamed){
+      const leftover=await db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM cyclopean_lifts');
+      if((leftover?.count??0)>0)throw new Error('Migration 45 found Lifts in both cyclopean_lifts and construction_lifts; refusing to drop either.');
+      await db.execAsync(`DROP TABLE cyclopean_lifts;`);
+    }
+    await db.execAsync(`
+      DROP INDEX IF EXISTS idx_cyclopean_lifts_foundation_seq;
+      DROP INDEX IF EXISTS idx_cyclopean_lifts_wall_seq;
+      DROP INDEX IF EXISTS idx_cyclopean_lifts_foundation;
+      DROP INDEX IF EXISTS idx_cyclopean_lifts_wall;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_construction_lifts_foundation_seq ON construction_lifts(foundation_id, sequence) WHERE foundation_id IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_construction_lifts_wall_seq ON construction_lifts(wall_id, sequence) WHERE wall_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_construction_lifts_foundation ON construction_lifts(foundation_id, sequence);
+      CREATE INDEX IF NOT EXISTS idx_construction_lifts_wall ON construction_lifts(wall_id, sequence);
+    `);
+    currentVersion = 45;
+  }
+
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);
 }

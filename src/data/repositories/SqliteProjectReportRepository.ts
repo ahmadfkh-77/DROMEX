@@ -5,8 +5,8 @@ import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, 
 import { validateDailyReport } from '../../domain/projectReports';
 import type { BaseStatus } from '../../domain/wallBase';
 import type { Foundation } from '../../domain/foundations';
-import { buildLiftReportGroup, liftHasActivityOn } from '../../domain/cyclopeanLiftReport';
-import { SqliteCyclopeanLiftRepository } from './SqliteCyclopeanLiftRepository';
+import { buildLiftReportGroup, liftHasActivityOn } from '../../domain/constructionLiftReport';
+import { SqliteConstructionLiftRepository } from './SqliteConstructionLiftRepository';
 import { SqliteWallRepository, wallConsumptionFromRow, type WallConsumptionRow } from './SqliteWallRepository';
 import type { ProjectReportRepository } from './ProjectReportRepository';
 
@@ -67,6 +67,10 @@ function fromRow(row: ReportRow): DailyProjectReport {
 /** DEC-459/464. What happened to this foundation on one work date, in the order it happens on site. */
 function foundationEventsOn(foundation:Foundation,workDate:string):string[]{
   const events:string[]=[];
+  // DEC-470. Creation is itself a dated event. A planned foundation has no constructed, curing, cured
+  // or consumption date at all -- DEC-468 correctly stopped it claiming a consumption it never had --
+  // so without this a foundation recorded today would appear in no Daily Report whatsoever.
+  if(foundation.createdAt.slice(0,10)===workDate)events.push('Foundation created');
   if(foundation.constructedOn===workDate)events.push('Foundation constructed or poured');
   if(foundation.curingStartedOn===workDate)events.push('Curing started');
   if(foundation.curedOn===workDate)events.push('Foundation confirmed cured');
@@ -161,9 +165,9 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
     // DEC-464. A wall linked to a foundation that had any event on this date, even with no wall
     // material recorded yet -- the report still shows the foundation's honest progress that day.
     const foundationWalls=await this.db.getAllAsync<{wall_id:string}>(`SELECT w.id wall_id FROM walls w JOIN foundations f ON f.id=w.foundation_id JOIN projects p ON p.id=w.project_id
-      WHERE w.project_id=? AND p.is_archived=0 AND (f.constructed_on=? OR f.curing_started_on=? OR f.cured_on=? OR f.consumption_date=?)`,projectId,workDate,workDate,workDate,workDate);
+      WHERE w.project_id=? AND p.is_archived=0 AND (date(f.created_at)=? OR f.constructed_on=? OR f.curing_started_on=? OR f.cured_on=? OR f.consumption_date=?)`,projectId,workDate,workDate,workDate,workDate,workDate);
     const walls=new SqliteWallRepository(this.db);
-    const lifts=new SqliteCyclopeanLiftRepository(this.db);
+    const lifts=new SqliteConstructionLiftRepository(this.db);
     const groups=new Map<string,LinkedWallWork>();
     for(const row of rows){
       const group=groups.get(row.wall_id)??{wallId:row.wall_id,wallName:row.w_name,system:row.w_system,purpose:row.w_purpose,lengthM:row.w_length_m,heightM:row.w_height_m,bottomThicknessM:row.w_bottom_thickness_m,topThicknessM:row.w_top_thickness_m,netVolumeM3:row.w_net_volume_m3,plannedVolumeM3:row.w_planned_volume_m3,layers:await walls.listLayers(row.wall_id),entries:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null,foundationLifts:null,wallLifts:null,foundationLegacyStage:null};
@@ -175,10 +179,10 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
       if(!wall)continue;
       groups.set(row.wall_id,{wallId:wall.id,wallName:wall.name,system:wall.system,purpose:wall.purpose,lengthM:wall.length_m,heightM:wall.height_m,bottomThicknessM:wall.bottom_thickness_m,topThicknessM:wall.top_thickness_m,netVolumeM3:wall.net_volume_m3,plannedVolumeM3:wall.planned_volume_m3,layers:[],entries:[],foundation:null,constructionSectionName:null,foundationEvents:[],foundationStatusAsOf:null,foundationComposition:null,foundationLifts:null,wallLifts:null,foundationLegacyStage:null});
     }
-    // DEC-467. A wall whose only activity that day was a Cyclopean Lift still belongs in the report,
+    // DEC-467. A wall whose only activity that day was a Lift still belongs in the report,
     // the same way a foundation's own construction or curing date already brings it in.
     for(const row of await this.db.getAllAsync<{wall_id:string}>(`SELECT DISTINCT w.id wall_id FROM walls w JOIN projects p ON p.id=w.project_id
-      LEFT JOIN cyclopean_lifts cw ON cw.wall_id=w.id LEFT JOIN cyclopean_lifts cf ON cf.foundation_id=w.foundation_id
+      LEFT JOIN construction_lifts cw ON cw.wall_id=w.id LEFT JOIN construction_lifts cf ON cf.foundation_id=w.foundation_id
       WHERE w.project_id=? AND p.is_archived=0 AND (cw.id IS NOT NULL OR cf.id IS NOT NULL)`,projectId)){
       if(groups.has(row.wall_id))continue;
       const wall=await this.db.getFirstAsync<{id:string;name:string;system:LinkedWallWork['system'];purpose:LinkedWallWork['purpose'];length_m:number;height_m:number;bottom_thickness_m:number;top_thickness_m:number;net_volume_m3:number;planned_volume_m3:number;foundation_id:string|null}>('SELECT id,name,system,purpose,length_m,height_m,bottom_thickness_m,top_thickness_m,net_volume_m3,planned_volume_m3,foundation_id FROM walls WHERE id=?',row.wall_id);
@@ -215,13 +219,13 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   /** DEC-464. Foundations with an event on this date that have no wall linked to them yet. */
   async listLinkedFoundationActivity(projectId: string, workDate: string): Promise<LinkedFoundationActivity[]> {
     // DEC-467. A foundation with no wall belongs in the report either because of its own lifecycle
-    // dates or because one of its Cyclopean Lifts did something that day.
+    // dates or because one of its Lifts did something that day.
     const rows=await this.db.getAllAsync<{id:string}>(`SELECT DISTINCT f.id FROM foundations f JOIN projects p ON p.id=f.project_id
-      LEFT JOIN cyclopean_lifts c ON c.foundation_id=f.id
+      LEFT JOIN construction_lifts c ON c.foundation_id=f.id
       WHERE f.project_id=? AND p.is_archived=0 AND f.id NOT IN (SELECT foundation_id FROM walls WHERE foundation_id IS NOT NULL)
-      AND (f.constructed_on=? OR f.curing_started_on=? OR f.cured_on=? OR f.consumption_date=? OR c.id IS NOT NULL)`,projectId,workDate,workDate,workDate,workDate);
+      AND (date(f.created_at)=? OR f.constructed_on=? OR f.curing_started_on=? OR f.cured_on=? OR f.consumption_date=? OR c.id IS NOT NULL)`,projectId,workDate,workDate,workDate,workDate,workDate);
     const walls=new SqliteWallRepository(this.db);
-    const lifts=new SqliteCyclopeanLiftRepository(this.db);
+    const lifts=new SqliteConstructionLiftRepository(this.db);
     const activity:LinkedFoundationActivity[]=[];
     for(const row of rows){
       const foundation=await walls.getFoundation(row.id);if(!foundation)continue;
