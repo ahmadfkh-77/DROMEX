@@ -14,7 +14,12 @@ import type { Pool } from 'pg';
  * auditing and Owner protection.
  */
 
-export type PrincipalStatus = 'active' | 'disabled';
+/**
+ * `pending` (DEC-444) is an invited Admin whose setup has not completed. It
+ * is never active, never the Owner, and never MFA-complete, and every gate
+ * refuses it exactly as it refuses a missing or disabled principal.
+ */
+export type PrincipalStatus = 'pending' | 'active' | 'disabled';
 
 export interface Principal {
   /** Stable Better Auth user id. The join key for historical attribution. */
@@ -77,8 +82,8 @@ export function createPrincipalRepository(pool: Pool): PrincipalRepository {
 /**
  * Raised when a principal may not proceed.
  *
- * Carries no detail on purpose, so missing and disabled principals cannot be
- * distinguished by an outside observer.
+ * Carries no detail on purpose, so missing, pending, and disabled principals
+ * cannot be distinguished by an outside observer.
  */
 export class PrincipalAccessDeniedError extends Error {
   constructor() {
@@ -89,7 +94,8 @@ export class PrincipalAccessDeniedError extends Error {
 
 /**
  * Fail-closed gate: returns the principal only when it exists and is active.
- * Everything else is refused with the identical error.
+ * Everything else, including a pending principal, is refused with the
+ * identical error.
  */
 export async function requireActivePrincipal(
   repository: PrincipalRepository,

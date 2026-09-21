@@ -1450,6 +1450,15 @@ subsection records the confirmed requirements only.
   shall load no third-party content, and security emails shall be English
   only, in plain text and HTML, with no business or secret content and no
   tracking (DEC-442).
+- An invited Admin whose setup was interrupted, cancelled, superseded, or
+  expired shall keep a never-deleted identity with DROMEX principal status
+  `pending`, which cannot sign in, hold an authorized session, or reach any
+  protected route. The Owner may invite the same address again; the identity
+  shall be resumed, never duplicated, and only after the invitee proves the
+  password created earlier, never by replacing it. Invitation validity shall
+  be re-checked at every state-changing acceptance step, and the identity
+  shall be created only by a server-internal, never-routed sign-up
+  capability (DEC-444).
 - A real Owner shall not be activated until password reset is implemented
   and verified, email delivery is production configured with valid SPF,
   DKIM, and DMARC and a monitored `Reply-To` mailbox, a real message is
@@ -1458,9 +1467,12 @@ subsection records the confirmed requirements only.
   alone do not satisfy this (DEC-443).
 - Authentication, authorisation, the permission model, email delivery,
   invitations, password reset, and the Owner
-  recovery procedure are **not implemented**. This subsection records
-  confirmed requirements for a later, separately approved implementation
-  phase, not current behaviour.
+  recovery procedure are **not in production**. Parts are implemented and
+  verified only against disposable databases (see
+  `docs/web/README.md`), including Admin invitation issuance and restricted
+  acceptance (checkpoints 4B1 and 4B2); password reset, the permission
+  model, and every production configuration are not implemented. This
+  subsection records confirmed requirements, not production behaviour.
 
 ## 15. Constraints
 

@@ -10,5 +10,11 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
+    // Same-origin API calls in local development, so the session cookie and
+    // the trusted Origin behave as they will behind the production proxy.
+    // The Origin header is preserved, never rewritten.
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:3000', changeOrigin: false },
+    },
   },
 });

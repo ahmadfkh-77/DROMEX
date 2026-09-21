@@ -26,6 +26,12 @@ import type { FastifyInstance, RouteOptions } from 'fastify';
  *                     must be the Owner (DEC-440). A state-changing method
  *                     also requires a trusted Origin, checked before the
  *                     session. The use case checks the Owner again (DEC-428).
+ * - `invitation`      reachable only to accept an Admin invitation (DEC-440,
+ *                     DEC-444), without an ordinary session. The guard
+ *                     requires an exact trusted Origin before the handler
+ *                     runs. The route itself establishes the invitee from the
+ *                     invitation token or a bound setup session, re-checks the
+ *                     invitation, and never grants business access.
  *
  * The classification itself does not authenticate anything; the
  * authentication guard in `auth/http.ts` enforces it per request. What this
@@ -39,6 +45,7 @@ export const ROUTE_ACCESS = [
   'mfa-challenge',
   'recovery',
   'owner',
+  'invitation',
 ] as const;
 
 export type RouteAccess = (typeof ROUTE_ACCESS)[number];

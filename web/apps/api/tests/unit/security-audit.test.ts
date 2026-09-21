@@ -166,6 +166,16 @@ describe('security audit writer', () => {
       'admin_invitation_delivery_accepted',
       'admin_invitation_delivery_failed',
       'admin_invitation_refused',
+      'admin_invitation_acceptance_refused',
+      'admin_invitation_identity_created',
+      'admin_invitation_identity_resumed',
+      'admin_invitation_password_rejected',
+      'admin_invitation_totp_enrolment_started',
+      'admin_invitation_totp_rejected',
+      'admin_invitation_totp_verified',
+      'admin_invitation_recovery_codes_issued',
+      'admin_invitation_sessions_revoked',
+      'admin_invitation_accepted',
     ]);
   });
 

@@ -43,7 +43,7 @@ describe('route access classification (default-deny registration)', () => {
     }).toThrow(/access/i);
   });
 
-  it('accepts each of the seven recognised classifications', async () => {
+  it('accepts each of the eight recognised classifications', async () => {
     app = await build();
 
     expect(() => {
@@ -54,6 +54,7 @@ describe('route access classification (default-deny registration)', () => {
       app!.post('/e', { config: { access: 'mfa-challenge' } }, async () => ({ ok: true }));
       app!.post('/f', { config: { access: 'recovery' } }, async () => ({ ok: true }));
       app!.get('/g', { config: { access: 'owner' } }, async () => ({ ok: true }));
+      app!.post('/h', { config: { access: 'invitation' } }, async () => ({ ok: true }));
     }).not.toThrow();
   });
 
@@ -108,6 +109,10 @@ describe('route access classification (default-deny registration)', () => {
       ['POST /api/auth/sign-in/email', 'guest-only'],
       ['POST /api/auth/sign-out', 'session-cleanup'],
       ['POST /api/auth/two-factor/verify-totp', 'mfa-challenge'],
+      ['POST /api/invitation/complete', 'invitation'],
+      ['POST /api/invitation/inspect', 'invitation'],
+      ['POST /api/invitation/password', 'invitation'],
+      ['POST /api/invitation/totp', 'invitation'],
       ['POST /api/owner/invitations', 'owner'],
       ['POST /api/owner/invitations/:id/cancel', 'owner'],
       ['POST /api/owner/invitations/:id/resend', 'owner'],
@@ -144,6 +149,54 @@ describe('route access classification (default-deny registration)', () => {
       const response = await app.inject({ method: 'POST', url: '/owner-probe', headers, payload: {} });
       expect(response.statusCode).toBe(403);
       expect(response.json()).toEqual({ error: 'forbidden' });
+    }
+  });
+
+  it('refuses every invitation-classified request without a trusted Origin, before its handler runs (DEC-444)', async () => {
+    app = await build();
+    let reached = 0;
+    app.post('/invitation-probe', { config: { access: 'invitation' } }, async () => {
+      reached += 1;
+      return { reached: true };
+    });
+    await app.ready();
+
+    for (const headers of [{}, { origin: 'https://evil.example.test' }, { origin: 'null' }, { origin: 'http://127.0.0.1:5173/extra' }]) {
+      const response = await app.inject({ method: 'POST', url: '/invitation-probe', headers, payload: {} });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ error: 'forbidden' });
+    }
+    expect(reached).toBe(0);
+
+    const trusted = await app.inject({ method: 'POST', url: '/invitation-probe', headers: { origin: 'http://127.0.0.1:5173' }, payload: {} });
+    expect(trusted.statusCode).toBe(200);
+    expect(reached).toBe(1);
+  });
+
+  it('refuses every acceptance route from an untrusted Origin or without JSON, before any database work', async () => {
+    app = await build();
+    await app.ready();
+
+    for (const url of ['/api/invitation/inspect', '/api/invitation/password', '/api/invitation/totp', '/api/invitation/complete']) {
+      const hostile = await app.inject({
+        method: 'POST',
+        url,
+        headers: { origin: 'https://evil.example.test', 'content-type': 'application/json' },
+        payload: { token: 'x' },
+      });
+      expect(hostile.statusCode, url).toBe(403);
+      expect(hostile.json()).toEqual({ error: 'forbidden' });
+
+      const form = await app.inject({
+        method: 'POST',
+        url,
+        headers: { origin: 'http://127.0.0.1:5173', 'content-type': 'text/plain' },
+        payload: '{"token":"x"}',
+      });
+      expect(form.statusCode, url).toBe(415);
+      expect(form.json()).toEqual({ error: 'unsupported_media_type' });
+      expect(form.headers['cache-control']).toBe('no-store');
+      expect(form.headers['referrer-policy']).toBe('no-referrer');
     }
   });
 

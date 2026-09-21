@@ -11,7 +11,7 @@ import { generateInvitationToken } from './invitation-token.ts';
 /**
  * Owner-managed Admin invitation issuance (DEC-440): create, resend, cancel,
  * expire, list, hand the email to the transport, and audit every step.
- * Acceptance is a later checkpoint and is not implemented here.
+ * Acceptance lives in `invitation-acceptance.ts` (checkpoint 4B2).
  *
  * **Authorization lives here as well as on the route (DEC-428).** Every
  * operation re-reads the caller's principal inside its own transaction and
@@ -386,8 +386,21 @@ export function createAdminInvitationService(deps: AdminInvitationDependencies):
         await lockEmail(client, email);
         await expireDue(client, clientAddress);
 
-        const account = await client.query(`SELECT 1 FROM "user" WHERE lower("email") = $1 LIMIT 1`, [email]);
-        if (account.rows.length > 0) throw new Refusal('account_exists');
+        // DEC-444 (2): an address whose identity is still pending in invitation
+        // setup may be invited again and resumes that identity. A completed
+        // active or disabled account, and any identity setup did not create,
+        // stays ineligible.
+        const account = await client.query<{ resumable: boolean }>(
+          `SELECT (p.status = 'pending' AND e.user_id = u.id AND e.step <> 'completed')
+                  OR (p.user_id IS NULL AND e.step = 'identity_pending' AND e.user_id IS NULL) AS resumable
+             FROM "user" u
+             LEFT JOIN dromex_principal p ON p.user_id = u.id
+             LEFT JOIN dromex_admin_enrolment e ON e.email = $1
+            WHERE lower(u."email") = $1
+            LIMIT 1`,
+          [email],
+        );
+        if (account.rows.length > 0 && account.rows[0]!.resumable !== true) throw new Refusal('account_exists');
 
         const pending = await client.query<InvitationRow>(
           `SELECT ${COLUMNS} FROM dromex_admin_invitation WHERE email = $1 AND status = 'pending' FOR UPDATE`,

@@ -164,8 +164,9 @@ describe('Owner provisioning isolation from the running server', () => {
       await app.ready();
       const routes = [...app.routeAccess.entries()].sort(([a], [b]) => a.localeCompare(b));
 
-      // The Owner invitation routes (checkpoint 4B1) are the only addition
-      // since provisioning; none of them is a provisioning route.
+      // The Owner invitation routes (checkpoint 4B1) and the invitation
+      // acceptance routes (checkpoint 4B2) are the only additions since
+      // provisioning; none of them is a provisioning or sign-up route.
       expect(routes).toEqual([
         ['GET /api/owner/invitations', 'owner'],
         ['GET /api/session', 'authenticated'],
@@ -181,6 +182,10 @@ describe('Owner provisioning isolation from the running server', () => {
         ['POST /api/auth/sign-in/email', 'guest-only'],
         ['POST /api/auth/sign-out', 'session-cleanup'],
         ['POST /api/auth/two-factor/verify-totp', 'mfa-challenge'],
+        ['POST /api/invitation/complete', 'invitation'],
+        ['POST /api/invitation/inspect', 'invitation'],
+        ['POST /api/invitation/password', 'invitation'],
+        ['POST /api/invitation/totp', 'invitation'],
         ['POST /api/owner/invitations', 'owner'],
         ['POST /api/owner/invitations/:id/cancel', 'owner'],
         ['POST /api/owner/invitations/:id/resend', 'owner'],

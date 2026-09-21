@@ -418,6 +418,13 @@ export function registerAuthenticationGuard(app: FastifyInstance, deps: AuthRout
     // Cleanup and challenge routes enforce their own Origin and state checks.
     if (access === 'public' || access === 'session-cleanup' || access === 'mfa-challenge') return;
 
+    // Invitation acceptance (DEC-444): a cross-origin caller is refused before
+    // the handler runs; the handler establishes and re-checks everything else.
+    if (access === 'invitation') {
+      if (!hasTrustedOrigin(request, deps)) return reply.code(403).send(FORBIDDEN);
+      return;
+    }
+
     // Recovery routes carry their own gate (DEC-436). The guard runs it and
     // refuses a recovery route that has none, or whose gate does not admit.
     if (access === 'recovery') {

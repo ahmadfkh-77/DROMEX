@@ -115,8 +115,9 @@ conflict or unclassifiable 409 never is), tested
 locally and not wired to the server. Nothing below is production configured
 or physically verified: no Resend account, DNS record, API key, or secret
 file exists, and no email has been sent. The Owner's side of Admin
-invitations is implemented against disposable databases (checkpoint 4B1);
-invitation acceptance and password reset are not. The full design, failure
+invitations (checkpoint 4B1) and restricted invitation acceptance
+(checkpoint 4B2, DEC-444) are implemented against disposable databases;
+password reset is not. The full design, failure
 behaviour, and dated sources are in
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#14a-transactional-email-admin-invitations-and-password-reset).
 
@@ -134,7 +135,29 @@ behaviour, and dated sources are in
   routes, re-checked in the use case; refusal of an address that already
   has an account; at most one issuance per 60 seconds and six per 24 hours
   per address; truthful delivery state; closed audit events without
-  addresses or tokens. Acceptance and enrolment are not implemented.
+  addresses or tokens. **Acceptance is implemented (checkpoint 4B2,
+  disposable databases only):** the invitee creates a password (or, when
+  resuming an interrupted setup under a newer invitation, proves the
+  password created then), enrols TOTP, sees ten recovery codes once,
+  acknowledges them, and is activated only then, after every session is
+  revoked; a fresh password-and-TOTP sign-in is required.
+- **Pending identities (DEC-444).** An identity whose setup was interrupted,
+  cancelled, superseded, or expired is never deleted. Its principal is
+  `pending`: it cannot sign in, hold an authorized session, or reach any
+  protected route, and both the database and every application gate refuse
+  it. The Owner may invite the same address again; the identity is resumed,
+  never duplicated, and only after proof of its existing password. A
+  forgotten password waits for password reset (checkpoint 4C); a lost
+  authenticator before activation has no path yet (OQ-166). An active or
+  disabled completed account is still ineligible for a new invitation.
+- **Validity at every step (DEC-444 (3)).** Every state-changing acceptance
+  step re-checks the invitation; an expired, cancelled, or superseded
+  invitation stops setup with one generic result and never activates
+  anything, while completed security work is kept for a new invitation.
+- **No public sign-up (DEC-444 (5)).** The identity is created by a
+  server-internal Better Auth instance that is never mounted on a route and
+  is reachable only from the acceptance service; architectural tests prove
+  it.
 - **Password reset (DEC-441).** Available to every enabled account,
   including the Owner; single-use, 30 minutes, same response for every
   address, all sessions revoked, and MFA never removed or bypassed.

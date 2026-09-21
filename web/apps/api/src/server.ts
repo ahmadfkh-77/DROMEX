@@ -19,6 +19,8 @@ import { loadRuntimeConfig, type RuntimeConfig } from './config/runtime.ts';
 import { checkDatabase, createPool } from './db.ts';
 import { parseLinkOrigin } from './email/message.ts';
 import { createAdminInvitationService, type InvitationDelivery } from './invitations/admin-invitations.ts';
+import { registerInvitationAcceptanceRoutes } from './invitations/acceptance-http.ts';
+import { createInvitationAcceptance } from './invitations/invitation-acceptance.ts';
 import { registerInvitationRoutes } from './invitations/invitation-http.ts';
 import { registerRouteAccessGuard } from './routeAccess.ts';
 
@@ -137,6 +139,8 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
     }
   }
   const invitations = createAdminInvitationService({ pool, audit, delivery });
+  // Owns the server-internal, never-routed sign-up capability (DEC-444 (5)).
+  const acceptance = createInvitationAcceptance({ pool, audit, settings: options.auth });
 
   const authDependencies: AuthRoutesDependencies = {
     backend: {
@@ -188,6 +192,7 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   registerRecoveryRoutes(app, { ...authDependencies, recovery, audit, recoveryBackend });
   registerAuthRoutes(app, authDependencies);
   registerInvitationRoutes(app, invitations);
+  registerInvitationAcceptanceRoutes(app, { acceptance, cookies: authDependencies.cookies });
 
   app.addHook('onClose', async () => {
     await pool.end().catch(() => undefined);

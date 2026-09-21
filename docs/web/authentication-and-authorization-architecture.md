@@ -1727,9 +1727,10 @@ resort, and the single-Owner rule never bent to provide either.
 Status: **approved design (DEC-439 through DEC-442, closing OQ-161,
 2026-09-16); only the provider-neutral email transport foundation is
 implemented locally (checkpoint 4A), and Owner-side Admin invitation
-issuance is implemented against disposable databases only (checkpoint 4B1,
-below); invitation acceptance and password reset are not. Nothing is
-production configured or physically verified.** No reset route, page, real
+issuance (checkpoint 4B1) and restricted Admin invitation acceptance
+(checkpoint 4B2, DEC-444) are implemented against disposable databases only
+(below); password reset is not. Nothing is production configured or
+physically verified.** No reset route, page, real
 invitation, Resend account, API key, DNS record, or secret file exists, and
 no email has been sent. The rest of the Accounts and Sessions phase (§23) has
 not started. The Owner activation command and the terminal
@@ -2023,10 +2024,10 @@ timers, and `fetch` are injectable, and every loop is bounded.
 ### Implemented invitation issuance (Phase 2C checkpoint 4B1, local development only)
 
 Status: **implemented and verified against disposable PostgreSQL 18.6
-databases only, on exact Node 24.20.0.** Only the Owner's side exists:
-create, list, resend, cancel, expiry, delivery handoff, and audit.
-**Invitation acceptance, the restricted Admin enrolment flow, and Admin
-account creation are not implemented**, so no invitation can yet be used. No
+databases only, on exact Node 24.20.0.** This section covers the Owner's
+side: create, list, resend, cancel, expiry, delivery handoff, and audit.
+Acceptance and restricted enrolment were added by checkpoint 4B2 (next
+section), which also refines the `account_exists` rule below. No
 email has been sent; tests use the capture transport and scripted fakes.
 The running server entry point passes no email configuration, so a real
 deployment would record invitations as `not_sent` (`email_disabled`). No
@@ -2146,11 +2147,277 @@ row holds an address, token, hash, link, or message body.
 - The `sending` state is not reconciled automatically after a crash.
 - Email configuration is not yet read from the process environment.
 
+### Implemented invitation acceptance (Phase 2C checkpoint 4B2, local development only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases only, on exact Node 24.20.0 (DEC-440 (7) to (9), DEC-442,
+DEC-444).** An invited Admin can now accept an invitation end to end on a
+development machine: create or prove a password, enrol TOTP, receive ten
+recovery codes once, acknowledge them, and be activated, after which only a
+fresh password-and-TOTP sign-in grants access. No real invitation, account,
+or email exists; every test identity is synthetic. The running server entry
+point still passes no email configuration, so no invitation email could be
+delivered by a real deployment. No Owner exists, and the Owner activation and
+terminal recovery commands still refuse every run.
+
+**The `pending` principal lifecycle (DEC-444 (4)).** Migration `0009` widens
+`dromex_principal.status` to `pending`, `active`, `disabled`, without
+rewriting any existing row. The database refuses a pending principal that is
+the Owner or carries `mfa_completed_at`; a trigger allows a pending principal
+to become only `active`, and only together with `mfa_completed_at`, and never
+lets any principal return to `pending`. `active` and `disabled` move between
+each other exactly as before. In the application, `requireActivePrincipal`
+refuses `pending` exactly like a missing or disabled principal, so the
+ordinary gate, the `owner` gate, the recovery gate, and Better Auth's runtime
+session hook all deny it. A pending identity therefore cannot sign in, obtain
+an authorized session, or reach any protected route, and it never appears as
+an active Admin. It is never deleted.
+
+**Routes.** An eighth route classification, `invitation`, admits a request
+only with an exact trusted `Origin`, checked by the authentication guard
+before the handler runs. Each handler additionally requires
+`application/json` (415 otherwise) and a body of exactly the listed keys (400
+`invalid_request` otherwise), and every response carries `Cache-Control:
+no-store` and `Referrer-Policy: no-referrer`.
+
+| Route | Body | Success | Refusals |
+|---|---|---|---|
+| `POST /api/invitation/inspect` | `{ token }` | `{ next: "create_password" \| "confirm_password" }` | `400 invitation_invalid`; `429` |
+| `POST /api/invitation/password` | `{ token, name, password }` (new) or `{ token, password }` (resume) | `{ next: "verify_totp", totpUri, manualEntrySecret }` with the setup session cookie, or `{ next: "verify_existing_totp" }` with Better Auth's challenge cookie | `400 invitation_invalid`, `invalid_name`, `password_rejected`; `401 invalid_password`; `409 setup_in_progress`; `429` |
+| `POST /api/invitation/totp` | `{ code }` (setup session) or `{ token, code, password }` (existing-authenticator challenge) | `{ recoveryCodes, next: "acknowledge_recovery_codes" }` with the rotated setup session cookie | `400 invitation_invalid`; `401 invalid_code`, `invalid_password`, `unauthorized`; `409 setup_incomplete`, `setup_in_progress`; `429` |
+| `POST /api/invitation/complete` | `{ recoveryCodesSaved: true }` | `{ signInRequired: true }`, with both cookies expired | `400 acknowledgement_required`, `invitation_invalid`; `401 unauthorized`; `409 setup_incomplete`, `setup_in_progress`; `429` |
+
+`invitation_invalid` is one response for an unknown, malformed, expired,
+cancelled, superseded, or consumed invitation, and for an address that is not
+eligible; it also expires the setup cookies, because the setup sessions were
+just revoked. `unauthorized` never clears cookies, so an Owner who opens an
+invitation link in the same browser is refused without being signed out.
+What `inspect` reveals (whether a password already exists) is known only to
+the holder of a valid token, so no address can be enumerated.
+
+**The browser page (DEC-442).** The development preview serves
+`/invitation`. It reads the token from the fragment once, immediately removes
+the fragment from the address bar and the history entry with
+`history.replaceState`, keeps the token (and, until TOTP verification, the
+typed password) only in memory, and sends same-origin JSON `POST` requests.
+Nothing is written to `localStorage`, `sessionStorage`, or a cookie by the
+page. `index.html` sets `<meta name="referrer" content="no-referrer">`. The
+forms are plain and functional; the designed authentication screens remain
+the later UX phase (§23).
+
+**The state machine.** `src/invitations/enrolment-state.ts` defines it, and
+migration `0009` enforces the same pairs in a trigger; a unit test compares
+the two pair for pair.
+
+```mermaid
+stateDiagram-v2
+  [*] --> identity_pending: intent recorded before Better Auth creates the identity
+  identity_pending --> identity_pending: re-recorded under a newer invitation
+  identity_pending --> password_verified: identity confirmed, pending principal created
+  password_verified --> password_verified: password step repeated
+  password_verified --> totp_enrolling: TOTP secret issued
+  totp_enrolling --> password_verified: resumed before verification
+  totp_enrolling --> totp_enrolling
+  totp_enrolling --> codes_issued: code verified, ten codes shown
+  totp_enrolling --> factor_challenge: resumed after Better Auth verified the factor
+  factor_challenge --> factor_challenge
+  factor_challenge --> codes_issued: existing code passed, codes regenerated
+  codes_issued --> factor_challenge: resumed before acknowledgement
+  codes_issued --> completed: acknowledged, sessions revoked, activated
+  completed --> [*]
+```
+
+A verified factor never falls back to password-only enrolment, and only
+`codes_issued` reaches `completed`. `dromex_admin_enrolment` holds one row
+per invited address (email, the Better Auth user id once confirmed, the
+current invitation, the step, and times); it has no column for any secret,
+its identifying columns are immutable, it is never deleted, and completion is
+terminal. `dromex_admin_enrolment_session` records every Better Auth session
+ever issued to an enrolment, with the invitation it was issued under; rows
+are never changed or deleted.
+
+**The internal sign-up capability (DEC-444 (5)).**
+`src/invitations/enrolment-identity.ts` builds a second Better Auth instance
+from exactly the runtime options, with `disableSignUp: false`, `autoSignIn:
+false`, Better Auth's logger disabled, and its own session hook. It exports
+only its constructor; the instance never leaves that function, no handler is
+referenced, and nothing is mounted. The only importer is
+`invitation-acceptance.ts`, and the server constructs that service with the
+runtime settings. The hook admits a session only for an identity whose
+address has an open enrolment and a pending, unexpired invitation, and that
+has either no principal yet (created but unrecorded) or a non-Owner `pending`
+principal; every other session, including the Owner's and any active
+Admin's, is refused. Boundary tests prove that only the acceptance service
+imports it, that `signUpEmail` and `disableSignUp: false` appear only here and
+in Owner provisioning, that no route matches sign-up or registration, and
+that `POST /api/auth/sign-up/email` and eight similar paths are a plain 404.
+The Owner terminal-provisioning boundary is unchanged.
+
+**The workflow and its transaction boundaries.** Better Auth changes the
+identity, factor, recovery codes, and sessions in its own transactions;
+DROMEX records each step in separate transactions. Every state-changing step
+holds a session-level advisory lock per address (a concurrent attempt gets
+`setup_in_progress` at once), and every DROMEX transaction first takes the
+Owner operations' address lock and a row lock on the invitation, expires it
+if due (audited once), and refuses it if it is no longer pending (audited
+with its reason). Validity is therefore re-checked at the token exchange,
+before identity creation, at pending-principal association, before and after
+TOTP enrolment, at session binding, before and after TOTP verification, at
+recovery-code issuance, before revoking sessions, and inside the activation
+transaction (DEC-444 (3)).
+
+1. **Password step, new address.** The enrolment intent (`identity_pending`)
+   is committed; Better Auth's `signUpEmail` creates the identity; one
+   transaction confirms a real user row with that id and address (Better
+   Auth answers a duplicate address with a synthetic user), inserts the
+   `pending` principal, and moves to `password_verified`. The password is
+   then proven through Better Auth's `signInEmail`.
+2. **Password step, pending address (DEC-444 (2)).** The existing password
+   must be proven through `signInEmail`; no request can replace it, and a
+   forgotten password is simply a failed proof until checkpoint 4C. An
+   identity created by an interrupted run but never recorded is proven the
+   same way and then associated.
+3. **Session binding.** A session never leaves the server before it is bound
+   to the enrolment. Every other session of the identity is revoked, so an
+   older setup session never survives a new password step.
+4. **TOTP.** With no verified factor, `enableTwoFactor` issues a new secret
+   (replacing an unverified one) and the step becomes `totp_enrolling`; the
+   first code is verified through Better Auth's enrolment path, which Better
+   Auth does not rate limit, so DROMEX limits it per enrolment. When an
+   interrupted run already verified the factor, sign-in returns a challenge,
+   the step becomes `factor_challenge`, and the invitee must pass it with a
+   current code, the password, and the invitation token, all in the JSON body
+   (never a URL, header, or cookie; the page keeps the token and password in
+   memory only). Before Better Auth verifies anything, DROMEX resolves the
+   token and re-checks the invitation and enrolment under the locks: an ended
+   invitation returns `invitation_invalid` and consumes nothing; an enrolment
+   that is missing, has no identity, or belongs to another invitation returns
+   `unauthorized` and is audited as `admin_invitation_acceptance_refused` with
+   reason `not_eligible`; then the attempt counts against the per-enrolment
+   limit. Every accepted code is recorded against replay.
+5. **Recovery codes.** After a first verification, the ten codes Better Auth
+   generated at enrolment are read with the server-only `viewBackupCodes`;
+   after a challenge they are regenerated with `generateBackupCodes`, so no
+   code an interrupted run may have shown stays valid. Exactly ten canonical
+   codes are required, or the step fails closed.
+6. **Activation.** Only from `codes_issued` with an explicit acknowledgement:
+   every session of the identity is revoked through Better Auth, then one
+   DROMEX transaction re-checks the invitation, the step, the pending
+   principal, the enabled factor, and that no session remains, sets the
+   principal `active` with `mfa_completed_at`, marks the invitation
+   `accepted`, completes the enrolment, and audits the revocation count and
+   the acceptance.
+
+**Crash recovery.** A crash leaves either nothing or a `pending` identity
+that no gate admits, and the same still-valid invitation, or a new one,
+resumes it. After an intent only, the next password step creates the identity
+under the current invitation. After Better Auth created the identity but before DROMEX
+recorded it, the next step finds the unrecorded identity through the intent,
+proves its password, and associates it. After TOTP was enabled but not
+recorded, a new secret replaces it. After Better Auth verified the factor but
+before DROMEX recorded codes, the next attempt passes a TOTP challenge and
+receives regenerated codes. After sessions were revoked but before
+activation, the invitee repeats the challenge and acknowledgement. The eight
+interruption points are named in `ACCEPTANCE_INTERRUPTIONS` and each is
+tested. Sessions a crash leaves unbound never reached a browser, belong to a
+pending principal, and are revoked at activation.
+
+**Rate limits** (DROMEX's PostgreSQL-backed storage; implementation detail
+under DEC-440 (10) and DEC-444): token checks 10 per 60 seconds per network
+source; password creations and proofs 5 per 15 minutes per invitation from
+any source; TOTP submissions 10 per 60 seconds per source and 5 per 5 minutes
+per enrolment (the existing-factor path also has Better Auth's per-challenge
+and account lockouts); completion 10 per 60 seconds per source. Limits
+survive a process restart. A limited attempt adds no audit row, and unknown
+or malformed tokens are never audited, so repeated guessing cannot grow the
+audit table.
+
+**Audit.** New closed events: `admin_invitation_acceptance_refused` (reasons
+`invitation_expired`, `invitation_cancelled`, `invitation_superseded`,
+`invitation_accepted`, `not_eligible`, `invalid_state`,
+`identity_rejected`), `_identity_created`, `_identity_resumed`,
+`_password_rejected`, `_totp_enrolment_started`, `_totp_rejected`,
+`_totp_verified`, `_recovery_codes_issued`, `_sessions_revoked` (with the
+count), and `_accepted`. Each carries the invitation reference, the invitee's
+user id and display-name snapshot when known, a reason code, and the client
+address; never an address, token, password, TOTP secret or code, recovery
+code, cookie, or session value.
+
+**Refinement of 4B1's `account_exists` (DEC-444 (2)).** The Owner may invite
+an address again when its identity is still pending in setup (or was created
+but never recorded). An address with an active or disabled principal, or with
+an identity invitation setup did not create, is still refused.
+
+**Verification and mutation testing (checkpoint 4B2).** Every test runs
+against disposable PostgreSQL 18.6 databases with synthetic identities, and
+the authoritative runtime is exact Node 24.20.0 in a disposable container. On
+the host's Node 22.17.1, two unit tests that spawn a `.ts` child process fail
+with `ERR_UNKNOWN_FILE_EXTENSION`, and TOTP-dependent integration tests were
+seen to fail intermittently on the host while passing on Node 24.20.0 (the cause
+was not investigated). A host result is not evidence about Node 24.20.0.
+
+The first pass applied 40 targeted mutations to acceptance and killed 38. A
+review of the resume path then found that the existing-authenticator step let
+Better Auth verify a code before DROMEX re-checked the invitation, and that
+the resume body did not carry the token. The step now takes
+`{ token, code, password }`, re-checks the invitation and enrolment first,
+counts the attempt per enrolment, audits an ineligible refusal once, and only
+then lets Better Auth verify. The ten mutations rerun after that change were
+these, each applied alone to a container copy, with the file restored and
+confirmed byte-identical by SHA-256:
+
+| Mutation | Result |
+|---|---|
+| Skip the invitation re-check on the resume path | Survived at first; killed by a new test that cancels the invitation between the password step and the code, and expects `invitation_invalid`, no new session, and no replay marker |
+| Remove the per-enrolment limit on the enrolment path | Killed |
+| Remove the per-enrolment limit on the resume path | Survived at first; killed by a new test in which the attempt after the limit is refused with `429` even with the right code |
+| Remove the refusal audit for an ineligible resume | Killed (the new test also proves repeated attempts add no rows beyond the per-source limit and that no secret is stored) |
+| Accept a session bound to a replaced invitation | Killed |
+| Allow TOTP replay, on each path | Both killed |
+| Clear cookies on `unauthorized` | Killed |
+| Accept a session bound to a completed enrolment | **Survives** |
+| Ignore a session/enrolment user mismatch | **Survives** |
+
+The two survivors are redundant layers, not gaps, and production logic was not
+distorted to kill them. Activation revokes every session of the identity and
+re-checks, inside the same transaction under the row lock, that none remains
+before marking the enrolment `completed`, so no session can exist for a
+completed enrolment; and the session-to-enrolment binding row is written from
+the identity the session belongs to and is immutable, so a mismatch could only
+follow direct database tampering. The ordinary gate independently refuses every
+session ever bound to invitation setup. These are consistent with the two
+survivors recorded in the first pass; the scripts of that pass were temporary
+and are not kept.
+
+**Known limits and residual risks of checkpoint 4B2:**
+
+- **Lost authenticator before activation (OQ-166).** An invitee who verified
+  a factor and then lost the authenticator before completing setup cannot
+  resume: resumption requires a current TOTP code, the pending identity
+  cannot be deleted, and password reset never removes MFA (DEC-441 (8)). No
+  recovery path is designed; this is an open question for the Owner.
+- The invitee's display name is collected at password creation because
+  Better Auth requires one; it is refused if empty, over 100 characters, or
+  containing `@` or control characters, so an address never becomes an audit
+  name snapshot.
+- Owner cancellation or resend does not itself revoke setup sessions; they
+  are refused and revoked on their next use.
+- A pending identity is not yet listed for the Owner; account management is
+  checkpoint 4E2.
+- The page is a plain development preview, and the API and page are not
+  served from one origin outside development (the Vite proxy stands in).
+- Recovery codes remain Better Auth's reversible encrypted storage (DEC-435).
+- Better Auth's own sign-up endpoint exists inside the internal instance's
+  router; it is unreachable only because that router is never mounted, which
+  the boundary tests enforce.
+- Behaviour under a least-privilege runtime database role is not verified;
+  that role is not provisioned.
+
 ### Deliberately left to the implementation phase
 
-Invitation acceptance and restricted Admin enrolment (checkpoint 4B2);
-password reset (checkpoint 4C); reading email configuration in the running
-server. (Whether design closure satisfies DEC-435 (6) is no longer open: it
+Password reset (checkpoint 4C); a recovery path for an invitee who lost the
+authenticator before activation (OQ-166); listing pending identities for the
+Owner (checkpoint 4E2); reading email configuration in the running server. (Whether design closure satisfies DEC-435 (6) is no longer open: it
 does not, and DEC-443 sets the gate above.)
 
 ### Sources (accessed 2026-09-16)

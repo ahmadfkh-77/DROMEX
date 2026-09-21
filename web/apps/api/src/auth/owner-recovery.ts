@@ -163,11 +163,13 @@ export function createOwnerRecovery(pool: Pool, audit: SecurityAudit): OwnerReco
 
   return {
     async isRecoverySession(sessionId) {
-      // A session a terminal recovery run obtained (DEC-437) is refused
-      // exactly like a web recovery session.
+      // A session a terminal recovery run obtained (DEC-437), and a session
+      // issued to an invited Admin's setup (DEC-444), are refused exactly like
+      // a web recovery session.
       const { rows } = await pool.query<{ bound: boolean }>(
         `SELECT EXISTS (SELECT 1 FROM dromex_recovery_session WHERE session_id = $1)
-             OR EXISTS (SELECT 1 FROM dromex_terminal_recovery_session WHERE session_id = $1) AS bound`,
+             OR EXISTS (SELECT 1 FROM dromex_terminal_recovery_session WHERE session_id = $1)
+             OR EXISTS (SELECT 1 FROM dromex_admin_enrolment_session WHERE session_id = $1) AS bound`,
         [sessionId],
       );
       return rows[0]?.bound === true;

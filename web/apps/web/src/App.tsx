@@ -1,3 +1,5 @@
+import { InvitationPage } from './invitation/InvitationPage.tsx';
+
 const STYLES = `
   :root {
     --signal-orange: #c84b31;
@@ -60,9 +62,54 @@ const STYLES = `
     padding-top: 1rem;
     font-size: 0.875rem;
   }
+  .form { display: grid; gap: 1rem; max-width: 32rem; }
+  .form p { margin: 0; }
+  .form label { display: grid; gap: 0.35rem; font-weight: 600; font-size: 0.9375rem; }
+  .form input:not([type='checkbox']) {
+    font: inherit;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 0.25rem;
+    background: var(--surface);
+    color: var(--ink);
+    width: 100%;
+  }
+  .form .check { display: flex; gap: 0.5rem; align-items: center; font-weight: 400; }
+  .form .check input { width: 1.25rem; height: 1.25rem; }
+  .form button {
+    font: inherit;
+    font-weight: 700;
+    min-height: 2.75rem;
+    border: 0;
+    border-radius: 0.25rem;
+    background: var(--structural-navy);
+    color: #fff;
+    cursor: pointer;
+  }
+  .form button:disabled { opacity: 0.6; cursor: progress; }
+  .codes { margin: 0; padding-left: 1.5rem; display: grid; gap: 0.35rem; }
+  .alert {
+    border-left: 3px solid var(--signal-orange);
+    background: var(--surface);
+    padding: 0.75rem 1rem;
+    margin: 0 0 1rem;
+  }
 `;
 
+/** The invitation page is the only other path the preview serves (DEC-442). */
+const INVITATION_PATH = '/invitation';
+
 export function App() {
+  if (window.location.pathname === INVITATION_PATH) {
+    return (
+      <>
+        <style>{STYLES}</style>
+        <InvitationPage />
+      </>
+    );
+  }
+
   return (
     <>
       <style>{STYLES}</style>

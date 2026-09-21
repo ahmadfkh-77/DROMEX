@@ -17,7 +17,7 @@ const BETTER_AUTH_MIGRATION = fileURLToPath(
 );
 
 const BETTER_AUTH_TABLES = ['user', 'session', 'account', 'verification', 'rateLimit'];
-const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008'];
+const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009'];
 
 describe('DROMEX migration mechanism', () => {
   let database: EphemeralDatabase;
@@ -118,6 +118,215 @@ describe('DROMEX migration mechanism', () => {
         'suspended',
       ]),
     ).rejects.toThrow(/violates check constraint/i);
+  });
+
+  describe('pending principal lifecycle and invited Admin enrolment (0009, DEC-444)', () => {
+    async function seedInvitation(email: string, inviter: string): Promise<string> {
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO dromex_admin_invitation
+           (email, token_hash, status, invited_by_user_id, expires_at, delivery_id, delivery_status)
+         VALUES ($1, decode(md5(random()::text) || md5(random()::text), 'hex'), 'pending', $2,
+                 CURRENT_TIMESTAMP + interval '24 hours', gen_random_uuid(), 'sending')
+         RETURNING id::text`,
+        [email, inviter],
+      );
+      return rows[0]!.id;
+    }
+
+    async function seedEnrolment(values: Record<string, unknown>) {
+      const columns = Object.keys(values);
+      return pool.query<{ id: string }>(
+        `INSERT INTO dromex_admin_enrolment (${columns.join(', ')})
+         VALUES (${columns.map((_, index) => `$${index + 1}`).join(', ')}) RETURNING id::text`,
+        Object.values(values),
+      );
+    }
+
+    beforeEach(async () => {
+      await applyMigrations(pool, await loadDromexMigrations());
+      await seedUser(pool, 'inviter');
+    });
+
+    it('accepts a pending, non-Owner principal with no MFA completion', async () => {
+      await seedUser(pool, 'pending_one');
+      await pool.query(`INSERT INTO dromex_principal (user_id, status) VALUES ('pending_one', 'pending')`);
+      const { rows } = await pool.query(`SELECT status, is_owner, mfa_completed_at FROM dromex_principal WHERE user_id = 'pending_one'`);
+      expect(rows).toEqual([{ status: 'pending', is_owner: false, mfa_completed_at: null }]);
+    });
+
+    it('refuses a pending Owner and a pending principal that claims MFA completion', async () => {
+      await seedUser(pool, 'pending_owner');
+      await expect(
+        pool.query(`INSERT INTO dromex_principal (user_id, status, is_owner) VALUES ('pending_owner', 'pending', TRUE)`),
+      ).rejects.toThrow(/check constraint/i);
+      await expect(
+        pool.query(`INSERT INTO dromex_principal (user_id, status, mfa_completed_at) VALUES ('pending_owner', 'pending', CURRENT_TIMESTAMP)`),
+      ).rejects.toThrow(/check constraint/i);
+    });
+
+    it('allows pending to become active only with MFA completion, and nothing to become pending again', async () => {
+      await seedUser(pool, 'lifecycle');
+      await pool.query(`INSERT INTO dromex_principal (user_id, status) VALUES ('lifecycle', 'pending')`);
+      const update = (sql: string) => pool.query(`UPDATE dromex_principal SET ${sql} WHERE user_id = 'lifecycle'`);
+
+      await expect(update(`status = 'active'`)).rejects.toThrow(/principal lifecycle/i);
+      await expect(update(`status = 'disabled'`)).rejects.toThrow(/principal lifecycle/i);
+      await expect(update(`is_owner = TRUE`)).rejects.toThrow(/check constraint/i);
+
+      await update(`status = 'active', mfa_completed_at = CURRENT_TIMESTAMP`);
+      await expect(update(`status = 'pending', mfa_completed_at = NULL`)).rejects.toThrow(/principal lifecycle/i);
+      await update(`status = 'disabled'`);
+      await expect(update(`status = 'pending', mfa_completed_at = NULL`)).rejects.toThrow(/principal lifecycle/i);
+      await update(`status = 'active'`);
+      // An existing active Owner's recovery still clears MFA completion (DEC-436).
+      await update(`mfa_completed_at = NULL`);
+    });
+
+    it('holds no column for a password, code, secret, token, or cookie', async () => {
+      const columns = async (table: string) =>
+        (
+          await pool.query<{ column_name: string }>(
+            `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 ORDER BY column_name`,
+            [table],
+          )
+        ).rows.map((row) => row.column_name);
+
+      expect(await columns('dromex_admin_enrolment')).toEqual([
+        'completed_at',
+        'created_at',
+        'email',
+        'id',
+        'invitation_id',
+        'step',
+        'updated_at',
+        'user_id',
+      ]);
+      expect(await columns('dromex_admin_enrolment_session')).toEqual(['bound_at', 'enrolment_id', 'invitation_id', 'session_id']);
+    });
+
+    it('constrains the step, ties it to the identity and to completion, and stores one normalised email once', async () => {
+      const invitation = await seedInvitation('enrol@synthetic.invalid', 'inviter');
+      await seedUser(pool, 'enrolled');
+      const email = 'enrol@synthetic.invalid';
+
+      await expect(seedEnrolment({ email, invitation_id: invitation, step: 'activated' })).rejects.toThrow(/check constraint/i);
+      await expect(seedEnrolment({ email, invitation_id: invitation, step: 'identity_pending', user_id: 'enrolled' })).rejects.toThrow(
+        /check constraint/i,
+      );
+      await expect(seedEnrolment({ email, invitation_id: invitation, step: 'password_verified' })).rejects.toThrow(/check constraint/i);
+      await expect(seedEnrolment({ email, invitation_id: invitation, step: 'completed', user_id: 'enrolled' })).rejects.toThrow(
+        /check constraint/i,
+      );
+      await expect(seedEnrolment({ email: 'Enrol@Synthetic.invalid', invitation_id: invitation, step: 'identity_pending' })).rejects.toThrow(
+        /check constraint/i,
+      );
+
+      await seedEnrolment({ email, invitation_id: invitation, step: 'identity_pending' });
+      await expect(seedEnrolment({ email, invitation_id: invitation, step: 'identity_pending' })).rejects.toThrow(/duplicate key|unique/i);
+    });
+
+    it('enforces the state machine, keeps identity columns immutable, ends only once, and never deletes', async () => {
+      const invitation = await seedInvitation('machine@synthetic.invalid', 'inviter');
+      await seedUser(pool, 'machine');
+      await seedUser(pool, 'other_machine');
+      const { rows } = await seedEnrolment({ email: 'machine@synthetic.invalid', invitation_id: invitation, step: 'identity_pending' });
+      const id = rows[0]!.id;
+      const set = (sql: string) => pool.query(`UPDATE dromex_admin_enrolment SET ${sql} WHERE id = $1`, [id]);
+
+      await expect(set(`step = 'codes_issued', user_id = 'machine'`)).rejects.toThrow(/enrolment transition/i);
+      await set(`step = 'password_verified', user_id = 'machine'`);
+      await expect(set(`user_id = 'other_machine'`)).rejects.toThrow(/immutable/i);
+      await expect(set(`email = 'changed@synthetic.invalid'`)).rejects.toThrow(/immutable/i);
+      await expect(set(`step = 'completed', completed_at = CURRENT_TIMESTAMP`)).rejects.toThrow(/enrolment transition/i);
+      await set(`step = 'totp_enrolling'`);
+      await set(`step = 'codes_issued'`);
+      await set(`step = 'completed', completed_at = CURRENT_TIMESTAMP`);
+      await expect(set(`step = 'factor_challenge', completed_at = NULL`)).rejects.toThrow(/enrolment transition/i);
+      await expect(pool.query(`DELETE FROM dromex_admin_enrolment WHERE id = $1`, [id])).rejects.toThrow(/never deleted/i);
+      await expect(pool.query(`DELETE FROM "user" WHERE id = 'machine'`)).rejects.toThrow(/RESTRICT|foreign key/i);
+    });
+
+    it('binds sessions to one enrolment and invitation, refusing an empty session id, duplicates, and deletes', async () => {
+      const invitation = await seedInvitation('bound@synthetic.invalid', 'inviter');
+      const { rows } = await seedEnrolment({ email: 'bound@synthetic.invalid', invitation_id: invitation, step: 'identity_pending' });
+      const enrolment = rows[0]!.id;
+      const bind = (session: string) =>
+        pool.query(`INSERT INTO dromex_admin_enrolment_session (session_id, enrolment_id, invitation_id) VALUES ($1, $2, $3)`, [
+          session,
+          enrolment,
+          invitation,
+        ]);
+
+      await expect(bind('')).rejects.toThrow(/check constraint/i);
+      await bind('s1');
+      await expect(bind('s1')).rejects.toThrow(/duplicate key|unique/i);
+      await expect(pool.query(`DELETE FROM dromex_admin_enrolment_session`)).rejects.toThrow(/never deleted/i);
+    });
+
+    it('accepts the invitation acceptance audit vocabulary and still refuses unknown events', async () => {
+      for (const type of [
+        'admin_invitation_acceptance_refused',
+        'admin_invitation_identity_created',
+        'admin_invitation_identity_resumed',
+        'admin_invitation_password_rejected',
+        'admin_invitation_totp_enrolment_started',
+        'admin_invitation_totp_rejected',
+        'admin_invitation_totp_verified',
+        'admin_invitation_recovery_codes_issued',
+        'admin_invitation_sessions_revoked',
+        'admin_invitation_accepted',
+        'admin_invitation_created',
+        'recovery_code_accepted',
+        'terminal_recovery_completed',
+      ]) {
+        await pool.query(`INSERT INTO dromex_audit_event (event_type, outcome) VALUES ($1, 'success')`, [type]);
+      }
+      await expect(
+        pool.query(`INSERT INTO dromex_audit_event (event_type, outcome) VALUES ('admin_invitation_password_reset', 'success')`),
+      ).rejects.toThrow(/check constraint/i);
+    });
+  });
+
+  it('preserves existing principals exactly when 0009 is applied over 0008 (DEC-444 (4))', async () => {
+    const migrations = await loadDromexMigrations();
+    await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0008'));
+    await seedUser(pool, 'kept_owner');
+    await seedUser(pool, 'kept_admin');
+    await seedUser(pool, 'kept_disabled');
+    await pool.query(
+      `INSERT INTO dromex_principal (user_id, status, is_owner, mfa_completed_at, created_at, updated_at) VALUES
+         ('kept_owner', 'active', TRUE, '2026-09-01T10:00:00Z', '2026-09-01T09:00:00Z', '2026-09-01T10:00:00Z'),
+         ('kept_admin', 'active', FALSE, NULL, '2026-09-02T09:00:00Z', '2026-09-02T09:00:00Z'),
+         ('kept_disabled', 'disabled', FALSE, '2026-09-03T10:00:00Z', '2026-09-03T09:00:00Z', '2026-09-03T11:00:00Z')`,
+    );
+    const snapshot = async () => (await pool.query(`SELECT * FROM dromex_principal ORDER BY user_id`)).rows;
+    const before = await snapshot();
+
+    const result = await applyMigrations(pool, migrations);
+    expect(result.applied).toEqual(['0009']);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('applies 0009 idempotently: running its SQL again changes nothing', async () => {
+    const migrations = await loadDromexMigrations();
+    await applyMigrations(pool, migrations);
+    const sql = migrations.find((migration) => migration.id === '0009')!.sql;
+    const shape = async () =>
+      (
+        await pool.query(
+          `SELECT conrelid::regclass::text AS relation, conname::text AS name, pg_get_constraintdef(oid) AS definition
+             FROM pg_constraint WHERE connamespace = 'public'::regnamespace
+           UNION ALL
+           SELECT tgrelid::regclass::text, tgname::text, pg_get_triggerdef(oid) FROM pg_trigger WHERE NOT tgisinternal
+           UNION ALL
+           SELECT tablename::text, indexname::text, indexdef FROM pg_indexes WHERE schemaname = 'public'
+           ORDER BY 1, 2, 3`,
+        )
+      ).rows;
+    const before = await shape();
+    await pool.query(sql);
+    await pool.query(sql);
+    expect(await shape()).toEqual(before);
   });
 
   it('accepts the approved active and disabled statuses', async () => {
@@ -487,6 +696,8 @@ describe('DROMEX migration mechanism', () => {
     // Only the DROMEX-owned objects are added.
     const dromexTables = tables.filter((name) => name.startsWith('dromex_')).sort();
     expect(dromexTables).toEqual([
+      'dromex_admin_enrolment',
+      'dromex_admin_enrolment_session',
       'dromex_admin_invitation',
       'dromex_audit_event',
       'dromex_migration',
