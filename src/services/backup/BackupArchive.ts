@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import type {SQLiteDatabase} from 'expo-sqlite';
 import {strFromU8,strToU8,unzipSync,zipSync} from 'fflate';
-import type {BackupPreview,BackupRecordCounts} from '../../domain/backup';
+import {BACKUP_COUNT_TABLES,type BackupPreview,type BackupRecordCounts} from '../../domain/backup';
 import {base64ToBytes} from './BackupCrypto';
 
 export const BACKUP_ARCHIVE_FORMAT='DROMEX-COMPLETE-BACKUP';
@@ -24,7 +24,7 @@ const jsonSpecs=[
   {table:'quarry_purchases',column:'photos_json'},
 ] as const;
 const allowedLocator=new Set([...singleSpecs,...jsonSpecs].map(value=>`${value.table}.${value.column}`));
-const countTables=['loads','projects','customers','daily_project_reports','quarry_purchases','waste_dumps','fuel_movements','payment_entries','schedule_tasks','pavement_calculations','walls','wall_consumptions','project_issues','project_media','quick_text_documents','suppliers','driver_profiles','truck_profiles','worker_profiles','machine_profiles','catalog_items'];
+
 
 export async function createBackupArchive(db:SQLiteDatabase,preferences:Array<[string,string]>,backupId:string,createdAt:string):Promise<{bytes:Uint8Array;manifest:BackupManifest}>{
   await db.execAsync('PRAGMA wal_checkpoint(FULL)');
@@ -83,7 +83,7 @@ function validateManifest(manifest:BackupManifest,files:Record<string,Uint8Array
   for(const locator of manifest.media){if(!allowedLocator.has(`${locator.table}.${locator.column}`)||!locator.recordId||!locator.archivePath.startsWith('media/')||!files[locator.archivePath]||(locator.jsonIndex!==null&&(!Number.isInteger(locator.jsonIndex)||locator.jsonIndex<0)))throw new Error('The backup attachment index is invalid.');}
 }
 
-async function collectCounts(db:SQLiteDatabase){const counts:BackupRecordCounts={};for(const table of countTables){const row=await db.getFirstAsync<{count:number}>(`SELECT COUNT(*) count FROM ${table}`);counts[table]=row?.count??0;}return counts;}
+async function collectCounts(db:SQLiteDatabase){const counts:BackupRecordCounts={};for(const table of BACKUP_COUNT_TABLES){const row=await db.getFirstAsync<{count:number}>(`SELECT COUNT(*) count FROM ${table}`);counts[table]=row?.count??0;}return counts;}
 
 async function addMediaFile(files:Record<string,Uint8Array>,archivedByUri:Map<string,string>,uri:string){
   const existing=archivedByUri.get(uri);if(existing)return existing;

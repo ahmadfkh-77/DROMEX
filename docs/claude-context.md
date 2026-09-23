@@ -647,6 +647,38 @@ values on its next save.
   been built or installed, so upgrade-install behaviour against the Owner's real on-phone database is
   still unverified — Expo Go uses its own separate database.**
 
+## People roles, directories, supervisors and totals — feature branch, not released (2026-09-23)
+
+- **Branch** `feature/android-people-directories-supervisors-totals`, created from the synchronized
+  build-20 commit `0dc768b` in `C:\Users\fakih\Desktop\Dromex\DROMEX-wall-worktree`. Not merged, no APK,
+  release metadata unchanged (still 0.17.0 / build 20).
+- **Decisions** DEC-476 to DEC-481; open questions OQ-166 and OQ-167.
+- **Database version 46** (one forward-only step; 1–45 untouched):
+  - `driver_profiles` is the unified People table (legacy name kept so every foreign key stays valid) with
+    `person_role`, `job_title`, `legacy_worker_id`, `role_history_json`; `worker_profiles` rows are moved
+    in, verified, then the table is dropped. Idempotent and completes an interrupted run.
+  - `loads.driver_role` (NULL on older receipts, displayed as Driver).
+  - `daily_project_reports.operators_json`, `custom_resources_json`, `supervisor_signoffs_json`.
+  - `custom_directories`, `custom_directory_entries`, `supervisors` (unique normalized-name indexes).
+  - No normalization runs inside the migration, so none had to be frozen.
+- **New modules**: domain `people`, `customDirectories`, `supervisors`, `supplierLoadGroups`,
+  `projectTotals`; repositories `SqliteCustomDirectoryRepository`, `SqliteSupervisorRepository`,
+  `SqliteProjectTotalsRepository` (People lives on `LoadRepository`: `listPeople`, `createPerson`,
+  `updatePerson`, `setPersonActive`); PDF sections in `services/dailyReportSectionsTemplate.ts`;
+  screens `CustomDirectoriesScreen`, `SupervisorsScreen`, `ProjectTotalsScreen`; shared components
+  `FocusedSheet`, `SegmentedChoice`, `PeopleDirectory`, `CustomResourcePicker`, `SupervisorSignoffPicker`.
+- **Signatures** are stroke JSON in the database (never files): backups carry them automatically; the sync
+  queue and any cloud row never carry them (`cloudSafeRow`); every stroke is validated on save and print.
+- **Totals** aggregate in SQL; delivered and used never combine; units never convert; construction sources
+  never add to each other or to Daily Report use (no record links them).
+- **Workbook**: new sheets (`Custom Resources`, `Supervisor Sign-off`, `Supplier Load Subtotals`) are
+  appended after Photos so every earlier sheet keeps its position.
+- **Tests**: 98 files, 1,349 tests green; typecheck clean. Physical Expo acceptance pending.
+- **Known limitations**: Waste and Supplier Load driver pickers remain Drivers-only (OQ-166); the financial
+  Receipt still does not print the person (OQ-167); the dormant cloud sync schema was not extended to the new
+  tables (their outbox entries would be reported as unsupported types, as consulting agencies already are);
+  the deprecated, unrouted `DriversTrucksScreen` was only adjusted to compile.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:

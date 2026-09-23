@@ -1,4 +1,5 @@
 import type { CompanySettings, Customer } from './profiles';
+import type { TruckCrewRole } from './people';
 
 export type MeasurementUnit = {
   id: string;
@@ -47,17 +48,22 @@ export type LoadItemOption = {
   defaultUnitId: string | null;
 };
 
-export type DriverProfile = { id: string; name: string; phone: string | null; licenseNumber: string | null; notes: string | null; isActive: boolean };
+/**
+ * A person who can be named as the one driving a truck: a Driver for Supplier Loads and Waste Dumps,
+ * and a Driver or an Operator on a receipt (DEC-477). `role` is that person's current directory role.
+ */
+export type DriverProfile = { id: string; name: string; phone: string | null; licenseNumber: string | null; notes: string | null; isActive: boolean; role: TruckCrewRole };
 export type TruckProfile = { id: string; plate: string; makeModel: string | null; capacityKg: number | null; ownerName: string | null; notes: string | null; isActive: boolean };
-export type WorkerProfile = { id: string; name: string; role: string | null; phone: string | null; notes: string | null; isActive: boolean };
 export type MachineProfile = { id: string; name: string; machineType: string | null; identifier: string | null; notes: string | null; isActive: boolean };
-export type DriverDraft = { name: string; phone?: string; licenseNumber?: string; notes?: string };
 export type TruckDraft = { plate: string; makeModel?: string; capacityKg?: number | null; ownerName?: string; notes?: string };
-export type WorkerDraft = { name: string; role?: string; phone?: string; notes?: string };
 export type MachineDraft = { name: string; machineType?: string; identifier?: string; notes?: string };
 export type QuantityMethod = 'weighbridge' | 'direct';
-/** `correctionReason` is optional on the type so not-yet-updated screens still compile; the repository requires a non-empty value at runtime. */
-export type LoadCorrectionDraft = { requestedQuantityKg: string; emptyWeightKg: string; fullWeightKg: string; directQuantity: string; unitPriceUsd: string; destinationAddress: string; notes: string; correctionReason?: string };
+/**
+ * `correctionReason` is optional on the type so not-yet-updated screens still compile; the repository
+ * requires a non-empty value at runtime. `driverId`, when present and different from the load's person,
+ * reassigns the Driver / Operator through the same reasoned, audited correction (DEC-477).
+ */
+export type LoadCorrectionDraft = { requestedQuantityKg: string; emptyWeightKg: string; fullWeightKg: string; directQuantity: string; unitPriceUsd: string; destinationAddress: string; notes: string; correctionReason?: string; driverId?: string };
 export type LoadStatus = 'Active' | 'Cancelled';
 export type LoadCorrectionChange = { field: string; originalValue: string | null; newValue: string | null };
 export type LoadCorrectionEntry = { correctedAt: string; correctedBy: string; reason: string; changes: LoadCorrectionChange[] };
@@ -68,9 +74,9 @@ export type LoadSetupOptions = {
   projects: Project[];
   units: MeasurementUnit[];
   conversions: ConversionOption[];
+  /** DEC-477. Active Drivers and Operators: everyone who may be named on a receipt. */
   drivers: DriverProfile[];
   trucks: TruckProfile[];
-  workers: WorkerProfile[];
   machines: MachineProfile[];
   companySettings: CompanySettings;
 };
@@ -233,6 +239,10 @@ export type ConfirmedLoad = Omit<LoadCalculation, 'netWeightKg' | 'convertedQuan
   itemCode: string | null;
   categoryName: string;
   driverName: string;
+  /** DEC-477. The role this person served in on this receipt; null on receipts made before it existed. */
+  driverRole?: TruckCrewRole | null;
+  /** The directory person currently recorded on this load, used to offer a reasoned reassignment. */
+  driverId?: string | null;
   truckPlate: string;
   requestedQuantityKg: number | null;
   emptyWeightKg: number | null;
@@ -340,9 +350,9 @@ export function validateLoadDraft(draft: LoadDraft, options: LoadSetupOptions): 
   if (!options.items.some((value) => value.id === draft.itemId)) issues.push('Select a load-enabled item.');
   const driver = options.drivers.find((value) => value.id === draft.driverId);
   const truck = options.trucks.find((value) => value.id === draft.truckId);
-  if (!driver) issues.push('Select a saved driver.');
+  if (!driver) issues.push('Select a saved driver or operator.');
   if (!truck) issues.push('Select a saved truck.');
-  if (!draft.driverName.trim()) issues.push('Driver name is required.');
+  if (!draft.driverName.trim()) issues.push('Driver or operator name is required.');
   if (!draft.truckPlate.trim()) issues.push('Truck plate is required.');
   if (draft.quantityMethod === 'direct') {
     if (positiveDecimal(draft.directQuantity) == null) issues.push('Direct quantity must be greater than zero with no more than six decimals.');

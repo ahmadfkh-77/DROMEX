@@ -13,7 +13,7 @@ import {EditProjectInformationScreen} from './EditProjectInformationScreen';
 import {ProjectFinancialReview} from './FinancialsScreen';
 import {colors} from '../theme';
 
-type Routes={onSchedule:()=>void;onPavement:()=>void;onWalls:()=>void;onDailyReport:()=>void;onReceipt:()=>void;onWaste:()=>void;onFuel:()=>void;onQuarry:()=>void;onQuickText:()=>void;onLoads:()=>void;onReports:()=>void;onManageProject:()=>void};
+type Routes={onSchedule:()=>void;onPavement:()=>void;onWalls:()=>void;onDailyReport:()=>void;onReceipt:()=>void;onWaste:()=>void;onFuel:()=>void;onQuarry:()=>void;onQuickText:()=>void;onLoads:()=>void;onReports:()=>void;onManageProject:()=>void;onTotals:()=>void};
 type ScreenStatus='loading'|'error'|'ready';
 const PHOTO_PAGE=8;
 const priorityColor:Record<WorkspaceIssue['priority'],string>={Urgent:colors.danger,High:colors.warning,Normal:colors.navy,Low:colors.muted};
@@ -141,6 +141,7 @@ export function ProjectCommandCenterScreen({project,repository,financialReposito
     <ExpandableMenuSection title="Records and Documents" hint="Open project loads, reports, PDFs, and Excel output." marker="07" refined polished open={open.has('documents')} onToggle={()=>toggle('documents')}>
       <MenuAction refined polished number="01" title="Project Load Records" body="Open confirmed loads and documents." onPress={routes.onLoads}/>
       <MenuAction refined polished number="02" title="Project Reports" body="Daily history, completed-project PDF, and Excel exports." onPress={routes.onReports}/>
+      <MenuAction refined polished number="03" title="Totals" body="Delivered, used, fuel and construction quantities for this project, per item and unit." onPress={routes.onTotals}/>
       <MenuAction refined polished number="03" title="Project Financial Review" body="Billed, paid, and outstanding for this project. Read-only." onPress={()=>setShowFinancialReview(true)}/><MenuAction refined polished number="04" title="Edit Project Information" body="Correct the project name, location, and notes. Records, payments, and history are untouched." onPress={()=>setEditingInformation(true)}/>
     </ExpandableMenuSection>
   </AppPage>;

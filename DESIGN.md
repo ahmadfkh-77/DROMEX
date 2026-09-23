@@ -579,6 +579,40 @@ No new colour, component primitive, or motion curve was introduced.
 - **A foundation without a wall is shown honestly, not hidden.** A Foundation with recorded activity on the work date but no linked wall gets its own dashed-border block, captioned "no wall linked yet", still with its full geometry, composite composition, and diagram.
 - **The workbook agrees with the PDF.** "Wall Foundations" carries the same per-wall foundation columns as before plus Construction Section and the composite columns (mode, Stone, estimated concrete, actual Ready Mix, variance); a new "Foundations Without a Wall" sheet mirrors the PDF's standalone blocks. Numbers in both always come from the same `FoundationComposition` read-model.
 
+## Implemented on People, Custom Directories, Supervisors and Project Totals (DEC-476 to DEC-481)
+
+Feature branch, not released; physical acceptance pending.
+
+### Shared primitives added
+- **Focused Sheet** (`src/ui/components/FocusedSheet.tsx`): the Focused Record Sheet pattern first built in Receipt Setup, now shared — eyebrow, title, Close pill, keyboard-safe scrolling body, sticky footer with Cancel and one Signal Orange primary action (`SheetActions`). `scrollEnabled` is turned off while a finger draws a signature. Receipt Setup keeps its own local copy unchanged.
+- **Segmented Choice** (`src/ui/components/SegmentedChoice.tsx`): a small fixed single choice where every option stays visible — a person's role, a sign-off style, a list filter. The selected option carries a filled `#EAF1F6` background, a 2px Structural Navy border **and** a leading check mark, so it never depends on colour; options wrap rather than shrink below 48dp. `radio` mode for form values, `tabs` mode (with counts) for filters.
+
+### People & Equipment
+- One **People** tab replaces Workers and Drivers; Trucks and Machines are unchanged. Inside People: role filter chips (All · Workers · Drivers · Operators, each with its active count), the existing search bar pattern, one primary **Add person** action, then the active list and the closed-by-default **Inactive people** band.
+- A person row keeps the Monogram Avatar and adds an outlined **role pill** stating the role in words. A legacy duplicate shows an amber-tinted `Possible duplicate` line in text.
+- The person editor is a Focused Sheet with a single-select **Role** Segmented Choice whose hint explains where that role can be selected, and a **Role history** block. Saving a different role opens a confirmation stating that existing reports and receipts keep the recorded role.
+- A **Custom directories** link row (navy left rule) sits under the tab groups.
+
+### Custom Directories screen
+Standard `AppPage` + `PageHeader`; directories list → a directory's entries, each as a white row with a 3px Structural Navy left rule and quiet inline actions (Open, Edit, ↑ Up, ↓ Down, Archive). Archived records sit behind the closed Collapsible Status Band. Editing happens in Focused Sheets.
+
+### Supervisors
+PDF Settings gains section **04 Supervisors** (same numbered-tab, navy header and Seam Rule as sections 01–03) with a secondary **Manage Supervisors** button. The Supervisors screen shows a state pill in words (`Signature saved`, `Name only`, `Signature unreadable · sign again` in warning tone) and a signature preview drawn with `preserveAspectRatio="xMidYMid meet"`. Signing uses the existing SignaturePad inside a Focused Sheet.
+
+### Daily Report editor
+Section 02 gains an **Operators** Presence field and the **Custom resources** picker (per directory: selected entries with a report note field and a Remove action, then an `Add from …` searchable select). A new section **15 Supervisor Sign-off** lists the selected supervisors in order with a numbered outline badge, a Name only / Name + saved signature Segmented Choice, and ↑ / ↓ / Remove.
+
+### Make Receipt
+The person field is **Driver / Operator**, preceded by All / Drivers / Operators filter chips; every option's detail line starts with the person's role.
+
+### Project Totals
+A dedicated screen from Project Command Center → Records and Documents → **Totals**. A filter card (navy top rule) holds From / To dates, Item, Supplier and Unit selects and an All / Delivered / Used Segmented Choice, then a `Covering: …` line. Each item is a card: a unit chip per unit, then **Total delivered · unit** and **Total used · unit** rows (value right-aligned with its record count, or muted italic `Not recorded`), a `Delivered minus recorded use` row with its "not an inventory balance" note only when valid, and a `Suppliers and sources` disclosure. Fuel and Wall and foundation materials follow as their own sections, each with a sentence stating what is and is not added. Every value row with records opens a Focused Sheet listing them.
+
+### PDF additions
+- **Additional resources**: one block per directory, a navy 9.5pt heading kept with its table, fixed Name / Identifier / Note columns, `dir="auto"` cells.
+- **Supplier Loads**: one fixed-column table per item; the item name is a Structural Navy `<thead>` row (repeats across pages), supplier rows on `#F5F2EC` with a 1.5px ink top rule, italic supplier subtotals with a 1px rule, bold item totals on Ledger Cream with a 2px rule. Hierarchy reads in grayscale.
+- **Supervisor Sign-off**: after Photo evidence, a two-column grid of white blocks with a 3px Structural Navy top rule; a 24mm signing band with the signature or, for name-only, the words `Sign-off recorded by name` over a dashed rule; the name at 10.5pt/800 and the title muted beneath.
+
 ## Current-vs-Target Gap List
 
 1. **Typography weight.** Current: `fontWeight: '900'` used pervasively in `src/ui/theme.ts`'s global tokens and on every screen except Home, Project Command Center, Supplier Loads, and Daily Reports. Target: graded hierarchy above. **Partially implemented** — Home's and Project Command Center's navigation sections use a 3-step subset (`900`/`700`/`500`); Supplier Loads' supplied-material records and Daily Reports' section/record content use the full 4-step scale including `600` (see "Implemented on Supplier Loads" and "Implemented on Daily Reports"). Every other screen is still the pre-existing pervasive-900 state, and the global `theme.ts` tokens themselves are unchanged.

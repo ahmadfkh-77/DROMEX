@@ -1,4 +1,5 @@
 import {Buffer} from 'buffer';
+import {truckCrewRoleLabel} from '../domain/people';
 
 import type {ConfirmedLoad} from '../domain/loads';
 import type {QuickTextDocument} from '../domain/quickText';
@@ -93,7 +94,9 @@ export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper
     doc.line('').line(divider(columns));
     const destination=record.projectLocation??record.destinationAddress;
     if(destination)labelled(doc,'Destination',destination);
-    labelled(doc,'Driver',record.driverName);
+    // DEC-477. The role this person served in on this load; a pre-DEC-477 load reads Driver.
+    const crewRole=truckCrewRoleLabel(record.driverRole);
+    labelled(doc,crewRole,record.driverName);
     labelled(doc,'Truck plate',record.truckPlate);
     if(record.quantityMethod==='weighbridge'){
       if(record.requestedQuantityKg!=null)labelled(doc,'Requested quantity',`${record.requestedQuantityKg} kg`);
@@ -103,8 +106,8 @@ export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper
       labelled(doc,'Converted quantity',`${record.billedQuantity.toFixed(3)} ${record.outputUnitSymbol}`);
     }else labelled(doc,'Quantity',`${record.billedQuantity.toFixed(3)} ${record.outputUnitSymbol}`,true);
     if(record.signaturePaths.length){
-      doc.line('').line(divider(columns)).line('').align(1).raster(signatureRaster(record.signaturePaths,paper)).wrapped(`Driver signature: ${record.driverName}`).align(0);
-    }else labelled(doc,'Driver signature','Unsigned');
+      doc.line('').line(divider(columns)).line('').align(1).raster(signatureRaster(record.signaturePaths,paper)).wrapped(`${crewRole} signature: ${record.driverName}`).align(0);
+    }else labelled(doc,`${crewRole} signature`,'Unsigned');
   }
   if(record.companyReceiptFooter)doc.line('').line(divider(columns)).line('').align(1).wrapped(record.companyReceiptFooter).align(0);
   return doc.finish();

@@ -81,8 +81,8 @@ describe('migration 45: fresh install',()=>{
   it('reaches version 45 with construction_lifts and no cyclopean_lifts',async()=>{
     const db=new TestDatabase();databases.push(db);
     await migrateDatabase(db as never);
-    expect(DATABASE_VERSION).toBe(45);
-    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(45);
+    expect(DATABASE_VERSION).toBeGreaterThanOrEqual(45);
+    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(DATABASE_VERSION);
     expect(tables(db)).toContain('construction_lifts');
     expect(tables(db)).not.toContain('cyclopean_lifts');
     expect(db.raw.prepare('SELECT COUNT(*) count FROM construction_lifts').get()).toMatchObject({count:0});
@@ -109,7 +109,7 @@ describe.each([43,44])('migration 45: upgrading a version %i database',(version)
 
     const after=db.raw.prepare('SELECT * FROM construction_lifts ORDER BY id').all();
     expect(after).toEqual(before);
-    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(45);
+    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(DATABASE_VERSION);
   });
 
   it('removes the old table and the old index names from the active schema',async()=>{
@@ -155,6 +155,6 @@ describe('migration 45: replaying the chain',()=>{
 
     expect(db.raw.prepare('SELECT * FROM construction_lifts ORDER BY id').all()).toEqual(before);
     expect(tables(db)).not.toContain('cyclopean_lifts');
-    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(45);
+    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(DATABASE_VERSION);
   });
 });

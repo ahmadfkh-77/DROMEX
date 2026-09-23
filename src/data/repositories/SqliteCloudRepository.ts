@@ -4,7 +4,7 @@ import type {CloudAccountSnapshot,CloudRecord,CloudSession} from '../../domain/c
 import {CloudMediaService} from '../../services/cloud/CloudMediaService';
 import {CloudSessionStore} from '../../services/cloud/CloudSessionStore';
 import {FirebaseRestGateway} from '../../services/cloud/FirebaseRestGateway';
-import {entityTable,isSyncTable,rankFor,syncTables} from '../../services/cloud/SyncSchema';
+import {cloudSafeRow,entityTable,isSyncTable,rankFor,syncTables} from '../../services/cloud/SyncSchema';
 import type {CloudRepository} from './CloudRepository';
 
 type StateRow={owner_uid:string|null;owner_email:string|null;device_id:string;last_sync_at:string|null;last_pull_at:string;last_error:string|null;phase:CloudAccountSnapshot['phase'];initial_upload_complete:number};
@@ -45,7 +45,7 @@ export class SqliteCloudRepository implements CloudRepository{
 
   private async enqueueCurrentDraft(){const draft=await this.db.getFirstAsync<Record<string,unknown>>('SELECT * FROM load_drafts WHERE id=?','current');if(!draft)return;const updated=String(draft.updated_at??new Date().toISOString());const registry=await this.db.getFirstAsync<{client_modified_at:string}>('SELECT client_modified_at FROM cloud_sync_records WHERE record_key=?',this.key('load_drafts','current'));if((registry?.client_modified_at??'')>=updated)return;const exists=await this.db.getFirstAsync<{id:number}>('SELECT id FROM sync_outbox WHERE entity_type=? AND entity_id=? AND created_at>=? LIMIT 1','loadDraft','current',updated);if(!exists)await this.db.runAsync('INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES (?,?,?,?,?)','loadDraft','current','{}',updated);}
 
-  private async row(table:string,id:string){return this.db.getFirstAsync<Record<string,unknown>>(`SELECT * FROM "${table}" WHERE id=?`,id);}
+  private async row(table:string,id:string){return cloudSafeRow(table,await this.db.getFirstAsync<Record<string,unknown>>(`SELECT * FROM "${table}" WHERE id=?`,id));}
   private async saveRegistry(record:CloudRecord){await this.db.runAsync('INSERT INTO cloud_sync_records (record_key,client_modified_at,cloud_updated_at,device_id) VALUES (?,?,?,?) ON CONFLICT(record_key) DO UPDATE SET client_modified_at=excluded.client_modified_at,cloud_updated_at=excluded.cloud_updated_at,device_id=excluded.device_id',record.key,record.clientModifiedAt,record.cloudUpdatedAt,record.deviceId);}
   private async markFailure(id:number,error:string){await this.db.runAsync('UPDATE sync_outbox SET attempt_count=attempt_count+1,last_error=? WHERE id=?',error.slice(0,500),id);}
   private async pending(){const row=await this.db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM sync_outbox');return row?.count??0;}

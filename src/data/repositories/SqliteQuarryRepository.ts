@@ -60,14 +60,14 @@ export class SqliteQuarryRepository implements QuarryRepository {
       this.db.getAllAsync<{id:string;customer_id:string;customer_name:string;name:string;location:string;status:'active'|'completed';notes:string|null;start_date:string|null;end_date:string|null}>("SELECT p.*,c.name customer_name FROM projects p JOIN customers c ON c.id=p.customer_id WHERE p.status='active' AND p.is_archived=0 ORDER BY p.name COLLATE NOCASE"),
       this.db.getAllAsync<{id:string;name:string;internal_code:string|null;category_name:string;default_unit_id:string|null}>('SELECT i.id,i.name,i.internal_code,i.default_unit_id,c.name category_name FROM catalog_items i JOIN categories c ON c.id=i.category_id WHERE i.is_active=1 AND i.quarry_enabled=1 AND c.is_active=1 ORDER BY c.name COLLATE NOCASE,i.name COLLATE NOCASE'),
       this.db.getAllAsync<{id:string;name:string;symbol:string}>('SELECT id,name,symbol FROM measurement_units WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
-      this.db.getAllAsync<{id:string;name:string;phone:string|null;license_number:string|null;notes:string|null;is_active:number}>('SELECT * FROM driver_profiles WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
+      this.db.getAllAsync<{id:string;name:string;phone:string|null;license_number:string|null;notes:string|null;is_active:number}>("SELECT * FROM driver_profiles WHERE is_active=1 AND person_role='driver' ORDER BY name COLLATE NOCASE"),
       this.db.getAllAsync<{id:string;plate:string;make_model:string|null;capacity_kg:number|null;owner_name:string|null;notes:string|null;is_active:number}>('SELECT * FROM truck_profiles WHERE is_active=1 ORDER BY plate COLLATE NOCASE'),
       this.db.getFirstAsync<{vat_rate_basis_points:number}>("SELECT vat_rate_basis_points FROM tax_settings WHERE id='tax'"),
     ]);
     return{suppliers:suppliers.map(r=>({id:r.id,name:r.name,phone:r.phone,email:r.email,address:r.address,taxVatNumber:r.tax_vat_number,notes:r.notes,isActive:r.is_active===1})),
       projects:projects.map((r):Project=>({id:r.id,customerId:r.customer_id,customerName:r.customer_name,name:r.name,location:r.location,status:r.status,notes:r.notes,startDate:r.start_date,endDate:r.end_date})),
       items:items.map(r=>({id:r.id,name:r.name,internalCode:r.internal_code,categoryName:r.category_name,defaultUnitId:r.default_unit_id})),
-      units,drivers:drivers.map((r):DriverProfile=>({id:r.id,name:r.name,phone:r.phone,licenseNumber:r.license_number,notes:r.notes,isActive:r.is_active===1})),
+      units,drivers:drivers.map((r):DriverProfile=>({id:r.id,name:r.name,phone:r.phone,licenseNumber:r.license_number,notes:r.notes,isActive:r.is_active===1,role:'driver'})),
       trucks:trucks.map((r):TruckProfile=>({id:r.id,plate:r.plate,makeModel:r.make_model,capacityKg:r.capacity_kg,ownerName:r.owner_name,notes:r.notes,isActive:r.is_active===1})),
       vatRatePercent:(tax?.vat_rate_basis_points??0)/100};
   }

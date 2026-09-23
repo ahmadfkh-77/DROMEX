@@ -2275,3 +2275,18 @@ Domain, migration 42, repository, five-stage screens, real Stone-core dragging, 
 Report/workbook grouping implemented on `feature/android-wall-consumption-improvements`. Typecheck
 clean; 773 Vitest tests green across 65 files. Not yet verified on a physical device or in Expo Go —
 the Owner will test the new directory, five-stage workspace, and drag gesture there.
+
+## People, Custom Directories, Supervisor Sign-off, Supplier Load grouping and Project Totals (2026-09-23)
+
+Feature branch `feature/android-people-directories-supervisors-totals`; DEC-476 to DEC-481. Visual detail is recorded in DESIGN.md, "Implemented on People, Custom Directories, Supervisors and Project Totals".
+
+- People & Equipment: one People tab with role filter chips and counts, a role pill in words on every person, a Focused Sheet editor with a single-select Role and role-change confirmation, and a Possible duplicate flag in text.
+- Two shared primitives: `FocusedSheet` (the Receipt Setup sheet, generalised) and `SegmentedChoice` (selection shown by fill, 2px border and check mark, never colour alone).
+- New focused screens: Custom Directories, Supervisors (from PDF Settings section 04), and Project Totals (from Project Command Center → Records and Documents).
+- Daily Report editor: Operators field, per-directory Custom resources picker with report notes, and section 15 Supervisor Sign-off.
+- Make Receipt: Driver / Operator field with role filters; Load History and Load Corrections name the role served; a signed load's person is shown locked.
+- Daily Report PDF: Additional resources blocks, Supplier Loads grouped per item in fixed-column tables with repeating item headings, and a closing Supervisor Sign-off grid. Reviewed on rendered samples; the review caught and fixed quantities losing their decimals ("22. t") and a false "$0.00" subtotal for all-unpriced suppliers, and aligned column widths across item tables.
+
+### Status
+
+Implemented with automated tests (98 files, 1,349 tests green, typecheck clean). Physical acceptance in Expo Go pending.

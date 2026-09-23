@@ -1,4 +1,6 @@
+import type {CustomDirectoryOption,CustomResourceSnapshot} from './customDirectories';
 import type {FuelType} from './fuel';
+import type {Supervisor,SupervisorSignoffSnapshot} from './supervisors';
 import type {ConsultingAgencyOption} from './profiles';
 import type {BaseStatus} from './wallBase';
 import type {Foundation} from './foundations';
@@ -10,7 +12,8 @@ import type {WallConsumption,WallPurpose,WallSystem} from './walls';
 export type ReportProjectStatus = 'active' | 'completed';
 export type MaterialMovement = 'used' | 'transported';
 export type WorkerSafetyStatus = 'compliant' | 'missing' | 'not_checked';
-export type SafetyParticipantType = 'worker' | 'driver';
+// DEC-476. Operators carry their own PPE entries alongside workers and truck drivers.
+export type SafetyParticipantType = 'worker' | 'driver' | 'operator';
 export type WorkerSafetyEntry = { workerName:string;participantType?:SafetyParticipantType;status:WorkerSafetyStatus;missingItems:string[];notes:string };
 export const safetyEquipment=['Helmet','High-visibility vest','Safety boots','Gloves','Safety glasses','Hearing protection','Harness'] as const;
 
@@ -54,6 +57,18 @@ export type DailyProjectReportDraft = {
   workers: string[];
   workerSafety?: WorkerSafetyEntry[];
   drivers: string[];
+  /**
+   * DEC-476. The list a name is saved in is its role snapshot: a person selected as a Driver stays
+   * under Drivers in this report even if their directory role later changes to Operator. Optional
+   * only so records written before DEC-476 still type-check; the repository always returns a list.
+   */
+  operators?: string[];
+  /**
+   * DEC-478. Entries selected from Owner-defined directories, copied when selected (directory name,
+   * entry name, identifier, report note). Never re-read from the directory; optional only so records
+   * written before DEC-478 still type-check -- the repository always returns a list.
+   */
+  customResources?: CustomResourceSnapshot[];
   truckPlates: string[];
   machines: string[];
   materials: DailyReportMaterial[];
@@ -81,6 +96,12 @@ export type DailyProjectReportDraft = {
   consultingAgencyId: string | null;
   consultingAgencyNameEn: string | null;
   consultingAgencyNameAr: string | null;
+  /**
+   * DEC-479. Supervisor Sign-off, in the order the supervisors were selected. Each entry is the report's
+   * own copy of the name, title, display choice and signature strokes; independent of the Consultant
+   * sign-off and of every document header. Optional only so pre-DEC-479 records still type-check.
+   */
+  supervisorSignoffs?: SupervisorSignoffSnapshot[];
 };
 
 export type DailyProjectReport = Omit<DailyProjectReportDraft, 'id'> & {
@@ -99,7 +120,8 @@ export type LinkedProjectLoad = {
   truckPlate: string;
   unitPriceUsd?:number|null;subtotalUsd?:number|null;vatAmountUsd?:number|null;finalTotalUsd?:number|null;
 };
-export type LinkedQuarryLoad = { id:string; purchaseNumber:string; confirmedAt:string; supplierName:string; itemName:string; quantity:number; unitSymbol:string; deliveryMethod:'company'|'supplier'; deliveryLabel:string; truckPlate:string|null; supplierTicketNumber:string|null; notes:string|null; unitPriceUsd?:number|null;subtotalUsd?:number|null;vatAmountUsd?:number|null;finalTotalUsd?:number|null };
+/** DEC-480. itemId, supplierId and unitId are the stable keys Supplier Loads are grouped by; absent only on hand-built fixtures. */
+export type LinkedQuarryLoad = { id:string; purchaseNumber:string; confirmedAt:string; supplierId?:string|null; supplierName:string; itemId?:string|null; itemName:string; quantity:number; unitId?:string|null; unitSymbol:string; deliveryMethod:'company'|'supplier'; deliveryLabel:string; truckPlate:string|null; supplierTicketNumber:string|null; notes:string|null; unitPriceUsd?:number|null;subtotalUsd?:number|null;vatAmountUsd?:number|null;finalTotalUsd?:number|null };
 export type LinkedFuelFill = {id:string;confirmedAt:string;equipmentName:string;fuelType:FuelType;litres:number;pricePerLitreUsd:number|null;consumptionCostUsd:number|null;odometerReading:string|null;notes:string|null};
 export type LinkedWasteDump = { id: string; dumpedAt: string; materialType: string; dumpLocation: string; truckPlate: string | null; driverName: string | null };
 // DEC-453. Wall construction read live for a Daily Report, like every other linked section: each
@@ -129,6 +151,7 @@ export type ProjectReportSetup = {
   presenceOptions: {
     workers: ReportPresenceOption[];
     drivers: ReportPresenceOption[];
+    operators: ReportPresenceOption[];
     truckPlates: ReportPresenceOption[];
     machines: ReportPresenceOption[];
   };
@@ -143,6 +166,10 @@ export type ProjectReportSetup = {
   // record's own currently-assigned-but-inactive agency is not in this list; combine with
   // resolveConsultingAgencySelectorOptions (domain/profiles.ts) to include it.
   consultingAgencies: ConsultingAgencyOption[];
+  /** DEC-478. Active directories with their active entries, for new selections only. */
+  customDirectories: CustomDirectoryOption[];
+  /** DEC-479. Active saved supervisors, for new sign-off selections only. */
+  supervisors: Supervisor[];
 };
 
 export function splitPresence(value: string): string[] {
@@ -179,7 +206,7 @@ export function emptyDailyReport(
   agency?: { id: string; nameEn: string; nameAr: string | null } | null,
 ): DailyProjectReportDraft {
   return {
-    id: null, projectId, workDate: localDateString(), workDescription: '', workers: [], workerSafety:[], drivers: [],
+    id: null, projectId, workDate: localDateString(), workDescription: '', workers: [], workerSafety:[], drivers: [], operators: [],
     truckPlates: [], machines: [], materials: [], photos: [], notes: '', problemsDelaysIncidents: '',
     weatherSiteConditions: '', workStartTime: '', workEndTime: '', breakMinutes: '', nextWorkPlanned: '',
     consultantSignoffEnabled: false, consultantName: '', consultantSignaturePaths: [],

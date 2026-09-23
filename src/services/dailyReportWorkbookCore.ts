@@ -1,3 +1,6 @@
+import { normalizeCustomResourceSnapshots } from '../domain/customDirectories';
+import { normalizeSupervisorSignoffs } from '../domain/supervisors';
+import { groupSupplierLoads } from '../domain/supplierLoadGroups';
 import { netWorkMinutes, type DailyProjectReport, type LinkedFoundationActivity, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
 import { liftHasManualOverride, type ConstructionLiftReportGroup } from '../domain/constructionLiftReport';
 import { liftStatusText } from '../domain/constructionLiftDiagram';
@@ -152,13 +155,13 @@ export function dailyReportWorkbookSheets(report: DailyProjectReport, project: R
       { Section: 'Net Work Minutes', Details: net },
     ] },
     { name: 'Presence', rows: [
-      { Category: 'Workers', Entries: list(report.workers) }, { Category: 'Drivers', Entries: list(report.drivers) },
+      { Category: 'Workers', Entries: list(report.workers) }, { Category: 'Drivers', Entries: list(report.drivers) }, { Category: 'Operators', Entries: list(report.operators ?? []) },
       { Category: 'Truck Plates', Entries: list(report.truckPlates) }, { Category: 'Machines', Entries: list(report.machines) },
     ] },
-    { name:'Worker Safety',rows:[...report.workers.map(name=>({name,type:'Worker' as const})),...report.drivers.map(name=>({name,type:'Truck Driver' as const}))].map(person=>{const safety=(report.workerSafety??[]).find(value=>value.workerName===person.name&&(value.participantType??'worker')===(person.type==='Worker'?'worker':'driver'));return{Person:person.name,Role:person.type,Status:safety?.status==='compliant'?'Compliant':safety?.status==='missing'?'Missing PPE':'Not checked','Missing PPE':safety?.missingItems.join(', ')||null,Notes:safety?.notes||null};})},
+    { name:'Worker Safety',rows:[...report.workers.map(name=>({name,type:'Worker',key:'worker'})),...report.drivers.map(name=>({name,type:'Truck Driver',key:'driver'})),...(report.operators??[]).map(name=>({name,type:'Operator',key:'operator'}))].map(person=>{const safety=(report.workerSafety??[]).find(value=>value.workerName===person.name&&(value.participantType??'worker')===person.key);return{Person:person.name,Role:person.type,Status:safety?.status==='compliant'?'Compliant':safety?.status==='missing'?'Missing PPE':'Not checked','Missing PPE':safety?.missingItems.join(', ')||null,Notes:safety?.notes||null};})},
     { name: 'Materials', rows: report.materials.map((material) => ({ 'Material ID': material.id, 'Item ID': material.itemId, Item: material.itemName, Movement: material.movement, Quantity: material.quantity, 'Unit ID': material.unitId, Unit: material.unitSymbol })) },
     { name: 'Linked Loads', rows: loads.map((load) => ({ 'Record ID': load.id, 'Transaction Number': load.transactionNumber, Item: load.itemName, Quantity: load.quantity, Unit: load.unitSymbol, Driver: load.driverName, 'Truck Plate': load.truckPlate })) },
-    { name:'Supplier Loads',rows:quarry.map(load=>({'Record ID':load.id,'Supplier Reference':load.purchaseNumber,'Confirmed At':load.confirmedAt,Supplier:load.supplierName,Item:load.itemName,Quantity:load.quantity,Unit:load.unitSymbol,'Delivery Method':load.deliveryLabel,'Truck Plate':load.truckPlate,'Supplier Ticket':load.supplierTicketNumber,Notes:load.notes}))},
+    { name:'Supplier Loads',rows:quarry.map(load=>({'Record ID':load.id,'Supplier Reference':load.purchaseNumber,'Confirmed At':load.confirmedAt,'Supplier ID':load.supplierId??null,Supplier:load.supplierName,'Item ID':load.itemId??null,Item:load.itemName,Quantity:load.quantity,'Unit ID':load.unitId??null,Unit:load.unitSymbol,'Delivery Method':load.deliveryLabel,'Truck Plate':load.truckPlate,'Supplier Ticket':load.supplierTicketNumber,Notes:load.notes}))},
     { name:'Fuel Used',rows:fuel.map(fill=>({'Record ID':fill.id,'Confirmed At':fill.confirmedAt,Equipment:fill.equipmentName,'Litres Filled':fill.litres,'Price per Litre USD':fill.pricePerLitreUsd,'Consumption Cost USD':fill.consumptionCostUsd,'Cost Status':fill.consumptionCostUsd==null?'Unpriced':'Costed','Odometer Reference':fill.odometerReading,Notes:fill.notes}))},
     { name: 'Waste Dumps', rows: waste.map((entry) => ({ 'Record ID': entry.id, 'Dumped At': entry.dumpedAt, Material: entry.materialType, Location: entry.dumpLocation, Driver: entry.driverName, 'Truck Plate': entry.truckPlate })) },
     { name: 'Wall Construction', rows: wallConstructionRows(wallWork) },
@@ -167,6 +170,16 @@ export function dailyReportWorkbookSheets(report: DailyProjectReport, project: R
     { name: 'Lifts', rows: constructionLiftRows(wallWork, foundationActivity, project, report.workDate) },
     { name: 'Foundations Without a Wall', rows: foundationOnlyRows(foundationActivity) },
     { name: 'Photos', rows: report.photos.map((uri, index) => ({ Photo: index + 1, 'File name': uri.split('/').pop() ?? `photo-${index + 1}.jpg`, 'Work Date': report.workDate })), images },
+    // Sheets added after DEC-476 follow Photos so every earlier sheet keeps its position in the file.
+    // DEC-478. One flat row per selected entry, carrying stable ids so the sheet filters and joins cleanly.
+    { name: 'Custom Resources', rows: normalizeCustomResourceSnapshots(report.customResources ?? []).flatMap((group) => group.entries.map((entry) => ({ 'Directory ID': group.directoryId, Directory: group.directoryName, 'Entry ID': entry.entryId, Entry: entry.name, Identifier: entry.identifier, 'Report Note': entry.note }))) },
+    // DEC-479. Who signed off and how; the signature strokes themselves stay in the PDF only.
+    { name: 'Supervisor Sign-off', rows: normalizeSupervisorSignoffs(report.supervisorSignoffs ?? []).map((signoff, index) => ({ Order: index + 1, 'Supervisor ID': signoff.supervisorId, Supervisor: signoff.name, 'Job Title': signoff.jobTitle, 'Sign-off': signoff.display === 'name_with_signature' ? 'Name with saved signature' : 'Name only' })) },
+    // DEC-480. The PDF's supplier and item subtotals as flat rows, one per unit; never a total across units.
+    { name: 'Supplier Load Subtotals', rows: groupSupplierLoads(quarry).flatMap((item) => [
+      ...item.suppliers.flatMap((supplier) => supplier.subtotals.map((value) => ({ Level: 'Supplier subtotal', 'Item ID': item.itemId, Item: item.itemName, 'Supplier ID': supplier.supplierId, Supplier: supplier.supplierName, Unit: value.unitSymbol, 'Total Quantity': value.quantity, Loads: value.loadCount }))),
+      ...item.totals.map((value) => ({ Level: 'Item total', 'Item ID': item.itemId, Item: item.itemName, 'Supplier ID': null, Supplier: null, Unit: value.unitSymbol, 'Total Quantity': value.quantity, Loads: value.loadCount })),
+    ]) },
   ];
   return localizeWorkbookSheets(sheets, locale);
 }

@@ -17,6 +17,8 @@ import {baseStatusLabels} from '../../domain/wallBase';
 import {describeFoundationQuantity,hasLegacyMaterialRecord} from '../../domain/foundations';
 import {describeFoundationSectionPreference,parseFoundationSectionPreference,serializeFoundationSectionPreference,FOUNDATION_SECTION_PREFERENCE_KEY} from '../../domain/reportSectionPreferences';
 import { SearchableSelect } from '../components/SearchableSelect';
+import {CustomResourcePicker} from '../components/CustomResourcePicker';
+import {SupervisorSignoffPicker} from '../components/SupervisorSignoffPicker';
 import {CollapsibleFilterCard} from '../components/CollapsibleFilterCard';
 import {DatePickerField,todayIso} from '../components/DatePickerField';
 import {TimePickerField} from '../components/TimePickerField';
@@ -194,7 +196,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
           <TouchableOpacity onPress={() => editReport(report)} disabled={busy} accessibilityRole="button">
             <View style={styles.reportCardHeader}><Text style={styles.reportCardTitle}>{report.workDate}</Text><Text style={styles.openText}>Open</Text></View>
             <Text style={styles.reportDescription} numberOfLines={3}>{report.workDescription||'No work description recorded'}</Text>
-            <View style={styles.reportCounts}><Text style={styles.reportCountText}>{report.workers.length} workers</Text><Text style={styles.reportCountText}>{report.drivers.length} drivers</Text><Text style={styles.reportCountText}>{report.materials.length} materials</Text><Text style={styles.reportCountText}>{report.photos.length} photos</Text></View>
+            <View style={styles.reportCounts}><Text style={styles.reportCountText}>{report.workers.length} workers</Text><Text style={styles.reportCountText}>{report.drivers.length} drivers</Text><Text style={styles.reportCountText}>{(report.operators??[]).length} operators</Text><Text style={styles.reportCountText}>{report.materials.length} materials</Text><Text style={styles.reportCountText}>{report.photos.length} photos</Text></View>
             <Text style={styles.helper}>Saved {new Date(report.updatedAt).toLocaleString()}</Text>
           </TouchableOpacity>
           {exportingThis?<View style={styles.exportProgressTrack}><View style={[styles.exportProgressFill,{width:`${Math.max(2,exportProgress?.percent??2)}%`}]}/></View>:null}
@@ -294,7 +296,7 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
   const [openSections,setOpenSections]=useState<Set<string>>(()=>new Set());
   const toggleSection=(key:string)=>{if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setOpenSections(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});};
   const minutes = useMemo(() => netWorkMinutes(draft), [draft]);
-  const safetyPeople=[...draft.workers.map(name=>({name,type:'worker' as const,label:'Worker'})),...draft.drivers.map(name=>({name,type:'driver' as const,label:'Truck Driver'}))];
+  const safetyPeople=[...draft.workers.map(name=>({name,type:'worker' as const,label:'Worker'})),...draft.drivers.map(name=>({name,type:'driver' as const,label:'Truck Driver'})),...(draft.operators??[]).map(name=>({name,type:'operator' as const,label:'Operator'}))];
   const ppeSummary=useMemo(()=>summarizePpe(safetyPeople,draft.workerSafety??[]),[safetyPeople,draft.workerSafety]);
   const duplicateReport=useMemo(()=>reports.find(r=>r.workDate===draft.workDate&&r.id!==draft.id)??null,[reports,draft.workDate,draft.id]);
   const update = <K extends keyof DailyProjectReportDraft>(key: K, value: DailyProjectReportDraft[K]) => onChange({ ...draft, [key]: value });
@@ -307,7 +309,7 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
   }
   async function addPhoto(source:'camera'|'library') { if(draft.photos.length>=20){setMediaError('A report can contain up to 20 photos.');return;} try{setMediaError(null);const uri=source==='camera'?await capturePersistentImage('project-reports'):await pickPersistentImage('project-reports');if(uri)update('photos',[...draft.photos,uri]);}catch(cause){setMediaError(cause instanceof Error?cause.message:'Could not add photo.');} }
 
-  const peopleCount=draft.workers.length+draft.drivers.length+draft.truckPlates.length+draft.machines.length;
+  const peopleCount=draft.workers.length+draft.drivers.length+(draft.operators??[]).length+(draft.customResources??[]).reduce((sum,group)=>sum+group.entries.length,0)+draft.truckPlates.length+draft.machines.length;
   const notesFilledCount=[draft.notes,draft.problemsDelaysIncidents,draft.weatherSiteConditions,draft.nextWorkPlanned].filter(value=>value.trim()).length;
   const loadsCount=linkedLoads.length+linkedQuarryLoads.length;
   const wallRecordCount=linkedWallWork.reduce((sum,wall)=>sum+wall.entries.length,0);
@@ -347,12 +349,15 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
         <Text style={styles.sectionHint}>Choose saved records from a dropdown or type names and plates manually. Both methods can be combined; all fields are optional.</Text>
         <PresenceField label="Workers" options={setup.presenceOptions.workers} values={draft.workers} onChange={(value) => update('workers', value)} />
         <PresenceField label="Drivers" options={setup.presenceOptions.drivers} values={draft.drivers} onChange={(value) => update('drivers', value)} />
+        <PresenceField label="Operators" options={setup.presenceOptions.operators} values={draft.operators??[]} onChange={(value) => update('operators', value)} />
         <PresenceField label="Truck plates" options={setup.presenceOptions.truckPlates} values={draft.truckPlates} onChange={(value) => update('truckPlates', value)} />
         <PresenceField label="Machines" options={setup.presenceOptions.machines} values={draft.machines} onChange={(value) => update('machines', value)} />
+        <Text style={styles.sectionHint}>Additional resources from your own directories. Each choice is saved into this report as it reads today.</Text>
+        <CustomResourcePicker options={setup.customDirectories} value={draft.customResources??[]} onChange={(value) => update('customResources', value)} />
       </LedgerSection>
 
       <LedgerSection number="03" title="Worker Safety / PPE" badge={ppeBadge} badgeTone={ppeSummary.missing>0?'warning':'neutral'} open={openSections.has('ppe')} onToggle={()=>toggleSection('ppe')} reducedMotion={reducedMotion}>
-        <Text style={styles.sectionHint}>Workers and truck drivers start as Not Checked. Record compliance or missing safety equipment without blocking the report.</Text>
+        <Text style={styles.sectionHint}>Workers, truck drivers and operators start as Not Checked. Record compliance or missing safety equipment without blocking the report.</Text>
         {safetyPeople.length?safetyPeople.map(person=>{const safety=(draft.workerSafety??[]).find(value=>value.workerName===person.name&&(value.participantType??'worker')===person.type)??{workerName:person.name,participantType:person.type,status:'not_checked' as const,missingItems:[],notes:''};return <View key={`${person.type}:${person.name}`} style={styles.safetyWorker}><View style={styles.safetyWorkerHeader}><Text style={styles.recordName}>{person.name}</Text><View style={styles.roleBadge}><Text style={styles.roleBadgeText}>{person.label}</Text></View></View><View style={styles.ppeChips}><PpeChoice label="Compliant" tone="success" selected={safety.status==='compliant'} onPress={()=>updateSafety(person.type,person.name,{status:'compliant',missingItems:[]})}/><PpeChoice label="Missing PPE" tone="warning" selected={safety.status==='missing'} onPress={()=>updateSafety(person.type,person.name,{status:'missing'})}/><PpeChoice label="Not Checked" tone="neutral" selected={safety.status==='not_checked'} onPress={()=>updateSafety(person.type,person.name,{status:'not_checked',missingItems:[]})}/></View>{safety.status==='missing'?<><Text style={styles.fieldLabel}>Missing equipment</Text><View style={styles.chipWrap}>{safetyEquipment.map(item=><Choice key={item} label={item} selected={safety.missingItems.includes(item)} onPress={()=>updateSafety(person.type,person.name,{missingItems:safety.missingItems.includes(item)?safety.missingItems.filter(value=>value!==item):[...safety.missingItems,item]})}/>)}</View></>:null}<Field label="Safety notes" value={safety.notes} onChangeText={notes=>updateSafety(person.type,person.name,{notes})} placeholder="Optional observation"/></View>}):<Text style={styles.helper}>Add the present workers or drivers above first.</Text>}
       </LedgerSection>
 
@@ -487,6 +492,13 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
           state={documentHeaderConfigured(setup.company,'customHeader')}
           onOpenPdfSettings={onOpenPdfSettings}
         />
+      </LedgerSection>
+
+      {/* DEC-479. Saved supervisors who sign off this report, in order. Independent of the Consultant
+          Sign-off above and of every PDF header: none of them reads or changes this section. */}
+      <LedgerSection number="15" title="Supervisor Sign-off" badge={(draft.supervisorSignoffs??[]).length?`${(draft.supervisorSignoffs??[]).length} supervisor${(draft.supervisorSignoffs??[]).length===1?'':'s'}`:'None'} open={openSections.has('supervisors')} onToggle={()=>toggleSection('supervisors')} reducedMotion={reducedMotion}>
+        <Text style={styles.sectionHint}>Optional. Prints at the very end of the PDF. Each supervisor signs off by name or with their saved signature, copied into this report now so later profile changes never alter it.</Text>
+        <SupervisorSignoffPicker supervisors={setup.supervisors} value={draft.supervisorSignoffs??[]} onChange={(value)=>update('supervisorSignoffs',value)}/>
       </LedgerSection>
 
       <View style={styles.reviewCard}>

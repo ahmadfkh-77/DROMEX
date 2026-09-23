@@ -8,6 +8,9 @@ import {SqliteBackupRepository} from '../data/repositories/SqliteBackupRepositor
 import {SqliteCatalogRepository} from '../data/repositories/SqliteCatalogRepository';
 import {SqliteCloudRepository} from '../data/repositories/SqliteCloudRepository';
 import {SqliteConstructionLiftRepository} from '../data/repositories/SqliteConstructionLiftRepository';
+import {SqliteCustomDirectoryRepository} from '../data/repositories/SqliteCustomDirectoryRepository';
+import {SqliteSupervisorRepository} from '../data/repositories/SqliteSupervisorRepository';
+import {SqliteProjectTotalsRepository} from '../data/repositories/SqliteProjectTotalsRepository';
 import {SqliteFinancialRepository} from '../data/repositories/SqliteFinancialRepository';
 import {SqliteFuelRepository} from '../data/repositories/SqliteFuelRepository';
 import {SqliteLoadRepository} from '../data/repositories/SqliteLoadRepository';
@@ -30,6 +33,7 @@ import {AccountCloudScreen} from './screens/AccountCloudScreen';
 import {BackupRestoreScreen} from './screens/BackupRestoreScreen';
 import {BluetoothPrinterScreen} from './screens/BluetoothPrinterScreen';
 import {CatalogScreen} from './screens/CatalogScreen';
+import {CustomDirectoriesScreen} from './screens/CustomDirectoriesScreen';
 import {CustomersScreen} from './screens/CustomersScreen';
 import {DraftCenterScreen,type DraftRoute} from './screens/DraftCenterScreen';
 import {FinancialsScreen} from './screens/FinancialsScreen';
@@ -43,19 +47,21 @@ import {PeopleEquipmentScreen} from './screens/PeopleEquipmentScreen';
 import {PavementCalculatorScreen} from './screens/PavementCalculatorScreen';
 import {ProjectCommandCenterScreen} from './screens/ProjectCommandCenterScreen';
 import {ProjectsScreen} from './screens/ProjectsScreen';
+import {ProjectTotalsScreen} from './screens/ProjectTotalsScreen';
 import {QuarryPurchasesScreen} from './screens/QuarryPurchasesScreen';
 import {QuickTextScreen} from './screens/QuickTextScreen';
 import {ReceiptSetupScreen} from './screens/ReceiptSetupScreen';
 import {ReportsScreen} from './screens/ReportsScreen';
 import {ScheduleScreen} from './screens/ScheduleScreen';
 import {SettingsScreen} from './screens/SettingsScreen';
+import {SupervisorsScreen} from './screens/SupervisorsScreen';
 import {PdfSettingsScreen} from './screens/PdfSettingsScreen';
 import {WasteDumpScreen} from './screens/WasteDumpScreen';
 import {WallConstructionScreen} from './screens/WallConstructionScreen';
 import {WorkspaceHubScreen} from './screens/WorkspaceHubScreen';
 import {colors} from './theme';
 
-type Screen='home'|'projects'|'recordsHub'|'moreHub'|'projectCommand'|'search'|'drafts'|'attention'|'backup'|'cloud'|'printer'|'makeReceipt'|'loads'|'loadCorrections'|'receiptSetup'|'pdfSettings'|'directory'|'customers'|'catalog'|'schedule'|'pavement'|'walls'|'reports'|'quarry'|'waste'|'fuel'|'quickText'|'financials'|'settings';
+type Screen='home'|'projects'|'recordsHub'|'moreHub'|'projectCommand'|'projectTotals'|'search'|'drafts'|'attention'|'backup'|'cloud'|'printer'|'makeReceipt'|'loads'|'loadCorrections'|'receiptSetup'|'pdfSettings'|'supervisors'|'directory'|'customDirectories'|'customers'|'catalog'|'schedule'|'pavement'|'walls'|'reports'|'quarry'|'waste'|'fuel'|'quickText'|'financials'|'settings';
 type EntryIntent=CreateAction|null;
 const activeProjectKey='dromex.active-project.v1';
 
@@ -78,6 +84,9 @@ export function DromexApp(){
   const workspaceRepository=useMemo(()=>new SqliteWorkspaceRepository(db),[db]);
   const wallRepository=useMemo(()=>new SqliteWallRepository(db),[db]);
   const constructionLiftRepository=useMemo(()=>new SqliteConstructionLiftRepository(db),[db]);
+  const customDirectoryRepository=useMemo(()=>new SqliteCustomDirectoryRepository(db),[db]);
+  const supervisorRepository=useMemo(()=>new SqliteSupervisorRepository(db),[db]);
+  const projectTotalsRepository=useMemo(()=>new SqliteProjectTotalsRepository(db),[db]);
   const[screen,setScreen]=useState<Screen>('home');
   const[history,setHistory]=useState<Screen[]>([]);
   const[activeProject,setActiveProject]=useState<Project|null>(null);
@@ -117,12 +126,14 @@ export function DromexApp(){
   else if(screen==='backup')content=<BackupRestoreScreen repository={backupRepository} onBack={()=>goBack('moreHub')} onRestored={()=>{setActiveProject(null);setCommandProject(null);setHistory([]);setScreen('home');}}/>;
   else if(screen==='cloud')content=<AccountCloudScreen repository={cloudRepository} onBack={()=>goBack('moreHub')} onChanged={setCloudSnapshot}/>;
   else if(screen==='printer')content=<BluetoothPrinterScreen onBack={()=>goBack('moreHub')}/>;
-  else if(screen==='projectCommand'&&commandProject){const project=commandProject;content=<ProjectCommandCenterScreen project={project} repository={workspaceRepository} financialRepository={financialRepository} loadRepository={loadRepository} onProjectUpdated={updated=>{setCommandProject(updated);setActiveProject(current=>current&&current.id===updated.id?updated:current);}} initialPanel={projectPanel} onBack={()=>goBack('projects')} routes={{onSchedule:()=>{setScheduleProjectId(project.id);navigate('schedule');},onPavement:()=>{setPavementProjectId(project.id);navigate('pavement');},onWalls:()=>{setWallProjectId(project.id);navigate('walls');},onDailyReport:()=>{setEntryIntent('dailyReport');navigate('reports');},onReceipt:()=>{setEntryIntent('receipt');navigate('makeReceipt');},onWaste:()=>navigate('waste'),onFuel:()=>{setFuelProjectId(project.id);setEntryIntent('equipmentFill');navigate('fuel');},onQuarry:()=>{setEntryIntent('quarry');navigate('quarry');},onQuickText:()=>{setEntryIntent('quickText');navigate('quickText');},onLoads:()=>{setSearchTarget({id:'',kind:'Project',title:project.name,subtitle:'',date:null,route:'loads',projectId:project.id});navigate('loads');},onReports:()=>navigate('reports'),onManageProject:()=>navigate('projects')}}/>;}
+  else if(screen==='projectCommand'&&commandProject){const project=commandProject;content=<ProjectCommandCenterScreen project={project} repository={workspaceRepository} financialRepository={financialRepository} loadRepository={loadRepository} onProjectUpdated={updated=>{setCommandProject(updated);setActiveProject(current=>current&&current.id===updated.id?updated:current);}} initialPanel={projectPanel} onBack={()=>goBack('projects')} routes={{onSchedule:()=>{setScheduleProjectId(project.id);navigate('schedule');},onPavement:()=>{setPavementProjectId(project.id);navigate('pavement');},onWalls:()=>{setWallProjectId(project.id);navigate('walls');},onDailyReport:()=>{setEntryIntent('dailyReport');navigate('reports');},onReceipt:()=>{setEntryIntent('receipt');navigate('makeReceipt');},onWaste:()=>navigate('waste'),onFuel:()=>{setFuelProjectId(project.id);setEntryIntent('equipmentFill');navigate('fuel');},onQuarry:()=>{setEntryIntent('quarry');navigate('quarry');},onQuickText:()=>{setEntryIntent('quickText');navigate('quickText');},onLoads:()=>{setSearchTarget({id:'',kind:'Project',title:project.name,subtitle:'',date:null,route:'loads',projectId:project.id});navigate('loads');},onReports:()=>navigate('reports'),onManageProject:()=>navigate('projects'),onTotals:()=>navigate('projectTotals')}}/>;}
+  else if(screen==='projectTotals'&&commandProject)content=<ProjectTotalsScreen project={commandProject} repository={projectTotalsRepository} onBack={()=>goBack('projectCommand')}/>;
   else if(screen==='makeReceipt')content=<ReceiptEntrance><MakeReceiptScreen repository={loadRepository} initialProjectId={activeProject?.id} onBack={()=>goBack('home')} onOpenSetup={()=>navigate('receiptSetup')} onOpenDirectory={()=>navigate('directory')} onOpenProjects={()=>navigate('projects')}/></ReceiptEntrance>;
   else if(screen==='loads'){const projectName=searchTarget?.projectId?(commandProject?.id===searchTarget.projectId?commandProject.name:activeProject?.id===searchTarget.projectId?activeProject.name:''):'';content=<LoadHistoryScreen repository={loadRepository} supplierRepository={quarryRepository} onOpenSupplierLoad={load=>{setSearchTarget({id:load.id,kind:'Supplier Load',title:load.purchaseNumber,subtitle:`${load.supplierName} · ${load.itemName}`,date:load.confirmedAt,route:'quarry',projectId:load.projectId});navigate('quarry');}} initialFromDate={dashboardRange?.fromDate} initialToDate={dashboardRange?.toDate} initialProjectName={projectName} initialLoadId={searchTarget?.route==='loads'?searchTarget.id:null} onCorrectLoad={load=>{setCorrectionLoadId(load.id);navigate('loadCorrections');}} onBack={()=>goBack('recordsHub')}/>;}
   else if(screen==='loadCorrections')content=<LoadCorrectionsScreen repository={loadRepository} initialLoadId={correctionLoadId} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='receiptSetup')content=<ReceiptSetupScreen repository={loadRepository} onBack={()=>goBack('moreHub')}/>;
-  else if(screen==='directory')content=<PeopleEquipmentScreen repository={loadRepository} onBack={()=>goBack('recordsHub')}/>;
+  else if(screen==='directory')content=<PeopleEquipmentScreen repository={loadRepository} onOpenCustomDirectories={()=>navigate('customDirectories')} onBack={()=>goBack('recordsHub')}/>;
+  else if(screen==='customDirectories')content=<CustomDirectoriesScreen repository={customDirectoryRepository} onBack={()=>goBack('directory')}/>;
   else if(screen==='customers')content=<CustomersScreen repository={profileRepository} financialRepository={financialRepository} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='catalog')content=<CatalogScreen repository={catalogRepository} onBack={()=>goBack('moreHub')}/>;
   else if(screen==='reports')content=<ReportsScreen repository={projectReportRepository} businessReportRepository={businessReportRepository} onOpenPdfSettings={()=>navigate('pdfSettings')} initialBusinessFilters={dashboardRange?{fromDate:dashboardRange.fromDate,toDate:dashboardRange.toDate}:undefined} initialProjectId={searchTarget?.route==='reports'?searchTarget.projectId:activeProject?.id} initialReportId={searchTarget?.route==='reports'?searchTarget.id:null} startNewReport={entryIntent==='dailyReport'} onBack={()=>goBack('moreHub')}/>;
@@ -136,11 +147,12 @@ export function DromexApp(){
   else if(screen==='fuel')content=<FuelTrackingScreen repository={fuelRepository} initialProjectId={fuelProjectId??activeProject?.id} lockedProjectId={fuelProjectId} initialTab={entryIntent==='fuelDelivery'?'delivery':entryIntent==='equipmentFill'?'fill':undefined} onBack={()=>{setFuelProjectId(null);goBack('recordsHub');}}/>;
   else if(screen==='quickText')content=<QuickTextScreen repository={quickTextRepository} initialProjectId={activeProject?.id} initialDocumentId={searchTarget?.route==='quickText'?searchTarget.id:null} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='settings')content=<SettingsScreen repository={profileRepository} onBack={()=>goBack('moreHub')}/>;
-  else if(screen==='pdfSettings')content=<PdfSettingsScreen repository={profileRepository} onBack={()=>goBack('moreHub')}/>;
+  else if(screen==='pdfSettings')content=<PdfSettingsScreen repository={profileRepository} onOpenSupervisors={()=>navigate('supervisors')} onBack={()=>goBack('moreHub')}/>;
+  else if(screen==='supervisors')content=<SupervisorsScreen repository={supervisorRepository} onBack={()=>goBack('pdfSettings')}/>;
   else content=<ProjectsScreen repository={loadRepository} onBack={()=>goRoot('home')} onOpenProject={openProject}/>;
 
-  const recordsActive=(['recordsHub','loads','loadCorrections','customers','directory','schedule','pavement','walls','quarry','waste','fuel','quickText','financials'] as Screen[]).includes(screen);
-  const moreActive=(['moreHub','reports','catalog','receiptSetup','pdfSettings','printer','settings','search','drafts','attention','backup','cloud'] as Screen[]).includes(screen);
+  const recordsActive=(['recordsHub','loads','loadCorrections','customers','directory','customDirectories','schedule','pavement','walls','quarry','waste','fuel','quickText','financials'] as Screen[]).includes(screen);
+  const moreActive=(['moreHub','reports','catalog','receiptSetup','pdfSettings','supervisors','printer','settings','search','drafts','attention','backup','cloud'] as Screen[]).includes(screen);
   if(cloudSnapshot?.configured&&!cloudSnapshot.signedIn)return <SafeAreaView style={styles.safeArea}><StatusBar barStyle="dark-content" backgroundColor={colors.background}/><CloudAutoSync repository={cloudRepository} onSnapshot={setCloudSnapshot}/><AccountCloudScreen repository={cloudRepository} onChanged={setCloudSnapshot}/></SafeAreaView>;
   return <SafeAreaView style={styles.safeArea}><StatusBar barStyle="dark-content" backgroundColor={colors.background}/><CloudAutoSync repository={cloudRepository} onSnapshot={setCloudSnapshot}/>{activeProject?<ProjectContextBar project={activeProject} onOpen={()=>{setCommandProject(activeProject);setProjectPanel(null);navigate('projectCommand');}} onChange={()=>goRoot('projects')} onClear={()=>chooseActiveProject(null)}/>:null}<View style={styles.shell}>{content}</View><View style={styles.nav}><NavButton mark="⌂" label="Home" active={screen==='home'} onPress={()=>goRoot('home')}/><NavButton mark="P" label="Projects" active={screen==='projects'||screen==='projectCommand'} onPress={()=>goRoot('projects')}/><CreateNavButton onPress={()=>setCreateOpen(true)}/><NavButton mark="R" label="Records" active={recordsActive} onPress={()=>goRoot('recordsHub')}/><NavButton mark="•••" label="More" active={moreActive} onPress={()=>goRoot('moreHub')}/></View><CreateActionSheet visible={createOpen} activeProject={activeProject} onClose={()=>setCreateOpen(false)} onChooseProject={()=>{setCreateOpen(false);goRoot('projects');}} onSelect={openCreateAction}/></SafeAreaView>;
 }

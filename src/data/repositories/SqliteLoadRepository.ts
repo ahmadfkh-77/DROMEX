@@ -6,7 +6,6 @@ import {
   type ConfirmedLoad,
   type ConversionDraft,
   type ConversionOption,
-  type DriverDraft,
   type DriverProfile,
   type LoadDraft,
   type LoadCorrectionDraft,
@@ -22,13 +21,15 @@ import {
   type TruckDraft,
   type TruckProfile,
   type UnitDraft,
-  type WorkerDraft,
-  type WorkerProfile,
   validateLoadDraft,
   validateProjectStartDate, validateProjectInformation,
 } from '../../domain/loads';
 import type { DirectoryProfiles, LoadRepository } from './LoadRepository';
 import {paymentStatus} from '../../domain/financials';
+import {
+  findPersonNameConflict, isPersonRole, isTruckCrewEligible, normalizePersonName, personRoleLabels, truckCrewRoleLabel, validatePersonDraft,
+  type PersonDraft, type PersonProfile, type PersonRole, type PersonRoleChange, type TruckCrewRole,
+} from '../../domain/people';
 import { resolveConsultingAgencySelectorOptions, type ConsultingAgencyOption } from '../../domain/profiles';
 import { SqliteProfileRepository } from './SqliteProfileRepository';
 
@@ -48,9 +49,17 @@ type ItemRow = {
   id: string; name: string; internal_code: string | null; category_name: string;
   default_receipt_price_usd_cents: number | null; default_unit_id: string | null;
 };
-type DriverRow = { id: string; name: string; phone: string | null; license_number: string | null; notes: string | null; is_active: number };
+/**
+ * Internal compatibility rows (migration 24's "Supplier Delivering" driver) share the table but are
+ * not people: they never appear in People, in search, or in duplicate checks, and cannot be edited.
+ */
+const NOT_SYSTEM_ROW = "substr(id,1,7) <> 'system_'";
+/** DEC-476. A row of the unified People table, which keeps its legacy name driver_profiles. */
+type PersonRow = {
+  id: string; name: string; phone: string | null; license_number: string | null; notes: string | null; is_active: number;
+  person_role: PersonRole; job_title: string | null; role_history_json: string | null; created_at: string; updated_at: string;
+};
 type TruckRow = { id: string; plate: string; make_model: string | null; capacity_kg: number | null; owner_name: string | null; notes: string | null; is_active: number };
-type WorkerRow = { id: string; name: string; role: string | null; phone: string | null; notes: string | null; is_active: number };
 type MachineRow = { id: string; name: string; machine_type: string | null; identifier: string | null; notes: string | null; is_active: number };
 type LoadRow = {
   id: string; transaction_number: string; confirmed_at: string; customer_name: string;
@@ -71,12 +80,32 @@ type LoadRow = {
   direct_unit_id: string | null; direct_unit_name: string | null; direct_unit_symbol: string | null;
   status: 'Active' | 'Cancelled'; cancellation_reason: string | null; cancelled_at: string | null;
   correction_history_json: string | null;
+  driver_profile_id: string | null; driver_role: TruckCrewRole | null;
 };
 
 function makeId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 function clean(value: string): string | null { const next = value.trim().replace(/\s+/g, ' '); return next || null; }
+function roleHistory(value: string | null): PersonRoleChange[] {
+  try {
+    const parsed: unknown = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed.filter((entry): entry is PersonRoleChange => !!entry && typeof entry === 'object' && isPersonRole((entry as PersonRoleChange).fromRole) && isPersonRole((entry as PersonRoleChange).toRole) && typeof (entry as PersonRoleChange).changedAt === 'string') : [];
+  } catch { return []; }
+}
+function personFromRow(row: PersonRow): PersonProfile {
+  return {
+    id: row.id, name: row.name, role: row.person_role, jobTitle: row.job_title, phone: row.phone, licenseNumber: row.license_number,
+    notes: row.notes, isActive: row.is_active === 1, roleHistory: roleHistory(row.role_history_json), createdAt: row.created_at, updatedAt: row.updated_at,
+  };
+}
+function crewFromRow(row: PersonRow): DriverProfile {
+  return { id: row.id, name: row.name, phone: row.phone, licenseNumber: row.license_number, notes: row.notes, isActive: row.is_active === 1, role: row.person_role === 'operator' ? 'operator' : 'driver' };
+}
+/** How a correction's audit history names the person on a receipt, e.g. "Ali Mansour (Operator)". */
+function crewLabel(name: string | null, role: TruckCrewRole | null): string | null {
+  return name ? `${name} (${truckCrewRoleLabel(role)})` : null;
+}
 function localToday(){const value=new Date();return`${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;}
 function unitFromRow(row: UnitRow): MeasurementUnit {
   return { id: row.id, name: row.name, symbol: row.symbol, isActive: row.is_active === 1 };
@@ -103,7 +132,7 @@ function loadFromRow(row: LoadRow): ConfirmedLoad {
     id: row.id, transactionNumber: row.transaction_number, confirmedAt: row.confirmed_at,
     customerName: row.customer_name, projectName: row.project_name, projectLocation: row.project_location,
     destinationAddress: row.destination_address, itemName: row.item_name, itemCode: row.item_code,
-    categoryName: row.category_name, driverName: row.driver_name, truckPlate: row.truck_plate,
+    categoryName: row.category_name, driverName: row.driver_name, driverRole: row.driver_role ?? null, driverId: row.driver_profile_id, truckPlate: row.truck_plate,
     requestedQuantityKg: quantityMethod === 'weighbridge' ? row.requested_quantity_kg : null,
     emptyWeightKg: quantityMethod === 'weighbridge' ? row.empty_weight_kg : null,
     fullWeightKg: quantityMethod === 'weighbridge' ? row.full_weight_kg : null,
@@ -132,7 +161,7 @@ export class SqliteLoadRepository implements LoadRepository {
   constructor(private readonly db: SQLiteDatabase) { this.profiles = new SqliteProfileRepository(db); }
 
   async getSetupOptions(): Promise<LoadSetupOptions> {
-    const [customers, companySettings, unitRows, conversionRows, projectRows, itemRows, driverRows, truckRows, workerRows, machineRows] = await Promise.all([
+    const [customers, companySettings, unitRows, conversionRows, projectRows, itemRows, crewRows, truckRows, machineRows] = await Promise.all([
       this.profiles.listCustomers(),
       this.profiles.getCompanySettings(),
       this.db.getAllAsync<UnitRow>('SELECT * FROM measurement_units WHERE is_active = 1 ORDER BY name COLLATE NOCASE'),
@@ -145,9 +174,9 @@ export class SqliteLoadRepository implements LoadRepository {
       this.db.getAllAsync<ItemRow>(`SELECT i.id, i.name, i.internal_code, i.default_unit_id, c.name category_name,
         i.default_receipt_price_usd_cents FROM catalog_items i JOIN categories c ON c.id = i.category_id
         WHERE i.is_active = 1 AND i.loads_enabled = 1 ORDER BY i.name COLLATE NOCASE`),
-      this.db.getAllAsync<DriverRow>('SELECT * FROM driver_profiles WHERE is_active = 1 ORDER BY name COLLATE NOCASE'),
+      // DEC-477. Everyone who may be named on a receipt: active Drivers and Operators, never Workers.
+      this.db.getAllAsync<PersonRow>("SELECT * FROM driver_profiles WHERE is_active = 1 AND person_role IN ('driver','operator') ORDER BY name COLLATE NOCASE"),
       this.db.getAllAsync<TruckRow>('SELECT * FROM truck_profiles WHERE is_active = 1 ORDER BY plate COLLATE NOCASE'),
-      this.db.getAllAsync<WorkerRow>('SELECT * FROM worker_profiles WHERE is_active = 1 ORDER BY name COLLATE NOCASE'),
       this.db.getAllAsync<MachineRow>('SELECT * FROM machine_profiles WHERE is_active = 1 ORDER BY name COLLATE NOCASE'),
     ]);
     const items: LoadItemOption[] = itemRows.map((row) => ({
@@ -155,11 +184,10 @@ export class SqliteLoadRepository implements LoadRepository {
       defaultPriceUsd: row.default_receipt_price_usd_cents == null ? null : row.default_receipt_price_usd_cents / 100,
       defaultUnitId: row.default_unit_id,
     }));
-    const drivers: DriverProfile[] = driverRows.map((row) => ({ id: row.id, name: row.name, phone: row.phone, licenseNumber: row.license_number, notes: row.notes, isActive: row.is_active === 1 }));
+    const drivers: DriverProfile[] = crewRows.map(crewFromRow);
     const trucks: TruckProfile[] = truckRows.map((row) => ({ id: row.id, plate: row.plate, makeModel: row.make_model, capacityKg: row.capacity_kg, ownerName: row.owner_name, notes: row.notes, isActive: row.is_active === 1 }));
-    const workers: WorkerProfile[] = workerRows.map((row) => ({ id: row.id, name: row.name, role: row.role, phone: row.phone, notes: row.notes, isActive: row.is_active === 1 }));
     const machines: MachineProfile[] = machineRows.map((row) => ({ id: row.id, name: row.name, machineType: row.machine_type, identifier: row.identifier, notes: row.notes, isActive: row.is_active === 1 }));
-    return { customers: customers.filter((value) => value.isActive), companySettings, units: unitRows.map(unitFromRow), conversions: conversionRows.map(conversionFromRow), projects: projectRows.map(projectFromRow), items, drivers, trucks, workers, machines };
+    return { customers: customers.filter((value) => value.isActive), companySettings, units: unitRows.map(unitFromRow), conversions: conversionRows.map(conversionFromRow), projects: projectRows.map(projectFromRow), items, drivers, trucks, machines };
   }
 
   async createUnit(draft: UnitDraft): Promise<MeasurementUnit> {
@@ -298,21 +326,54 @@ export class SqliteLoadRepository implements LoadRepository {
     return earliest;
   }
 
-  async createDriver(draft: DriverDraft): Promise<DriverProfile> {
-    if (!draft.name.trim()) throw new Error('Driver name is required.');
-    const now = new Date().toISOString(); const driver: DriverProfile = { id: makeId('driver'), name: draft.name.trim().replace(/\s+/g, ' '), phone: clean(draft.phone ?? ''), licenseNumber: clean(draft.licenseNumber ?? ''), notes: clean(draft.notes ?? ''), isActive: true };
-    await this.db.withTransactionAsync(async () => {
-      await this.db.runAsync(`INSERT INTO driver_profiles (id, name, phone, license_number, notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`, driver.id, driver.name, driver.phone, driver.licenseNumber, driver.notes, now, now);
-      await this.enqueue('driverProfile', driver.id, driver);
-    }); return driver;
+  async listPeople(): Promise<PersonProfile[]> {
+    return (await this.db.getAllAsync<PersonRow>(`SELECT * FROM driver_profiles WHERE ${NOT_SYSTEM_ROW} ORDER BY is_active DESC, name COLLATE NOCASE, id`)).map(personFromRow);
   }
 
-  async updateDriver(id:string,draft:DriverDraft):Promise<DriverProfile>{
-    const name=draft.name.trim().replace(/\s+/g,' ');if(!name)throw new Error('Driver name is required.');const now=new Date().toISOString();
-    const result=await this.db.runAsync('UPDATE driver_profiles SET name=?,phone=?,license_number=?,notes=?,updated_at=? WHERE id=?',name,clean(draft.phone??''),clean(draft.licenseNumber??''),clean(draft.notes??''),now,id);if(!result.changes)throw new Error('Driver was not found.');
-    const row=await this.db.getFirstAsync<DriverRow>('SELECT * FROM driver_profiles WHERE id=?',id);if(!row)throw new Error('Driver was not found after saving.');
-    const driver:DriverProfile={id:row.id,name:row.name,phone:row.phone,licenseNumber:row.license_number,notes:row.notes,isActive:row.is_active===1};await this.enqueue('driverProfile',id,{...driver,updatedAt:now});return driver;
+  async createPerson(draft: PersonDraft): Promise<PersonProfile> {
+    const issues = validatePersonDraft(draft); if (issues.length) throw new Error(issues.join('\n'));
+    await this.assertNoPersonConflict(draft, null);
+    const now = new Date().toISOString(); const id = makeId('person');
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync(`INSERT INTO driver_profiles (id, name, phone, license_number, notes, is_active, created_at, updated_at, person_role, job_title, role_history_json)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, '[]')`, id, normalizePersonName(draft.name), clean(draft.phone ?? ''), clean(draft.licenseNumber ?? ''), clean(draft.notes ?? ''), now, now, draft.role, clean(draft.jobTitle ?? ''));
+      const created = await this.personById(id);
+      await this.enqueue('person', id, created);
+    });
+    return this.personById(id);
+  }
+
+  /** A role change is appended to the person's own history; nothing that references them is touched. */
+  async updatePerson(id: string, draft: PersonDraft): Promise<PersonProfile> {
+    const issues = validatePersonDraft(draft); if (issues.length) throw new Error(issues.join('\n'));
+    const current = await this.db.getFirstAsync<PersonRow>(`SELECT * FROM driver_profiles WHERE id = ? AND ${NOT_SYSTEM_ROW}`, id);
+    if (!current) throw new Error('Person was not found.');
+    await this.assertNoPersonConflict(draft, id);
+    const now = new Date().toISOString();
+    const history = roleHistory(current.role_history_json);
+    const nextHistory = current.person_role === draft.role ? history : [...history, { changedAt: now, fromRole: current.person_role, toRole: draft.role }];
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync('UPDATE driver_profiles SET name=?, phone=?, license_number=?, notes=?, person_role=?, job_title=?, role_history_json=?, updated_at=? WHERE id=?',
+        normalizePersonName(draft.name), clean(draft.phone ?? ''), clean(draft.licenseNumber ?? ''), clean(draft.notes ?? ''), draft.role, clean(draft.jobTitle ?? ''), JSON.stringify(nextHistory), now, id);
+      await this.enqueue('person', id, await this.personById(id));
+    });
+    return this.personById(id);
+  }
+
+  async setPersonActive(id: string, isActive: boolean): Promise<void> {
+    if (!await this.db.getFirstAsync<{ id: string }>(`SELECT id FROM driver_profiles WHERE id = ? AND ${NOT_SYSTEM_ROW}`, id)) throw new Error('Person was not found.');
+    await this.setDirectoryProfileActive('driver_profiles', 'person', id, isActive);
+  }
+
+  private async personById(id: string): Promise<PersonProfile> {
+    const row = await this.db.getFirstAsync<PersonRow>('SELECT * FROM driver_profiles WHERE id = ?', id);
+    if (!row) throw new Error('Person was not found.');
+    return personFromRow(row);
+  }
+
+  private async assertNoPersonConflict(draft: PersonDraft, editingId: string | null): Promise<void> {
+    const conflict = findPersonNameConflict(draft, await this.listPeople(), editingId);
+    if (conflict) throw new Error(`${conflict.name} is already in People as ${conflict.role === 'operator' ? 'an' : 'a'} ${personRoleLabels[conflict.role]}${conflict.isActive ? '' : ' (inactive)'}. Open that person and change their role instead of adding them again.`);
   }
 
   async createTruck(draft: TruckDraft): Promise<TruckProfile> {
@@ -336,22 +397,6 @@ export class SqliteLoadRepository implements LoadRepository {
     const truck:TruckProfile={id:row.id,plate:row.plate,makeModel:row.make_model,capacityKg:row.capacity_kg,ownerName:row.owner_name,notes:row.notes,isActive:row.is_active===1};await this.enqueue('truckProfile',id,{...truck,updatedAt:now});return truck;
   }
 
-  async createWorker(draft: WorkerDraft): Promise<WorkerProfile> {
-    const name = draft.name.trim().replace(/\s+/g, ' '); if (!name) throw new Error('Worker name is required.');
-    const now = new Date().toISOString(); const worker: WorkerProfile = { id: makeId('worker'), name, role: clean(draft.role ?? ''), phone: clean(draft.phone ?? ''), notes: clean(draft.notes ?? ''), isActive: true };
-    await this.db.withTransactionAsync(async () => {
-      await this.db.runAsync('INSERT INTO worker_profiles (id,name,role,phone,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?)', worker.id, worker.name, worker.role, worker.phone, worker.notes, now, now);
-      await this.enqueue('workerProfile', worker.id, worker);
-    }); return worker;
-  }
-
-  async updateWorker(id:string,draft:WorkerDraft):Promise<WorkerProfile>{
-    const name=draft.name.trim().replace(/\s+/g,' ');if(!name)throw new Error('Worker name is required.');const now=new Date().toISOString();
-    const result=await this.db.runAsync('UPDATE worker_profiles SET name=?,role=?,phone=?,notes=?,updated_at=? WHERE id=?',name,clean(draft.role??''),clean(draft.phone??''),clean(draft.notes??''),now,id);if(!result.changes)throw new Error('Worker was not found.');
-    const row=await this.db.getFirstAsync<WorkerRow>('SELECT * FROM worker_profiles WHERE id=?',id);if(!row)throw new Error('Worker was not found after saving.');
-    const worker:WorkerProfile={id:row.id,name:row.name,role:row.role,phone:row.phone,notes:row.notes,isActive:row.is_active===1};await this.enqueue('workerProfile',id,{...worker,updatedAt:now});return worker;
-  }
-
   async createMachine(draft: MachineDraft): Promise<MachineProfile> {
     const name = draft.name.trim().replace(/\s+/g, ' '); if (!name) throw new Error('Machine name is required.');
     const now = new Date().toISOString(); const machine: MachineProfile = { id: makeId('machine'), name, machineType: clean(draft.machineType ?? ''), identifier: clean(draft.identifier ?? ''), notes: clean(draft.notes ?? ''), isActive: true };
@@ -370,22 +415,18 @@ export class SqliteLoadRepository implements LoadRepository {
   }
 
   async getDirectoryProfiles(): Promise<DirectoryProfiles> {
-    const [workerRows, driverRows, truckRows, machineRows] = await Promise.all([
-      this.db.getAllAsync<WorkerRow>('SELECT * FROM worker_profiles ORDER BY is_active DESC, name COLLATE NOCASE'),
-      this.db.getAllAsync<DriverRow>('SELECT * FROM driver_profiles ORDER BY is_active DESC, name COLLATE NOCASE'),
+    const [people, truckRows, machineRows] = await Promise.all([
+      this.listPeople(),
       this.db.getAllAsync<TruckRow>('SELECT * FROM truck_profiles ORDER BY is_active DESC, plate COLLATE NOCASE'),
       this.db.getAllAsync<MachineRow>('SELECT * FROM machine_profiles ORDER BY is_active DESC, name COLLATE NOCASE'),
     ]);
     return {
-      workers: workerRows.map((row) => ({ id: row.id, name: row.name, role: row.role, phone: row.phone, notes: row.notes, isActive: row.is_active === 1 })),
-      drivers: driverRows.map((row) => ({ id: row.id, name: row.name, phone: row.phone, licenseNumber: row.license_number, notes: row.notes, isActive: row.is_active === 1 })),
+      people,
       trucks: truckRows.map((row) => ({ id: row.id, plate: row.plate, makeModel: row.make_model, capacityKg: row.capacity_kg, ownerName: row.owner_name, notes: row.notes, isActive: row.is_active === 1 })),
       machines: machineRows.map((row) => ({ id: row.id, name: row.name, machineType: row.machine_type, identifier: row.identifier, notes: row.notes, isActive: row.is_active === 1 })),
     };
   }
 
-  async setWorkerActive(id: string, isActive: boolean): Promise<void> { await this.setDirectoryProfileActive('worker_profiles', 'workerProfile', id, isActive); }
-  async setDriverActive(id: string, isActive: boolean): Promise<void> { await this.setDirectoryProfileActive('driver_profiles', 'driverProfile', id, isActive); }
   async setTruckActive(id: string, isActive: boolean): Promise<void> { await this.setDirectoryProfileActive('truck_profiles', 'truckProfile', id, isActive); }
   async setMachineActive(id: string, isActive: boolean): Promise<void> { await this.setDirectoryProfileActive('machine_profiles', 'machineProfile', id, isActive); }
 
@@ -412,6 +453,9 @@ export class SqliteLoadRepository implements LoadRepository {
     if (calculation.convertedQuantity == null || calculation.billedQuantity == null || (draft.quantityMethod === 'weighbridge' && calculation.netWeightKg == null)) throw new Error('Load calculations are incomplete.');
     if (draft.quantityMethod === 'direct' && !directUnit) throw new Error('The direct quantity unit is unavailable.');
     if (draft.quantityMethod === 'weighbridge' && !conversion) throw new Error('The selected conversion is unavailable.');
+    // DEC-477. The person's name and role are snapshotted from the directory as they are now, so a
+    // draft saved before a rename or role change still confirms with what is true at confirmation.
+    const crew = options.drivers.find((value) => value.id === draft.driverId)!;
     const enteredAt=new Date().toISOString();const now=new Date(),[year=0,month=0,day=0]=draft.recordDate.split('-').map(Number);const confirmedAt=new Date(year,month-1,day,now.getHours(),now.getMinutes(),now.getSeconds(),now.getMilliseconds()).toISOString(); const id = makeId('load');
     let transactionNumber = '';
     await this.db.withTransactionAsync(async () => {
@@ -433,11 +477,11 @@ export class SqliteLoadRepository implements LoadRepository {
         conversion_name, conversion_rule, output_unit_symbol, converted_quantity, billed_quantity, unit_price_usd_cents,
         subtotal_usd_cents, vat_rate_basis_points, vat_amount_usd_cents, final_total_usd_cents, payment_status, notes,
         company_name, company_address, company_phone, company_email, company_tax_vat_number, company_receipt_footer, company_logo_uri,
-        quantity_method, direct_quantity, direct_unit_id, direct_unit_name, direct_unit_symbol,entered_at)
-        VALUES (${Array.from({length:47},()=>'?').join(', ')})`,
+        quantity_method, direct_quantity, direct_unit_id, direct_unit_name, direct_unit_symbol,entered_at,driver_role)
+        VALUES (${Array.from({length:48},()=>'?').join(', ')})`,
         id, transactionNumber, confirmedAt, customer.id, customer.name, project?.id ?? null, project?.name ?? null,
         project?.location ?? null, clean(draft.destinationAddress), item.id, item.name, item.internalCode, item.categoryName,
-        draft.driverName.trim(), draft.truckPlate.trim().toUpperCase(), draft.driverId, draft.truckId, !isDirect && draft.requestedQuantityKg.trim() ? Number(draft.requestedQuantityKg) : null,
+        crew.name, draft.truckPlate.trim().toUpperCase(), crew.id, draft.truckId, !isDirect && draft.requestedQuantityKg.trim() ? Number(draft.requestedQuantityKg) : null,
         isDirect ? 0 : Number(draft.emptyWeightKg), isDirect ? 1 : Number(draft.fullWeightKg), isDirect ? 1 : calculation.netWeightKg,
         retainedConversion.id, isDirect ? 'Direct quantity' : retainedConversion.name,
         isDirect ? 'Entered directly' : `${retainedConversion.inputQuantity} ${retainedConversion.inputUnitSymbol} = ${retainedConversion.outputQuantity} ${retainedConversion.outputUnitSymbol}`,
@@ -446,7 +490,7 @@ export class SqliteLoadRepository implements LoadRepository {
         calculation.vatAmountUsd == null ? null : Math.round(calculation.vatAmountUsd * 100), calculation.finalTotalUsd == null ? null : Math.round(calculation.finalTotalUsd * 100),
         paymentStatus, clean(draft.notes), options.companySettings.companyName, options.companySettings.address,
         options.companySettings.phone, options.companySettings.email, options.companySettings.taxVatNumber, options.companySettings.receiptFooter, options.companySettings.logoUri,
-        draft.quantityMethod, isDirect ? calculation.billedQuantity : null, isDirect ? directUnit!.id : null, isDirect ? directUnit!.name : null, isDirect ? directUnit!.symbol : null,enteredAt);
+        draft.quantityMethod, isDirect ? calculation.billedQuantity : null, isDirect ? directUnit!.id : null, isDirect ? directUnit!.name : null, isDirect ? directUnit!.symbol : null,enteredAt,crew.role);
       await this.db.runAsync('UPDATE device_state SET next_load_sequence = next_load_sequence + 1 WHERE id = ?', 'local');
       await this.db.runAsync('DELETE FROM load_drafts WHERE id = ?', 'current');
       await this.db.runAsync("DELETE FROM sync_outbox WHERE entity_type='loadDraft' AND entity_id='current'");
@@ -500,11 +544,26 @@ export class SqliteLoadRepository implements LoadRepository {
     const newValues:Record<string,string|null>=isDirect
       ?{'Direct quantity':String(direct),'Unit price':price==null?null:String(price),'Destination address':clean(draft.destinationAddress),Notes:clean(draft.notes)}
       :{'Requested quantity kg':requested==null?null:String(requested),'Empty weight kg':String(empty),'Full weight kg':String(full),'Unit price':price==null?null:String(price),'Destination address':clean(draft.destinationAddress),Notes:clean(draft.notes)};
+    // DEC-477. Reassigning the Driver / Operator is one more audited field of the same correction. The
+    // new person must be an active Driver or Operator, and their current name and role are snapshotted.
+    // A signed load keeps its person: the signature was given by them, and relabelling it would
+    // attribute someone else's signature to the new name.
+    let crew:{id:string;name:string;role:TruckCrewRole}={id:row.driver_profile_id??'',name:row.driver_name,role:row.driver_role??'driver'};
+    if(draft.driverId&&draft.driverId!==row.driver_profile_id){
+      const person=await this.db.getFirstAsync<PersonRow>(`SELECT * FROM driver_profiles WHERE id=? AND ${NOT_SYSTEM_ROW}`,draft.driverId);
+      if(!person||!isTruckCrewEligible(personFromRow(person)))throw new Error('Select an active driver or operator.');
+      if(row.signature_json&&(JSON.parse(row.signature_json) as unknown[]).length)throw new Error(`This load is signed by ${row.driver_name}. The person on a signed load cannot be changed.`);
+      crew={id:person.id,name:person.name,role:person.person_role==='operator'?'operator':'driver'};
+      oldValues['Driver / Operator']=crewLabel(row.driver_name,row.driver_role);
+      newValues['Driver / Operator']=crewLabel(crew.name,crew.role);
+    }
     const changes=Object.keys(newValues).filter(field=>newValues[field]!==oldValues[field]).map(field=>({field,originalValue:oldValues[field]??null,newValue:newValues[field]??null}));
     if(!changes.length)throw new Error('No information was changed.');
     const history=[...safeCorrectionHistory(row.correction_history_json),{correctedAt:now,correctedBy:'Admin',reason,changes}];
+    const crewChanged=crew.id!==(row.driver_profile_id??'');
     await this.db.withTransactionAsync(async()=>{
       await this.db.runAsync('UPDATE loads SET requested_quantity_kg=?,empty_weight_kg=?,full_weight_kg=?,net_weight_kg=?,direct_quantity=?,converted_quantity=?,billed_quantity=?,unit_price_usd_cents=?,subtotal_usd_cents=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,destination_address=?,notes=?,correction_history_json=?,updated_at=? WHERE id=?',requested,empty,full,net,isDirect?billed:null,converted,billed,price==null?null:Math.round(price*100),subtotal,vat,total,paymentStatusValue,clean(draft.destinationAddress),clean(draft.notes),JSON.stringify(history),now,loadId);
+      if(crewChanged)await this.db.runAsync('UPDATE loads SET driver_profile_id=?,driver_name=?,driver_role=? WHERE id=?',crew.id,crew.name,crew.role,loadId);
       await this.enqueue('load',loadId,{id:loadId,correctedAt:now,reason,changes,paymentStatus:paymentStatusValue,updatedAt:now});
     });
     const updated=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!updated)throw new Error('Corrected load was not found.');return loadFromRow(updated);
@@ -530,7 +589,7 @@ export class SqliteLoadRepository implements LoadRepository {
     await this.db.runAsync(`INSERT INTO sync_outbox (entity_type, entity_id, operation, payload_json, created_at)
       VALUES (?, ?, 'upsert', ?, ?)`, entityType, entityId, JSON.stringify(payload), new Date().toISOString());
   }
-  private async setDirectoryProfileActive(table: 'worker_profiles'|'driver_profiles'|'truck_profiles'|'machine_profiles', entityType: string, id: string, isActive: boolean): Promise<void> {
+  private async setDirectoryProfileActive(table: 'driver_profiles'|'truck_profiles'|'machine_profiles', entityType: string, id: string, isActive: boolean): Promise<void> {
     const exists = await this.db.getFirstAsync<{ id: string }>(`SELECT id FROM ${table} WHERE id = ?`, id);
     if (!exists) throw new Error('The saved profile was not found.');
     const updatedAt = new Date().toISOString();

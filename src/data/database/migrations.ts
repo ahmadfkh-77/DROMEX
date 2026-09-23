@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 45;
+export const DATABASE_VERSION = 46;
 
 type TableColumn = { name: string };
 
@@ -1580,6 +1580,101 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_construction_lifts_wall ON construction_lifts(wall_id, sequence);
     `);
     currentVersion = 45;
+  }
+
+  if (currentVersion === 45) {
+    // DEC-476. Workers, Drivers and Operators become one People directory. driver_profiles is the
+    // unified table and keeps its legacy name, exactly as quarry_purchases still stores Supplier
+    // Loads: loads, quarry_purchases, waste_dumps and waste_counter_presets all hold foreign keys to
+    // it, and keeping the table means none of those tables is rebuilt and no stored id changes.
+    // Every existing driver row simply becomes a person whose role is 'driver'.
+    await addColumnIfMissing(db, 'driver_profiles', 'person_role', "TEXT NOT NULL DEFAULT 'driver' CHECK (person_role IN ('worker','driver','operator'))");
+    // The old worker "role" column held a trade such as Mason or Steel fixer, not a directory role.
+    await addColumnIfMissing(db, 'driver_profiles', 'job_title', 'TEXT');
+    // The worker_profiles id a row was moved from. It makes the move below idempotent and auditable.
+    await addColumnIfMissing(db, 'driver_profiles', 'legacy_worker_id', 'TEXT');
+    await addColumnIfMissing(db, 'driver_profiles', 'role_history_json', "TEXT NOT NULL DEFAULT '[]'");
+
+    // Workers move across with every field, active state and timestamp. Nothing references a worker
+    // row by id (Daily Reports store name snapshots), so a worker keeps its own id unless a driver
+    // already owns it, in which case it is given a derived one; the source id is kept either way.
+    // A replay, or a second run after an interrupted first one, copies only the rows still missing.
+    // The table name is inlined rather than bound because minimal adapters (the demo-backup
+    // generator) forward no parameters, as in migration 45.
+    const workersTable = await db.getFirstAsync<{ name: string }>("SELECT name FROM sqlite_master WHERE type='table' AND name='worker_profiles'");
+    if (workersTable) {
+      await db.execAsync(`
+        INSERT INTO driver_profiles (id, name, phone, license_number, notes, is_active, created_at, updated_at, person_role, job_title, legacy_worker_id)
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM driver_profiles d WHERE d.id = w.id) THEN 'person_from_worker_' || w.id ELSE w.id END,
+               w.name, w.phone, NULL, w.notes, w.is_active, w.created_at, w.updated_at, 'worker', w.role, w.id
+        FROM worker_profiles w
+        WHERE NOT EXISTS (SELECT 1 FROM driver_profiles d WHERE d.legacy_worker_id = w.id);
+      `);
+      // The source table is dropped only after every one of its rows is confirmed present.
+      const missing = await db.getFirstAsync<{ count: number }>(
+        'SELECT COUNT(*) count FROM worker_profiles w WHERE NOT EXISTS (SELECT 1 FROM driver_profiles d WHERE d.legacy_worker_id = w.id)',
+      );
+      if (Number(missing?.count ?? 0) > 0) throw new Error('Migration 46 could not move every worker into People; nothing was removed.');
+      await db.execAsync('DROP TABLE worker_profiles;');
+    }
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_people_role_active ON driver_profiles(person_role, is_active, name COLLATE NOCASE);');
+
+    // DEC-477. The role a person served in on a receipt. NULL on every receipt made before this
+    // step: those could only ever name a Driver, and are displayed as such without writing a value.
+    await addColumnIfMissing(db, 'loads', 'driver_role', "TEXT CHECK (driver_role IS NULL OR driver_role IN ('driver','operator'))");
+
+    // DEC-476/478/479. Daily Report snapshots. Each is a JSON copy made when the report is saved and
+    // never re-read from a directory afterwards; an existing report starts with none of them.
+    await addColumnIfMissing(db, 'daily_project_reports', 'operators_json', "TEXT NOT NULL DEFAULT '[]'");
+    await addColumnIfMissing(db, 'daily_project_reports', 'custom_resources_json', "TEXT NOT NULL DEFAULT '[]'");
+    await addColumnIfMissing(db, 'daily_project_reports', 'supervisor_signoffs_json', "TEXT NOT NULL DEFAULT '[]'");
+
+    // DEC-478. Owner-defined resource directories in two generic tables -- never a table per
+    // directory. name_key is written only by the repository; this step creates empty tables, so no
+    // normalization runs here and none has to be frozen.
+    // DEC-479. Saved supervisors. The signature is stroke data in the same JSON form the consultant
+    // and driver signatures already use, so it lives inside the database and every backup.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS custom_directories (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL,
+        description TEXT,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_directories_name_key ON custom_directories(name_key);
+      CREATE TABLE IF NOT EXISTS custom_directory_entries (
+        id TEXT PRIMARY KEY NOT NULL,
+        directory_id TEXT NOT NULL REFERENCES custom_directories(id),
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL,
+        identifier TEXT,
+        notes TEXT,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_directory_entries_name_key ON custom_directory_entries(directory_id, name_key);
+      CREATE INDEX IF NOT EXISTS idx_custom_directory_entries_order ON custom_directory_entries(directory_id, is_active, display_order);
+      CREATE TABLE IF NOT EXISTS supervisors (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL,
+        job_title TEXT,
+        signature_json TEXT NOT NULL DEFAULT '[]',
+        signature_updated_at TEXT,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_supervisors_name_key ON supervisors(name_key);
+    `);
+    currentVersion = 46;
   }
 
 

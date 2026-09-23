@@ -6,7 +6,7 @@ const setup: QuarrySetup = {
   projects: [{id:'p1',customerId:'c1',customerName:'DROMEX',name:'Mountain Road',location:'Aley',status:'active',notes:null}],
   items: [{ id:'i1',name:'Aggregate',internalCode:null,categoryName:'Quarry' }],
   units: [{id:'unit_m3',name:'Cubic metre',symbol:'m³'}],
-  drivers: [{ id:'d1',name:'Ali',phone:null,licenseNumber:null,notes:null,isActive:true }],
+  drivers: [{ id:'d1',name:'Ali',phone:null,licenseNumber:null,notes:null,isActive:true, role: 'driver' }],
   trucks: [{ id:'t1',plate:'123456',makeModel:null,capacityKg:null,ownerName:null,notes:null,isActive:true }],
   vatRatePercent: 11,
 };

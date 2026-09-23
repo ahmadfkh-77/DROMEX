@@ -2104,3 +2104,51 @@ This section extends FR-093 and closes its pending "controlled consumption-entry
 - The Simple-mode Stone core shall support direct touch dragging within its drawn cross-section, remaining fully contained inside the outer foundation boundary by construction, changing only its stored position and never its recorded volume; position shall be committed once per gesture, on release. The existing nudge buttons and Reset to Centre shall remain available as a keyboard-safe, non-drag alternative.
 - The Daily Report PDF and workbook shall group Wall Construction output by Construction Section, then by Foundation, then by its linked wall or its own activity when no wall is linked yet, preserving every date-scoped honesty rule already required for curing status and material (DEC-463).
 - Migration 42 shall add Construction Sections and independent Foundations without modifying, dropping, or renaming `wall_bases` or `wall_base_composition_records`, so migrations 37 through 41 remain exactly as they were and stay safe to replay against an already-current database; every existing wall/base pair shall be preserved and linked automatically, and a wall with no base (a legacy wall) shall remain exactly as it was, with nothing invented for it (DEC-465).
+
+## People Roles, Custom Directories, Supervisor Sign-off, Supplier Load Grouping, and Project Totals Update
+
+Feature branch `feature/android-people-directories-supervisors-totals`, database version 46, decisions
+DEC-476 to DEC-481. Not released; no APK built. Physical acceptance pending.
+
+### People roles (DEC-476)
+- FR-PR-1: The system shall keep one People directory in which every person has exactly one current role: Worker, Driver or Operator.
+- FR-PR-2: Changing a person's role shall edit the same record, keep its id and every other field, append the change to the person's role history, and require confirmation first.
+- FR-PR-3: The system shall refuse a new or renamed person whose normalized name (trimmed, internal whitespace collapsed, case-folded) matches any saved person in any role, active or inactive; duplicates that existed before unification shall be kept, flagged, and never merged automatically.
+- FR-PR-4: People shall be deactivated, never deleted.
+- FR-PR-5: A Daily Report shall offer Workers, Drivers and Operators as separate lists, each built from active people of that role, and shall print Operators as their own People and equipment row and PPE role; the list a name is saved in is its historical role and shall not change when the person's role changes.
+- FR-PR-6: Migration 46 shall move every existing worker into People with no loss and keep every existing driver reference valid.
+
+### Driver / Operator on receipts (DEC-477)
+- FR-RC-1: Make Receipt shall offer active Drivers and Operators, filterable by role, each shown with their role; Workers shall not be offered.
+- FR-RC-2: Confirmation shall snapshot the person's current name and role; a receipt made before this update shall display as Driver without any value being written to it.
+- FR-RC-3: A reasoned correction may reassign the person to another active Driver or Operator and shall record the change in the correction history; the person on a signed load shall not be changeable.
+- FR-RC-4: The Delivery Authorization, Load History and business workbook shall show the role served.
+
+### Custom directories (DEC-478)
+- FR-CD-1: The Owner shall be able to create, rename, describe, reorder and archive directories, and add, edit, reorder and archive their entries (name, optional identifier, optional notes).
+- FR-CD-2: Directory names shall be unique among directories and entry names within their directory by normalized key; empty and over-length names shall be refused.
+- FR-CD-3: A Daily Report shall let the user select entries of each active directory, with an optional report note, and shall store a snapshot of the directory name, entry name, identifier and note.
+- FR-CD-4: The PDF shall print each selected directory under its own heading and omit empty ones; the workbook shall contain a Custom Resources sheet.
+
+### Supervisor sign-off (DEC-479)
+- FR-SV-1: PDF Settings shall provide a Supervisors manager: name, optional job title, optional saved signature, archive.
+- FR-SV-2: A saved signature shall be validated stroke data stored in the database; it shall never be stored as a file, logged, placed in the sync queue, or uploaded.
+- FR-SV-3: A Daily Report shall let the user select zero or more supervisors in order, each by name only or with their saved signature, and shall keep its own copy of the name, title, choice and signature.
+- FR-SV-4: The PDF shall end with a Supervisor Sign-off section whose blocks never split across pages, never distort a signature, and present a name-only sign-off as complete.
+
+### Supplier Loads grouping (DEC-480)
+- FR-SL-1: A Daily Report's Supplier Loads shall be grouped by item, then supplier, then load, using stable ids.
+- FR-SL-2: The PDF shall show a supplier subtotal per unit and an item total per unit, and shall never total across units or items.
+- FR-SL-3: Item headings shall repeat across page breaks; subtotal rows shall not split from their values; an all-unpriced subtotal shall read Unpriced.
+- FR-SL-4: The workbook shall keep row-based Supplier Loads data with stable ids and add a Supplier Load Subtotals sheet.
+
+### Project Totals (DEC-481)
+- FR-PT-1: Each project shall have a Totals destination showing, separately, supplier deliveries, company deliveries, Daily Report recorded use (Used and Transported), fuel per fuel type, and wall and foundation materials per source.
+- FR-PT-2: Totals shall be computed by grouped database queries; the screen shall perform no arithmetic.
+- FR-PT-3: Quantities shall only be added within one unit; no unit shall be converted; delivered and used shall never be one number; construction sources shall never be added to each other or to Daily Report use.
+- FR-PT-4: A difference shall appear only when the same item has delivered and used quantities in the same unit, and shall be labelled as not an inventory balance.
+- FR-PT-5: A missing measure shall read Not recorded; each total shall name its item, unit, date range and whether it is delivered or used; a total shall open its contributing records.
+- FR-PT-6: Filters shall cover an inclusive date range, item, supplier, unit and All / Delivered / Used; archived items and suppliers shall remain in historical totals.
+
+### Status
+Implemented with automated tests (98 files, 1,349+ tests green, typecheck clean). Not yet accepted on a physical device.

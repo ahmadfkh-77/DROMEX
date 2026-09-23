@@ -12,9 +12,9 @@ const baseOptions: LoadSetupOptions = {
   customers: [{ id: 'outside', type: 'company', name: 'Outside Customer', phone: null, email: null, address: null, taxVatNumber: null, notes: null, isOwnCompany: false, isActive: true, mergedIntoId: null, createdAt: '', updatedAt: '' }],
   items: [{ id: 'asphalt', name: 'Asphalt', internalCode: null, categoryName: 'Produced', defaultPriceUsd: 90, defaultUnitId: 'unit_ton' }],
   projects: [], units: [{id:'unit_piece',name:'Piece',symbol:'pc',isActive:true}], conversions: [conversion],
-  drivers: [{ id: 'driver_1', name: 'Ali', phone: null, licenseNumber: null, notes: null, isActive: true }],
+  drivers: [{ id: 'driver_1', name: 'Ali', phone: null, licenseNumber: null, notes: null, isActive: true, role: 'driver' }],
   trucks: [{ id: 'truck_1', plate: 'B123', makeModel: null, capacityKg: null, ownerName: null, notes: null, isActive: true }],
-  workers: [], machines: [],
+  machines: [],
   companySettings: { companyName: 'DROMEX', logoUri: null, address: null, phone: null, email: null, taxVatNumber: null, receiptFooter: null, ministryName: null, ministryNameAr: null, ministryLogoUri: null, consultingAgencyName: null, consultingAgencyNameAr: null, customHeaderEn: null, customHeaderAr: null, vatRatePercent: 11, updatedAt: '' },
 };
 const validDraft = { ...emptyLoadDraft, customerId: 'outside', destinationAddress: 'Beirut', itemId: 'asphalt', driverId: 'driver_1', truckId: 'truck_1', driverName: 'Ali', truckPlate: 'B123', emptyWeightKg: '10000', fullWeightKg: '30555', conversionId: conversion.id, unitPriceUsd: '90' };
@@ -61,7 +61,7 @@ describe('load confirmation validation', () => {
 
   it('requires saved driver and truck selections rather than free text alone', () => {
     const issues = validateLoadDraft({ ...validDraft, driverId: '', truckId: '' }, baseOptions);
-    expect(issues).toContain('Select a saved driver.');
+    expect(issues).toContain('Select a saved driver or operator.');
     expect(issues).toContain('Select a saved truck.');
   });
   it('rejects prices with more than two decimals or scientific notation',()=>{

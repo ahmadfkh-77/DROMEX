@@ -56,9 +56,9 @@ const legacyDraft=(sectionId:string,overrides:Partial<FoundationDraft>={}):Found
 
 describe('migration 44: schema',()=>{
   it('advances the database version',async()=>{
-    expect(DATABASE_VERSION).toBe(45);
+    expect(DATABASE_VERSION).toBeGreaterThanOrEqual(45);
     const {db}=await seeded();
-    expect((await db.getFirstAsync<{user_version:number}>('PRAGMA user_version'))?.user_version).toBe(45);
+    expect((await db.getFirstAsync<{user_version:number}>('PRAGMA user_version'))?.user_version).toBe(DATABASE_VERSION);
   });
 
   it('makes the three legacy material columns nullable and keeps every other column',async()=>{
@@ -122,7 +122,7 @@ describe('migration 44: existing data is preserved exactly',()=>{
 
     const after=await db.getAllAsync<Record<string,unknown>>('SELECT * FROM foundations ORDER BY id');
     expect(after).toEqual(before);
-    expect((await db.getFirstAsync<{user_version:number}>('PRAGMA user_version'))?.user_version).toBe(45);
+    expect((await db.getFirstAsync<{user_version:number}>('PRAGMA user_version'))?.user_version).toBe(DATABASE_VERSION);
     expect((await walls.getFoundation(populated.id))?.quantity).toBe(9);
     expect((await walls.getFoundation(planned.id))?.quantity).toBeNull();
   });
