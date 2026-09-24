@@ -169,6 +169,7 @@ export function ProjectFinancialReview({ repository, projectId, projectName, cus
               <MoneyTile role="overpaid" label="Overpaid by customer" value={summary.revenue.overpaidUsd} wide note="payments exceed the amount billed" accessibilityLabel={`Overpaid by customer, ${formatMoney(summary.revenue.overpaidUsd)}. Payments recorded exceed the amount billed.`} />
             ) : null}
 
+            <PaidScopeNote />
             <Text style={styles.metaLine}>{plural(summary.revenue.recordCount, 'record')} · {billingPeriodText(summary.revenue)}</Text>
             <StatusStrip statuses={revenueStatuses} noun="record" />
             {revenueExcluded ? <ExclusionStrip phrase={revenueExcluded} where="Load History" /> : null}
@@ -228,6 +229,7 @@ export function ProjectFinancialReview({ repository, projectId, projectName, cus
               <MoneyTile role="overpaid" label="Overpaid to suppliers" value={summary.supplierPayables.overpaidUsd} wide note="payments exceed the amount billed" accessibilityLabel={`Overpaid to suppliers, ${formatMoney(summary.supplierPayables.overpaidUsd)}. Payments recorded exceed the amount billed.`} />
             ) : null}
 
+            <PaidScopeNote />
             <Text style={styles.metaLine}>{plural(summary.supplierPayables.recordCount, 'priced delivery', 'priced deliveries')}</Text>
             <StatusStrip statuses={supplierStatuses} noun="delivery" pluralNoun="deliveries" />
             {supplierExcluded ? <ExclusionStrip phrase={supplierExcluded} where="Supplier Loads" /> : null}
@@ -668,6 +670,19 @@ function SupplierCard({ group, records, open, onToggle, recordsOpen, onToggleRec
   );
 }
 
+/**
+ * DEC-482. Paid here counts only amounts applied to this project's records. An account payment left
+ * unallocated is attached to no record, so it belongs to no project and appears only in Payments &
+ * Balances; that account's total Paid can therefore be higher than any project's Paid.
+ */
+function PaidScopeNote() {
+  return (
+    <Text style={styles.scopeNote}>
+      Paid here counts only payments applied to this project's records. Unallocated payments belong to no project, so the account's total Paid in Payments & Balances can be higher.
+    </Text>
+  );
+}
+
 function EmptyExpectation({ title, body }: { title: string; body: string }) {
   return (
     <View style={styles.emptyExpectation}>
@@ -687,6 +702,7 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: '#F7F4EE' },
   helper: { color: BODY_TEXT, fontSize: 13, lineHeight: 19 },
   metaLine: { color: BODY_TEXT, fontSize: 12, lineHeight: 17 },
+  scopeNote: { color: BODY_TEXT, fontSize: 12, lineHeight: 17, backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: SOFT_BORDER, paddingHorizontal: 11, paddingVertical: 9 },
   footnote: { color: BODY_TEXT, fontSize: 12, lineHeight: 18, padding: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: SOFT_BORDER },
   subheadRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginTop: 4 },
   subhead: { color: colors.navy, fontSize: 13, fontWeight: '700', marginTop: 4 },

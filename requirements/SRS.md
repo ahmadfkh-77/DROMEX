@@ -584,6 +584,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Acceptance criteria: Recording several partial payments against order 1 creates separate dated entries under order 1, does not attach them to order 2, and updates order 1's total paid and remaining balance without executing a financial transfer. A payment covering orders 1 and 2 requires one entry under each order. Cancelling opens a warning, requires a reason, records cancellation time, removes its amount from calculations, retains the entry/details visibly, and cannot be reactivated.
 - Source: Interview turns 22–25
 - Status: Confirmed
+- Amended by DEC-482 and DEC-485: one real payment may now be recorded once for a whole customer or supplier account and applied overall (left unallocated), oldest first, or to selected records, and unallocated money may be applied to records later. Amounts applied to records remain separate entries each linked to exactly one record; see *Payments & Balances Account Statement* below.
 
 ### FR-024
 - Statement: “The system shall display the payment history for a selected customer order.”
@@ -1199,7 +1200,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - A confirmed payment cannot be deleted but may be marked Cancelled after an explicit warning and required reason. The system records the cancellation date/time; the entry, reason, and time remain visible and contribute zero to paid totals, remaining balances, and status derivation. Cancellation is final and cannot be reactivated. (Sources: Turns 167–169; status: Confirmed.)
 
 ### BR-015
-- An order may receive multiple partial payments. Each payment entry is linked to exactly one order, and remaining balance equals order total less the sum of its linked payment amounts. A real-world payment covering several orders is recorded as separate entries per order. (Sources: Turns 24–25 and 165; status: Confirmed.)
+- An order may receive multiple partial payments. Each payment entry is linked to exactly one order, and remaining balance equals order total less the sum of its linked payment amounts. A real-world payment covering several orders is recorded as separate entries per order. (Sources: Turns 24–25 and 165; status: Confirmed.) Amended by DEC-482: such a payment may be entered once and split automatically into one linked entry per order; any part not applied to an order stays visible as unallocated on the account and lowers its balance, never an order's.
 
 ### BR-016
 - A quarry delivery records its quantity directly and does not require the empty/full weighbridge workflow used for outgoing loads. (Source: Turn 26; status: Confirmed.)
@@ -1310,7 +1311,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - A customer order shall retain its customer, exactly one truck load and item reference, quantity, unit, USD price state, derived total paid, remaining balance, and automatically derived status of Unpriced, No Payment Due, Unpaid, Partially Paid, Paid, or Overpaid, with every USD value displayed to two decimal places. Different items or loads use separate receipt/order history entries. An order relates to zero or more separate USD payment entries. (Sources: Turns 23–25, 114, 120, 128–129, and 166; status: Partially confirmed; other attributes pending.)
 
 ### DR-014
-- Each payment entry shall retain its USD amount to two decimal places, payment date, association with exactly one customer order, and Active or Cancelled state. A real-world payment covering multiple orders is represented by separate entries for their respective allocated amounts. A cancelled entry retains required reason and automatic cancellation date/time, remains in history, is excluded from calculations, and cannot be reactivated. Other fields remain open. (Sources: Turns 25, 120, 165, and 167–169; status: Partially confirmed.)
+- Each payment entry shall retain its USD amount to two decimal places, payment date, association with exactly one customer order, and Active or Cancelled state. A real-world payment covering multiple orders is represented by separate entries for their respective allocated amounts. A cancelled entry retains required reason and automatic cancellation date/time, remains in history, is excluded from calculations, and cannot be reactivated. Other fields remain open. (Sources: Turns 25, 120, 165, and 167–169; status: Partially confirmed.) Amended by DEC-482: an entry may also reference the account payment it was applied from (`account_payment_id`); the account payment itself (DR-014a below) retains amount, payment date, method, optional reference and note, application mode, and Active/Cancelled state with reason and time.
 
 ### DR-015
 - A measurement unit shall retain a required display name, required symbol, stable identifier, and Active/Inactive state. Receipt Setup organizes units into alphabetic Active and Inactive groups with Edit, Remove, and Reactivate actions. Names and symbols are independently unique under case-insensitive comparison. A referenced unit cannot be deleted and Remove deactivates it and dependent conversion choices; it may later be reactivated. An unused unit may be permanently removed. Every confirmed referencing record retains an immutable snapshot of the unit name and symbol used at confirmation. (Sources: Turns 27, 301, and 434; status: Confirmed and implemented.)
@@ -1559,7 +1560,7 @@ subsection records the confirmed requirements only.
 | CON-001 | 22 | Exclude in-app payment processing | Defined |
 | FR-021 | 23 | Summarize customer quantities and total price | Unit and inclusion rules pending |
 | FR-022 | 23 | Show complete customer order/payment history | Exception handling pending |
-| FR-023 | 22–23 | Track in-person payments against orders | Allocation rules pending |
+| FR-023 | 22–23 | Track in-person payments against orders | Allocation rules defined (DEC-482, DEC-485) |
 | BR-014 | 23 | Derive customer summary and order balances | Aggregation rules pending |
 | DR-013 | 23 | Represent customer order payment tracking | Payment cardinality pending |
 | BR-015 | 24 | Support partial order payment and remaining balance | Multiple-payment history pending |
@@ -2175,3 +2176,36 @@ DEC-484. Presentation only: no calculation, schema, record, backup, sync, PDF or
 ### Status
 Implemented with automated tests. Not yet accepted on a physical device.
 
+## Payments & Balances Account Statement
+
+DEC-482, DEC-483, DEC-485 and DEC-486. Migration 47. Physical acceptance pending.
+
+### Account payments
+- FR-AP-1: The Owner shall record one real payment once for a customer or supplier account with amount, payment date, method (Cash, Cheque, Bank transfer, Other), optional reference and optional note. It records money exchanged outside the app and processes nothing.
+- FR-AP-2: The Owner shall choose how it is applied: Overall balance (unallocated), Oldest unpaid records, or Select records with exact full or partial amounts; each choice shall be explained, and the oldest-first result and the resulting balance shall be previewed before confirmation.
+- FR-AP-3: A record shall never receive more than it still owes, a payment shall never be allocated beyond its own amount, and the unallocated part shall stay visible and lower the account balance. Money beyond what the account owes shall be shown as credit, never as a negative balance, and customer and supplier money shall never be netted together.
+- FR-AP-4: From an unpaid record the Owner shall be able to Mark paid in full or Record partial payment, see total, paid and remaining, and see every payment that affected the record, including which account payment each amount came from.
+- FR-AP-5: A payment with an unallocated amount shall offer Apply unallocated payment: part or all of that amount applied oldest first or to selected records, without changing, cancelling or re-entering the payment (DEC-485).
+- FR-AP-6: Cancelling a payment shall require a reason and shall cancel it and every amount it applied together, all kept in history; an amount applied from a larger payment shall not be cancelled on its own.
+- FR-AP-7: Every save shall re-read the records' remaining balances and the payment's unallocated amount inside one transaction and save nothing if any check fails; every change shall append a `sync_outbox` audit entry.
+
+### Open Balance cancellation
+- FR-OB-1: An Open Balance shall be cancelled, never deleted, through an explicit action requiring a reason; its cancellation time and prior payment status shall be retained (DEC-483).
+- FR-OB-2: Cancellation shall be refused while the balance has any active payment.
+- FR-OB-3: A cancelled balance shall count toward no amount owed, Attention count, workbook billed total or dashboard balance, shall remain visible in the account's Cancelled balances and in the workbook with Record Status Cancelled, and shall not be restored by payment-status recalculation, backup restore or sync.
+
+### Account statement layout (DEC-486)
+- FR-PB-1: Payments & Balances shall list accounts with customer and supplier totals kept apart, search, an All / Customers / Suppliers switch and an *only accounts with a balance owed* filter; each account shows its balance, total paid and open record count.
+- FR-PB-2: An account statement shall show the balance with Billed, Paid and Unallocated, one Add Payment action, and `+` / `×` sections for Open records, Payment history, Paid records, Cancelled balances and Account activity (a dated timeline built only from real records, payments, applications and cancellations).
+- FR-PB-3: Opened from a dashboard period, the screen shall state the period and keep balances current rather than filtering them.
+- FR-PB-4: Project Financial Review shall exclude unallocated payments, which belong to no project, and shall state why a project's Paid can be lower than the account's total Paid.
+
+### Data
+- DR-014a: An account payment shall retain party, amount in USD cents, payment date, method, optional reference and note, application mode, Active/Cancelled state, cancellation reason and time, and creation time. Its record allocations are payment entries (DR-014) linked by `account_payment_id`.
+- DR-OB-1: An Open Balance shall retain status (Active or Cancelled), cancellation reason, cancellation time and the payment status before cancellation. Migration 47 sets every existing balance Active and links no existing payment.
+
+### Known follow-up
+- The Excel workbook's supplier Total Billed does not include supplier Open Balances. This predates DEC-482 and is left unchanged.
+
+### Status
+Implemented with automated tests. Not yet accepted on a physical device.

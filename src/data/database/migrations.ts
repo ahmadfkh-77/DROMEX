@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 46;
+export const DATABASE_VERSION = 47;
 
 type TableColumn = { name: string };
 
@@ -1675,6 +1675,43 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_supervisors_name_key ON supervisors(name_key);
     `);
     currentVersion = 46;
+  }
+
+  if (currentVersion === 46) {
+    // DEC-482 / DEC-483. Open Balances can be cancelled (never deleted): status, reason, time, and the
+    // payment status they had when cancelled. One real payment is an account_payments row; the
+    // amounts it applies to individual records stay ordinary payment_entries linked back to it, so
+    // every per-record balance rule keeps working. Existing balances become Active; existing
+    // payments keep account_payment_id NULL and behave exactly as before.
+    await addColumnIfMissing(db, 'opening_balances', 'status', "TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled'))");
+    await addColumnIfMissing(db, 'opening_balances', 'cancellation_reason', 'TEXT');
+    await addColumnIfMissing(db, 'opening_balances', 'cancelled_at', 'TEXT');
+    await addColumnIfMissing(db, 'opening_balances', 'status_before_cancellation', 'TEXT');
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS account_payments (
+        id TEXT PRIMARY KEY NOT NULL,
+        party_type TEXT NOT NULL CHECK (party_type IN ('customer', 'supplier')),
+        customer_id TEXT REFERENCES customers(id),
+        supplier_id TEXT REFERENCES suppliers(id),
+        party_name TEXT NOT NULL,
+        amount_usd_cents INTEGER NOT NULL CHECK (amount_usd_cents > 0),
+        payment_date TEXT NOT NULL,
+        method TEXT NOT NULL CHECK (method IN ('cash', 'cheque', 'bank_transfer', 'other')),
+        reference TEXT,
+        notes TEXT,
+        application_mode TEXT NOT NULL CHECK (application_mode IN ('overall', 'oldest', 'selected', 'record')),
+        status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled')),
+        cancellation_reason TEXT,
+        cancelled_at TEXT,
+        created_at TEXT NOT NULL,
+        CHECK ((party_type = 'customer' AND customer_id IS NOT NULL AND supplier_id IS NULL) OR (party_type = 'supplier' AND supplier_id IS NOT NULL AND customer_id IS NULL))
+      );
+      CREATE INDEX IF NOT EXISTS idx_account_payments_customer ON account_payments(customer_id, payment_date DESC);
+      CREATE INDEX IF NOT EXISTS idx_account_payments_supplier ON account_payments(supplier_id, payment_date DESC);
+    `);
+    await addColumnIfMissing(db, 'payment_entries', 'account_payment_id', 'TEXT REFERENCES account_payments(id)');
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_payments_account_payment ON payment_entries(account_payment_id);');
+    currentVersion = 47;
   }
 
 

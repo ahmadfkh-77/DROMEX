@@ -48,11 +48,20 @@ export function buildDashboardSnapshot(data:BusinessReportData,range:DashboardRa
   const balanceGroups=new Map<string,DashboardBalanceSummary>();
   const addBalance=(partyType:'customer'|'supplier',id:string,name:string,remaining:number)=>{if(!id||remaining<=0)return;const key=`${partyType}|${id}`,current=balanceGroups.get(key)??{id,name:name||'Unnamed',partyType,remainingUsd:0,recordCount:0};current.remainingUsd+=remaining;current.recordCount++;balanceGroups.set(key,current);};
   for(const row of loads){const remaining=numeric(row['Remaining USD']);addBalance('customer',text(row['Customer ID']),text(row.Customer),remaining);}
-  const openings=data.openingBalances.filter(row=>inRange(row,range));
+  // DEC-483. A cancelled Open Balance stays in the workbook as history but is never owed.
+  const openings=data.openingBalances.filter(row=>inRange(row,range)&&text(row['Record Status'])!=='Cancelled');
   for(const row of openings){const remaining=Math.max(0,numeric(row['Original Amount USD'])-(paymentByTarget.get(text(row['Record ID']))??0));const supplier=text(row['Party Type'])==='supplier';addBalance(supplier?'supplier':'customer',text(row[supplier?'Supplier ID':'Customer ID']),text(row.Party),remaining);}
   for(const row of quarry)addBalance('supplier',text(row['Supplier ID']),text(row.Supplier),numeric(row['Remaining USD']));
   const fuelDeliveries=fuelInPeriod.filter(row=>text(row.Type)==='delivery');
   for(const row of fuelDeliveries){const remaining=Math.max(0,numeric(row['Final Total USD'])-numeric(row['Paid USD']));addBalance('supplier',text(row['Supplier ID']),text(row.Supplier),remaining);}
+  // DEC-482. Money paid to an account but not applied to a record lowers that account's balance,
+  // exactly as Payments & Balances shows it; an account never goes below zero here.
+  for(const payment of data.payments){
+    if(text(payment['Target Type'])!=='unallocated'||text(payment.Status)!=='Active')continue;
+    const supplier=Boolean(text(payment['Supplier ID'])),key=`${supplier?'supplier':'customer'}|${text(payment[supplier?'Supplier ID':'Customer ID'])}`,current=balanceGroups.get(key);
+    if(current)current.remainingUsd=Math.max(0,current.remainingUsd-numeric(payment['Amount USD']));
+  }
+  for(const [key,value] of balanceGroups)if(value.remainingUsd<=0)balanceGroups.delete(key);
   const balances=[...balanceGroups.values()];
   const receivableUsd=balances.filter(value=>value.partyType==='customer').reduce((sum,value)=>sum+value.remainingUsd,0);
   const payableUsd=balances.filter(value=>value.partyType==='supplier').reduce((sum,value)=>sum+value.remainingUsd,0);

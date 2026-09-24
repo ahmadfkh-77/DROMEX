@@ -631,6 +631,28 @@ A `Covering` bar (period in navy, active filter count in Signal-Orange-Deep, `+`
 ### Project Financial Review
 The navy folder headers, orange seams and `01`-`03` tabs are replaced by three bordered `+`/`×` cards, closed by default, each keeping its headline figure (Outstanding, Still owed, Fuel cost) in the header. Money boxes: **Billed** `#EEF3F8`, **Paid** `#E8F3EC` with a `#1F6446` label, **Outstanding** white with a 1.5px navy border and the largest value, **cost** `#F6F0E6`, **Overpaid** the existing warning tint. Each supplier is its own `+`/`×` card (Outstanding, or Settled in `#1F6446`, in the header); records are small bordered cards. Warning text on its tint uses `#7A500E` (the documented `warning` measures 4.49:1 there).
 
+## Implemented on Payments & Balances (DEC-482, DEC-483, DEC-485, DEC-486, 2026-09-24)
+
+An account statement replacing the tab-based control center. Shared pieces live in `src/ui/screens/finance/financeParts.tsx`; the screens add nothing up and take every figure from `domain/accountPayments.ts`.
+
+### Structure
+**Account list** (Customers owe you / You owe suppliers boxes, search, All / Customers / Suppliers, `Only accounts with a balance owed`) -> **Account statement** -> focused full screens for **Add Payment**, **Apply unallocated payment** and one **record**. Full screens rather than sheets because each needs a date picker or searchable select, which are their own modals. Each account row is its own bordered card: name (2 lines), Customer/Supplier, then `Owes`, `In credit` or `Settled` with the figure, and a ruled footer with Paid, open records and cancelled count.
+
+### Account statement
+A balance card (state word, 30/800 navy figure, open-record line) with **Billed** `#EEF3F8`, **Paid** `#E8F3EC` and **Unallocated** `#F6F0E6` boxes, then exactly one Signal Orange **Add Payment**. Below, `+`/`×` sections: Open records (open by default, oldest first), Payment history, Paid records, Cancelled balances, Account activity (dated, newest first, paged).
+
+### Status words
+Every state is a word beside a 6px dot: `Paid` success, `Unpaid` danger, `Partially Paid` / `Overpaid` / `Unpriced` warning text `#7A500E`, `Unallocated` / `Credit` navy on `#EEF3F8`, `Cancelled` outlined in `#E7B7B1` with the amount struck through. Colour never carries a state alone.
+
+### Add Payment and Apply unallocated payment
+A context card with the amount owed (or the unallocated amount, in `#6E4B1F`), then amount, date, method choice pills (Cash, Cheque, Bank transfer, Other), reference and note. The three ways to apply a payment are radio cards with a one-sentence explanation each; the selected card takes a 1.5px navy border. Oldest first shows the exact records it will pay; Select records shows a checkbox per record with its own amount field. A navy-bordered summary states Payment, Applied to records, Unallocated and the balance (or remaining) afterwards, with a credit sentence when it applies, before a confirmation dialog and the single orange save button named with the amount.
+
+### Record screen and cancellations
+Total / Paid / Remaining boxes and the status word; **Mark paid in full** (orange) and **Record partial payment** (secondary). Payment history names the account payment each amount came from. Cancelling a payment or an Open Balance is a danger-toned card or inline box with a required reason, a plain explanation of what stays in history, and a confirmation; a blocked Open Balance cancellation shows why instead of the button.
+
+### Project Financial Review note
+Customer Revenue and Supplier Payables each carry a bordered note stating that Paid counts only payments applied to the project's records, and that unallocated payments belong to no project.
+
 ## Current-vs-Target Gap List
 
 1. **Typography weight.** Current: `fontWeight: '900'` used pervasively in `src/ui/theme.ts`'s global tokens and on every screen except Home, Project Command Center, Supplier Loads, and Daily Reports. Target: graded hierarchy above. **Partially implemented** — Home's and Project Command Center's navigation sections use a 3-step subset (`900`/`700`/`500`); Supplier Loads' supplied-material records and Daily Reports' section/record content use the full 4-step scale including `600` (see "Implemented on Supplier Loads" and "Implemented on Daily Reports"). Every other screen is still the pre-existing pervasive-900 state, and the global `theme.ts` tokens themselves are unchanged.

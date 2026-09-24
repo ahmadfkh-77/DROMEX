@@ -82,8 +82,8 @@ async function atVersion45(){
 describe('migration 46 on a fresh installation',()=>{
   it('reaches the current version with the unified people columns and the new tables',async()=>{
     const db=await fresh();
-    expect(DATABASE_VERSION).toBe(46);
-    expect(version(db)).toBe(46);
+    expect(DATABASE_VERSION).toBeGreaterThanOrEqual(46);
+    expect(version(db)).toBe(DATABASE_VERSION);
     expect(tables(db)).not.toContain('worker_profiles');
     expect(tables(db)).toEqual(expect.arrayContaining(['driver_profiles','custom_directories','custom_directory_entries','supervisors']));
     expect(columns(db,'driver_profiles')).toEqual(expect.arrayContaining(['person_role','job_title','legacy_worker_id','role_history_json']));
@@ -118,7 +118,7 @@ describe('migration 46 upgrading a version-45 installation',()=>{
   it('moves every worker into the people table with its id, fields, active state and timestamps preserved',async()=>{
     const db=await atVersion45();
     await migrateDatabase(db as never);
-    expect(version(db)).toBe(46);
+    expect(version(db)).toBe(DATABASE_VERSION);
     expect(tables(db)).not.toContain('worker_profiles');
     const people=db.raw.prepare('SELECT id,name,phone,license_number,notes,is_active,created_at,updated_at,person_role,job_title,legacy_worker_id FROM driver_profiles ORDER BY id').all();
     expect(people).toEqual([
@@ -162,7 +162,7 @@ describe('migration 46 upgrading a version-45 installation',()=>{
     db.raw.exec('PRAGMA user_version = 45;');
     await migrateDatabase(db as never);
     expect(db.raw.prepare('SELECT id,person_role,job_title FROM driver_profiles ORDER BY id').all()).toEqual(first);
-    expect(version(db)).toBe(46);
+    expect(version(db)).toBe(DATABASE_VERSION);
   });
 
   it('completes an interrupted move: rows copied before the interruption are not copied twice',async()=>{
