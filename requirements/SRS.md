@@ -2156,7 +2156,7 @@ Implemented with automated tests (98 files, 1,349+ tests green, typecheck clean)
 
 ## Projects List, Project Totals and Project Screens Redesign
 
-DEC-484. Presentation only: no calculation, schema, record, backup, sync, PDF or Excel behaviour changes. Physical acceptance pending.
+DEC-484. Presentation only: no calculation, schema, record, backup, sync, PDF or Excel behaviour changes. Physically accepted on Android build 22 (2026-09-24).
 
 ### Projects list
 - FR-PL-1: A project card shall show only the project name, its status in words (Active or Completed), its location, its start date, and the date of its latest recorded work when one exists. A missing start date or location shall read *not recorded*; a missing last activity shall not be shown.
@@ -2174,11 +2174,11 @@ DEC-484. Presentation only: no calculation, schema, record, backup, sync, PDF or
 - FR-PS-2: Project Financial Review's Customer Revenue, Supplier Payables and Project Costs, and each supplier, shall be separate `+` / `×` cards, closed by default, with the headline figure visible when closed. Billed, Paid, Outstanding and cost shall each have their own quiet box colour and a written label.
 
 ### Status
-Implemented with automated tests. Not yet accepted on a physical device.
+Implemented with automated tests and physically accepted on Android build 22 (2026-09-24).
 
 ## Payments & Balances Account Statement
 
-DEC-482, DEC-483, DEC-485 and DEC-486. Migration 47. Physical acceptance pending.
+DEC-482, DEC-483, DEC-485 and DEC-486. Migration 47. Physically accepted on Android build 22 (2026-09-24).
 
 ### Account payments
 - FR-AP-1: The Owner shall record one real payment once for a customer or supplier account with amount, payment date, method (Cash, Cheque, Bank transfer, Other), optional reference and optional note. It records money exchanged outside the app and processes nothing.
@@ -2208,4 +2208,4 @@ DEC-482, DEC-483, DEC-485 and DEC-486. Migration 47. Physical acceptance pending
 - The Excel workbook's supplier Total Billed does not include supplier Open Balances. This predates DEC-482 and is left unchanged.
 
 ### Status
-Implemented with automated tests. Not yet accepted on a physical device.
+Implemented with automated tests and physically accepted on Android build 22 (2026-09-24).

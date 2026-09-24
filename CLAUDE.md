@@ -29,17 +29,13 @@ documents, and backups.
 
 Current source release metadata is version `0.19.0`, Android version code `22`,
 package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
-internal Android artifact is `output/DROMEX-0.17.0-build20.apk` when present
-(Construction Lift workflow, migrations 44 and 45, DEC-470 to DEC-475),
-physically tested and confirmed working by the Owner; build 19 is retained
-unchanged as the previous accepted installer.
-`output/DROMEX-0.18.0-build21.apk` (People roles and directories, supervisor
-sign-off, Supplier Load grouping, and Project Totals; migration 46) is a preview
-build pending physical upgrade-install acceptance.
-`output/DROMEX-0.19.0-build22.apk` (Projects list and project screens redesign,
-account payments, Apply unallocated payment, Open Balance cancellation and the
-Payments & Balances statement; migration 47, DEC-482 to DEC-486) is a preview
-build pending physical upgrade-install acceptance.
+internal Android artifact is `output/DROMEX-0.19.0-build22.apk` when present
+(Projects list and project screens redesign, account payments, Apply unallocated
+payment, Open Balance cancellation and the Payments & Balances statement;
+migration 47, DEC-482 to DEC-486), installed in place and confirmed working on
+the Owner's phone; `output/DROMEX-0.17.0-build20.apk` is retained unchanged as
+the previous accepted installer. `output/DROMEX-0.18.0-build21.apk` (migration 46)
+was a preview that was never separately accepted and is superseded by build 22.
 
 Release APKs are no longer committed to Git from build 14 onward (DEC-396):
 `output/*.apk` is ignored, so the signed artifact lives in `output/` on the

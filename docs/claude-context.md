@@ -679,6 +679,38 @@ values on its next save.
   tables (their outbox entries would be reported as unsupported types, as consulting agencies already are);
   the deprecated, unrouted `DriversTrucksScreen` was only adjusted to compile.
 
+## Release — DROMEX 0.19.0, Android build 22 (2026-09-24)
+
+- **Build 22 — 0.19.0**, three commits on `feature/android-payment-and-balances-redesign`, created from
+  the build-21 commit `d9c3e7f` in `C:\Users\fakih\Desktop\Dromex\DROMEX-wall-worktree`. Not merged into
+  `main`.
+  - `7ff538a` — Projects list, Project Totals, Project Command Center action cards and Project Financial
+    Review redesign (DEC-484, presentation only; `feature/android-project-list-and-totals-redesign` points
+    here). Verified on its own before committing: typecheck clean, 102 files / 1,384 tests green.
+  - `569915a` — account payments, Apply unallocated payment, Open Balance cancellation and the Payments &
+    Balances account statement (DEC-482, DEC-483, DEC-485, DEC-486), **database version 47**.
+  - `c47b058` — release metadata: 0.18.0 → 0.19.0, versionCode 21 → 22 in `package.json`, `app.json`,
+    `src/appVersion.ts` and `CLAUDE.md`.
+- **Database version 47** (one forward-only step; 1–46 untouched): `opening_balances` gains `status`
+  (Active/Cancelled, default Active), `cancellation_reason`, `cancelled_at`, `status_before_cancellation`;
+  new `account_payments` table; `payment_entries.account_payment_id` (NULL for every existing payment).
+  No existing row changes meaning. Backups carry the new data automatically; `opening_balances` and
+  `account_payments` were added to the backup record counts, and `account_payments` to the dormant sync
+  table order (rank 35, before `payment_entries`).
+- **Tests**: 106 files, 1,435 tests green; typecheck clean. Each feature was physically tested in Expo Go
+  and approved by the Owner before committing.
+- **EAS build**: `c334e581-1fba-4be4-a9b7-abad44c3015c`, built from commit `c47b058` with eas-cli 24.7.0;
+  profile `preview`, APK, account `drofk12`. Remote credentials reused unchanged
+  (`Using Keystore from configuration: Build Credentials wtQXwzktVi (default)`), so it installs in place.
+- **Artifact**: `output/DROMEX-0.19.0-build22.apk`, 83,556,498 bytes (~80 MB). SHA-256:
+  `1b21d35146f7da3efc44d334369574a043bf31fce172fdc7d1ed011ecc0b1283`. Ignored by `output/*.apk` and
+  untracked (DEC-396); builds 13, 20 and 21 in `output/` are untouched.
+- **Physically verified.** The Owner installed build 22 in place on their phone and confirmed it installed
+  and works. Build 22 is now the accepted internal artifact; build 20 stays the previous accepted installer.
+  Build 21 was a preview that was never separately accepted and is superseded by build 22.
+- **Known follow-up**: the workbook's supplier Total Billed still excludes supplier Open Balances (predates
+  DEC-482, recorded in DEC-486 and the SRS).
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:
