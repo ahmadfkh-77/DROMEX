@@ -61,7 +61,7 @@ const configuredFrom = (draft: Draft, kind: DocumentHeaderKind) => documentHeade
  * print any of these, which is why every section says so rather than implying these values appear
  * automatically.
  */
-export function PdfSettingsScreen({ repository, onBack }: { repository: ProfileRepository; onBack: () => void }) {
+export function PdfSettingsScreen({ repository, onBack, onOpenSupervisors }: { repository: ProfileRepository; onBack: () => void; onOpenSupervisors: () => void }) {
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [failure, setFailure] = useState<string | null>(null);
@@ -300,6 +300,21 @@ export function PdfSettingsScreen({ repository, onBack }: { repository: ProfileR
         <EnglishField label="Custom header (English)" value={draft.customHeaderEn} onChangeText={(value) => set('customHeaderEn', value)} placeholder="Contract 2026/114" multiline />
         <ArabicField label="Custom header (Arabic)" value={draft.customHeaderAr} onChangeText={(value) => set('customHeaderAr', value)} placeholder="عقد ٢٠٢٦/١١٤" multiline />
       </Section>
+
+      {/* DEC-479. Supervisors are managed on their own screen: they are people with saved signatures, not header text, and are chosen per Daily Report. */}
+      <View style={styles.section}>
+        <View style={styles.sectionTab}><Text style={styles.sectionTabText}>04</Text></View>
+        <View style={styles.sectionHeader} accessibilityRole="header" accessibilityLabel="Section 04. Supervisors and saved signatures.">
+          <Text style={styles.sectionTitle}>Supervisors</Text>
+          <Text style={styles.sectionPurpose}>Save each supervisor once, with or without a signature, then choose who signs off each Daily Report. Separate from the Consultant Sign-off and every header.</Text>
+        </View>
+        <View style={styles.sectionSeam} />
+        <View style={styles.sectionBody}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={onOpenSupervisors} accessibilityRole="button" accessibilityLabel="Manage supervisors and saved signatures">
+            <Text style={styles.secondaryButtonText}>Manage Supervisors</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <Text style={styles.footnote}>
         Leaving a value empty is allowed. A report prints only the parts that exist, and switching a header off on a report never deletes anything saved here.

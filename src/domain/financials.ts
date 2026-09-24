@@ -2,7 +2,7 @@ export type FinancialPartyType='customer'|'supplier';
 export type FinancialTargetType='load'|'quarryPurchase'|'openingBalance'|'fuelDelivery';
 export type PaymentStatus='Unpriced'|'No Payment Due'|'Unpaid'|'Partially Paid'|'Paid'|'Overpaid';
 export type FinancialParty={id:string;name:string;type:FinancialPartyType};
-export type PaymentEntry={id:string;targetType:FinancialTargetType;targetId:string;amountUsd:number;paymentDate:string;status:'Active'|'Cancelled';cancellationReason:string|null;cancelledAt:string|null;createdAt:string};
+export type PaymentEntry={id:string;targetType:FinancialTargetType;targetId:string;amountUsd:number;paymentDate:string;status:'Active'|'Cancelled';cancellationReason:string|null;cancelledAt:string|null;createdAt:string;/** DEC-482. The account payment this amount was applied from; null for a payment made on the record alone. */accountPaymentId?:string|null};
 export type FinancialTarget={id:string;type:FinancialTargetType;partyId:string;partyName:string;partyType:FinancialPartyType;reference:string;recordDate:string;projectId?:string|null;projectName?:string|null;projectStatus?:string|null;itemName?:string|null;quantity?:number|null;unitSymbol?:string|null;totalUsd:number;paidUsd:number;remainingUsd:number;overpaidUsd:number;status:PaymentStatus;payments:PaymentEntry[]};
 export type FinancialOverview={parties:FinancialParty[];targets:FinancialTarget[]};
 // A project's money is reported as three sections that never share a total: what the customer was

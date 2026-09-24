@@ -1,7 +1,8 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {Alert,LayoutAnimation,ScrollView,StyleSheet,Text,TextInput,TouchableOpacity,View} from 'react-native';
 import type {LoadRepository} from '../../data/repositories/LoadRepository';
-import type {ConfirmedLoad,LoadCorrectionDraft} from '../../domain/loads';
+import type {ConfirmedLoad,DriverProfile,LoadCorrectionDraft} from '../../domain/loads';
+import {truckCrewRoleLabel} from '../../domain/people';
 import {correctionValidationError,formatUsd} from '../../domain/loads';
 import {AppButton,AppCard,AppField,Feedback,MetricCard,PageHeader} from '../components/AppPrimitives';
 import {SearchableSelect} from '../components/SearchableSelect';
@@ -13,12 +14,12 @@ type GroupMode='project'|'customer';
 type Stage='browse'|'blocked'|'edit'|'review';
 type DiffRow={field:string;was:string;now:string};
 
-const draftFrom=(load:ConfirmedLoad):LoadCorrectionDraft=>({requestedQuantityKg:load.requestedQuantityKg==null?'':String(load.requestedQuantityKg),emptyWeightKg:load.emptyWeightKg==null?'':String(load.emptyWeightKg),fullWeightKg:load.fullWeightKg==null?'':String(load.fullWeightKg),directQuantity:load.directQuantity==null?'':String(load.directQuantity),unitPriceUsd:load.unitPriceUsd==null?'':load.unitPriceUsd.toFixed(2),destinationAddress:load.destinationAddress??'',notes:load.notes??'',correctionReason:''});
+const draftFrom=(load:ConfirmedLoad):LoadCorrectionDraft=>({requestedQuantityKg:load.requestedQuantityKg==null?'':String(load.requestedQuantityKg),emptyWeightKg:load.emptyWeightKg==null?'':String(load.emptyWeightKg),fullWeightKg:load.fullWeightKg==null?'':String(load.fullWeightKg),directQuantity:load.directQuantity==null?'':String(load.directQuantity),unitPriceUsd:load.unitPriceUsd==null?'':load.unitPriceUsd.toFixed(2),destinationAddress:load.destinationAddress??'',notes:load.notes??'',correctionReason:'',driverId:load.driverId??''});
 const localDate=(value:string)=>{const date=new Date(value);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
 const unique=(values:string[])=>[...new Set(values)].sort((a,b)=>a.localeCompare(b));
 
 /** Mirrors correctLoad's own field parsing so the review stage previews exactly what the repository will record. */
-function computeCorrectionPreview(selected:ConfirmedLoad,draft:LoadCorrectionDraft):DiffRow[]{
+function computeCorrectionPreview(selected:ConfirmedLoad,draft:LoadCorrectionDraft,crew:DriverProfile[]=[]):DiffRow[]{
   const isDirect=selected.quantityMethod==='direct';
   const whole=(value:string)=>{const t=value.trim();return /^\d+$/.test(t)?Number(t):null;};
   const price=(value:string)=>{const t=value.trim().replace(',','.');return t?Number(t):null;};
@@ -33,6 +34,9 @@ function computeCorrectionPreview(selected:ConfirmedLoad,draft:LoadCorrectionDra
     ?{'Direct quantity':asString(direct(draft.directQuantity)),'Unit price':asString(price(draft.unitPriceUsd)),'Destination address':text(draft.destinationAddress),Notes:text(draft.notes)}
     :{'Requested quantity kg':asString(draft.requestedQuantityKg.trim()?whole(draft.requestedQuantityKg):null),'Empty weight kg':asString(whole(draft.emptyWeightKg)),'Full weight kg':asString(whole(draft.fullWeightKg)),'Unit price':asString(price(draft.unitPriceUsd)),'Destination address':text(draft.destinationAddress),Notes:text(draft.notes)};
 
+  // DEC-477. The same "Name (Role)" wording correctLoad writes into the audit history.
+  const nextCrew=draft.driverId&&draft.driverId!==(selected.driverId??'')?crew.find(value=>value.id===draft.driverId):undefined;
+  if(nextCrew){oldValues['Driver / Operator']=`${selected.driverName} (${truckCrewRoleLabel(selected.driverRole)})`;newValues['Driver / Operator']=`${nextCrew.name} (${truckCrewRoleLabel(nextCrew.role)})`;}
   return Object.keys(newValues).filter(field=>newValues[field]!==oldValues[field]).map(field=>{
     const was=oldValues[field],now=newValues[field];
     if(field==='Unit price')return {field,was:was==null?'Unpriced':formatUsd(Number(was)),now:now==null?'Unpriced':formatUsd(Number(now))};
@@ -45,14 +49,15 @@ export function LoadCorrectionsScreen({repository,onBack,initialLoadId}:{reposit
   const[loads,setLoads]=useState<ConfirmedLoad[]>([]);const[selected,setSelected]=useState<ConfirmedLoad|null>(null);const[draft,setDraft]=useState<LoadCorrectionDraft|null>(null);const[stage,setStage]=useState<Stage>('browse');
   const[groupMode,setGroupMode]=useState<GroupMode>('project');const[projectFilter,setProjectFilter]=useState('');const[customerFilter,setCustomerFilter]=useState('');const[fromDate,setFromDate]=useState('');const[toDate,setToDate]=useState('');const[search,setSearch]=useState('');
   const[busy,setBusy]=useState(false);const[error,setError]=useState<string|null>(null);const[message,setMessage]=useState<string|null>(null);const[historyOpen,setHistoryOpen]=useState(false);
-  const refresh=useCallback(async()=>setLoads(await repository.listLoads()),[repository]);
+  const[crew,setCrew]=useState<DriverProfile[]>([]);
+  const refresh=useCallback(async()=>{const[nextLoads,setup]=await Promise.all([repository.listLoads(),repository.getSetupOptions()]);setLoads(nextLoads);setCrew(setup.drivers);},[repository]);
   useEffect(()=>{void refresh();},[refresh]);
   useEffect(()=>{if(initialLoadId&&loads.length&&!selected){const match=loads.find(load=>load.id===initialLoadId);if(match)choose(match);}},[initialLoadId,loads]); // eslint-disable-line react-hooks/exhaustive-deps
   const projectOptions=useMemo(()=>unique(loads.map(load=>load.projectName??'No project')).map(value=>({id:value,label:value})),[loads]);
   const customerOptions=useMemo(()=>unique(loads.map(load=>load.customerName)).map(value=>({id:value,label:value})),[loads]);
   const filtered=useMemo(()=>{const query=search.trim().toLocaleLowerCase('en-US');return loads.filter(load=>{const date=localDate(load.confirmedAt);if(projectFilter&&(load.projectName??'No project')!==projectFilter)return false;if(customerFilter&&load.customerName!==customerFilter)return false;if(fromDate&&date<fromDate)return false;if(toDate&&date>toDate)return false;if(query&&!`${load.transactionNumber} ${load.customerName} ${load.projectName??''} ${load.itemName} ${load.driverName} ${load.truckPlate}`.toLocaleLowerCase('en-US').includes(query))return false;return true;});},[customerFilter,fromDate,loads,projectFilter,search,toDate]);
   const groups=useMemo(()=>{const map=new Map<string,ConfirmedLoad[]>();for(const load of filtered){const key=groupMode==='project'?(load.projectName??'No project'):load.customerName;map.set(key,[...(map.get(key)??[]),load]);}return [...map].sort(([a],[b])=>a.localeCompare(b));},[filtered,groupMode]);
-  const preview=useMemo(()=>selected&&draft?computeCorrectionPreview(selected,draft):[],[selected,draft]);
+  const preview=useMemo(()=>selected&&draft?computeCorrectionPreview(selected,draft,crew):[],[selected,draft,crew]);
   const validationError=useMemo(()=>selected&&draft?correctionValidationError(selected,draft):null,[selected,draft]);
 
   function animateLayout(){if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);}
@@ -124,6 +129,9 @@ export function LoadCorrectionsScreen({repository,onBack,initialLoadId}:{reposit
           <AppField label="Requested quantity kg" value={draft.requestedQuantityKg} onChangeText={(v)=>update('requestedQuantityKg',v)} keyboardType="number-pad"/>
           <View style={styles.columns}><View style={styles.flex}><AppField label="Empty weight kg *" value={draft.emptyWeightKg} onChangeText={(v)=>update('emptyWeightKg',v)} keyboardType="number-pad"/></View><View style={styles.flex}><AppField label="Full weight kg *" value={draft.fullWeightKg} onChangeText={(v)=>update('fullWeightKg',v)} keyboardType="number-pad"/></View></View>
         </>}
+        {selected.signatureStatus==='Signed'
+          ?<View style={styles.lockedCrew}><Text style={styles.lockedCrewLabel}>{truckCrewRoleLabel(selected.driverRole)}</Text><Text style={styles.lockedCrewName}>{selected.driverName}</Text><Text style={styles.helper}>Signed by this person, so the Driver / Operator of this load cannot be changed.</Text></View>
+          :<SearchableSelect label="Driver / Operator" options={[...(crew.some(value=>value.id===selected.driverId)?[]:[{id:selected.driverId??'',label:selected.driverName,detail:`${truckCrewRoleLabel(selected.driverRole)} · currently recorded`}]),...crew.map(value=>({id:value.id,label:value.name,detail:truckCrewRoleLabel(value.role)}))]} selectedId={draft.driverId??''} onSelect={(v)=>update('driverId',v)}/>}
         <AppField label="Unit price USD (blank = Unpriced)" value={draft.unitPriceUsd} onChangeText={(v)=>update('unitPriceUsd',v)} keyboardType="decimal-pad"/>
         <AppField label="Destination address" value={draft.destinationAddress} onChangeText={(v)=>update('destinationAddress',v)} multiline/>
         <AppField label="Notes" value={draft.notes} onChangeText={(v)=>update('notes',v)} multiline/>
@@ -150,6 +158,7 @@ export function LoadCorrectionsScreen({repository,onBack,initialLoadId}:{reposit
 function Choice({label,selected,onPress}:{label:string;selected:boolean;onPress:()=>void}){return <TouchableOpacity style={[styles.choice,selected&&styles.choiceSelected]} onPress={onPress} accessibilityRole="button" accessibilityState={{selected}}><Text style={[styles.choiceText,selected&&styles.choiceTextSelected]}>{label}</Text></TouchableOpacity>;}
 function Field({label,...props}:{label:string;value:string;onChangeText:(v:string)=>void;placeholder?:string}){return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput style={styles.input} placeholderTextColor="#89939B" {...props}/></View>;}
 const styles=StyleSheet.create({
+  lockedCrew:{gap:3,padding:12,borderRadius:11,borderWidth:1,borderColor:colors.line,backgroundColor:colors.creamSoft},lockedCrewLabel:{color:colors.muted,fontSize:11,fontWeight:'900',letterSpacing:.5},lockedCrewName:{color:colors.ink,fontSize:15,fontWeight:'900'},
   content:{padding:20,paddingBottom:42,gap:15}, helper:{color:colors.muted,fontSize:13,lineHeight:19}, flex:{flex:1,minWidth:0},
   row:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-start',gap:10}, rowRight:{flexDirection:'row',alignItems:'center',gap:8},
   segment:{flexDirection:'row',backgroundColor:'#EEEAE2',borderRadius:11,padding:4,gap:4}, choice:{flex:1,minHeight:44,justifyContent:'center',padding:10,borderRadius:8,alignItems:'center'}, choiceSelected:{backgroundColor:colors.navy}, choiceText:{color:colors.muted,fontWeight:'800'}, choiceTextSelected:{color:'#FFF'},

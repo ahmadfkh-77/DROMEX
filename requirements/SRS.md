@@ -584,6 +584,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Acceptance criteria: Recording several partial payments against order 1 creates separate dated entries under order 1, does not attach them to order 2, and updates order 1's total paid and remaining balance without executing a financial transfer. A payment covering orders 1 and 2 requires one entry under each order. Cancelling opens a warning, requires a reason, records cancellation time, removes its amount from calculations, retains the entry/details visibly, and cannot be reactivated.
 - Source: Interview turns 22–25
 - Status: Confirmed
+- Amended by DEC-482 and DEC-485: one real payment may now be recorded once for a whole customer or supplier account and applied overall (left unallocated), oldest first, or to selected records, and unallocated money may be applied to records later. Amounts applied to records remain separate entries each linked to exactly one record; see *Payments & Balances Account Statement* below.
 
 ### FR-024
 - Statement: “The system shall display the payment history for a selected customer order.”
@@ -1199,7 +1200,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - A confirmed payment cannot be deleted but may be marked Cancelled after an explicit warning and required reason. The system records the cancellation date/time; the entry, reason, and time remain visible and contribute zero to paid totals, remaining balances, and status derivation. Cancellation is final and cannot be reactivated. (Sources: Turns 167–169; status: Confirmed.)
 
 ### BR-015
-- An order may receive multiple partial payments. Each payment entry is linked to exactly one order, and remaining balance equals order total less the sum of its linked payment amounts. A real-world payment covering several orders is recorded as separate entries per order. (Sources: Turns 24–25 and 165; status: Confirmed.)
+- An order may receive multiple partial payments. Each payment entry is linked to exactly one order, and remaining balance equals order total less the sum of its linked payment amounts. A real-world payment covering several orders is recorded as separate entries per order. (Sources: Turns 24–25 and 165; status: Confirmed.) Amended by DEC-482: such a payment may be entered once and split automatically into one linked entry per order; any part not applied to an order stays visible as unallocated on the account and lowers its balance, never an order's.
 
 ### BR-016
 - A quarry delivery records its quantity directly and does not require the empty/full weighbridge workflow used for outgoing loads. (Source: Turn 26; status: Confirmed.)
@@ -1310,7 +1311,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - A customer order shall retain its customer, exactly one truck load and item reference, quantity, unit, USD price state, derived total paid, remaining balance, and automatically derived status of Unpriced, No Payment Due, Unpaid, Partially Paid, Paid, or Overpaid, with every USD value displayed to two decimal places. Different items or loads use separate receipt/order history entries. An order relates to zero or more separate USD payment entries. (Sources: Turns 23–25, 114, 120, 128–129, and 166; status: Partially confirmed; other attributes pending.)
 
 ### DR-014
-- Each payment entry shall retain its USD amount to two decimal places, payment date, association with exactly one customer order, and Active or Cancelled state. A real-world payment covering multiple orders is represented by separate entries for their respective allocated amounts. A cancelled entry retains required reason and automatic cancellation date/time, remains in history, is excluded from calculations, and cannot be reactivated. Other fields remain open. (Sources: Turns 25, 120, 165, and 167–169; status: Partially confirmed.)
+- Each payment entry shall retain its USD amount to two decimal places, payment date, association with exactly one customer order, and Active or Cancelled state. A real-world payment covering multiple orders is represented by separate entries for their respective allocated amounts. A cancelled entry retains required reason and automatic cancellation date/time, remains in history, is excluded from calculations, and cannot be reactivated. Other fields remain open. (Sources: Turns 25, 120, 165, and 167–169; status: Partially confirmed.) Amended by DEC-482: an entry may also reference the account payment it was applied from (`account_payment_id`); the account payment itself (DR-014a below) retains amount, payment date, method, optional reference and note, application mode, and Active/Cancelled state with reason and time.
 
 ### DR-015
 - A measurement unit shall retain a required display name, required symbol, stable identifier, and Active/Inactive state. Receipt Setup organizes units into alphabetic Active and Inactive groups with Edit, Remove, and Reactivate actions. Names and symbols are independently unique under case-insensitive comparison. A referenced unit cannot be deleted and Remove deactivates it and dependent conversion choices; it may later be reactivated. An unused unit may be permanently removed. Every confirmed referencing record retains an immutable snapshot of the unit name and symbol used at confirmation. (Sources: Turns 27, 301, and 434; status: Confirmed and implemented.)
@@ -1598,7 +1599,7 @@ subsection records the confirmed requirements only.
 | CON-001 | 22 | Exclude in-app payment processing | Defined |
 | FR-021 | 23 | Summarize customer quantities and total price | Unit and inclusion rules pending |
 | FR-022 | 23 | Show complete customer order/payment history | Exception handling pending |
-| FR-023 | 22–23 | Track in-person payments against orders | Allocation rules pending |
+| FR-023 | 22–23 | Track in-person payments against orders | Allocation rules defined (DEC-482, DEC-485) |
 | BR-014 | 23 | Derive customer summary and order balances | Aggregation rules pending |
 | DR-013 | 23 | Represent customer order payment tracking | Payment cardinality pending |
 | BR-015 | 24 | Support partial order payment and remaining balance | Multiple-payment history pending |
@@ -2029,7 +2030,7 @@ Status note: this section preserves the original question trace, but some indivi
 - Priority: Must
 - Acceptance criteria: Cement, sand, gravel/aggregate, water, admixture, concrete, stone, and steel entries appear only in the applicable wall's consumption history and totals and do not change any stock balance. Ready-mix records require finished m³ and purpose; Site-mixed records accept one or more ingredient quantities and optional finished m³; rebar records require diameter, number of bars, and length per bar and show total metres and calculated kilograms separately by diameter; stone records require a quantity and m³ or tonnes. Reinforced-concrete, stacked-rock/rubble-masonry, and cyclopean-concrete walls can be saved under active projects as retaining, boundary/free-standing, or other walls.
 - Source: Interview turn 413
-- Status: Confirmed and implemented in code through Turn 416; physical mobile acceptance and controlled consumption-entry correction remain pending
+- Status: Confirmed and implemented in code through Turn 416; controlled consumption-entry correction, optional volume calculation from wall dimensions, saved purposes, and Daily Report inclusion implemented under DEC-450 to DEC-456 (see "Wall Construction Volume Calculation, Purposes, Corrections, and Daily Report Update"); physical mobile acceptance remains pending
 
 ### FR-094
 - Statement: “A versioned external acceptance backup shall contain representative linked records for the application's major implemented workflows.”
@@ -2099,3 +2100,151 @@ No appendices yet.
 - Global header values and project descriptive information shall be read live at generation time, so regenerated historical PDFs reflect current configuration, while the per-report switches remain stored history and confirmed transaction records keep their snapshotted `project_name` (DEC-403).
 - An **Edit Project Information** action shall be reachable from the Project Command Center and the Projects list and shall permit editing project name, location, and notes (DEC-404). It shall exclude customer reassignment, shall leave the protected start-date workflow unchanged, and shall never delete or reassign a record, change a transaction number, rewrite a stored snapshot, alter a payment or financial calculation, change an already-generated document, or break project relationships.
 - The Project Financial Review supplier section shall present one visually separated block per supplier showing billed, paid, and outstanding in fixed aligned columns, each material with its delivered quantity, unit, and trip count, and record detail behind a collapsible disclosure (DEC-405). It shall remain presentation-only, preserve every existing calculation, exclusion, and read-only rule, and introduce no combined total, net figure, margin, or profit.
+
+## Wall Construction Volume Calculation, Purposes, Corrections, and Daily Report Update
+
+This section extends FR-093 and closes its pending "controlled consumption-entry correction" item. Physical device acceptance remains pending.
+
+- A Wall Construction consumption record for **Stone** or **Ready Mix** shall offer an optional volume calculation using the same inputs and formula as section 1 "Wall and geometry": length × height × average of bottom and top thickness, less volume deductions in m³, with no allowance (DEC-455, superseding the covered-area approach of DEC-450 before release). Length, height, and both thicknesses shall be greater than zero and deductions zero or more, each with at most three decimals; NaN, infinity, and deductions equal to or above the gross volume shall be rejected. The record shall store the dimensions, deductions, gross volume, and net volume as a snapshot.
+- A valid calculated net volume shall fill the consumed quantity (Stone in m³), which the user may still edit before saving; the saved quantity remains the recorded figure. A quantity without a calculation shall display **Entered directly**, never a zero volume, and the calculator shall not be offered for rebar or site-mixed records.
+- The six built-in Concrete/Mortar purposes shall remain unchanged. **Add new purpose** shall save a reusable purpose, trimmed and with internal whitespace collapsed, rejecting empty labels, labels over 60 characters, and case-insensitive duplicates of any saved or built-in purpose, and shall select it immediately (DEC-451). A record shall snapshot the saved purpose label. Saved purposes shall not be renamed, merged, or deleted.
+- Consumption History shall let the user open a record and choose **Correct This Record**, which prefills every current value and requires a correction reason (DEC-452). A correction shall keep the record's identity, creation time, wall, and project; refuse a no-change correction; append the timestamp, reason, and each changed field's previous and corrected values to the record's correction history; and never duplicate consumption. Totals, summaries, and Daily Report content shall reflect the corrected values.
+- The Daily Report shall include a **Wall Construction** section in the editor, PDF, and Excel workbook containing only consumption records whose wall belongs to the report's project and whose used-on date equals the work date, grouped by wall (DEC-453). Like other linked sections, it shall be read at generation time, so corrections appear in later exports while files already exported are unchanged. The PDF shall show each consumed quantity beside its volume calculation (net and gross volume, deductions, and dimensions, or Entered directly, or Not applicable), purposes, notes, and the latest correction reason, keep headings with their tables, repeat table headings across pages, and print a single full-width empty row when no wall work exists. The workbook shall provide the same information with numeric columns left empty when not recorded.
+- Database migration 37 shall add the saved-purpose table and nullable purpose and correction columns, migration 38 shall add the nullable volume-calculation columns, and migration 39 shall add the wall layer table, none modifying any existing record; backups shall carry all of this data unchanged (DEC-454, DEC-456, DEC-458).
+- A wall shall carry an optional, ordered set of **layers and construction phases**, each with a name, phase order, bottom and top thickness, and optional note, whose thicknesses shall agree with the wall's own bottom and top thickness within 5 mm; a disagreement shall state the exact difference and prevent saving, and entered thicknesses shall never be adjusted automatically (DEC-457).
+- A **technical wall diagram** shall be generated deterministically from the recorded geometry and layers whenever it is displayed or exported, as vector drawing on the phone and inline SVG in the Daily Report PDF, with no generated imagery, no stored bitmap, and no external resource (DEC-457). It shall show an elevation with dimensions, a cross-section with the layers in construction order, and a legend of marker, phase, name, and thicknesses; a wall without layers shall still produce a geometry-only figure. Layers shall be distinguishable without colour, thin layers shall stay visible with a stated exaggeration, user text shall be escaped, and the printed measurements shall always be the recorded values.
+- The Daily Report PDF shall include the generated diagram inside each wall block, keeping the figure whole and allowing the wall block to move to the next page, and the workbook shall carry the same layer and geometry information as text (DEC-457).
+
+### Wall base, curing, and wall-stage locking
+
+- Every wall section created after this feature shall have a recorded **base**, and wall geometry, layers, and wall-material consumption shall stay unavailable until that base is recorded (DEC-459). **Curing itself shall never gate this: once a base exists, in any status (planned, constructed, curing, or cured), wall geometry, layers, and material consumption shall all be immediately available (DEC-463, superseding DEC-459's earlier cured-confirmation gate).** A wall that existed beforehand shall remain fully usable, shall be shown as "Base not recorded — legacy wall", and shall never be given an invented base or curing date.
+- The base shall record its own geometry, material, purpose, quantity, unit, consumption date, and notes, measured independently of the wall. Its volume shall use the same shared formula as the wall, its net volume shall fill the consumed quantity in m³, and any different quantity shall be a deliberate manual override that leaves the calculated volume and geometry snapshot unchanged.
+- The base lifecycle shall be planned, constructed, curing, cured, enforced in the domain and by database constraints, with each step carrying its own date and the dates running forwards. Curing shall never complete through elapsed time: confirming a cured base shall require a cured date and an explicit confirmation that the base was inspected and is ready for wall work, worded without "approved" or "certified".
+- **Curing is tracked information, not a workflow gate (DEC-463).** A wall-work date may be recorded before, during, or after the curing period and shall never be refused for curing chronology; dates shall be recorded exactly as entered. Reverting a cured base back to curing shall always be allowed, including when wall work already exists above it. Correcting a base's construction, curing-start, or cured date shall never invalidate, block, or remove existing wall work, however that work is dated relative to the correction. Base corrections shall use the same reasoned model as wall consumption.
+- While curing is not yet confirmed, the screen shall show a non-blocking, warning-styled (not error-styled) notice — "Base curing is not yet confirmed", with supporting copy explaining that wall planning and work may continue and that curing is confirmed separately — that never requires acknowledgement, never blocks navigation or saving, never clears entered values, and never uses "approved"/"certified"/engineering-endorsement wording (DEC-463).
+- The Daily Report shall include base activity on the date it happened, show the stage the base had reached **by that work date** rather than its latest stage, and never show wall work or layers on an earlier base-only report. It shall never hide or suppress wall material recorded while curing was not yet confirmed, and shall print a concise note — "Base curing not confirmed on this work date" — whenever that is the case, without ever claiming the base was cured before its recorded cured date (DEC-463). The workbook shall carry the base geometry, volumes, quantity, override state, status, and lifecycle dates (DEC-459).
+- Migration 40 shall add the base table and the legacy-wall flag without modifying any existing record, and backups shall carry base data unchanged (DEC-460).
+
+### Composite foundation model (Stone core inside concrete)
+
+- A base may optionally switch from its single recorded material to a **composite foundation**: an outer volume (the base's own geometry) that may hold a Stone core, with the concrete that fills the rest **estimated, not recorded as poured**, until Ready Mix is itself recorded (DEC-461). Switching to composite mode shall never change or remove the base's own single materialType/quantity recorded before this feature.
+- The Stone core shall support two modes: **Simple** (a schematic block placed by a normalized position, the default, whose position never changes its recorded volume) and **Detailed** (a measured sub-geometry — length, height/depth, bottom and top thickness/width, longitudinal and vertical offsets — using the same trapezoid formula as the base itself, with an unbounded transverse offset stored only as a 2D-cross-section reference value, never as a third engineering coordinate). A detailed core shall be refused if it would extend outside the outer foundation's length, depth, or thickness.
+- Stone and Ready Mix shall each be recorded as separate, dated, notable entries, each cancellable with a required reason and correctable in place with a required reason and a field-level before/after audit (the same reasoned-correction model as DEC-452). The active Stone total (excluding cancelled entries) shall never be allowed to exceed the foundation's net volume; recording or correcting an entry that would do so shall be refused with the exact numbers, and reducing the base's own geometry below the already-recorded active Stone total shall be refused the same way, never silently clamped.
+- **Estimated concrete volume = net foundation volume − active Stone volume**, clamped at zero, recalculated from the current geometry and active records on every read, never persisted as a stale duplicate and never recorded as poured. Once Ready Mix is actually recorded, its active total shall be compared against the estimate as a plain positive ("over"), negative ("under"), or zero ("matches") variance, shown neutrally and never labelled waste.
+- The composite foundation diagram shall always draw the Stone core inside the outer foundation boundary, never beside it as an adjacent wall-style layer. The outer boundary shall be an empty outline in single mode or before anything is recorded; filled and labelled "Estimated space — not yet poured" once Stone exists with no Ready Mix; and filled and labelled with the actual Ready Mix quantity only once Ready Mix is actually recorded. A simple-mode diagram shall carry the caption "Schematic placement — not to scale."
+- Migration 41 shall add the composite foundation's columns and its `wall_base_composition_records` table without modifying any existing base's `materialType`/`quantity`, every existing base shall default to single mode, and backups shall carry the new columns and table unchanged as part of the whole-database file copy (DEC-462).
+
+### Project → Construction Section → Foundation → Wall (DEC-464)
+
+- A **Construction Section** shall be a named, project-scoped site segment with an optional location/description, creatable inline while recording a foundation. Its name shall be unique within its project after trimming surrounding whitespace, collapsing repeated internal whitespace, and comparing case-insensitively; the same name shall be allowed in a different project; renaming shall change display only, never a linked foundation's or wall's own identifiers; a section shall never be destructively deleted while it holds foundations or walls.
+- A **Foundation** shall be creatable independently, before any wall exists for it, carrying its own project, Construction Section, geometry, material, composite composition, and curing lifecycle, using the same shared volume and lifecycle rules as the legacy per-wall base so the two can never calculate or transition differently.
+- A wall shall link to its Foundation through a stable id, not a copied name. A Foundation in **any** curing status (planned, constructed, curing, or cured) shall be selectable for a new or existing wall, consistent with the non-blocking curing rule (DEC-463); a Foundation already carrying an active wall shall be refused for a second one, and linking across projects shall be refused, both with an explanation naming the conflict rather than a silent failure.
+- The composite foundation model (DEC-461) shall be addressed directly by the Foundation's own id, independent of any wall link.
+- The Wall Construction screen shall present a directory of Construction Sections grouped under the chosen project, each showing its Foundations and their status, with inline creation for both; a wall created before this feature (no Foundation, no base) shall remain shown and fully usable in its own unchanged area of the screen. Opening a Foundation shall present a five-stage guided workspace (Foundation, Curing, Wall, Layers and Materials, History and Reports) through a vertical or compact stepper; these stages shall be organizational only and shall never lock access to a later stage for curing reasons, consistent with DEC-463.
+- The Simple-mode Stone core shall support direct touch dragging within its drawn cross-section, remaining fully contained inside the outer foundation boundary by construction, changing only its stored position and never its recorded volume; position shall be committed once per gesture, on release. The existing nudge buttons and Reset to Centre shall remain available as a keyboard-safe, non-drag alternative.
+- The Daily Report PDF and workbook shall group Wall Construction output by Construction Section, then by Foundation, then by its linked wall or its own activity when no wall is linked yet, preserving every date-scoped honesty rule already required for curing status and material (DEC-463).
+- Migration 42 shall add Construction Sections and independent Foundations without modifying, dropping, or renaming `wall_bases` or `wall_base_composition_records`, so migrations 37 through 41 remain exactly as they were and stay safe to replay against an already-current database; every existing wall/base pair shall be preserved and linked automatically, and a wall with no base (a legacy wall) shall remain exactly as it was, with nothing invented for it (DEC-465).
+
+## People Roles, Custom Directories, Supervisor Sign-off, Supplier Load Grouping, and Project Totals Update
+
+Feature branch `feature/android-people-directories-supervisors-totals`, database version 46, decisions
+DEC-476 to DEC-481. Not released; no APK built. Physical acceptance pending.
+
+### People roles (DEC-476)
+- FR-PR-1: The system shall keep one People directory in which every person has exactly one current role: Worker, Driver or Operator.
+- FR-PR-2: Changing a person's role shall edit the same record, keep its id and every other field, append the change to the person's role history, and require confirmation first.
+- FR-PR-3: The system shall refuse a new or renamed person whose normalized name (trimmed, internal whitespace collapsed, case-folded) matches any saved person in any role, active or inactive; duplicates that existed before unification shall be kept, flagged, and never merged automatically.
+- FR-PR-4: People shall be deactivated, never deleted.
+- FR-PR-5: A Daily Report shall offer Workers, Drivers and Operators as separate lists, each built from active people of that role, and shall print Operators as their own People and equipment row and PPE role; the list a name is saved in is its historical role and shall not change when the person's role changes.
+- FR-PR-6: Migration 46 shall move every existing worker into People with no loss and keep every existing driver reference valid.
+
+### Driver / Operator on receipts (DEC-477)
+- FR-RC-1: Make Receipt shall offer active Drivers and Operators, filterable by role, each shown with their role; Workers shall not be offered.
+- FR-RC-2: Confirmation shall snapshot the person's current name and role; a receipt made before this update shall display as Driver without any value being written to it.
+- FR-RC-3: A reasoned correction may reassign the person to another active Driver or Operator and shall record the change in the correction history; the person on a signed load shall not be changeable.
+- FR-RC-4: The Delivery Authorization, Load History and business workbook shall show the role served.
+
+### Custom directories (DEC-478)
+- FR-CD-1: The Owner shall be able to create, rename, describe, reorder and archive directories, and add, edit, reorder and archive their entries (name, optional identifier, optional notes).
+- FR-CD-2: Directory names shall be unique among directories and entry names within their directory by normalized key; empty and over-length names shall be refused.
+- FR-CD-3: A Daily Report shall let the user select entries of each active directory, with an optional report note, and shall store a snapshot of the directory name, entry name, identifier and note.
+- FR-CD-4: The PDF shall print each selected directory under its own heading and omit empty ones; the workbook shall contain a Custom Resources sheet.
+
+### Supervisor sign-off (DEC-479)
+- FR-SV-1: PDF Settings shall provide a Supervisors manager: name, optional job title, optional saved signature, archive.
+- FR-SV-2: A saved signature shall be validated stroke data stored in the database; it shall never be stored as a file, logged, placed in the sync queue, or uploaded.
+- FR-SV-3: A Daily Report shall let the user select zero or more supervisors in order, each by name only or with their saved signature, and shall keep its own copy of the name, title, choice and signature.
+- FR-SV-4: The PDF shall end with a Supervisor Sign-off section whose blocks never split across pages, never distort a signature, and present a name-only sign-off as complete.
+
+### Supplier Loads grouping (DEC-480)
+- FR-SL-1: A Daily Report's Supplier Loads shall be grouped by item, then supplier, then load, using stable ids.
+- FR-SL-2: The PDF shall show a supplier subtotal per unit and an item total per unit, and shall never total across units or items.
+- FR-SL-3: Item headings shall repeat across page breaks; subtotal rows shall not split from their values; an all-unpriced subtotal shall read Unpriced.
+- FR-SL-4: The workbook shall keep row-based Supplier Loads data with stable ids and add a Supplier Load Subtotals sheet.
+
+### Project Totals (DEC-481)
+- FR-PT-1: Each project shall have a Totals destination showing, separately, supplier deliveries, company deliveries, Daily Report recorded use (Used and Transported), fuel per fuel type, and wall and foundation materials per source.
+- FR-PT-2: Totals shall be computed by grouped database queries; the screen shall perform no arithmetic.
+- FR-PT-3: Quantities shall only be added within one unit; no unit shall be converted; delivered and used shall never be one number; construction sources shall never be added to each other or to Daily Report use.
+- FR-PT-4: A difference shall appear only when the same item has delivered and used quantities in the same unit, and shall be labelled as not an inventory balance.
+- FR-PT-5: A missing measure shall read Not recorded; each total shall name its item, unit, date range and whether it is delivered or used; a total shall open its contributing records.
+- FR-PT-6: Filters shall cover an inclusive date range, item, supplier, unit and All / Delivered / Used; archived items and suppliers shall remain in historical totals.
+
+### Status
+Implemented with automated tests (98 files, 1,349+ tests green, typecheck clean). Not yet accepted on a physical device.
+
+## Projects List, Project Totals and Project Screens Redesign
+
+DEC-484. Presentation only: no calculation, schema, record, backup, sync, PDF or Excel behaviour changes. Physically accepted on Android build 22 (2026-09-24).
+
+### Projects list
+- FR-PL-1: A project card shall show only the project name, its status in words (Active or Completed), its location, its start date, and the date of its latest recorded work when one exists. A missing start date or location shall read *not recorded*; a missing last activity shall not be shown.
+- FR-PL-2: Last activity shall be the latest effective date among Active loads, Active supplier loads, daily reports (work date), Active equipment fuel fills, Active waste dumps (work date), project issues and project photos. Schedule plans and wall or pavement edits shall never count. It shall be read-only and derived; nothing is stored.
+- FR-PL-3: The card shall have one tap target that opens the Project Command Center and one Manage control whose sheet offers Edit information, Change start date and Mark completed / Reactivate project, preserving every existing rule of those actions.
+- FR-PL-4: Loading, load failure with retry, empty and no-match states shall be explicit; long and Arabic names shall wrap without forced left alignment.
+
+### Project Totals presentation
+- FR-PT-7: Each item shall be its own card showing its whole-project Delivered and Used per unit in two separately labelled boxes; an absent measure reads *Not recorded* in its unit.
+- FR-PT-8: `+` shall open and `×` close an item's sources, listing suppliers first and the company's own deliveries last, labelled as own loads and not a supplier. A source shall open a focused view of its delivered totals and contributing records, stating that use is not recorded per supplier.
+- FR-PT-9: Date, item, supplier, unit and Delivered / Used filters shall sit behind one closed-by-default control that names the covered period and the number of active filters.
+
+### Project Command Center and Project Financial Review
+- FR-PS-1: Project Command Center actions shall be separate bordered cards with no coloured side stripe and no ordinal number.
+- FR-PS-2: Project Financial Review's Customer Revenue, Supplier Payables and Project Costs, and each supplier, shall be separate `+` / `×` cards, closed by default, with the headline figure visible when closed. Billed, Paid, Outstanding and cost shall each have their own quiet box colour and a written label.
+
+### Status
+Implemented with automated tests and physically accepted on Android build 22 (2026-09-24).
+
+## Payments & Balances Account Statement
+
+DEC-482, DEC-483, DEC-485 and DEC-486. Migration 47. Physically accepted on Android build 22 (2026-09-24).
+
+### Account payments
+- FR-AP-1: The Owner shall record one real payment once for a customer or supplier account with amount, payment date, method (Cash, Cheque, Bank transfer, Other), optional reference and optional note. It records money exchanged outside the app and processes nothing.
+- FR-AP-2: The Owner shall choose how it is applied: Overall balance (unallocated), Oldest unpaid records, or Select records with exact full or partial amounts; each choice shall be explained, and the oldest-first result and the resulting balance shall be previewed before confirmation.
+- FR-AP-3: A record shall never receive more than it still owes, a payment shall never be allocated beyond its own amount, and the unallocated part shall stay visible and lower the account balance. Money beyond what the account owes shall be shown as credit, never as a negative balance, and customer and supplier money shall never be netted together.
+- FR-AP-4: From an unpaid record the Owner shall be able to Mark paid in full or Record partial payment, see total, paid and remaining, and see every payment that affected the record, including which account payment each amount came from.
+- FR-AP-5: A payment with an unallocated amount shall offer Apply unallocated payment: part or all of that amount applied oldest first or to selected records, without changing, cancelling or re-entering the payment (DEC-485).
+- FR-AP-6: Cancelling a payment shall require a reason and shall cancel it and every amount it applied together, all kept in history; an amount applied from a larger payment shall not be cancelled on its own.
+- FR-AP-7: Every save shall re-read the records' remaining balances and the payment's unallocated amount inside one transaction and save nothing if any check fails; every change shall append a `sync_outbox` audit entry.
+
+### Open Balance cancellation
+- FR-OB-1: An Open Balance shall be cancelled, never deleted, through an explicit action requiring a reason; its cancellation time and prior payment status shall be retained (DEC-483).
+- FR-OB-2: Cancellation shall be refused while the balance has any active payment.
+- FR-OB-3: A cancelled balance shall count toward no amount owed, Attention count, workbook billed total or dashboard balance, shall remain visible in the account's Cancelled balances and in the workbook with Record Status Cancelled, and shall not be restored by payment-status recalculation, backup restore or sync.
+
+### Account statement layout (DEC-486)
+- FR-PB-1: Payments & Balances shall list accounts with customer and supplier totals kept apart, search, an All / Customers / Suppliers switch and an *only accounts with a balance owed* filter; each account shows its balance, total paid and open record count.
+- FR-PB-2: An account statement shall show the balance with Billed, Paid and Unallocated, one Add Payment action, and `+` / `×` sections for Open records, Payment history, Paid records, Cancelled balances and Account activity (a dated timeline built only from real records, payments, applications and cancellations).
+- FR-PB-3: Opened from a dashboard period, the screen shall state the period and keep balances current rather than filtering them.
+- FR-PB-4: Project Financial Review shall exclude unallocated payments, which belong to no project, and shall state why a project's Paid can be lower than the account's total Paid.
+
+### Data
+- DR-014a: An account payment shall retain party, amount in USD cents, payment date, method, optional reference and note, application mode, Active/Cancelled state, cancellation reason and time, and creation time. Its record allocations are payment entries (DR-014) linked by `account_payment_id`.
+- DR-OB-1: An Open Balance shall retain status (Active or Cancelled), cancellation reason, cancellation time and the payment status before cancellation. Migration 47 sets every existing balance Active and links no existing payment.
+
+### Known follow-up
+- The Excel workbook's supplier Total Billed does not include supplier Open Balances. This predates DEC-482 and is left unchanged.
+
+### Status
+Implemented with automated tests and physically accepted on Android build 22 (2026-09-24).

@@ -114,7 +114,7 @@ infrastructure can meet DEC-414, now also gating sign-in itself), **OQ-159**
 (how domain rules are shared without a forked copy), **OQ-160** (session
 lifetime values), **OQ-162** (Android authentication model), **OQ-163**
 (offline-revocation policy), **OQ-164** (Daily Report finalization boundary),
-**OQ-165** (CI security tooling), **OQ-166** (recovery for an invited Admin
+**OQ-165** (CI security tooling), **OQ-168** (recovery for an invited Admin
 who lost the authenticator before activation). **OQ-157** (authentication solution) is
 closed by DEC-418. **OQ-161** (email delivery mechanism) is closed as a design
 decision by DEC-439 through DEC-442; implementation and production

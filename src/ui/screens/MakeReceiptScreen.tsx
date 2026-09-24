@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, LayoutAnimation, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { LoadRepository } from '../../data/repositories/LoadRepository';
+import { truckCrewRoleLabel, type TruckCrewRole } from '../../domain/people';
 import { calculateLoad, createAnotherItemDraft, emptyLoadDraft, formatUsd, type ConfirmedLoad, type LoadDraft, type LoadSetupOptions, validateLoadDraft } from '../../domain/loads';
 import { printLoadBluetooth } from '../../services/bluetoothPrinter';
 import { AppButton, AppCard, AppField, Feedback, MetricCard, PageHeader } from '../components/AppPrimitives';
 import { LoadDocuments, type DocumentViewData } from '../components/LoadDocuments';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { SegmentedChoice } from '../components/SegmentedChoice';
 import { GroupedSearchableSelect } from '../components/GroupedSearchableSelect';
 import { DatePickerField, todayIso } from '../components/DatePickerField';
 import { useReducedMotion } from '../components/ExpandableMenu';
@@ -15,6 +17,18 @@ import { colors } from '../theme';
 export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId }: { repository: LoadRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null }) {
   const [options, setOptions] = useState<LoadSetupOptions | null>(null);
   const [draft, setDraft] = useState<LoadDraft>(emptyLoadDraft);
+  // DEC-477. Narrows the Driver / Operator list; the selected person always stays listed so a filter change never hides the current choice.
+  const [crewFilter, setCrewFilter] = useState<'all' | TruckCrewRole>('all');
+  const crew = options?.drivers ?? [];
+  const selectedCrew = crew.find((value) => value.id === draft.driverId);
+  const crewFilterOptions = [
+    { id: 'all' as const, label: 'All', count: crew.length },
+    { id: 'driver' as const, label: 'Drivers', count: crew.filter((value) => value.role === 'driver').length },
+    { id: 'operator' as const, label: 'Operators', count: crew.filter((value) => value.role === 'operator').length },
+  ];
+  const crewOptions = crew
+    .filter((value) => crewFilter === 'all' || value.role === crewFilter || value.id === draft.driverId)
+    .map((value) => ({ id: value.id, label: value.name, detail: [truckCrewRoleLabel(value.role), value.phone, value.licenseNumber ? `Licence ${value.licenseNumber}` : null].filter(Boolean).join(' · ') }));
   const [lastConfirmedDraft, setLastConfirmedDraft] = useState<LoadDraft | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [setupStatus, setSetupStatus] = useState<'loading' | 'error' | 'ready'>('loading');
@@ -140,8 +154,8 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
           <View style={styles.warning}>
             <Text style={styles.warningEyebrow}>ACTION NEEDED</Text>
             <Text style={styles.warningTitle}>Setup required</Text>
-            <Text style={styles.helper}>Create a customer, load-enabled item, saved driver, and saved truck. Units and the kg-to-ton conversion are already seeded.</Text>
-            <TouchableOpacity onPress={onOpenDirectory} accessibilityRole="button" accessibilityLabel="Open Drivers and Trucks setup" hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}><Text style={styles.link}>Open Drivers & Trucks</Text></TouchableOpacity>
+            <Text style={styles.helper}>Create a customer, load-enabled item, a saved Driver or Operator, and a saved truck. Units and the kg-to-ton conversion are already seeded.</Text>
+            <TouchableOpacity onPress={onOpenDirectory} accessibilityRole="button" accessibilityLabel="Open People and Equipment" hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}><Text style={styles.link}>Open People & Equipment</Text></TouchableOpacity>
           </View>
         ) : null}
 
@@ -165,7 +179,9 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
               <MethodChoice title="Direct quantity" hint="Pieces, metres, bundles…" selected={draft.quantityMethod === 'direct'} onPress={() => selectQuantityMethod('direct')} />
             </View>
             <GroupedSearchableSelect label="Load-enabled item *" groups={itemGroups} selectedId={draft.itemId} onSelect={selectItem} placeholder="Choose category, then item" />
-            <SearchableSelect label="Driver *" options={options.drivers.map((value) => ({ id: value.id, label: value.name, detail: [value.phone, value.licenseNumber ? `Licence ${value.licenseNumber}` : null].filter(Boolean).join(' · ') }))} selectedId={draft.driverId} onSelect={selectDriver} />
+            {/* DEC-477. Drivers and Operators can both drive a truck. The filter only narrows the list; choosing an Operator never changes their directory role. */}
+            <SegmentedChoice mode="tabs" options={crewFilterOptions} selectedId={crewFilter} onSelect={setCrewFilter} />
+            <SearchableSelect label="Driver / Operator *" options={crewOptions} selectedId={draft.driverId} onSelect={selectDriver} placeholder="Choose the person driving" />
             <SearchableSelect label="Truck *" options={options.trucks.map((value) => ({ id: value.id, label: value.plate, detail: [value.makeModel, value.ownerName].filter(Boolean).join(' · ') }))} selectedId={draft.truckId} onSelect={selectTruck} />
             {draft.quantityMethod === 'weighbridge' ? (
               <>
@@ -291,7 +307,7 @@ function FinalReviewSummary({ options, draft, calculation }: { options: LoadSetu
       <SummaryRow label="Customer" value={customer?.name ?? '—'} />
       <SummaryRow label="Project / destination" value={project?.name ?? (draft.destinationAddress.trim() || '—')} />
       <SummaryRow label="Item" value={item?.name ?? '—'} />
-      <SummaryRow label="Driver / truck" value={`${draft.driverName || '—'} · ${draft.truckPlate || '—'}`} />
+      <SummaryRow label={`${truckCrewRoleLabel(options.drivers.find((value) => value.id === draft.driverId)?.role)} / truck`} value={`${draft.driverName || '—'} · ${draft.truckPlate || '—'}`} />
       <SummaryRow label="Quantity" value={calculation.billedQuantity == null ? '—' : `${calculation.billedQuantity} ${quantitySymbol}`} />
       <SummaryRow label="Price" value={draft.unitPriceUsd.trim() ? formatUsd(calculation.finalTotalUsd) : 'Unpriced'} strong />
     </AppCard>
@@ -311,8 +327,8 @@ function ProgressMarker({ number, done, current }: { number: number; done: boole
 function MethodChoice({ title, hint, selected, onPress }: { title: string; hint: string; selected: boolean; onPress: () => void }) { return <TouchableOpacity activeOpacity={.72} onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${title}. ${hint}`} style={[styles.methodChoice, selected && styles.methodChoiceSelected]}><Text style={[styles.methodTitle, selected && styles.methodTitleSelected]}>{title}</Text><Text style={[styles.methodHint, selected && styles.methodHintSelected]}>{hint}</Text></TouchableOpacity>; }
 function IssueList({ issues }: { issues: string[] }) { if (!issues.length) return null; return <Feedback kind="error">{issues.map((issue) => `• ${issue}`).join('\n')}</Feedback>; }
 
-function draftDocument(options: LoadSetupOptions, draft: LoadDraft, calculation: ReturnType<typeof calculateLoad>): DocumentViewData { const customer = options.customers.find((v) => v.id === draft.customerId); const project = options.projects.find((v) => v.id === draft.projectId); const item = options.items.find((v) => v.id === draft.itemId); const conversion = options.conversions.find((v) => v.id === draft.conversionId); const unit = options.units.find(v => v.id === draft.directUnitId); const direct = draft.quantityMethod === 'direct'; return { quantityMethod: draft.quantityMethod, companyName: options.companySettings.companyName, companyAddress: options.companySettings.address, companyPhone: options.companySettings.phone, companyEmail: options.companySettings.email, companyTaxVatNumber: options.companySettings.taxVatNumber, companyReceiptFooter: options.companySettings.receiptFooter, transactionNumber: '', dateTime: new Date(`${draft.recordDate}T12:00:00`).toISOString(), customerName: customer?.name ?? '', projectName: project?.name ?? null, destinationAddress: project?.location ?? (draft.destinationAddress.trim() || null), itemName: item?.name ?? '', driverName: draft.driverName.trim(), truckPlate: draft.truckPlate.trim(), requestedQuantityKg: !direct && draft.requestedQuantityKg ? Number(draft.requestedQuantityKg) : null, emptyWeightKg: !direct && draft.emptyWeightKg ? Number(draft.emptyWeightKg) : null, fullWeightKg: !direct && draft.fullWeightKg ? Number(draft.fullWeightKg) : null, netWeightKg: calculation.netWeightKg, convertedQuantity: calculation.billedQuantity, outputUnitSymbol: direct ? (unit?.symbol ?? null) : (conversion?.outputUnitSymbol ?? null), unitPriceUsd: draft.unitPriceUsd.trim() ? Number(draft.unitPriceUsd.replace(',', '.')) : null, subtotalUsd: calculation.subtotalUsd, vatRatePercent: draft.unitPriceUsd.trim() ? options.companySettings.vatRatePercent : null, vatAmountUsd: calculation.vatAmountUsd, finalTotalUsd: calculation.finalTotalUsd, signaturePaths: [] }; }
-export function confirmedDocument(record: ConfirmedLoad): DocumentViewData { return { quantityMethod: record.quantityMethod, companyName: record.companyName, companyAddress: record.companyAddress, companyPhone: record.companyPhone, companyEmail: record.companyEmail, companyTaxVatNumber: record.companyTaxVatNumber, companyReceiptFooter: record.companyReceiptFooter, transactionNumber: record.transactionNumber, dateTime: record.confirmedAt, customerName: record.customerName, projectName: record.projectName, destinationAddress: record.projectLocation ?? record.destinationAddress, itemName: record.itemName, driverName: record.driverName, truckPlate: record.truckPlate, requestedQuantityKg: record.requestedQuantityKg, emptyWeightKg: record.emptyWeightKg, fullWeightKg: record.fullWeightKg, netWeightKg: record.netWeightKg, convertedQuantity: record.billedQuantity, outputUnitSymbol: record.outputUnitSymbol, unitPriceUsd: record.unitPriceUsd, subtotalUsd: record.subtotalUsd, vatRatePercent: record.vatRatePercent, vatAmountUsd: record.vatAmountUsd, finalTotalUsd: record.finalTotalUsd, signaturePaths: record.signaturePaths }; }
+function draftDocument(options: LoadSetupOptions, draft: LoadDraft, calculation: ReturnType<typeof calculateLoad>): DocumentViewData { const customer = options.customers.find((v) => v.id === draft.customerId); const project = options.projects.find((v) => v.id === draft.projectId); const item = options.items.find((v) => v.id === draft.itemId); const conversion = options.conversions.find((v) => v.id === draft.conversionId); const unit = options.units.find(v => v.id === draft.directUnitId); const direct = draft.quantityMethod === 'direct'; return { quantityMethod: draft.quantityMethod, companyName: options.companySettings.companyName, companyAddress: options.companySettings.address, companyPhone: options.companySettings.phone, companyEmail: options.companySettings.email, companyTaxVatNumber: options.companySettings.taxVatNumber, companyReceiptFooter: options.companySettings.receiptFooter, transactionNumber: '', dateTime: new Date(`${draft.recordDate}T12:00:00`).toISOString(), customerName: customer?.name ?? '', projectName: project?.name ?? null, destinationAddress: project?.location ?? (draft.destinationAddress.trim() || null), itemName: item?.name ?? '', driverName: draft.driverName.trim(), driverRole: options.drivers.find((v) => v.id === draft.driverId)?.role ?? null, truckPlate: draft.truckPlate.trim(), requestedQuantityKg: !direct && draft.requestedQuantityKg ? Number(draft.requestedQuantityKg) : null, emptyWeightKg: !direct && draft.emptyWeightKg ? Number(draft.emptyWeightKg) : null, fullWeightKg: !direct && draft.fullWeightKg ? Number(draft.fullWeightKg) : null, netWeightKg: calculation.netWeightKg, convertedQuantity: calculation.billedQuantity, outputUnitSymbol: direct ? (unit?.symbol ?? null) : (conversion?.outputUnitSymbol ?? null), unitPriceUsd: draft.unitPriceUsd.trim() ? Number(draft.unitPriceUsd.replace(',', '.')) : null, subtotalUsd: calculation.subtotalUsd, vatRatePercent: draft.unitPriceUsd.trim() ? options.companySettings.vatRatePercent : null, vatAmountUsd: calculation.vatAmountUsd, finalTotalUsd: calculation.finalTotalUsd, signaturePaths: [] }; }
+export function confirmedDocument(record: ConfirmedLoad): DocumentViewData { return { quantityMethod: record.quantityMethod, companyName: record.companyName, companyAddress: record.companyAddress, companyPhone: record.companyPhone, companyEmail: record.companyEmail, companyTaxVatNumber: record.companyTaxVatNumber, companyReceiptFooter: record.companyReceiptFooter, transactionNumber: record.transactionNumber, dateTime: record.confirmedAt, customerName: record.customerName, projectName: record.projectName, destinationAddress: record.projectLocation ?? record.destinationAddress, itemName: record.itemName, driverName: record.driverName, driverRole: record.driverRole ?? null, truckPlate: record.truckPlate, requestedQuantityKg: record.requestedQuantityKg, emptyWeightKg: record.emptyWeightKg, fullWeightKg: record.fullWeightKg, netWeightKg: record.netWeightKg, convertedQuantity: record.billedQuantity, outputUnitSymbol: record.outputUnitSymbol, unitPriceUsd: record.unitPriceUsd, subtotalUsd: record.subtotalUsd, vatRatePercent: record.vatRatePercent, vatAmountUsd: record.vatAmountUsd, finalTotalUsd: record.finalTotalUsd, signaturePaths: record.signaturePaths }; }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 }, content: { padding: 20, paddingBottom: 42, gap: 16 }, contentWithFooter: { paddingBottom: 125 }, flex: { flex: 1, minWidth: 0 },

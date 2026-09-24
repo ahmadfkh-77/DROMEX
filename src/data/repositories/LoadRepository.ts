@@ -1,12 +1,13 @@
 import type {
-  ConfirmedLoad, ConversionDraft, ConversionOption, DriverDraft, DriverProfile, LoadCorrectionDraft, LoadDraft, LoadSetupOptions,
-  MachineDraft, MachineProfile, MeasurementUnit, Project, ProjectDraft, ProjectInformationDraft, TruckDraft, TruckProfile, UnitDraft, WorkerDraft, WorkerProfile,
+  ConfirmedLoad, ConversionDraft, ConversionOption, LoadCorrectionDraft, LoadDraft, LoadSetupOptions,
+  MachineDraft, MachineProfile, MeasurementUnit, Project, ProjectDraft, ProjectInformationDraft, TruckDraft, TruckProfile, UnitDraft,
 } from '../../domain/loads';
+import type { PersonDraft, PersonProfile } from '../../domain/people';
 import type { ConsultingAgencyOption } from '../../domain/profiles';
 
 export type DirectoryProfiles = {
-  workers: WorkerProfile[];
-  drivers: DriverProfile[];
+  /** DEC-476. Every person, active and inactive, whatever their role. */
+  people: PersonProfile[];
   trucks: TruckProfile[];
   machines: MachineProfile[];
 };
@@ -32,17 +33,19 @@ export interface LoadRepository {
   /** DEC-417. Read-only: every active agency, plus the calling project's own current agency even
    * if it has since been deactivated, resolved via resolveConsultingAgencySelectorOptions. */
   listConsultingAgencyOptions(currentAgencyId?: string | null): Promise<ConsultingAgencyOption[]>;
-  createDriver(draft: DriverDraft): Promise<DriverProfile>;
-  updateDriver(id:string,draft:DriverDraft):Promise<DriverProfile>;
+  /**
+   * DEC-476. One People directory. A duplicate normalized name is refused in any role; a role change
+   * edits the same record and appends to its role history; people are deactivated, never deleted.
+   */
+  listPeople(): Promise<PersonProfile[]>;
+  createPerson(draft: PersonDraft): Promise<PersonProfile>;
+  updatePerson(id: string, draft: PersonDraft): Promise<PersonProfile>;
+  setPersonActive(id: string, isActive: boolean): Promise<void>;
   createTruck(draft: TruckDraft): Promise<TruckProfile>;
   updateTruck(id:string,draft:TruckDraft):Promise<TruckProfile>;
-  createWorker(draft: WorkerDraft): Promise<WorkerProfile>;
-  updateWorker(id:string,draft:WorkerDraft):Promise<WorkerProfile>;
   createMachine(draft: MachineDraft): Promise<MachineProfile>;
   updateMachine(id:string,draft:MachineDraft):Promise<MachineProfile>;
   getDirectoryProfiles(): Promise<DirectoryProfiles>;
-  setWorkerActive(id: string, isActive: boolean): Promise<void>;
-  setDriverActive(id: string, isActive: boolean): Promise<void>;
   setTruckActive(id: string, isActive: boolean): Promise<void>;
   setMachineActive(id: string, isActive: boolean): Promise<void>;
   getDraft(): Promise<LoadDraft | null>;

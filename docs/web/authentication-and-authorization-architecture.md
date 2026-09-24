@@ -2391,7 +2391,7 @@ and are not kept.
 
 **Known limits and residual risks of checkpoint 4B2:**
 
-- **Lost authenticator before activation (OQ-166).** An invitee who verified
+- **Lost authenticator before activation (OQ-168).** An invitee who verified
   a factor and then lost the authenticator before completing setup cannot
   resume: resumption requires a current TOTP code, the pending identity
   cannot be deleted, and password reset never removes MFA (DEC-441 (8)). No
@@ -2416,7 +2416,7 @@ and are not kept.
 ### Deliberately left to the implementation phase
 
 Password reset (checkpoint 4C); a recovery path for an invitee who lost the
-authenticator before activation (OQ-166); listing pending identities for the
+authenticator before activation (OQ-168); listing pending identities for the
 Owner (checkpoint 4E2); reading email configuration in the running server. (Whether design closure satisfies DEC-435 (6) is no longer open: it
 does not, and DEC-443 sets the gate above.)
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+import { truckCrewRoleLabel, type TruckCrewRole } from '../../domain/people';
 import { formatUsd } from '../../domain/loads';
 import { colors } from '../theme';
 
@@ -10,7 +11,9 @@ export type DocumentViewData = {
   companyName: string; companyAddress: string | null; companyPhone: string | null;
   companyEmail: string | null; companyTaxVatNumber: string | null; companyReceiptFooter: string | null;
   transactionNumber: string; dateTime: string; customerName: string; projectName: string | null;
-  destinationAddress: string | null; itemName: string; driverName: string; truckPlate: string;
+  destinationAddress: string | null; itemName: string; driverName: string;
+  /** DEC-477. Role served on this load; absent or null on a pre-DEC-477 load, which reads Driver. */
+  driverRole?: TruckCrewRole | null; truckPlate: string;
   requestedQuantityKg: number | null; emptyWeightKg: number | null; fullWeightKg: number | null;
   netWeightKg: number | null; convertedQuantity: number | null; outputUnitSymbol: string | null;
   unitPriceUsd: number | null; subtotalUsd: number | null; vatRatePercent: number | null;
@@ -55,10 +58,10 @@ export function LoadDocuments({ data, isDraft }: { data: DocumentViewData; isDra
         ) : (
           <>
             {data.destinationAddress ? <Line label="Destination" value={data.destinationAddress} /> : null}
-            <Line label="Driver" value={missing(data.driverName)} />
+            <Line label={truckCrewRoleLabel(data.driverRole)} value={missing(data.driverName)} />
             <Line label="Truck plate" value={missing(data.truckPlate)} />
             {data.quantityMethod==='weighbridge'?<>{data.requestedQuantityKg != null ? <Line label="Requested quantity" value={`${data.requestedQuantityKg} kg`} /> : null}<Line label="Empty weight" value={data.emptyWeightKg == null ? '—' : `${data.emptyWeightKg} kg`} /><Line label="Full weight" value={data.fullWeightKg == null ? '—' : `${data.fullWeightKg} kg`} /><Line label="Net weight" value={data.netWeightKg == null ? '—' : `${data.netWeightKg} kg`} strong /><Line label="Converted quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} /></>:<Line label="Quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} strong />}
-            {data.signaturePaths.length ? <View style={styles.signature}><Svg width="100%" height={80} viewBox="0 0 320 140">{data.signaturePaths.map((path,index)=><Path key={`${index}-${path.length}`} d={path} fill="none" stroke="#111" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"/>)}</Svg><Text style={styles.signatureLabel}>Driver signature: {data.driverName}</Text></View> : <Line label="Driver signature" value="Unsigned" />}
+            {data.signaturePaths.length ? <View style={styles.signature}><Svg width="100%" height={80} viewBox="0 0 320 140">{data.signaturePaths.map((path,index)=><Path key={`${index}-${path.length}`} d={path} fill="none" stroke="#111" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"/>)}</Svg><Text style={styles.signatureLabel}>{truckCrewRoleLabel(data.driverRole)} signature: {data.driverName}</Text></View> : <Line label={`${truckCrewRoleLabel(data.driverRole)} signature`} value="Unsigned" />}
           </>
         )}
         {data.companyReceiptFooter ? <><View style={styles.rule} /><Text style={styles.footer}>{data.companyReceiptFooter}</Text></> : null}

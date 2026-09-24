@@ -2076,3 +2076,217 @@ confirmed before the rename still displays its original project name.
 ### Status
 
 Implemented, released in build 17, and accepted after device verification.
+
+---
+
+## 2026-09-17 — Wall Construction consumption, area, purposes, and corrections
+
+**Trigger**: Owner directive to add covered area for Stone and Ready Mix, saved
+Concrete/Mortar purposes, reasoned consumption corrections, and a Daily Report
+Wall Construction section (DEC-450 to DEC-453), with the design skills applied as
+a refinement inside the committed ledger identity.
+
+### Critique of the previous screen
+
+- Missing quantities printed as zero (`0 cement bags`, `0.00 m³` metric cards).
+- Validation errors appeared only at the top of a long page, away from the action.
+- Consumption History was read-only with no way to correct a wrong entry.
+- The wall row nested an Edit touchable inside the row touchable.
+
+### Changes
+
+- One `WallConsumptionForm` for recording and for in-place correction, with the
+  error shown directly above the failed action and values preserved.
+- `WallAreaCalculator`: progressive disclosure in Calc Result Teal with gross,
+  openings, and net results beside the inputs.
+- `ConcretePurposeField`: built-in and saved purposes in one selector and a
+  focused Add new purpose form that selects the saved purpose.
+- `WallConsumptionHistory`: expandable records, correction trail, and a
+  non-destructive Correct This Record action.
+- Metrics show only recorded totals; the Edit action has its own touch target.
+- Daily Report editor section 08, PDF section, and workbook sheet (see DESIGN.md).
+
+### Status
+
+Implemented on `feature/android-wall-consumption-improvements`. PDF output was
+inspected through the real print engine. Not yet verified on a physical device.
+
+### Addendum — 2026-09-17, during the first Expo Go device test
+
+The Owner rejected covered area: the calculation must produce volume exactly like
+section 1 (DEC-455). `WallAreaCalculator` was replaced by `WallVolumeCalculator`
+(length, height, bottom and top thickness, volume deductions, a shortcut to copy the
+wall's section 1 dimensions, and Gross volume / Deductions / Net volume results). The
+net volume now fills the consumed quantity and remains editable. History, the Daily
+Report editor, PDF, and workbook show the volume calculation instead of area.
+
+### Addendum - 2026-09-17, wall diagram, layers, and mandatory base
+
+Two approved additions landed on the same branch. `WallDiagramView` and `WallLayersEditor` add a
+generated technical figure and an ordered layer editor (DEC-457). `WallBaseWorkflow` adds section A,
+where a wall section records its base, marks it constructed, tracks curing, and unlocks wall work only
+through an explicit cured confirmation (DEC-459). Walls created before the rule stay usable and are
+labelled as legacy walls with no base recorded.
+
+### Addendum — 2026-09-17, composite foundation model (DEC-461)
+
+Audited the existing base workflow before building on top of it: `WallBaseWorkflow`'s four-stage
+strip, cream lock banner, and single-action lifecycle controls were already close to the guided,
+one-primary-action pattern this phase's brief asked for, so this addition extends that pattern
+rather than rebuilding it. What changed:
+
+- **New domain module** `src/domain/wallFoundation.ts`: Simple/Detailed Stone-core modes, position
+  clamping and nudging (the accessible alternative to a drag gesture), detailed-offset containment
+  validation, active-quantity aggregation excluding cancelled records, the capacity refusal in both
+  directions (recording too much Stone, and correcting the base geometry down below what is already
+  recorded), estimated concrete, and actual-vs-estimated variance. 36 unit tests, written before the
+  implementation and kept as the RED-then-GREEN record of this phase.
+- **New diagram module** `src/domain/wallFoundationDiagram.ts`: draws the Stone core inside the
+  outer foundation boundary — never beside it — with the surrounding region visually distinct as
+  "estimated" versus "poured", reusing the existing `wallDiagramToSvg` serializer rather than
+  duplicating it. 8 tests, including an outer-boundary-only planned state, simple vs. detailed core
+  rendering, the estimated/poured distinction, and XML-escaping of an injected label.
+- **Repository**: `wall_base_composition_records` (migration 41) holds each Stone/Ready-Mix entry
+  as its own cancellable, correctable row, mirroring the existing wall-consumption correction model
+  instead of introducing a second one. 20 repository tests, plus 2 migration tests confirming the
+  step is additive and every existing base defaults to single mode.
+- **New screen component** `FoundationCompositionCard.tsx`, mounted inside `WallBaseWorkflow`
+  beneath the existing base summary, additive to (never replacing) the base's single
+  materialType/quantity field: a mode toggle, the technical preview, Simple-mode nudge buttons with
+  a Reset-to-Centre action, Detailed-mode numeric offset fields, a record-entry form, and a per-record
+  Cancel/Correct list.
+- **Deliberately not built in this phase**, and called out as open in DEC-461 rather than left
+  unstated: the requested 5-stage guided-workflow redesign of the whole Wall Construction screen
+  (this addition extends the existing base workflow instead), and Daily Report PDF/workbook
+  representation of the composite breakdown. Both are recommended as the next phase.
+
+### Status
+
+Domain, migration, repository, diagram, and screen wiring implemented on
+`feature/android-wall-consumption-improvements`. Typecheck clean; 734 Vitest tests green across 64
+files. Not yet verified on a physical device or in Expo Go — the Owner will test the guided base
+workflow and the new Foundation composition card there.
+
+### Addendum — 2026-09-18, curing gate removed (DEC-463)
+
+The Owner corrected the base/curing rule this branch had shipped under DEC-459: curing must be
+tracked but must never block, hide, or disable wall work. The earlier design entry above described
+the base workflow as "locked" until cured — that language, and the behavior behind it, is now wrong
+and is superseded here rather than edited in place, since it was an accurate record of what shipped
+at the time.
+
+What changed:
+
+- `describeWallStageLock` in `src/domain/wallBase.ts` now returns `locked:true` only when a wall
+  requires a base and none has been recorded; curing status never sets it. It gained
+  `curingConfirmed`, `warningTitle`, and `warningBody` fields carrying the new non-blocking notice
+  ("Base curing is not yet confirmed" / "You can continue recording wall planning and work. Confirm
+  curing separately when the base is ready."), exported as `CURING_WARNING_TITLE`/`CURING_WARNING_BODY`.
+- `validateWallWorkDate` no longer refuses a wall-work date for curing chronology; a new
+  `describeWallWorkDateNotice` gives a purely informational note instead. `SqliteWallRepository`'s
+  gate (renamed `assertWallHasBase`) checks only that a base exists.
+- `validateBaseStatusChange` no longer refuses reverting a cured base to curing because wall work
+  exists, and `correctBaseCuring` no longer refuses a cured-date correction that would leave earlier
+  wall work "stranded" — both cases are now allowed, and neither ever touches the wall records.
+- `WallBaseWorkflow`'s stepper no longer calls an upcoming stage "locked"; the base-missing case
+  keeps a blocking notice, and the not-yet-cured case shows the new warning-styled (not error-styled)
+  banner instead, beside the wall sections, which are never hidden by it.
+- `WallConstructionScreen` still hides sections only for `stage.locked` (now base-existence only) and
+  additionally shows the same non-blocking warning card when `!stage.curingConfirmed`.
+- The Daily Report PDF (`projectReportWasteTemplate.ts`) prints a concise
+  "Base curing not confirmed on this work date" note beside any wall material recorded before the
+  base reached `cured`, without ever hiding that material or claiming the base was cured early.
+- Obsolete blocking tests across `wall-base-domain.test.ts`, `wall-base-repository.test.ts`, and
+  `wall-construction-ui.test.ts` were replaced with tests proving every base status can be selected
+  and worked on, dates in any order are accepted, curing-date corrections and reverts preserve wall
+  records, and reports show curing status and wall work honestly without a false "cured" claim.
+
+Full suite (743 Vitest tests, 64 files) and typecheck green. Not yet verified on a physical device
+or in Expo Go.
+
+### Addendum — 2026-09-18, Project -> Construction Section -> Foundation -> Wall (DEC-464)
+
+Re-audited the workflow at `0797dc2`/`371ad8d` against the approved checkpoints and rebuilt the
+foundation model from a per-wall attribute into an independent entity, with a genuinely new
+five-stage workspace, real Stone-core dragging, and Daily Report grouping to match.
+
+**Data model and migration.** `construction_sections` and `foundations` are new tables;
+`walls.foundation_id` (nullable, unique where set) replaces the implicit 1:1 base-per-wall
+relationship for anything created going forward. Migration 42 copies every existing `wall_bases`
+row into `foundations` (keeping its id) under a deterministic per-project "Legacy Section", and
+every `wall_base_composition_records` row into a new `foundation_composition_records` table keyed
+by `foundation_id`. **`wall_bases` and `wall_base_composition_records` are never dropped or
+renamed** — an earlier draft of this migration renamed `wall_base_composition_records` in place and
+dropped `wall_bases`, which passed every wall-specific test but broke several *unrelated* older
+migration tests (37, 38, 39, and two in `migrations.test.ts`) that reset `PRAGMA user_version` on an
+already-fully-migrated database to replay just their own step, relying on every table those steps
+touch being safe to recreate with `IF NOT EXISTS`. Renaming/dropping broke that assumption; using
+new, independently named tables and making every insert idempotent (`INSERT OR IGNORE`) fixed it
+without touching migrations 37-41's own code, and a dedicated regression test now exercises exactly
+that replay scenario.
+
+**Domain.** `wallBase.ts`'s shared curing/volume functions were narrowed to `Pick`/`Omit` parameter
+types (no behavior change) so the new `Foundation` type in `foundations.ts` satisfies them
+structurally and reuses the exact same lifecycle rules as the legacy base, rather than a second copy
+of them. `constructionSections.ts` adds name normalization (trim, collapse internal whitespace,
+case-insensitive comparison) and per-project uniqueness checking.
+
+**Repository.** `SqliteWallRepository` gained Construction Section CRUD, independent Foundation
+CRUD (`createFoundation` takes no wall id), `linkWallToFoundation`, and `saveWall` now accepts an
+optional `foundationId` set at creation. One active wall per foundation is enforced by a database
+partial unique index (`idx_walls_foundation`), with the repository translating the raw SQLite
+constraint message into a stated conflict rather than a bare failure.
+
+**Screens.** `WallConstructionScreen.tsx` is now a directory: Construction Sections (closed by
+default) under the chosen project, each listing its Foundations with inline "+ New..." actions, plus
+an untouched "Legacy walls" area for `base_required = 0` walls using the exact pre-DEC-459 workflow.
+Opening a Foundation enters `FoundationWorkspaceScreen.tsx`'s five-stage guided workspace via
+`FoundationStageStepper.tsx` — a vertical list, not a row of tiny horizontal labels — where every
+stage stays tappable regardless of curing status (DEC-463 extended to this new hierarchy, not
+re-litigated). `FoundationGeometryForm.tsx` and `FoundationCuringPanel.tsx` extract the
+geometry/material and curing-lifecycle fields the old `WallBaseWorkflow.tsx` held, generalized for
+an independent Foundation; `WallBaseWorkflow.tsx` itself is deleted, fully superseded.
+
+**Real dragging (Checkpoint 5).** `FoundationDiagramView.tsx` gained a `PanResponder`-driven drag for
+the Simple-mode Stone core (React Native's own gesture API, no new dependency). The screen-pixel to
+diagram-coordinate to normalized-position conversion is three small pure functions in
+`wallFoundationDiagram.ts` (`foundationDiagramDragBounds`, `viewBoxPointFromTouch`,
+`stoneCorePositionFromViewBoxPoint`), unit-tested directly for boundary clamping, containment,
+volume-preservation, and NaN safety, independent of any renderer. The core only ever moves visually
+during the gesture; the position is written once, on release. Nudge buttons and Reset to Centre are
+unchanged and remain the accessible alternative.
+
+**Reports (Checkpoints 6/7).** `LinkedWallWork` gained `constructionSectionName` and
+`foundationComposition`; a new `LinkedFoundationActivity` type covers a Foundation with recorded
+activity but no wall linked yet. The PDF's Wall Construction section now nests by Construction
+Section, then by wall or standalone foundation block (dashed border, captioned "no wall linked
+yet"). The workbook's "Wall Bases" sheet is renamed "Wall Foundations" (Construction Section and
+composite columns added) and a new "Foundations Without a Wall" sheet mirrors the PDF's standalone
+blocks.
+
+**Deliberately not built further in this phase:** a merged single-tree UI combining sections,
+foundations, and legacy walls into one list (they stay in clearly separated areas instead, which
+matched every visual-verification case reviewed); resume-at-exact-unfinished-substep memory beyond
+the stage the workspace opens on.
+
+### Status
+
+Domain, migration 42, repository, five-stage screens, real Stone-core dragging, and Daily
+Report/workbook grouping implemented on `feature/android-wall-consumption-improvements`. Typecheck
+clean; 773 Vitest tests green across 65 files. Not yet verified on a physical device or in Expo Go —
+the Owner will test the new directory, five-stage workspace, and drag gesture there.
+
+## People, Custom Directories, Supervisor Sign-off, Supplier Load grouping and Project Totals (2026-09-23)
+
+Feature branch `feature/android-people-directories-supervisors-totals`; DEC-476 to DEC-481. Visual detail is recorded in DESIGN.md, "Implemented on People, Custom Directories, Supervisors and Project Totals".
+
+- People & Equipment: one People tab with role filter chips and counts, a role pill in words on every person, a Focused Sheet editor with a single-select Role and role-change confirmation, and a Possible duplicate flag in text.
+- Two shared primitives: `FocusedSheet` (the Receipt Setup sheet, generalised) and `SegmentedChoice` (selection shown by fill, 2px border and check mark, never colour alone).
+- New focused screens: Custom Directories, Supervisors (from PDF Settings section 04), and Project Totals (from Project Command Center → Records and Documents).
+- Daily Report editor: Operators field, per-directory Custom resources picker with report notes, and section 15 Supervisor Sign-off.
+- Make Receipt: Driver / Operator field with role filters; Load History and Load Corrections name the role served; a signed load's person is shown locked.
+- Daily Report PDF: Additional resources blocks, Supplier Loads grouped per item in fixed-column tables with repeating item headings, and a closing Supervisor Sign-off grid. Reviewed on rendered samples; the review caught and fixed quantities losing their decimals ("22. t") and a false "$0.00" subtotal for all-unpriced suppliers, and aligned column widths across item tables.
+
+### Status
+
+Implemented with automated tests (98 files, 1,349 tests green, typecheck clean). Physical acceptance in Expo Go pending.

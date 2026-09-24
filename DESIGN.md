@@ -259,7 +259,7 @@ DROMEX is mostly flat, with shadow reserved for elements that float above the pa
 ### Expandable Menu (`ExpandableMenuSection`, `MenuAction` — shared by seven screens)
 - **Base/default treatment (five screens: `DraftCenterScreen`, `PavementCalculatorScreen`, `WallConstructionScreen`, `WorkspaceHubScreen`, `PavementAdvancedSections`):** a 67px-minimum, 15px-radius header block in navy, orange, or cream, with a title, a one-line hint, and a `+`/`×` mark that swaps instantly on open; opening animates a 3px orange accent bar growing across the header's bottom edge over ~230ms, and reveals child actions with a simultaneous fade/slide-up. Action rows are 80px-minimum white cards with a 4px left border in the section's accent color, a small numbered index, a bold Ink title, a Muted description, and a trailing orange chevron (`›`). Sections are closed by default, per `docs/design-system.md`.
 - **Home's `refined` variant** (opt-in `refined` prop, default `false`, used only by `HomeScreen.tsx` — see "Implemented on Home"): a solid Ledger-Cream rounded-square index chip (`01`–`04`) instead of the translucent circle; the `+` rotates 45° into `×` (one glyph, animated) instead of swapping text; the expanded body is one bounded Ledger-Cream card containing flat, ruled rows (thin bottom divider, no per-row shadow, 3px left border) instead of individually-shadowed floating cards; section/row title weight `700`, hint/body weight `500`/default, row numbers and chevrons in Structural Navy instead of Signal Orange.
-- **Project Command Center's `refined`+`polished` variant** (opt-in `polished` prop, default `false`, always paired with `refined`, used only by `ProjectCommandCenterScreen.tsx` — see "Implemented on Project Command Center"): builds on Home's `refined` treatment with an attached numbered ledger tab (protruding above the header rather than sitting inline), a connected header/body seam on open (flattened corners, a static 4px Signal Orange rule at the join), individually-shadowed white rows layered on the Ledger Cream body (reversing `refined`'s flat ruled-row look for this screen only), a capped staggered row reveal, and subtle header press feedback. Row number/badge weight is `600` here (`refined`-only screens keep `700`).
+- **Project Command Center's `refined`+`polished` variant** (opt-in `polished` prop, default `false`, always paired with `refined`, used only by `ProjectCommandCenterScreen.tsx` — see "Implemented on Project Command Center"): builds on Home's `refined` treatment with an attached numbered ledger tab (protruding above the header rather than sitting inline), a connected header/body seam on open (flattened corners, a static 4px Signal Orange rule at the join), individually-shadowed white rows layered on the Ledger Cream body (reversing `refined`'s flat ruled-row look for this screen only), a capped staggered row reveal, and subtle header press feedback. Row number/badge weight is `600` here (`refined`-only screens keep `700`). **As of DEC-484 (2026-09-24)** its action rows are separate white cards with a full 1px `#D9CFBE` border, no coloured side stripe and no ordinal number, a 13px `#5A6570` description, and the `›` inside a 32dp `#EEF3F8` circle; the section headers are unchanged.
 
 ### Supplied Material Record (`QuarryPurchasesScreen.tsx`, screen-local)
 As of 2026-09-03: a bespoke record row (not a shared component) presenting one Supplier Load in a fixed 13-point reading order — material name first (700-weight, most prominent by position and size), quantity-and-unit as one inseparable, largest-on-the-card value (900-weight, joined by a non-breaking space so they can never wrap apart), category, delivery date/time, an optional "Trip N of M" badge, delivery mode, driver/truck (omitted entirely, not shown blank, when the supplier delivered), Per Unit/As a Whole, then a structurally separated Financial block (price/VAT/total, or an explicit "Unpriced" tag), then status badges (Cancelled/Reactivated) and reference/ticket numbers last, at 600-weight or below — deliberately demoting what the previous design showed first. Operational and Financial information sit in two `flexWrap`/`flexBasis` blocks that stack vertically on narrow phones and sit side-by-side on wide ones without any JS width breakpoint. See "Implemented on Supplier Loads" below.
@@ -300,11 +300,13 @@ A 40-44dp circle showing a record's initials (first letters of its first two wor
 A lower-emphasis alternative to a bordered/filled button for a secondary, reversible-adjacent action (Mark Completed/Reactivate, Deactivate/Reactivate, Edit information, Cancel editing): plain `colors.brandDark` bold text, no border or fill, inside a 44-48dp touch target created by padding rather than visible size. Used specifically to visually step back an action from the screen's one primary button, per the existing "Action placement" layout rule, without shrinking its actual tap target below the 48dp floor.
 
 ### Ledger Folder (`ProjectFinancialReviewScreen.tsx`, screen-local)
+**Superseded 2026-09-24 by DEC-484** for Project Financial Review: see "Implemented on Projects list, Project Totals and project screens" below. Kept as the record of the previous treatment.
 As of 2026-09-06: a fourth, independently-built instance of the numbered-marker device, and the first one whose header is **not** a disclosure control. A Ledger-Cream numbered tab (`01`-`03`) is absolutely positioned to protrude above a Structural Navy header, which carries the section title, a one-line purpose sentence, and — right-aligned — that section's single headline figure with a Signal-Orange-tinted (`#F2A184`) label above it. A static 3px Signal Orange rule (the Seam Rule) joins the header to a Ledger Cream body bounded by a 1px `#E8DED0` border with the top edge removed, so header and body read as one opened folder.
 
 The header is deliberately static: unlike Project Command Center's tab, Daily Reports' tab, and every `ExpandableMenuSection`, a Ledger Folder never collapses. Its totals must stay visible, so disclosure is pushed one level down to the records inside it. Anything that opens and closes within a folder is a **Disclosure Row** (below), never the folder itself.
 
 ### Money Role Tile and Quantity Tile (`ProjectFinancialReviewScreen.tsx`, screen-local)
+**Superseded 2026-09-24 by DEC-484** for Project Financial Review: see "Implemented on Projects list, Project Totals and project screens" below. Kept as the record of the previous treatment.
 Five money roles that must never read as peers, each given its own surface, rule color, and value size:
 
 | Role | Treatment |
@@ -325,9 +327,11 @@ The **Status Strip** renders one pill per payment status that has at least one r
 The **Exclusion Strip** is a separate device for a separate meaning, so the two are never confused: an outlined `colors.line` strip on `colors.surface` with a `NOT IN THESE TOTALS` micro-label, the excluded count and kind in Ink, and a muted line naming the screen where those records are still visible. Explanatory footnotes keep plain helper styling and never borrow this treatment.
 
 ### Disclosure Row (`ProjectFinancialReviewScreen.tsx`, screen-local)
+**Superseded 2026-09-24 by DEC-484** for Project Financial Review: see "Implemented on Projects list, Project Totals and project screens" below. Kept as the record of the previous treatment.
 A 56dp-minimum bordered header inside a Ledger Folder body carrying a title, a summary that always states its own disclosure state in words (`Tap to view` / `Tap to hide`, matching the Collapsible Status Band rule), and a `+` glyph that rotates 45° into `×` over 180ms. Record bodies open onto a `creamSoft` ground with 1px gaps so the white rows separate; prose bodies open onto `colors.surface` instead, because `muted` body text drops to 4.46:1 on the tint. An attention-toned variant switches the border to Status Warning with a `#FFFCF4` fill.
 
 ### Financial Record Row (`ProjectFinancialReviewScreen.tsx`, screen-local)
+**Superseded 2026-09-24 by DEC-484** for Project Financial Review: see "Implemented on Projects list, Project Totals and project screens" below. Kept as the record of the previous treatment.
 Extends Daily Reports' two-hue company-versus-supplier device to money direction: a 3px left accent in Signal Orange for customer revenue, Structural Navy for supplier payables, Status Danger for a cancelled payment. Reading order is reference, then date and material, then quantity-and-unit as one value, then a right-aligned billed amount above a `BILLED` micro-label, then a status pill beside `Paid $X of $Y`, then an outstanding or overpaid line in warning tone only when non-zero. A cancelled payment strikes its amount through and states "Not counted in any total" with its reason.
 
 ### Supplier Payable Summary Block (superseded 2026-09-07)
@@ -354,6 +358,7 @@ Arabic resolves from a **system font stack** (`'Noto Naskh Arabic', 'Geeza Pro',
 Page one composes in a fixed order: a **logo row** (company left, ministry right, both `object-fit: contain` and never stretched or recoloured), the institutional text block, one 2px Signal Orange divider, then the centred title. The ministry logo belongs to the ministry option alone — switching it off never removes the company logo, which is not part of any optional header.
 
 ### Supplier Payable Block (`ProjectFinancialReviewScreen.tsx`, screen-local)
+**Superseded 2026-09-24 by DEC-484** for Project Financial Review: see "Implemented on Projects list, Project Totals and project screens" below. Kept as the record of the previous treatment.
 As of 2026-09-07 (DEC-405), replacing a continuous run of supplier rows inside one disclosure. One separated block per supplier: name, then **billed, paid and outstanding in three fixed `flex: 1` columns** so several suppliers compare by scanning straight down, then one row per material carrying quantity, unit and trip count with unlike units never merged, then that supplier's delivery records behind a disclosure closed by default. Paid is Status Success; outstanding turns Status Warning only above zero; an overpaid supplier gets an extra warning line. The inner disclosure is a **flat ruled row, not a bordered card** — only the block itself carries a border and radius, because card-in-card nesting is prohibited in this section.
 
 ## Do's and Don'ts
@@ -505,10 +510,153 @@ The **Supplier Payable Block** documented under Components replaces the continuo
 
 No new component, colour, or motion was introduced. Everything above is an existing pattern applied to a new data shape.
 
+## Implemented on Wall Construction consumption (DEC-451 to DEC-455)
+
+`src/ui/screens/WallConstructionScreen.tsx` plus four focused components: `WallConsumptionForm`, `WallVolumeCalculator`, `ConcretePurposeField`, and `WallConsumptionHistory`. A refinement inside the committed ledger identity, not a new visual language.
+
+- **One form, two jobs.** `WallConsumptionForm` records a new consumption in section 2 and renders the correction form in place inside Consumption History, so both follow one field order: date, material, purpose, quantity, volume calculation, notes, then (when correcting) the reason. A failed save keeps every entered value and shows its error directly above the action that failed, announced through `accessibilityLiveRegion`, instead of only at the top of a long page.
+- **Volume calculation is progressive disclosure in Calc Result Teal.** For Stone and Ready Mix only, a dashed teal "Calculate volume from wall dimensions" row opens a pale teal panel with the section 1 inputs (length, height, bottom thickness, top thickness, volume deductions), a "Use this wall's section 1 dimensions" shortcut, and a three-tile result strip directly beneath: Gross volume, Deductions, and a solid-teal Net volume tile. Teal is used because these are derived numbers (the Reserved-Hue Rule). Each valid net volume fills the consumed quantity (Stone switches to m³), which stays editable. "Remove" clears only the calculation.
+- **Purpose selector stays quiet.** Built-in purposes list first with no detail line; saved purposes carry a single "Saved purpose" detail. "+ Add new purpose" is a text action under the selector, and it opens the one focused page-sheet form in this workflow: a single name field, a normalized preview, an inline error, and Save Purpose / Cancel.
+- **History rows open, they do not hide actions.** Each record shows its purpose or material, date, the shared quantity sentence, its calculated net volume or the italic muted "Entered directly", and a navy-outline "Corrected" tag when it has history. Tapping reveals details, the volume calculation on a teal-soft block, and the correction trail newest first (`field: before → after`). **Correct This Record** is a secondary (navy outline) button, deliberately not the danger style, because correcting preserves the record. While correcting, the row's left stripe turns navy.
+- **No zeros for missing data.** Metric cards above the wall list only totals that were actually recorded; a wall with no consumption shows a cream note instead of a grid of `0.00` cards. The shared quantity sentence omits missing site-mix ingredients.
+- **Touch and motion.** Every new control is at least 44px tall; the wall row's Edit action gets its own 48px target instead of a nested touchable. Expansion uses `LayoutAnimation` only when Reduce Motion is off, through the existing `useReducedMotion` hook.
+- **Daily Report editor.** A read-only `08 Wall Construction` ledger section after Waste Dumps, with one teal-striped group per wall (the calculated-value accent, since wall rows are calculation records) and each record's material and purpose, quantity, and volume calculation or "Entered directly". Later sections renumber to 09–13; the progress strip now counts eleven sections with entries.
+- **Daily Report PDF.** `Wall construction that day` follows the waste dumps section: a cream wall header with a 2px Structural Navy seam carrying name, system, purpose, and geometry, then a four-column table (Material and purpose, Consumed quantity, Volume calculation, Notes). Text columns are left-aligned because quantity and calculation cells hold short sentences, not single figures. The correction note uses bold navy text, so every distinction survives grayscale. The area-based layout was rendered through the real print engine and inspected (headings stay with their tables, short blocks move whole, long tables repeat column headings); the volume column reuses the same layout and cell structure.
+
+No new colour, component primitive, or motion curve was introduced.
+
+## Implemented on the wall technical diagram (DEC-457)
+
+`src/domain/wallDiagram.ts` plus `WallDiagramView` and `WallLayersEditor`. One generated element model, two renderers: `react-native-svg` on the phone and inline SVG in the PDF.
+
+- **A construction drawing, not decoration.** Elevation on the left, cross-section on the right, legend beneath. Muted stone, concrete, and earth tones only, each layer carrying a hatch pattern and a numbered marker as well as its colour, so the figure survives grayscale printing and colour-vision deficiencies. No gradient, no 3D, no animation inside the PDF.
+- **The numbers are the truth.** A thin layer is widened to a minimum visible width, and the figure says so in Signal Orange Deep; the legend still prints the recorded thickness. The gross volume shown is the one the volume formula produced.
+- **Layer editor as ordered rows.** Each row shows its marker colour, its phase number, and Move up / Move down / Remove, with an inline confirmation before a row leaves the list. "Same thickness top and bottom" collapses the second field to a read-only echo of the first. Running totals are shown against the wall's own thickness in the calc-result teal, and disagreements appear as accessible live-region errors.
+- **Live preview.** Section 1 previews the geometry as it is typed; section 2 shows the saved wall with its layers. Both use the same component, so nothing can drift between preview and export.
+
+## Implemented on the wall base and curing workflow (DEC-459/460, refined by DEC-463)
+
+`src/ui/components/WallBaseWorkflow.tsx`, inside Wall Construction so the base and its wall stay one place.
+
+- **A stage strip, not a wizard.** Four compact steps (Base geometry, Base material and volume, Construction and curing, Wall geometry and layers) show done in Status Success, current in Structural Navy, and later stages in muted grey. The strip states the stage; it never navigates away from the wall, and reaching an upcoming step never disables anything below.
+- **A warning, not a lock.** Recording the base is still required before the wall sections open — that is the only thing that ever hides them. Once a base exists, in any status, a Status Warning band reads "Base curing is not yet confirmed" with "You can continue recording wall planning and work. Confirm curing separately when the base is ready.", alongside the current stage and elapsed curing days. **Nothing below it is disabled, hidden, or requires acknowledging the notice**; the wording never claims the base is unsafe and never uses "approved" or "certified".
+- **Cured is a decision, never a timer.** The curing step shows the dates and the elapsed days, then asks for a cured date and an explicit inspected-and-ready confirmation before **Confirm Base Is Cured** is enabled. This confirmation itself is unchanged by DEC-463 — only its role as a prerequisite for wall work was removed.
+- **The calculated volume is offered, never forced.** Gross and net volume sit in the calc-result teal beside the fields, with a "Use Calculated" action; typing a different quantity marks it a manual override and the calculation stays visible beside it.
+- **Legacy walls keep their dignity.** A wall from before the rule shows "Base not recorded - legacy wall" with a plain explanation and an optional "Record This Wall's Base" action, and its existing wall workflow is untouched.
+- **The diagram knows the stage.** The base is drawn beneath the wall: dashed outline while planned, solid with its status label once constructed, and with curing days while curing. In the Daily Report the figure is drawn for the stage reached by that work date, so an early base report never shows a wall that did not exist yet, and a concise "Base curing not confirmed on this work date" note prints beside any wall material recorded before the base reached cured — the material itself is never hidden.
+- **Reverting and correcting curing dates never touches wall records.** A cured base may return to curing at any time, including with wall work already recorded above it, and correcting a construction/curing-start/cured date never invalidates, blocks, or removes any wall record — curing chronology is informational only.
+
+## Implemented on the composite foundation model (DEC-461)
+
+`src/domain/wallFoundation.ts`, `src/domain/wallFoundationDiagram.ts`, `src/ui/components/FoundationCompositionCard.tsx` and `FoundationDiagramView.tsx`, mounted inside a Foundation's own workspace (DEC-464, below) beneath its geometry summary.
+
+- **Additive, never a replacement.** The card only appears once a foundation exists, and its own "Single material" / "Composite (Stone core + concrete)" toggle defaults to Single. Nothing about the foundation's existing materialType/quantity field changes if the owner never opens this card.
+- **Stone is drawn inside concrete, never beside it.** `buildFoundationDiagram` fills the outer foundation trapezoid first — as an empty outline in single mode or before anything is recorded, then as "estimated" or "poured" concrete — and draws the Stone core on top of it, so the figure reads as one volume with a core inside, not two adjacent blocks. A Simple-mode core carries the caption "Schematic placement — not to scale"; a Detailed-mode core is captioned "Detailed geometry".
+- **Estimated is a caption, not a promise.** Estimated concrete is always net foundation volume minus active Stone, shown in the calc-result teal beside "Estimated concrete remaining", and the diagram's own surrounding fill is visibly lighter and labelled "Estimated space — not yet poured" until an actual Ready Mix record exists. Once Ready Mix is recorded, the fill reads as poured and a neutral variance line appears — never colored as a warning or success, since over/under is not, by itself, a business judgement.
+- **Records, not one overwritten number.** Stone and Ready Mix are each their own dated entry with independently visible Cancel (reasoned) and Correct (reasoned, with a before/after audit) actions, matching the wall-consumption correction pattern elsewhere on this screen (DEC-452) rather than introducing a second correction pattern.
+- **Position now drags for real (DEC-464/Checkpoint 5).** See "Implemented on real Stone-core dragging" below; the nudge buttons and Reset to Centre remain as the accessible alternative.
+- Daily Report PDF/workbook representation of the composite breakdown and the 5-stage guided-workflow screen redesign, both deferred in DEC-461, are now implemented — see the two sections below.
+
+## Implemented on Project → Construction Section → Foundation → Wall (DEC-464)
+
+`src/ui/screens/WallConstructionScreen.tsx` (directory), `src/ui/screens/FoundationWorkspaceScreen.tsx` (the five-stage workspace), `src/ui/components/FoundationStageStepper.tsx`, `FoundationGeometryForm.tsx`, `FoundationCuringPanel.tsx`.
+
+- **A directory, not a form.** Wall Construction now opens onto Construction Sections grouped under the chosen project, each an `ExpandableMenuSection` (closed by default, matching the rest of the app) listing its Foundations by status and net volume, with "+ New Construction Section" and "+ New Foundation In This Section" as the only two entry actions — never a long standalone creation form up front.
+- **A foundation exists before its wall.** Creating a Foundation needs only a Construction Section and its own geometry/material; a wall is a later, optional action taken from inside the Foundation's own Wall stage, either creating one or linking an existing unlinked wall. The repository enforces one active wall per Foundation and refuses linking across projects, both with a stated reason rather than a silent failure.
+- **Five stages, never a lock.** `FoundationStageStepper` is a vertical list of rows (not a strip of tiny horizontal labels), each showing done/current/upcoming — Foundation, Curing, Wall, Layers and Materials, History and Reports — and every row stays tappable regardless of curing status, matching DEC-463: curing produces the same non-blocking warning banner used elsewhere, never a disabled section.
+- **Legacy walls keep their own place.** Walls that predate a base entirely (`base_required = 0`) are listed and worked on in their own "Legacy walls" area of the directory, using the exact same consumption/layers/history components as before, untouched by any of this.
+
+## Implemented on real Stone-core dragging (Checkpoint 5, DEC-464)
+
+`src/ui/components/FoundationDiagramView.tsx`, using React Native's built-in `PanResponder` (no new dependency).
+
+- **The drawing and the draggable region share one source of truth.** `foundationDiagramDragBounds` computes the Simple-mode core's box in the exact same units `buildFoundationDiagram` draws it in; the drag handler converts a touch point through `viewBoxPointFromTouch` (screen pixels → SVG viewBox units, via the on-screen rendered size from `onLayout`) and `stoneCorePositionFromViewBoxPoint` (viewBox units → normalized position), so the core drawn and the core grabbed can never disagree. Both conversions are pure functions, unit-tested independent of any renderer.
+- **Containment is structural, not checked.** Because the core's on-screen position is `boxLeft + xNorm * (boxWidth - coreWidthPx)`, clamping the normalized value to [0, 1] on each axis is sufficient by construction to keep the whole core inside the outer boundary — there is no separate margin to get wrong.
+- **Committed once, not on every pixel.** The gesture updates a local, visual-only position on every move (so dragging feels immediate) and calls the parent's save only on release, matching "position updates persist after reopen" without flooding the repository with writes mid-gesture.
+- **Grabbed, not stolen.** The pan responder only claims the touch when it starts on or near the currently drawn core (with a small margin for a finger), so the rest of the screen's scrolling is never intercepted.
+- **The keyboard-safe alternative stays first-class.** The existing nudge buttons and Reset to Centre are unchanged and remain fully functional without ever touching the drag gesture, satisfying "retain nudge/numeric controls for accessibility."
+
+## Implemented on the section/foundation-grouped Daily Report PDF and workbook (DEC-464)
+
+`src/services/projectReportWasteTemplate.ts`, `src/services/dailyReportWorkbookCore.ts`.
+
+- **Grouped, not flattened.** Wall Construction's PDF section now nests by Construction Section, then lists each linked wall's block or a standalone Foundation-only block (no wall linked yet) inside it, so a report spanning more than one site segment reads as separate work areas.
+- **A foundation without a wall is shown honestly, not hidden.** A Foundation with recorded activity on the work date but no linked wall gets its own dashed-border block, captioned "no wall linked yet", still with its full geometry, composite composition, and diagram.
+- **The workbook agrees with the PDF.** "Wall Foundations" carries the same per-wall foundation columns as before plus Construction Section and the composite columns (mode, Stone, estimated concrete, actual Ready Mix, variance); a new "Foundations Without a Wall" sheet mirrors the PDF's standalone blocks. Numbers in both always come from the same `FoundationComposition` read-model.
+
+## Implemented on People, Custom Directories, Supervisors and Project Totals (DEC-476 to DEC-481)
+
+Feature branch, not released; physical acceptance pending.
+
+### Shared primitives added
+- **Focused Sheet** (`src/ui/components/FocusedSheet.tsx`): the Focused Record Sheet pattern first built in Receipt Setup, now shared — eyebrow, title, Close pill, keyboard-safe scrolling body, sticky footer with Cancel and one Signal Orange primary action (`SheetActions`). `scrollEnabled` is turned off while a finger draws a signature. Receipt Setup keeps its own local copy unchanged.
+- **Segmented Choice** (`src/ui/components/SegmentedChoice.tsx`): a small fixed single choice where every option stays visible — a person's role, a sign-off style, a list filter. The selected option carries a filled `#EAF1F6` background, a 2px Structural Navy border **and** a leading check mark, so it never depends on colour; options wrap rather than shrink below 48dp. `radio` mode for form values, `tabs` mode (with counts) for filters.
+
+### People & Equipment
+- One **People** tab replaces Workers and Drivers; Trucks and Machines are unchanged. Inside People: role filter chips (All · Workers · Drivers · Operators, each with its active count), the existing search bar pattern, one primary **Add person** action, then the active list and the closed-by-default **Inactive people** band.
+- A person row keeps the Monogram Avatar and adds an outlined **role pill** stating the role in words. A legacy duplicate shows an amber-tinted `Possible duplicate` line in text.
+- The person editor is a Focused Sheet with a single-select **Role** Segmented Choice whose hint explains where that role can be selected, and a **Role history** block. Saving a different role opens a confirmation stating that existing reports and receipts keep the recorded role.
+- A **Custom directories** link row (navy left rule) sits under the tab groups.
+
+### Custom Directories screen
+Standard `AppPage` + `PageHeader`; directories list → a directory's entries, each as a white row with a 3px Structural Navy left rule and quiet inline actions (Open, Edit, ↑ Up, ↓ Down, Archive). Archived records sit behind the closed Collapsible Status Band. Editing happens in Focused Sheets.
+
+### Supervisors
+PDF Settings gains section **04 Supervisors** (same numbered-tab, navy header and Seam Rule as sections 01–03) with a secondary **Manage Supervisors** button. The Supervisors screen shows a state pill in words (`Signature saved`, `Name only`, `Signature unreadable · sign again` in warning tone) and a signature preview drawn with `preserveAspectRatio="xMidYMid meet"`. Signing uses the existing SignaturePad inside a Focused Sheet.
+
+### Daily Report editor
+Section 02 gains an **Operators** Presence field and the **Custom resources** picker (per directory: selected entries with a report note field and a Remove action, then an `Add from …` searchable select). A new section **15 Supervisor Sign-off** lists the selected supervisors in order with a numbered outline badge, a Name only / Name + saved signature Segmented Choice, and ↑ / ↓ / Remove.
+
+### Make Receipt
+The person field is **Driver / Operator**, preceded by All / Drivers / Operators filter chips; every option's detail line starts with the person's role.
+
+### Project Totals
+A dedicated screen from Project Command Center → Records and Documents → **Totals**. A filter card (navy top rule) holds From / To dates, Item, Supplier and Unit selects and an All / Delivered / Used Segmented Choice, then a `Covering: …` line. Each item is a card: a unit chip per unit, then **Total delivered · unit** and **Total used · unit** rows (value right-aligned with its record count, or muted italic `Not recorded`), a `Delivered minus recorded use` row with its "not an inventory balance" note only when valid, and a `Suppliers and sources` disclosure. Fuel and Wall and foundation materials follow as their own sections, each with a sentence stating what is and is not added. Every value row with records opens a Focused Sheet listing them. **Layout superseded 2026-09-24 by DEC-484**; see "Implemented on Projects list, Project Totals and project screens" below.
+
+### PDF additions
+- **Additional resources**: one block per directory, a navy 9.5pt heading kept with its table, fixed Name / Identifier / Note columns, `dir="auto"` cells.
+- **Supplier Loads**: one fixed-column table per item; the item name is a Structural Navy `<thead>` row (repeats across pages), supplier rows on `#F5F2EC` with a 1.5px ink top rule, italic supplier subtotals with a 1px rule, bold item totals on Ledger Cream with a 2px rule. Hierarchy reads in grayscale.
+- **Supervisor Sign-off**: after Photo evidence, a two-column grid of white blocks with a 3px Structural Navy top rule; a 24mm signing band with the signature or, for name-only, the words `Sign-off recorded by name` over a dashed rule; the name at 10.5pt/800 and the title muted beneath.
+
+## Implemented on Projects list, Project Totals and project screens (DEC-484, 2026-09-24)
+
+Presentation only. One shared card language across these four surfaces: a white card with a full 1px `#D9CFBE` border, 14-16px radius and a faint ink shadow (`shadowOpacity .06-.08`, `elevation 1-2`), separated by 10-16dp of space instead of dividers inside one long panel. No coloured side stripes, no ordinal numbers. Everything that opens uses the same control: a 36dp circle, `+` on a white fill with a `#D9CFBE` ring when closed, `×` on Structural Navy when open, with the state in `accessibilityState.expanded` and a spoken label naming what opens.
+
+### Projects list
+One grouped white surface per section with hairline dividers; each row has one open target (name 17/700, status pill in words, location, then `Started …` and `Last activity …` with tabular figures) and a separate quiet 76dp **Manage** column behind a hairline rule. Manage opens a Focused Sheet of three action rows (title, one-line hint, navy `›`). The start-date editor opens inline under its row after the sheet closes, because a date picker is its own modal. Missing values read `Start date not recorded` / `Location not recorded`; a load failure has its own title, message and Try again.
+
+### Project Totals
+A `Covering` bar (period in navy, active filter count in Signal-Orange-Deep, `+`/`×`) replaces the always-open filter card. Each item is its own card: name, record and source count, then two boxes side by side — **Delivered** on `#EEF3F8` with a navy label, **Used** on `#F6F0E6` with a `#6E4B1F` label — one tabular line per unit, `Not recorded in <unit>` when absent. Opened, the item shows *Delivered by*: one bordered box per supplier, then *Company deliveries* on `#F7F4EE` tagged `Own loads, not a supplier`; then *Recorded on site*. Fuel types and wall/foundation materials use the same card.
+
+### Project Financial Review
+The navy folder headers, orange seams and `01`-`03` tabs are replaced by three bordered `+`/`×` cards, closed by default, each keeping its headline figure (Outstanding, Still owed, Fuel cost) in the header. Money boxes: **Billed** `#EEF3F8`, **Paid** `#E8F3EC` with a `#1F6446` label, **Outstanding** white with a 1.5px navy border and the largest value, **cost** `#F6F0E6`, **Overpaid** the existing warning tint. Each supplier is its own `+`/`×` card (Outstanding, or Settled in `#1F6446`, in the header); records are small bordered cards. Warning text on its tint uses `#7A500E` (the documented `warning` measures 4.49:1 there).
+
+## Implemented on Payments & Balances (DEC-482, DEC-483, DEC-485, DEC-486, 2026-09-24)
+
+An account statement replacing the tab-based control center. Shared pieces live in `src/ui/screens/finance/financeParts.tsx`; the screens add nothing up and take every figure from `domain/accountPayments.ts`.
+
+### Structure
+**Account list** (Customers owe you / You owe suppliers boxes, search, All / Customers / Suppliers, `Only accounts with a balance owed`) -> **Account statement** -> focused full screens for **Add Payment**, **Apply unallocated payment** and one **record**. Full screens rather than sheets because each needs a date picker or searchable select, which are their own modals. Each account row is its own bordered card: name (2 lines), Customer/Supplier, then `Owes`, `In credit` or `Settled` with the figure, and a ruled footer with Paid, open records and cancelled count.
+
+### Account statement
+A balance card (state word, 30/800 navy figure, open-record line) with **Billed** `#EEF3F8`, **Paid** `#E8F3EC` and **Unallocated** `#F6F0E6` boxes, then exactly one Signal Orange **Add Payment**. Below, `+`/`×` sections: Open records (open by default, oldest first), Payment history, Paid records, Cancelled balances, Account activity (dated, newest first, paged).
+
+### Status words
+Every state is a word beside a 6px dot: `Paid` success, `Unpaid` danger, `Partially Paid` / `Overpaid` / `Unpriced` warning text `#7A500E`, `Unallocated` / `Credit` navy on `#EEF3F8`, `Cancelled` outlined in `#E7B7B1` with the amount struck through. Colour never carries a state alone.
+
+### Add Payment and Apply unallocated payment
+A context card with the amount owed (or the unallocated amount, in `#6E4B1F`), then amount, date, method choice pills (Cash, Cheque, Bank transfer, Other), reference and note. The three ways to apply a payment are radio cards with a one-sentence explanation each; the selected card takes a 1.5px navy border. Oldest first shows the exact records it will pay; Select records shows a checkbox per record with its own amount field. A navy-bordered summary states Payment, Applied to records, Unallocated and the balance (or remaining) afterwards, with a credit sentence when it applies, before a confirmation dialog and the single orange save button named with the amount.
+
+### Record screen and cancellations
+Total / Paid / Remaining boxes and the status word; **Mark paid in full** (orange) and **Record partial payment** (secondary). Payment history names the account payment each amount came from. Cancelling a payment or an Open Balance is a danger-toned card or inline box with a required reason, a plain explanation of what stays in history, and a confirmation; a blocked Open Balance cancellation shows why instead of the button.
+
+### Project Financial Review note
+Customer Revenue and Supplier Payables each carry a bordered note stating that Paid counts only payments applied to the project's records, and that unallocated payments belong to no project.
+
 ## Current-vs-Target Gap List
 
 1. **Typography weight.** Current: `fontWeight: '900'` used pervasively in `src/ui/theme.ts`'s global tokens and on every screen except Home, Project Command Center, Supplier Loads, and Daily Reports. Target: graded hierarchy above. **Partially implemented** — Home's and Project Command Center's navigation sections use a 3-step subset (`900`/`700`/`500`); Supplier Loads' supplied-material records and Daily Reports' section/record content use the full 4-step scale including `600` (see "Implemented on Supplier Loads" and "Implemented on Daily Reports"). Every other screen is still the pre-existing pervasive-900 state, and the global `theme.ts` tokens themselves are unchanged.
-2. **Domain visual identity.** Current: domain separation via grouping, labels, and icons only, with no domain-dedicated color, on every screen except Home, Project Command Center, and Daily Reports. Target: restrained non-color identifiers per domain. **Partially implemented — Home's four sections (numbered chip), Project Command Center's seven sections (attached numbered tab), and Daily Reports' twelve sections (a third, independently-built attached numbered tab)**; Supplier Loads deliberately kept its existing two-tier color hierarchy instead (see "Implemented on Supplier Loads"); the five other `ExpandableMenuSection` consumers are unchanged.
+2. **Domain visual identity.** Current: domain separation via grouping, labels, and icons only, with no domain-dedicated color, on every screen except Home, Project Command Center, and Daily Reports. Target: restrained non-color identifiers per domain. **Partially implemented — Home's four sections (numbered chip), Project Command Center's seven sections (attached numbered tab), and Daily Reports' thirteen sections (a third, independently-built attached numbered tab; twelve until Wall Construction was added under DEC-453)**; Supplier Loads deliberately kept its existing two-tier color hierarchy instead (see "Implemented on Supplier Loads"); the five other `ExpandableMenuSection` consumers are unchanged.
 
 3. **Placeholder contrast.** `#89939B` on the `#FCFBF8` input fill computes to **3.05:1** and fails WCAG AA. It ships in sixteen files, three of which are the shared components every form inherits from: `AppPrimitives.tsx`, `SearchableSelect.tsx`, and `GroupedSearchableSelect.tsx`. **Not implemented** — Units & Conversions uses `#6B7681` (4.53:1) locally, but changing the three shared components would fix most of the app's forms in one edit. See "Contrast-driven variants" above for the two other measured failures deliberately left for a single coordinated pass.
 

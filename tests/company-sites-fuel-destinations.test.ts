@@ -45,8 +45,9 @@ const rawFill=(database:TestDatabase,id:string)=>database.raw.prepare('SELECT * 
 describe('migration 36: company sites and fuel destinations',()=>{
   it('creates saved company sites and the destination columns',async()=>{
     const {database}=await setup();
-    expect(DATABASE_VERSION).toBe(36);
-    expect(database.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:36});
+    // Version 36 is no longer the latest (migration 37, DEC-450); a migrated database reaches the current version.
+    expect(DATABASE_VERSION).toBeGreaterThanOrEqual(36);
+    expect(database.raw.prepare('PRAGMA user_version').get()).toMatchObject({user_version:DATABASE_VERSION});
     expect(columns(database,'company_sites')).toEqual(expect.arrayContaining(['id','name','name_key','is_active','created_at','updated_at']));
     expect(columns(database,'fuel_movements')).toEqual(expect.arrayContaining(['destination_type','company_site_id']));
   });
@@ -57,7 +58,7 @@ describe('migration 36: company sites and fuel destinations',()=>{
     await migrateDatabase(db as never);
     expect(statements.some(sql=>sql.includes('CREATE TABLE IF NOT EXISTS company_sites'))).toBe(true);
     expect(statements.some(sql=>sql.includes('ADD COLUMN destination_type'))).toBe(true);
-    expect(statements.at(-1)).toBe('PRAGMA user_version = 36');
+    expect(statements.at(-1)).toBe(`PRAGMA user_version = ${DATABASE_VERSION}`);
   });
 
   it('backfills existing fills deterministically and never invents a company site',async()=>{

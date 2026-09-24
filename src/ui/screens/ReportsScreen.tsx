@@ -10,9 +10,15 @@ import {exportAndShareDailyReportWorkbook} from '../../services/dailyReportWorkb
 import {
   addPresence, consultantSignoffState, emptyDailyReport, netWorkMinutes, safetyEquipment, splitPresence,
   type DailyProjectReport, type DailyProjectReportDraft, type DailyReportMaterial,
-  type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWasteDump, type ProjectReportSetup, type ReportProject, type SafetyParticipantType, type WorkerSafetyStatus,
+  type LinkedFoundationActivity, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject, type SafetyParticipantType, type WorkerSafetyStatus,
 } from '../../domain/projectReports';
+import {describeWallConsumptionQuantity,formatCubicMetres,formatVolumeCalculation,supportsVolumeCalculation,wallConsumptionPurposeLabel,wallMaterialLabels,wallSystemLabels} from '../../domain/walls';
+import {baseStatusLabels} from '../../domain/wallBase';
+import {describeFoundationQuantity,hasLegacyMaterialRecord} from '../../domain/foundations';
+import {describeFoundationSectionPreference,parseFoundationSectionPreference,serializeFoundationSectionPreference,FOUNDATION_SECTION_PREFERENCE_KEY} from '../../domain/reportSectionPreferences';
 import { SearchableSelect } from '../components/SearchableSelect';
+import {CustomResourcePicker} from '../components/CustomResourcePicker';
+import {SupervisorSignoffPicker} from '../components/SupervisorSignoffPicker';
 import {CollapsibleFilterCard} from '../components/CollapsibleFilterCard';
 import {DatePickerField,todayIso} from '../components/DatePickerField';
 import {TimePickerField} from '../components/TimePickerField';
@@ -40,6 +46,13 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
   const [linkedQuarryLoads,setLinkedQuarryLoads]=useState<LinkedQuarryLoad[]>([]);
   const [linkedFuelFills,setLinkedFuelFills]=useState<LinkedFuelFill[]>([]);
   const [linkedWasteDumps, setLinkedWasteDumps] = useState<LinkedWasteDump[]>([]);
+  const [linkedWallWork,setLinkedWallWork]=useState<LinkedWallWork[]>([]);
+  // DEC-470. Foundations with activity on this date but no wall linked yet: without fetching these,
+  // the PDF and workbook could never show a foundation that has no wall.
+  const [linkedFoundationActivity,setLinkedFoundationActivity]=useState<LinkedFoundationActivity[]>([]);
+  // DEC-471. A stored app preference, not a per-report column: the Owner can keep foundation data out
+  // of issued exports while that workflow is still being finished. Defaults to included.
+  const [includeFoundationSection,setIncludeFoundationSection]=useState(true);
   const [error, setError] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [exporting,setExporting]=useState<BusinessReportKind|null>(null);
@@ -90,6 +103,9 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
   }, [draft?.projectId, draft?.workDate, repository]);
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedQuarryLoads(draft.projectId,draft.workDate).then(setLinkedQuarryLoads);else setLinkedQuarryLoads([]);},[draft?.projectId,draft?.workDate,repository]);
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedFuelFills(draft.projectId,draft.workDate).then(setLinkedFuelFills);else setLinkedFuelFills([]);},[draft?.projectId,draft?.workDate,repository]);
+  useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedWallWork(draft.projectId,draft.workDate).then(setLinkedWallWork);else setLinkedWallWork([]);},[draft?.projectId,draft?.workDate,repository]);
+  useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedFoundationActivity(draft.projectId,draft.workDate).then(setLinkedFoundationActivity);else setLinkedFoundationActivity([]);},[draft?.projectId,draft?.workDate,repository]);
+  useEffect(()=>{void Storage.getItem(FOUNDATION_SECTION_PREFERENCE_KEY).then(value=>setIncludeFoundationSection(parseFoundationSectionPreference(value))).catch(()=>setIncludeFoundationSection(true));},[]);
   useEffect(() => {
     if (draft?.projectId && draft.workDate) void repository.listLinkedWasteDumps(draft.projectId, draft.workDate).then(setLinkedWasteDumps);
     else setLinkedWasteDumps([]);
@@ -138,13 +154,13 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
   }
   async function shareReport(report: DailyProjectReport,includePrices=false) {
     if (!project) return; setBusy(true); setError(null); setMessage(null);
-    try { const [loads,quarry,waste,fuel] = await Promise.all([repository.listLinkedLoads(project.id, report.workDate),repository.listLinkedQuarryLoads(project.id,report.workDate),repository.listLinkedWasteDumps(project.id, report.workDate),repository.listLinkedFuelFills(project.id,report.workDate)]); await exportAndShareProjectReport(report, project, loads, quarry, waste, fuel, setup!.company,includePrices); setMessage(includePrices?'PDF with prices created.':'PDF without prices created.'); setPdfChoiceId(null); }
+    try { const [loads,quarry,waste,fuel,wallWork,foundationActivity] = await Promise.all([repository.listLinkedLoads(project.id, report.workDate),repository.listLinkedQuarryLoads(project.id,report.workDate),repository.listLinkedWasteDumps(project.id, report.workDate),repository.listLinkedFuelFills(project.id,report.workDate),repository.listLinkedWallWork(project.id,report.workDate),repository.listLinkedFoundationActivity(project.id,report.workDate)]); await exportAndShareProjectReport(report, project, loads, quarry, waste, fuel, setup!.company,includePrices,wallWork,includeFoundationSection?foundationActivity:[]); setMessage(includePrices?'PDF with prices created.':'PDF without prices created.'); setPdfChoiceId(null); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not export project report.'); }
     finally { setBusy(false); }
   }
   async function shareReportExcel(report: DailyProjectReport) {
     if (!project || !setup) return;if(dailyExportingId){exportController.current?.abort();setExportProgress(current=>current?{...current,message:'Cancelling and removing incomplete output'}:current);return;}const controller=new AbortController();exportController.current=controller;setDailyExportingId(report.id);setExportProgress({stage:'preparing',completed:0,total:Math.max(1,report.photos.length),percent:1,message:'Preparing daily report'});setBusy(true); setError(null); setMessage(null);
-    try { const [loads,quarry,waste,fuel] = await Promise.all([repository.listLinkedLoads(project.id, report.workDate),repository.listLinkedQuarryLoads(project.id,report.workDate),repository.listLinkedWasteDumps(project.id, report.workDate),repository.listLinkedFuelFills(project.id,report.workDate)]); await exportAndShareDailyReportWorkbook(report, project, loads, quarry, waste, fuel, setup.company,{locale:workbookLocale,signal:controller.signal,onProgress:setExportProgress}); setMessage(`Daily report Excel created in ${workbookLocale==='ar'?'Arabic RTL':'English LTR'}.`); }
+    try { const [loads,quarry,waste,fuel,wallWork,foundationActivity] = await Promise.all([repository.listLinkedLoads(project.id, report.workDate),repository.listLinkedQuarryLoads(project.id,report.workDate),repository.listLinkedWasteDumps(project.id, report.workDate),repository.listLinkedFuelFills(project.id,report.workDate),repository.listLinkedWallWork(project.id,report.workDate),repository.listLinkedFoundationActivity(project.id,report.workDate)]); await exportAndShareDailyReportWorkbook(report, project, loads, quarry, waste, fuel, setup.company,{locale:workbookLocale,signal:controller.signal,onProgress:setExportProgress},wallWork,includeFoundationSection?foundationActivity:[]); setMessage(`Daily report Excel created in ${workbookLocale==='ar'?'Arabic RTL':'English LTR'}.`); }
     catch (cause) { if(cause instanceof Error&&cause.name==='AbortError')setMessage('Daily report Excel export cancelled. No incomplete workbook was kept.');else setError(cause instanceof Error ? cause.message : 'Could not export the daily report Excel workbook.'); }
     finally { if(exportController.current===controller)exportController.current=null;setDailyExportingId(null);setExportProgress(null);setBusy(false); }
   }
@@ -161,7 +177,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
 
   if (setupStatus === 'error') return <ScrollView contentContainerStyle={styles.content}><Header eyebrow="OPERATIONS" title="Reports" onBack={onBack}/><View style={styles.errorState}><Text style={styles.errorStateTitle}>Could not load reports</Text><Text style={styles.errorStateText}>{setupError}</Text><TouchableOpacity style={styles.retryButton} onPress={()=>void refreshSetup()} accessibilityRole="button"><Text style={styles.retryButtonText}>Retry</Text></TouchableOpacity></View></ScrollView>;
   if (!setup) return <ScrollView contentContainerStyle={styles.content}><Header eyebrow="OPERATIONS" title="Reports" onBack={onBack}/><View style={styles.centerState}><ActivityIndicator size="large" color={colors.brand}/><Text style={styles.helper}>Loading reports…</Text></View></ScrollView>;
-  if (draft && project) return <DailyReportEditor setup={setup} project={project} draft={draft} onOpenPdfSettings={onOpenPdfSettings} reports={reports} linkedLoads={linkedLoads} linkedQuarryLoads={linkedQuarryLoads} linkedFuelFills={linkedFuelFills} linkedWasteDumps={linkedWasteDumps} busy={busy} error={error} reducedMotion={reducedMotion} onChange={setDraft} onSave={() => void save()} onBack={() => setDraft(null)} onOpenReport={editReport}/>;
+  if (draft && project) return <DailyReportEditor setup={setup} project={project} draft={draft} onOpenPdfSettings={onOpenPdfSettings} reports={reports} linkedLoads={linkedLoads} linkedQuarryLoads={linkedQuarryLoads} linkedFuelFills={linkedFuelFills} linkedWasteDumps={linkedWasteDumps} linkedWallWork={linkedWallWork} linkedFoundationActivity={linkedFoundationActivity} includeFoundationSection={includeFoundationSection} onToggleFoundationSection={value=>{setIncludeFoundationSection(value);void Storage.setItem(FOUNDATION_SECTION_PREFERENCE_KEY,serializeFoundationSectionPreference(value));}} busy={busy} error={error} reducedMotion={reducedMotion} onChange={setDraft} onSave={() => void save()} onBack={() => setDraft(null)} onOpenReport={editReport}/>;
   if (project) {
     const visibleReports=reports.slice(0,historyVisible);
     const remaining=reports.length-visibleReports.length;
@@ -180,7 +196,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
           <TouchableOpacity onPress={() => editReport(report)} disabled={busy} accessibilityRole="button">
             <View style={styles.reportCardHeader}><Text style={styles.reportCardTitle}>{report.workDate}</Text><Text style={styles.openText}>Open</Text></View>
             <Text style={styles.reportDescription} numberOfLines={3}>{report.workDescription||'No work description recorded'}</Text>
-            <View style={styles.reportCounts}><Text style={styles.reportCountText}>{report.workers.length} workers</Text><Text style={styles.reportCountText}>{report.drivers.length} drivers</Text><Text style={styles.reportCountText}>{report.materials.length} materials</Text><Text style={styles.reportCountText}>{report.photos.length} photos</Text></View>
+            <View style={styles.reportCounts}><Text style={styles.reportCountText}>{report.workers.length} workers</Text><Text style={styles.reportCountText}>{report.drivers.length} drivers</Text><Text style={styles.reportCountText}>{(report.operators??[]).length} operators</Text><Text style={styles.reportCountText}>{report.materials.length} materials</Text><Text style={styles.reportCountText}>{report.photos.length} photos</Text></View>
             <Text style={styles.helper}>Saved {new Date(report.updatedAt).toLocaleString()}</Text>
           </TouchableOpacity>
           {exportingThis?<View style={styles.exportProgressTrack}><View style={[styles.exportProgressFill,{width:`${Math.max(2,exportProgress?.percent??2)}%`}]}/></View>:null}
@@ -273,14 +289,14 @@ function summarizePpe(safetyPeople:{name:string;type:SafetyParticipantType;label
   return {compliant,missing,notChecked,total:safetyPeople.length};
 }
 
-function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linkedQuarryLoads, linkedFuelFills, linkedWasteDumps, busy, error, reducedMotion, onChange, onSave, onBack, onOpenReport, onOpenPdfSettings }: { onOpenPdfSettings:()=>void; setup: ProjectReportSetup; project: ReportProject; draft: DailyProjectReportDraft; reports:DailyProjectReport[]; linkedLoads: LinkedProjectLoad[]; linkedQuarryLoads:LinkedQuarryLoad[]; linkedFuelFills:LinkedFuelFill[]; linkedWasteDumps: LinkedWasteDump[]; busy: boolean; error: string | null; reducedMotion:boolean; onChange: (draft: DailyProjectReportDraft) => void; onSave: () => void; onBack: () => void; onOpenReport:(report:DailyProjectReport)=>void }) {
+function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linkedQuarryLoads, linkedFuelFills, linkedWasteDumps, linkedWallWork, linkedFoundationActivity, includeFoundationSection, onToggleFoundationSection, busy, error, reducedMotion, onChange, onSave, onBack, onOpenReport, onOpenPdfSettings }: { onOpenPdfSettings:()=>void; linkedWallWork:LinkedWallWork[]; linkedFoundationActivity:LinkedFoundationActivity[]; includeFoundationSection:boolean; onToggleFoundationSection:(value:boolean)=>void; setup: ProjectReportSetup; project: ReportProject; draft: DailyProjectReportDraft; reports:DailyProjectReport[]; linkedLoads: LinkedProjectLoad[]; linkedQuarryLoads:LinkedQuarryLoad[]; linkedFuelFills:LinkedFuelFill[]; linkedWasteDumps: LinkedWasteDump[]; busy: boolean; error: string | null; reducedMotion:boolean; onChange: (draft: DailyProjectReportDraft) => void; onSave: () => void; onBack: () => void; onOpenReport:(report:DailyProjectReport)=>void }) {
   const [materialItemId, setMaterialItemId] = useState(''); const [materialUnitId, setMaterialUnitId] = useState('');
   const [materialQuantity, setMaterialQuantity] = useState(''); const [materialMovement, setMaterialMovement] = useState<'used' | 'transported'>('used');
   const [mediaError,setMediaError]=useState<string|null>(null);
   const [openSections,setOpenSections]=useState<Set<string>>(()=>new Set());
   const toggleSection=(key:string)=>{if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setOpenSections(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});};
   const minutes = useMemo(() => netWorkMinutes(draft), [draft]);
-  const safetyPeople=[...draft.workers.map(name=>({name,type:'worker' as const,label:'Worker'})),...draft.drivers.map(name=>({name,type:'driver' as const,label:'Truck Driver'}))];
+  const safetyPeople=[...draft.workers.map(name=>({name,type:'worker' as const,label:'Worker'})),...draft.drivers.map(name=>({name,type:'driver' as const,label:'Truck Driver'})),...(draft.operators??[]).map(name=>({name,type:'operator' as const,label:'Operator'}))];
   const ppeSummary=useMemo(()=>summarizePpe(safetyPeople,draft.workerSafety??[]),[safetyPeople,draft.workerSafety]);
   const duplicateReport=useMemo(()=>reports.find(r=>r.workDate===draft.workDate&&r.id!==draft.id)??null,[reports,draft.workDate,draft.id]);
   const update = <K extends keyof DailyProjectReportDraft>(key: K, value: DailyProjectReportDraft[K]) => onChange({ ...draft, [key]: value });
@@ -293,10 +309,11 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
   }
   async function addPhoto(source:'camera'|'library') { if(draft.photos.length>=20){setMediaError('A report can contain up to 20 photos.');return;} try{setMediaError(null);const uri=source==='camera'?await capturePersistentImage('project-reports'):await pickPersistentImage('project-reports');if(uri)update('photos',[...draft.photos,uri]);}catch(cause){setMediaError(cause instanceof Error?cause.message:'Could not add photo.');} }
 
-  const peopleCount=draft.workers.length+draft.drivers.length+draft.truckPlates.length+draft.machines.length;
+  const peopleCount=draft.workers.length+draft.drivers.length+(draft.operators??[]).length+(draft.customResources??[]).reduce((sum,group)=>sum+group.entries.length,0)+draft.truckPlates.length+draft.machines.length;
   const notesFilledCount=[draft.notes,draft.problemsDelaysIncidents,draft.weatherSiteConditions,draft.nextWorkPlanned].filter(value=>value.trim()).length;
   const loadsCount=linkedLoads.length+linkedQuarryLoads.length;
-  const sectionsWithEntries=[Boolean(draft.workDescription.trim()),peopleCount>0,ppeSummary.compliant+ppeSummary.missing>0,draft.materials.length>0,loadsCount>0,linkedFuelFills.length>0,linkedWasteDumps.length>0,notesFilledCount>0,draft.photos.length>0,minutes!=null].filter(Boolean).length;
+  const wallRecordCount=linkedWallWork.reduce((sum,wall)=>sum+wall.entries.length,0);
+  const sectionsWithEntries=[Boolean(draft.workDescription.trim()),peopleCount>0,ppeSummary.compliant+ppeSummary.missing>0,draft.materials.length>0,loadsCount>0,linkedFuelFills.length>0,linkedWasteDumps.length>0,wallRecordCount>0,linkedFoundationActivity.length>0,notesFilledCount>0,draft.photos.length>0,minutes!=null].filter(Boolean).length;
   const ppeBadge=ppeSummary.total===0?'No entries':ppeSummary.missing>0?`${ppeSummary.missing} missing PPE`:ppeSummary.notChecked===ppeSummary.total?'Not checked':ppeSummary.compliant===ppeSummary.total?`${ppeSummary.compliant} compliant`:`${ppeSummary.compliant} compliant · ${ppeSummary.notChecked} not checked`;
   const signoffState=useMemo(()=>consultantSignoffState(draft),[draft]);
   const hasConsultantData=Boolean(draft.consultantName.trim())||draft.consultantSignaturePaths.length>0;
@@ -319,7 +336,7 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Header eyebrow="DAILY REPORT" title={project.name} onBack={onBack} />
       <IdentityCard project={project} workDate={draft.workDate}/>
-      <View style={styles.progressStrip}><Text style={styles.progressStripText}>Sections with entries: <Text style={styles.progressStripNumber}>{sectionsWithEntries}</Text> of 10</Text></View>
+      <View style={styles.progressStrip}><Text style={styles.progressStripText}>Sections with entries: <Text style={styles.progressStripNumber}>{sectionsWithEntries}</Text> of 12</Text></View>
       {duplicateReport?<View style={styles.duplicateWarning}><Text style={styles.duplicateWarningTitle}>A report already exists for {draft.workDate}</Text><Text style={styles.duplicateWarningText}>Saving will not create a second report for this project and date — the repository keeps one report per day. Open the existing report instead to continue editing it.</Text><TouchableOpacity style={styles.duplicateWarningButton} onPress={()=>onOpenReport(duplicateReport)} accessibilityRole="button"><Text style={styles.duplicateWarningButtonText}>Open Existing Report</Text></TouchableOpacity></View>:null}
       {error ? <View style={styles.errorBox}>{error.split('\n').map((line,index)=><Text key={index} style={styles.errorLine}>{line}</Text>)}</View> : null}
 
@@ -332,12 +349,15 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
         <Text style={styles.sectionHint}>Choose saved records from a dropdown or type names and plates manually. Both methods can be combined; all fields are optional.</Text>
         <PresenceField label="Workers" options={setup.presenceOptions.workers} values={draft.workers} onChange={(value) => update('workers', value)} />
         <PresenceField label="Drivers" options={setup.presenceOptions.drivers} values={draft.drivers} onChange={(value) => update('drivers', value)} />
+        <PresenceField label="Operators" options={setup.presenceOptions.operators} values={draft.operators??[]} onChange={(value) => update('operators', value)} />
         <PresenceField label="Truck plates" options={setup.presenceOptions.truckPlates} values={draft.truckPlates} onChange={(value) => update('truckPlates', value)} />
         <PresenceField label="Machines" options={setup.presenceOptions.machines} values={draft.machines} onChange={(value) => update('machines', value)} />
+        <Text style={styles.sectionHint}>Additional resources from your own directories. Each choice is saved into this report as it reads today.</Text>
+        <CustomResourcePicker options={setup.customDirectories} value={draft.customResources??[]} onChange={(value) => update('customResources', value)} />
       </LedgerSection>
 
       <LedgerSection number="03" title="Worker Safety / PPE" badge={ppeBadge} badgeTone={ppeSummary.missing>0?'warning':'neutral'} open={openSections.has('ppe')} onToggle={()=>toggleSection('ppe')} reducedMotion={reducedMotion}>
-        <Text style={styles.sectionHint}>Workers and truck drivers start as Not Checked. Record compliance or missing safety equipment without blocking the report.</Text>
+        <Text style={styles.sectionHint}>Workers, truck drivers and operators start as Not Checked. Record compliance or missing safety equipment without blocking the report.</Text>
         {safetyPeople.length?safetyPeople.map(person=>{const safety=(draft.workerSafety??[]).find(value=>value.workerName===person.name&&(value.participantType??'worker')===person.type)??{workerName:person.name,participantType:person.type,status:'not_checked' as const,missingItems:[],notes:''};return <View key={`${person.type}:${person.name}`} style={styles.safetyWorker}><View style={styles.safetyWorkerHeader}><Text style={styles.recordName}>{person.name}</Text><View style={styles.roleBadge}><Text style={styles.roleBadgeText}>{person.label}</Text></View></View><View style={styles.ppeChips}><PpeChoice label="Compliant" tone="success" selected={safety.status==='compliant'} onPress={()=>updateSafety(person.type,person.name,{status:'compliant',missingItems:[]})}/><PpeChoice label="Missing PPE" tone="warning" selected={safety.status==='missing'} onPress={()=>updateSafety(person.type,person.name,{status:'missing'})}/><PpeChoice label="Not Checked" tone="neutral" selected={safety.status==='not_checked'} onPress={()=>updateSafety(person.type,person.name,{status:'not_checked',missingItems:[]})}/></View>{safety.status==='missing'?<><Text style={styles.fieldLabel}>Missing equipment</Text><View style={styles.chipWrap}>{safetyEquipment.map(item=><Choice key={item} label={item} selected={safety.missingItems.includes(item)} onPress={()=>updateSafety(person.type,person.name,{missingItems:safety.missingItems.includes(item)?safety.missingItems.filter(value=>value!==item):[...safety.missingItems,item]})}/>)}</View></>:null}<Field label="Safety notes" value={safety.notes} onChangeText={notes=>updateSafety(person.type,person.name,{notes})} placeholder="Optional observation"/></View>}):<Text style={styles.helper}>Add the present workers or drivers above first.</Text>}
       </LedgerSection>
 
@@ -372,26 +392,64 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
         {linkedWasteDumps.length ? linkedWasteDumps.map((dump) => <View key={dump.id} style={styles.recordRow}><Text style={styles.recordName}>{dump.materialType}</Text><Text style={styles.recordMeta}>{dump.dumpLocation} · {new Date(dump.dumpedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</Text><Text style={styles.recordMeta}>{[dump.driverName,dump.truckPlate].filter(Boolean).join(' · ') || 'No driver or truck selected'}</Text></View>) : <Text style={styles.helper}>No completed waste dumps linked to this project and date.</Text>}
       </LedgerSection>
 
-      <LedgerSection number="08" title="Site Notes" badge={notesFilledCount?`${notesFilledCount} of 4 added`:'No entries'} open={openSections.has('notes')} onToggle={()=>toggleSection('notes')} reducedMotion={reducedMotion}>
+      <LedgerSection number="08" title="Wall Construction" badge={wallRecordCount?`${wallRecordCount} record${wallRecordCount===1?'':'s'} · ${linkedWallWork.length} wall${linkedWallWork.length===1?'':'s'}`:'No wall work'} open={openSections.has('walls')} onToggle={()=>toggleSection('walls')} reducedMotion={reducedMotion}>
+        <Text style={styles.sectionHint}>Automatically linked from Wall Construction records for this project whose used-on date is this work date. Corrections made on the wall appear here and in later exports.</Text>
+        {linkedWallWork.length?linkedWallWork.map(wall=><View key={wall.wallId} style={styles.wallGroup}>
+          <View style={styles.recordTop}><Text style={styles.recordName}>{wall.wallName}</Text><Text style={styles.recordMeta}>{wallSystemLabels[wall.system]}</Text></View>
+          {wall.entries.map(entry=>{const purpose=wallConsumptionPurposeLabel(entry);return <View key={entry.id} style={styles.wallEntry}>
+            <View style={styles.recordTop}><Text style={styles.wallEntryTitle}>{wallMaterialLabels[entry.type]}{purpose?` · ${purpose}`:''}</Text><Text style={styles.recordStrongValue}>{describeWallConsumptionQuantity(entry)}</Text></View>
+            {supportsVolumeCalculation(entry.type)?<Text style={entry.volume?styles.recordMeta:styles.wallCalcMissing}>{entry.volume?`Calculated ${formatVolumeCalculation(entry)}`:formatVolumeCalculation(entry)}</Text>:null}
+            {entry.correctionHistory.length?<Text style={styles.recordMeta}>Corrected: {entry.correctionHistory[entry.correctionHistory.length-1]!.reason}</Text>:null}
+            {entry.notes?<Text style={styles.recordMeta}>{entry.notes}</Text>:null}
+          </View>;})}
+        </View>):<Text style={styles.helper}>No wall construction recorded for this project and date.</Text>}
+      </LedgerSection>
+
+      {/* DEC-470. Foundations get their own section rather than riding along inside Wall Construction:
+          a foundation exists before any wall does, and one may never have a wall at all. */}
+      <LedgerSection number="09" title="Foundation Construction" badge={linkedFoundationActivity.length?`${linkedFoundationActivity.length} foundation${linkedFoundationActivity.length===1?'':'s'}`:'No foundation work'} open={openSections.has('foundations')} onToggle={()=>toggleSection('foundations')} reducedMotion={reducedMotion}>
+        <Text style={styles.sectionHint}>Foundations with activity on this work date that have no wall linked to them yet. The structural envelope is capacity, not consumption: actual Stone and concrete are recorded through Lifts.</Text>
+        {/* DEC-471. Excluding the section only affects issued output; the records stay exactly as entered. */}
+        <TouchableOpacity style={styles.foundationToggle} onPress={()=>onToggleFoundationSection(!includeFoundationSection)}
+          accessibilityRole="switch" accessibilityState={{checked:includeFoundationSection}}
+          accessibilityLabel="Include Foundation Construction in the PDF and Excel exports">
+          <View style={[styles.foundationToggleBox,includeFoundationSection&&styles.foundationToggleBoxOn]}>{includeFoundationSection?<Text style={styles.foundationToggleMark}>✓</Text>:null}</View>
+          <View style={styles.flex}>
+            <Text style={styles.foundationToggleLabel}>Include in PDF and Excel exports</Text>
+            <Text style={styles.foundationToggleHint}>{describeFoundationSectionPreference(includeFoundationSection)}</Text>
+          </View>
+        </TouchableOpacity>
+        {linkedFoundationActivity.length?linkedFoundationActivity.map(activity=><View key={activity.foundation.id} style={styles.wallGroup}>
+          <View style={styles.recordTop}><Text style={styles.recordName}>{activity.foundation.reference}</Text><Text style={styles.recordMeta}>{activity.constructionSectionName||'No Construction Section'}</Text></View>
+          <Text style={styles.recordMeta}>Structural envelope {formatCubicMetres(activity.foundation.netVolumeM3)} · {baseStatusLabels[activity.foundationStatusAsOf]}{activity.foundation.location.trim()?` · ${activity.foundation.location}`:''}</Text>
+          {activity.lifts?.lifts.length?<Text style={styles.recordMeta}>
+            {activity.lifts.lifts.length} lift{activity.lifts.lifts.length===1?'':'s'} · Stone {formatCubicMetres(activity.lifts.reconciliation.totalActualStoneM3||activity.lifts.reconciliation.totalCalculatedStoneM3)} · Ready Mix {formatCubicMetres(activity.lifts.reconciliation.totalActualReadyMixM3)} · remaining {formatCubicMetres(activity.lifts.reconciliation.remainingUnallocatedVolumeM3)}
+          </Text>:<Text style={styles.recordMeta}>No Lifts recorded on or before this date.</Text>}
+          {hasLegacyMaterialRecord(activity.foundation)?<Text style={styles.recordMeta}>Legacy foundation material record: {describeFoundationQuantity(activity.foundation)}</Text>:null}
+          {activity.foundationEvents.length?<Text style={styles.recordMeta}>{activity.foundationEvents.join(' · ')}</Text>:null}
+        </View>):<Text style={styles.helper}>No foundation activity recorded for this project and date.</Text>}
+      </LedgerSection>
+
+      <LedgerSection number="10" title="Site Notes" badge={notesFilledCount?`${notesFilledCount} of 4 added`:'No entries'} open={openSections.has('notes')} onToggle={()=>toggleSection('notes')} reducedMotion={reducedMotion}>
         <NoteCard label="General notes" value={draft.notes} onChangeText={(value) => update('notes', value)} />
         <NoteCard label="Problems, delays, or incidents" value={draft.problemsDelaysIncidents} onChangeText={(value) => update('problemsDelaysIncidents', value)} attention/>
         <NoteCard label="Weather and site conditions" value={draft.weatherSiteConditions} onChangeText={(value) => update('weatherSiteConditions', value)} />
         <NoteCard label="Next work planned" value={draft.nextWorkPlanned} onChangeText={(value) => update('nextWorkPlanned', value)} />
       </LedgerSection>
 
-      <LedgerSection number="09" title="Photos" badge={draft.photos.length?`${draft.photos.length} photo${draft.photos.length===1?'':'s'}`:'No photos'} open={openSections.has('photos')} onToggle={()=>toggleSection('photos')} reducedMotion={reducedMotion}>
+      <LedgerSection number="11" title="Photos" badge={draft.photos.length?`${draft.photos.length} photo${draft.photos.length===1?'':'s'}`:'No photos'} open={openSections.has('photos')} onToggle={()=>toggleSection('photos')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Optional camera or library photos. Maximum 20.</Text>
         {mediaError?<Text style={styles.error}>{mediaError}</Text>:null}<View style={styles.photoActions}><TouchableOpacity style={styles.secondary} onPress={()=>void addPhoto('camera')} accessibilityRole="button"><Text style={styles.secondaryText}>Take photo</Text></TouchableOpacity><TouchableOpacity style={styles.secondary} onPress={()=>void addPhoto('library')} accessibilityRole="button"><Text style={styles.secondaryText}>Choose photo</Text></TouchableOpacity></View><View style={styles.photoGrid}>{draft.photos.map((uri,index)=><View key={uri} style={styles.photoItem}><Image source={{uri}} style={styles.photo}/><TouchableOpacity style={styles.removePhotoWrap} onPress={()=>update('photos',draft.photos.filter((_,photoIndex)=>photoIndex!==index))} accessibilityRole="button"><Text style={styles.remove}>Remove</Text></TouchableOpacity></View>)}</View>
       </LedgerSection>
 
-      <LedgerSection number="10" title="Working Time" badge={minutes!=null?`Net ${Math.floor(minutes/60)}h ${minutes%60}m`:'No entries'} open={openSections.has('time')} onToggle={()=>toggleSection('time')} reducedMotion={reducedMotion}>
+      <LedgerSection number="12" title="Working Time" badge={minutes!=null?`Net ${Math.floor(minutes/60)}h ${minutes%60}m`:'No entries'} open={openSections.has('time')} onToggle={()=>toggleSection('time')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Optional times for {draft.workDate}. Every daily report keeps its own start, end, and break. Tap a time to scroll to it.</Text>
         <View style={styles.twoColumns}><View style={styles.flex}><TimePickerField label="Start time" value={draft.workStartTime} onChange={(value) => update('workStartTime', value)} placeholder="For example 07:00" /></View><View style={styles.flex}><TimePickerField label="End time" value={draft.workEndTime} onChange={(value) => update('workEndTime', value)} placeholder="For example 17:00" /></View></View>
         <Field label="Break for this day (minutes)" value={draft.breakMinutes} onChangeText={(value) => update('breakMinutes', value)} keyboardType="number-pad" placeholder="For example 60" />
         <View style={styles.totalsCard}><Text style={styles.totalsValue}>{minutes != null ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : '—'}</Text><Text style={styles.totalsLabel}>NET WORKING TIME</Text></View>
       </LedgerSection>
 
-      <LedgerSection number="11" title="Consultant Sign-off" badge={signoffBadge} badgeTone={signoffState==='incomplete'?'warning':'neutral'} open={openSections.has('consultant')} onToggle={()=>toggleSection('consultant')} reducedMotion={reducedMotion}>
+      <LedgerSection number="13" title="Consultant Sign-off" badge={signoffBadge} badgeTone={signoffState==='incomplete'?'warning':'neutral'} open={openSections.has('consultant')} onToggle={()=>toggleSection('consultant')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Optional. When on, the consultant can add their name and digital signature here, before or after generating the PDF. Turning this off never deletes name or signature data already saved — it only hides it from the next PDF.</Text>
         <View style={styles.chipWrap} accessibilityRole="radiogroup" accessibilityLabel="Consultant sign-off on this report"><Choice label="Off" selected={!draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',false)}/><Choice label="On" selected={draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',true)}/></View>
         {draft.consultantSignoffEnabled?<Text style={styles.sectionHint} accessibilityRole="text">On the PDF, the consultant name and signature appear at the end, just before Photo Evidence. The consulting agency is a separate header controlled in PDF Headers below.{consultingAgency?'':' No consulting agency name is configured, so no agency line is printed — add one in More → Settings → Consulting agency.'}</Text>:null}
@@ -405,7 +463,7 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
 
       {/* DEC-402. One section, three independent controls: three separate numbered sections would
           make the common case, all headers off, longer to scroll past rather than shorter. */}
-      <LedgerSection number="12" title="PDF Headers" badge={headerBadge} badgeTone={headersOnButUnconfigured?'warning':'neutral'} open={openSections.has('headers')} onToggle={()=>toggleSection('headers')} reducedMotion={reducedMotion}>
+      <LedgerSection number="14" title="PDF Headers" badge={headerBadge} badgeTone={headersOnButUnconfigured?'warning':'neutral'} open={openSections.has('headers')} onToggle={()=>toggleSection('headers')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Optional. These print at the top of page one only, never on later pages, and each is off by default so every other report stays unbranded. The values themselves are saved once in PDF Settings and shared by every project.</Text>
         <HeaderControl
           label="Show Ministry"
@@ -436,12 +494,19 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
         />
       </LedgerSection>
 
+      {/* DEC-479. Saved supervisors who sign off this report, in order. Independent of the Consultant
+          Sign-off above and of every PDF header: none of them reads or changes this section. */}
+      <LedgerSection number="15" title="Supervisor Sign-off" badge={(draft.supervisorSignoffs??[]).length?`${(draft.supervisorSignoffs??[]).length} supervisor${(draft.supervisorSignoffs??[]).length===1?'':'s'}`:'None'} open={openSections.has('supervisors')} onToggle={()=>toggleSection('supervisors')} reducedMotion={reducedMotion}>
+        <Text style={styles.sectionHint}>Optional. Prints at the very end of the PDF. Each supervisor signs off by name or with their saved signature, copied into this report now so later profile changes never alter it.</Text>
+        <SupervisorSignoffPicker supervisors={setup.supervisors} value={draft.supervisorSignoffs??[]} onChange={(value)=>update('supervisorSignoffs',value)}/>
+      </LedgerSection>
+
       <View style={styles.reviewCard}>
         <Text style={styles.reviewTitle}>Final Review</Text>
         <Text style={styles.reviewLine}>Work description: {draft.workDescription.trim()?'Added':'Missing — required'}</Text>
         <Text style={styles.reviewLine}>{peopleCount} people/equipment entries · PPE: {ppeBadge}</Text>
         <Text style={styles.reviewLine}>{draft.materials.length} material{draft.materials.length===1?'':'s'} · {loadsCount} load{loadsCount===1?'':'s'} linked</Text>
-        <Text style={styles.reviewLine}>{linkedFuelFills.length} fuel fill{linkedFuelFills.length===1?'':'s'} · {linkedWasteDumps.length} waste dump{linkedWasteDumps.length===1?'':'s'}</Text>
+        <Text style={styles.reviewLine}>{linkedFuelFills.length} fuel fill{linkedFuelFills.length===1?'':'s'} · {linkedWasteDumps.length} waste dump{linkedWasteDumps.length===1?'':'s'} · {wallRecordCount} wall record{wallRecordCount===1?'':'s'}</Text>
         <Text style={styles.reviewLine}>{notesFilledCount} of 4 note areas · {draft.photos.length} photo{draft.photos.length===1?'':'s'}</Text>
         <TouchableOpacity style={styles.save} disabled={busy} onPress={onSave} accessibilityRole="button"><Text style={styles.saveText}>{busy ? 'Saving…' : draft.id ? 'Save Changes' : 'Save Daily Report'}</Text></TouchableOpacity>
       </View>
@@ -631,6 +696,7 @@ const styles = StyleSheet.create({
   sourceGroupHeading:{flexDirection:'row',alignItems:'center',gap:8,marginTop:4},sourceDot:{width:10,height:10,borderRadius:5},sourceDotCompany:{backgroundColor:colors.brand},sourceDotSupplier:{backgroundColor:colors.navy},sourceGroupTitle:{color:colors.navy,fontSize:12,fontWeight:'700',letterSpacing:.4},
   loadRow:{backgroundColor:colors.surface,borderRadius:12,padding:13,gap:4,borderWidth:1,borderColor:'#D7E2E8',borderLeftWidth:3},recordTop:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-start',gap:8},recordStrongValue:{color:colors.ink,fontSize:16,fontWeight:'700'},recordMeta:{color:colors.muted,fontSize:12,lineHeight:17},
   recordRow:{backgroundColor:colors.surface,borderRadius:12,padding:13,gap:4,borderLeftWidth:3,borderLeftColor:colors.brand},
+  wallGroup:{backgroundColor:colors.surface,borderRadius:12,padding:13,gap:8,borderLeftWidth:3,borderLeftColor:colors.result},wallEntry:{gap:3,borderTopWidth:1,borderTopColor:colors.line,paddingTop:8},wallEntryTitle:{flex:1,color:colors.ink,fontSize:14,fontWeight:'700'},wallCalcMissing:{color:colors.muted,fontSize:12,fontStyle:'italic'},
   totalsCard:{backgroundColor:'#F5F2EC',borderRadius:13,padding:14,alignItems:'flex-start',gap:2},totalsValue:{color:colors.ink,fontSize:22,fontWeight:'900'},totalsLabel:{color:colors.navy,fontSize:11,fontWeight:'700',letterSpacing:.4},
   noteCard:{backgroundColor:colors.surface,borderRadius:12,padding:13,gap:8,borderLeftWidth:3,borderLeftColor:colors.navy},noteCardAttention:{borderLeftColor:colors.danger,backgroundColor:'#FCE8E6'},noteInput:{minHeight:64,color:colors.ink,fontSize:14,lineHeight:20,textAlignVertical:'top'},
   save: { minHeight:48,backgroundColor: colors.ink, borderRadius: 13, padding: 16, alignItems: 'center' }, saveText: { color: '#FFF', fontWeight: '900', fontSize: 16 }, error: { color: colors.danger, backgroundColor: '#FCE8E6', padding: 12, borderRadius: 10, fontWeight: '700' }, success: { color: colors.success, backgroundColor: '#E5F3EC', padding: 12, borderRadius: 10, fontWeight: '700' },
@@ -649,4 +715,4 @@ const styles = StyleSheet.create({
   sectionBadge:{backgroundColor:'rgba(255,248,237,0.18)',borderRadius:9,paddingHorizontal:9,paddingVertical:5,maxWidth:130},sectionBadgeText:{color:'#FFF8ED',fontSize:11,fontWeight:'600'},sectionBadgeWarning:{backgroundColor:'#FFF3D8'},sectionBadgeWarningText:{color:'#8A5B12'},
   rotatingMark:{fontWeight:'700',width:22,textAlign:'center'},
   ledgerBody:{backgroundColor:'#FFF8ED',borderRadius:15,borderTopLeftRadius:0,borderTopRightRadius:0,borderTopWidth:3,borderTopColor:colors.brand,padding:14,gap:12},
-});
+foundationToggle:{minHeight:48,flexDirection:'row',alignItems:'center',gap:10,paddingVertical:8},foundationToggleBox:{width:24,height:24,borderRadius:6,borderWidth:2,borderColor:colors.muted,alignItems:'center',justifyContent:'center'},foundationToggleBoxOn:{borderColor:colors.navy,backgroundColor:colors.navy},foundationToggleMark:{color:'#FFFFFF',fontSize:14,fontWeight:'900'},foundationToggleLabel:{color:colors.ink,fontSize:13,fontWeight:'800'},foundationToggleHint:{color:colors.muted,fontSize:11,lineHeight:16}});

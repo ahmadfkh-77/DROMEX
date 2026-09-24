@@ -148,7 +148,7 @@ behaviour, and dated sources are in
   it. The Owner may invite the same address again; the identity is resumed,
   never duplicated, and only after proof of its existing password. A
   forgotten password waits for password reset (checkpoint 4C); a lost
-  authenticator before activation has no path yet (OQ-166). An active or
+  authenticator before activation has no path yet (OQ-168). An active or
   disabled completed account is still ineligible for a new invitation.
 - **Validity at every step (DEC-444 (3)).** Every state-changing acceptance
   step re-checks the invitation; an expired, cancelled, or superseded

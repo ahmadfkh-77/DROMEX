@@ -50,6 +50,21 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository{
     return{project,metrics:{loads:loads?.count??0,netTonnes:Number(loads?.value??0)/1000,dailyReports:reports?.count??0,wasteDumps:waste?.count??0,fuelLitres:Number(fuel?.value??0),quarryPurchases:quarry?.count??0,scheduled:scheduled?.count??0,pavementCalculations:pavement?.count??0,walls:walls?.count??0,openIssues:openIssues?.count??0},activities:activities.map(activity),issues:issues.map(issue),photos:photos.map(photo)};
   }
 
+  async getLastRecordedActivityDates():Promise<Record<string,string>>{
+    // Effective dates, as the rest of the app records them: a report's and a waste dump's work date,
+    // every other record's confirmation or creation instant in local time.
+    const rows=await this.db.getAllAsync<{project_id:string;day:string|null}>(`SELECT project_id,MAX(day) day FROM (
+        SELECT project_id,date(confirmed_at,'localtime') day FROM loads WHERE is_archived=0 AND status='Active'
+        UNION ALL SELECT project_id,date(confirmed_at,'localtime') FROM quarry_purchases WHERE status='Active'
+        UNION ALL SELECT project_id,work_date FROM daily_project_reports
+        UNION ALL SELECT project_id,date(confirmed_at,'localtime') FROM fuel_movements WHERE movement_type='fill' AND status='Active'
+        UNION ALL SELECT project_id,work_date FROM waste_dumps WHERE status='Active'
+        UNION ALL SELECT project_id,date(created_at,'localtime') FROM project_issues
+        UNION ALL SELECT project_id,date(created_at,'localtime') FROM project_media
+      ) WHERE project_id IS NOT NULL AND day IS NOT NULL GROUP BY project_id`);
+    return Object.fromEntries(rows.filter(row=>row.day).map(row=>[row.project_id,row.day as string]));
+  }
+
   async listProjectActivities(projectId:string,fromDate='',toDate=''):Promise<WorkspaceActivity[]>{
     if(fromDate&&toDate&&fromDate>toDate)throw new Error('From date cannot be after To date.');
     const project=await this.db.getFirstAsync<{start_date:string|null;end_date:string|null;created_at:string;updated_at:string;status:Project['status']}>(`SELECT start_date,end_date,created_at,updated_at,status FROM projects WHERE id=? AND is_archived=0`,projectId);if(!project)throw new Error('Project was not found.');const projectStart=project.start_date??project.created_at.slice(0,10),projectEnd=project.status==='completed'?(project.end_date??project.updated_at.slice(0,10)):this.today();if(fromDate&&fromDate<projectStart)throw new Error(`From date cannot be before the project start date (${projectStart}).`);if(toDate&&toDate<projectStart)throw new Error(`To date cannot be before the project start date (${projectStart}).`);if(fromDate&&fromDate>projectEnd)throw new Error(`From date cannot be after the project ${project.status==='completed'?'finish date':'current date'} (${projectEnd}).`);if(toDate&&toDate>projectEnd)throw new Error(`To date cannot be after the project ${project.status==='completed'?'finish date':'current date'} (${projectEnd}).`);
@@ -72,7 +87,7 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository{
       SELECT id,'Load' kind,transaction_number title,(CASE WHEN status='Cancelled' THEN 'CANCELLED · ' ELSE '' END)||customer_name||' · '||COALESCE(project_name,'No project')||' · '||item_name||' · '||driver_name||' · '||truck_plate subtitle,confirmed_at date,'loads' route,project_id FROM loads WHERE is_archived=0 AND (transaction_number LIKE ? ESCAPE '\\' OR customer_name LIKE ? ESCAPE '\\' OR COALESCE(project_name,'') LIKE ? ESCAPE '\\' OR item_name LIKE ? ESCAPE '\\' OR driver_name LIKE ? ESCAPE '\\' OR truck_plate LIKE ? ESCAPE '\\')
       UNION ALL SELECT id,'Customer',name,COALESCE(phone,'')||CASE WHEN email IS NULL THEN '' ELSE ' · '||email END,created_at,'customers',NULL FROM customers WHERE name LIKE ? ESCAPE '\\' OR COALESCE(phone,'') LIKE ? ESCAPE '\\' OR COALESCE(email,'') LIKE ? ESCAPE '\\'
       UNION ALL SELECT id,'Project',name,location||' · '||status,updated_at,'projects',id FROM projects WHERE is_archived=0 AND (name LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\')
-      UNION ALL SELECT id,'Driver',name,COALESCE(phone,''),created_at,'directory',NULL FROM driver_profiles WHERE name LIKE ? ESCAPE '\\' OR COALESCE(phone,'') LIKE ? ESCAPE '\\'
+      UNION ALL SELECT id,CASE person_role WHEN 'worker' THEN 'Worker' WHEN 'operator' THEN 'Operator' ELSE 'Driver' END,name,COALESCE(job_title||' · ','')||COALESCE(phone,''),created_at,'directory',NULL FROM driver_profiles WHERE substr(id,1,7) <> 'system_' AND (name LIKE ? ESCAPE '\\' OR COALESCE(phone,'') LIKE ? ESCAPE '\\')
       UNION ALL SELECT id,'Truck',plate,COALESCE(make_model,''),created_at,'directory',NULL FROM truck_profiles WHERE plate LIKE ? ESCAPE '\\' OR COALESCE(make_model,'') LIKE ? ESCAPE '\\'
       UNION ALL SELECT i.id,'Item',i.name,COALESCE(i.internal_code,'')||' · '||c.name,i.created_at,'catalog',NULL FROM catalog_items i JOIN categories c ON c.id=i.category_id WHERE i.name LIKE ? ESCAPE '\\' OR COALESCE(i.internal_code,'') LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\'
       UNION ALL SELECT id,'Supplier',name,COALESCE(phone,''),created_at,'quarry',NULL FROM suppliers WHERE name LIKE ? ESCAPE '\\' OR COALESCE(phone,'') LIKE ? ESCAPE '\\'
@@ -92,7 +107,7 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository{
   async getAttentionSnapshot():Promise<AttentionSnapshot>{const today=this.today();const[pending,unpriced,outstanding,missing,incomplete,blocked,issues,drafts]=await Promise.all([
     this.db.getFirstAsync<CountRow>('SELECT COUNT(*) count FROM sync_outbox'),
     this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM loads WHERE is_archived=0 AND status='Active' AND payment_status='Unpriced'`),
-    this.db.getFirstAsync<CountRow>(`SELECT (SELECT COUNT(*) FROM loads WHERE is_archived=0 AND status='Active' AND payment_status IN ('Unpaid','Partially Paid'))+(SELECT COUNT(*) FROM quarry_purchases WHERE status='Active' AND payment_status IN ('Unpaid','Partially Paid'))+(SELECT COUNT(*) FROM fuel_movements WHERE status='Active' AND movement_type='delivery' AND payment_status IN ('Unpaid','Partially Paid'))+(SELECT COUNT(*) FROM opening_balances WHERE payment_status IN ('Unpaid','Partially Paid')) count`),
+    this.db.getFirstAsync<CountRow>(`SELECT (SELECT COUNT(*) FROM loads WHERE is_archived=0 AND status='Active' AND payment_status IN ('Unpaid','Partially Paid'))+(SELECT COUNT(*) FROM quarry_purchases WHERE status='Active' AND payment_status IN ('Unpaid','Partially Paid'))+(SELECT COUNT(*) FROM fuel_movements WHERE status='Active' AND movement_type='delivery' AND payment_status IN ('Unpaid','Partially Paid'))+(SELECT COUNT(*) FROM opening_balances WHERE status='Active' AND payment_status IN ('Unpaid','Partially Paid')) count`),
     this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM projects p WHERE p.status='active' AND p.is_archived=0 AND EXISTS(SELECT 1 FROM loads l WHERE l.project_id=p.id AND l.is_archived=0 AND l.status='Active' AND substr(l.confirmed_at,1,10)=?) AND NOT EXISTS(SELECT 1 FROM daily_project_reports r WHERE r.project_id=p.id AND r.work_date=?)`,today,today),
     this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM waste_dumps WHERE status='Active' AND (material_type IS NULL OR dump_location IS NULL OR driver_profile_id IS NULL OR truck_profile_id IS NULL)`),
     this.db.getFirstAsync<CountRow>(`SELECT COUNT(*) count FROM schedule_tasks WHERE status='Blocked'`),

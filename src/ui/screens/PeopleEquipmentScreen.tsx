@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, LayoutAnimation, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { DirectoryProfiles, LoadRepository } from '../../data/repositories/LoadRepository';
+import type { PersonDraft, PersonProfile } from '../../domain/people';
 import { useReducedMotion } from '../components/ExpandableMenu';
+import { PeopleDirectory } from '../components/PeopleDirectory';
 import { colors } from '../theme';
 
-type TabName = 'workers' | 'drivers' | 'trucks' | 'machines';
+// DEC-476. People is one tab; Workers, Drivers and Operators are filters inside it (PeopleDirectory).
+type TabName = 'people' | 'trucks' | 'machines';
+type EquipmentTab = Exclude<TabName, 'people'>;
 type DirectoryRecord = { id: string; title: string; detail: string; notes: string | null; isActive: boolean };
 
 function initials(name: string): string {
@@ -15,41 +19,41 @@ function initials(name: string): string {
   return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
 }
 
-const tabConfig: Record<TabName, { label: string; singular: string; searchPlaceholder: string }> = {
-  workers: { label: 'Workers', singular: 'worker', searchPlaceholder: 'Search name, role, or phone' },
-  drivers: { label: 'Drivers', singular: 'driver', searchPlaceholder: 'Search name, phone, or licence' },
+const tabConfig: Record<EquipmentTab, { label: string; singular: string; searchPlaceholder: string }> = {
   trucks: { label: 'Trucks', singular: 'truck', searchPlaceholder: 'Search plate, make/model, or owner' },
   machines: { label: 'Machines', singular: 'machine', searchPlaceholder: 'Search name, type, or identifier' },
 };
 
-export function PeopleEquipmentScreen({ repository, onBack }: { repository: LoadRepository; onBack: () => void }) {
+export function PeopleEquipmentScreen({ repository, onBack, onOpenCustomDirectories }: { repository: LoadRepository; onBack: () => void; onOpenCustomDirectories: () => void }) {
   const reducedMotion = useReducedMotion();
-  const [options, setOptions] = useState<DirectoryProfiles | null>(null); const [tab, setTab] = useState<TabName>('workers');
+  const [options, setOptions] = useState<DirectoryProfiles | null>(null); const [tab, setTab] = useState<TabName>('people');
   const [search, setSearch] = useState(''); const [inactiveOpen, setInactiveOpen] = useState(false);
-  const [workerName,setWorkerName]=useState(''); const [workerRole,setWorkerRole]=useState(''); const [workerPhone,setWorkerPhone]=useState(''); const [workerNotes,setWorkerNotes]=useState('');
-  const [driverName,setDriverName]=useState(''); const [driverPhone,setDriverPhone]=useState(''); const [license,setLicense]=useState(''); const [driverNotes,setDriverNotes]=useState('');
   const [plate,setPlate]=useState(''); const [makeModel,setMakeModel]=useState(''); const [capacity,setCapacity]=useState(''); const [owner,setOwner]=useState(''); const [truckNotes,setTruckNotes]=useState('');
   const [machineName,setMachineName]=useState(''); const [machineType,setMachineType]=useState(''); const [identifier,setIdentifier]=useState(''); const [machineNotes,setMachineNotes]=useState('');
-  const[editingWorkerId,setEditingWorkerId]=useState<string|null>(null);const[editingDriverId,setEditingDriverId]=useState<string|null>(null);
   const[editingTruckId,setEditingTruckId]=useState<string|null>(null);const[editingMachineId,setEditingMachineId]=useState<string|null>(null);
   const [error,setError]=useState<string|null>(null); const [message,setMessage]=useState<string|null>(null); const [busy,setBusy]=useState(false);
   const refresh=useCallback(async()=>setOptions(await repository.getDirectoryProfiles()),[repository]); useEffect(()=>{void refresh();},[refresh]);
   useEffect(()=>{setSearch('');if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setInactiveOpen(false);},[tab]); // eslint-disable-line react-hooks/exhaustive-deps
   async function execute(action:()=>Promise<void>, success:string){setBusy(true);setError(null);setMessage(null);try{await action();await refresh();setMessage(success);}catch(cause){setError(cause instanceof Error?cause.message:'Could not save the record.');}finally{setBusy(false);}}
-  const clearWorker=()=>{setEditingWorkerId(null);setWorkerName('');setWorkerRole('');setWorkerPhone('');setWorkerNotes('');};
-  const clearDriver=()=>{setEditingDriverId(null);setDriverName('');setDriverPhone('');setLicense('');setDriverNotes('');};
-  function saveWorker(){return execute(async()=>{const value={name:workerName,role:workerRole,phone:workerPhone,notes:workerNotes};if(editingWorkerId)await repository.updateWorker(editingWorkerId,value);else await repository.createWorker(value);clearWorker();},editingWorkerId?'Worker information updated.':'Worker saved and available in Project Reports.');}
-  function saveDriver(){return execute(async()=>{const value={name:driverName,phone:driverPhone,licenseNumber:license,notes:driverNotes};if(editingDriverId)await repository.updateDriver(editingDriverId,value);else await repository.createDriver(value);clearDriver();},editingDriverId?'Driver information updated.':'Driver saved and available in loads and Project Reports.');}
+  /** The person sheet keeps its own error, so this rethrows instead of writing to the page banner. */
+  async function savePerson(draft:PersonDraft,id:string|null){
+    setBusy(true);setError(null);setMessage(null);
+    try{if(id)await repository.updatePerson(id,draft);else await repository.createPerson(draft);await refresh();setMessage(id?'Person updated. Existing reports and receipts keep what they recorded.':'Person saved and available for selection.');}
+    finally{setBusy(false);}
+  }
+  function setPersonActive(person:PersonProfile,isActive:boolean){
+    const run=()=>void execute(()=>repository.setPersonActive(person.id,isActive),isActive?'Person reactivated.':'Person deactivated and removed from new selections.');
+    if(!isActive){Alert.alert('Deactivate this person?',`"${person.name}" will no longer be offered for new records. Existing history is unchanged, and they can be reactivated at any time.`,[{text:'Keep Active',style:'cancel'},{text:'Deactivate',style:'destructive',onPress:run}]);return;}
+    run();
+  }
   const clearTruck=()=>{setEditingTruckId(null);setPlate('');setMakeModel('');setCapacity('');setOwner('');setTruckNotes('');};
   const clearMachine=()=>{setEditingMachineId(null);setMachineName('');setMachineType('');setIdentifier('');setMachineNotes('');};
   function saveTruck(){return execute(async()=>{const value={plate,makeModel,capacityKg:capacity.trim()?Number(capacity):null,ownerName:owner,notes:truckNotes};if(editingTruckId)await repository.updateTruck(editingTruckId,value);else await repository.createTruck(value);clearTruck();},editingTruckId?'Truck information updated. Historical records keep their original plate snapshot.':'Truck saved and available in loads and Project Reports.');}
   function saveMachine(){return execute(async()=>{const value={name:machineName,machineType,identifier,notes:machineNotes};if(editingMachineId)await repository.updateMachine(editingMachineId,value);else await repository.createMachine(value);clearMachine();},editingMachineId?'Machine information updated. Historical records keep their original snapshot.':'Machine saved and available in Project Reports.');}
-  function editWorker(id:string){const value=options?.workers.find(v=>v.id===id);if(!value)return;setEditingWorkerId(id);setWorkerName(value.name);setWorkerRole(value.role??'');setWorkerPhone(value.phone??'');setWorkerNotes(value.notes??'');setError(null);setMessage(null);}
-  function editDriver(id:string){const value=options?.drivers.find(v=>v.id===id);if(!value)return;setEditingDriverId(id);setDriverName(value.name);setDriverPhone(value.phone??'');setLicense(value.licenseNumber??'');setDriverNotes(value.notes??'');setError(null);setMessage(null);}
   function editTruck(id:string){const value=options?.trucks.find(v=>v.id===id);if(!value)return;setEditingTruckId(id);setPlate(value.plate);setMakeModel(value.makeModel??'');setCapacity(value.capacityKg==null?'':String(value.capacityKg));setOwner(value.ownerName??'');setTruckNotes(value.notes??'');setError(null);setMessage(null);}
   function editMachine(id:string){const value=options?.machines.find(v=>v.id===id);if(!value)return;setEditingMachineId(id);setMachineName(value.name);setMachineType(value.machineType??'');setIdentifier(value.identifier??'');setMachineNotes(value.notes??'');setError(null);setMessage(null);}
-  function toggle(kind:TabName,id:string,isActive:boolean){const action=kind==='workers'?repository.setWorkerActive(id,isActive):kind==='drivers'?repository.setDriverActive(id,isActive):kind==='trucks'?repository.setTruckActive(id,isActive):repository.setMachineActive(id,isActive);return execute(()=>action,isActive?'Profile reactivated.':'Profile deactivated and removed from new-entry selections.');}
-  function requestToggle(kind:TabName,id:string,name:string,isActive:boolean){
+  function toggle(kind:EquipmentTab,id:string,isActive:boolean){const action=kind==='trucks'?repository.setTruckActive(id,isActive):repository.setMachineActive(id,isActive);return execute(()=>action,isActive?'Profile reactivated.':'Profile deactivated and removed from new-entry selections.');}
+  function requestToggle(kind:EquipmentTab,id:string,name:string,isActive:boolean){
     if(isActive){
       Alert.alert(
         `Deactivate this ${tabConfig[kind].singular}?`,
@@ -62,10 +66,9 @@ export function PeopleEquipmentScreen({ repository, onBack }: { repository: Load
   }
   function toggleInactiveSection(){if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setInactiveOpen(v=>!v);}
 
+  const equipmentTab:EquipmentTab=tab==='machines'?'machines':'trucks';
   const records=useMemo<DirectoryRecord[]>(()=>{
-    if(!options)return [];
-    if(tab==='workers')return options.workers.map(v=>({id:v.id,title:v.name,detail:[v.role,v.phone].filter(Boolean).join(' · '),notes:v.notes,isActive:v.isActive}));
-    if(tab==='drivers')return options.drivers.map(v=>({id:v.id,title:v.name,detail:[v.phone,v.licenseNumber?`Licence ${v.licenseNumber}`:null].filter(Boolean).join(' · '),notes:v.notes,isActive:v.isActive}));
+    if(!options||tab==='people')return [];
     if(tab==='trucks')return options.trucks.map(v=>({id:v.id,title:v.plate,detail:[v.makeModel,v.capacityKg?`${v.capacityKg} kg capacity`:null,v.ownerName].filter(Boolean).join(' · '),notes:v.notes,isActive:v.isActive}));
     return options.machines.map(v=>({id:v.id,title:v.name,detail:[v.machineType,v.identifier].filter(Boolean).join(' · '),notes:v.notes,isActive:v.isActive}));
   },[options,tab]);
@@ -78,8 +81,8 @@ export function PeopleEquipmentScreen({ repository, onBack }: { repository: Load
   const inactiveVisible=useMemo(()=>inactiveAll.filter(matches),[inactiveAll,query]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasQuery=query.length>0;
 
-  function onEditFor(kind:TabName){return kind==='trucks'?editTruck:kind==='machines'?editMachine:kind==='workers'?editWorker:editDriver;}
-  function onRecordPress(kind:TabName,id:string){onEditFor(kind)(id);}
+
+  function onRecordPress(kind:EquipmentTab,id:string){(kind==='trucks'?editTruck:editMachine)(id);}
 
   return <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
     <View style={styles.hero}>
@@ -87,11 +90,11 @@ export function PeopleEquipmentScreen({ repository, onBack }: { repository: Load
         <TouchableOpacity style={styles.heroBack} onPress={onBack} accessibilityRole="button" accessibilityLabel="Back"><Text style={styles.heroBackText}>Back</Text></TouchableOpacity>
         <View style={styles.flex}><Text style={styles.heroEyebrow}>DIRECTORY</Text><Text style={styles.heroTitle}>People & equipment</Text></View>
       </View>
-      <Text style={styles.heroPurpose}>Create reusable workers, drivers, trucks, and machines, then choose them from searchable dropdowns.</Text>
+      <Text style={styles.heroPurpose}>One record per person and per machine. Roles and plates change in place; reports and receipts keep what they recorded.</Text>
       <View style={styles.heroSummaryRow}>
-        <View style={styles.heroSummaryItem}><Text style={styles.heroSummaryValue}>{(options?.workers.length??0)+(options?.drivers.length??0)}</Text><Text style={styles.heroSummaryLabel}>PEOPLE</Text></View>
+        <View style={styles.heroSummaryItem}><Text style={styles.heroSummaryValue}>{options?.people.length??0}</Text><Text style={styles.heroSummaryLabel}>PEOPLE</Text></View>
         <View style={styles.heroSummaryItem}><Text style={styles.heroSummaryValue}>{(options?.trucks.length??0)+(options?.machines.length??0)}</Text><Text style={styles.heroSummaryLabel}>EQUIPMENT</Text></View>
-        <View style={styles.heroSummaryItem}><Text style={styles.heroSummaryValue}>{activeAll.length}</Text><Text style={styles.heroSummaryLabel}>ACTIVE HERE</Text></View>
+        <View style={styles.heroSummaryItem}><Text style={styles.heroSummaryValue}>{options?options.people.filter(person=>person.isActive).length:0}</Text><Text style={styles.heroSummaryLabel}>ACTIVE PEOPLE</Text></View>
       </View>
     </View>
     {error?<Text style={styles.error} accessibilityRole="alert">{error}</Text>:null}{message?<Text style={styles.success} accessibilityRole="text">{message}</Text>:null}
@@ -99,38 +102,41 @@ export function PeopleEquipmentScreen({ repository, onBack }: { repository: Load
     <View style={styles.tabGroups}>
       <View style={styles.tabGroup}>
         <Text style={styles.tabGroupLabel}>PEOPLE</Text>
-        <View style={styles.tabRow}><Tab label="Workers" selected={tab==='workers'} onPress={()=>setTab('workers')}/><Tab label="Drivers" selected={tab==='drivers'} onPress={()=>setTab('drivers')}/></View>
+        <View style={styles.tabRow}><Tab label="People" selected={tab==='people'} onPress={()=>setTab('people')}/></View>
       </View>
       <View style={styles.tabGroup}>
         <Text style={styles.tabGroupLabel}>EQUIPMENT</Text>
         <View style={styles.tabRow}><Tab label="Trucks" selected={tab==='trucks'} onPress={()=>setTab('trucks')}/><Tab label="Machines" selected={tab==='machines'} onPress={()=>setTab('machines')}/></View>
       </View>
     </View>
+    <TouchableOpacity activeOpacity={.75} style={styles.customLink} onPress={onOpenCustomDirectories} accessibilityRole="button" accessibilityLabel="Open Custom directories">
+      <View style={styles.flex}><Text style={styles.customLinkTitle}>Custom directories</Text><Text style={styles.helper}>Engineers, pickups, generators, subcontractors and any other group you define.</Text></View>
+      <Text style={styles.customLinkAction}>Open</Text>
+    </TouchableOpacity>
 
-    {tab==='workers'?<Card title={editingWorkerId?'Edit worker':'Add worker'}><Field label="Worker name *" value={workerName} onChangeText={setWorkerName}/><Field label="Role / trade" value={workerRole} onChangeText={setWorkerRole}/><Field label="Phone" value={workerPhone} onChangeText={setWorkerPhone} keyboardType="phone-pad"/><Field label="Notes" value={workerNotes} onChangeText={setWorkerNotes} multiline/><Save label={editingWorkerId?'Save worker changes':'Save worker'} busy={busy} onPress={()=>void saveWorker()}/>{editingWorkerId?<TouchableOpacity style={styles.cancelEditWrap} onPress={clearWorker} accessibilityRole="button" accessibilityLabel="Cancel editing worker"><Text style={styles.cancelEdit}>Cancel editing</Text></TouchableOpacity>:null}</Card>:null}
-    {tab==='drivers'?<Card title={editingDriverId?'Edit driver':'Add driver'}><Field label="Driver name *" value={driverName} onChangeText={setDriverName}/><Field label="Phone" value={driverPhone} onChangeText={setDriverPhone} keyboardType="phone-pad"/><Field label="Licence number" value={license} onChangeText={setLicense}/><Field label="Notes" value={driverNotes} onChangeText={setDriverNotes} multiline/><Save label={editingDriverId?'Save driver changes':'Save driver'} busy={busy} onPress={()=>void saveDriver()}/>{editingDriverId?<TouchableOpacity style={styles.cancelEditWrap} onPress={clearDriver} accessibilityRole="button" accessibilityLabel="Cancel editing driver"><Text style={styles.cancelEdit}>Cancel editing</Text></TouchableOpacity>:null}</Card>:null}
+    {tab==='people'?<PeopleDirectory people={options?.people??null} busy={busy} onSave={savePerson} onSetActive={setPersonActive}/>:null}
     {tab==='trucks'?<Card title={editingTruckId?'Edit truck':'Add truck'}><Field label="Number plate *" value={plate} onChangeText={setPlate} autoCapitalize="characters"/><Field label="Make / model" value={makeModel} onChangeText={setMakeModel}/><Field label="Capacity kg" value={capacity} onChangeText={setCapacity} keyboardType="number-pad"/><Field label="Owner / company" value={owner} onChangeText={setOwner}/><Field label="Notes" value={truckNotes} onChangeText={setTruckNotes} multiline/><Save label={editingTruckId?'Save truck changes':'Save truck'} busy={busy} onPress={()=>void saveTruck()}/>{editingTruckId?<TouchableOpacity style={styles.cancelEditWrap} onPress={clearTruck} accessibilityRole="button" accessibilityLabel="Cancel editing truck"><Text style={styles.cancelEdit}>Cancel editing</Text></TouchableOpacity>:null}</Card>:null}
     {tab==='machines'?<Card title={editingMachineId?'Edit machine':'Add machine'}><Field label="Machine name *" value={machineName} onChangeText={setMachineName}/><Field label="Type / make / model" value={machineType} onChangeText={setMachineType}/><Field label="Identifier / serial / plate" value={identifier} onChangeText={setIdentifier}/><Field label="Notes" value={machineNotes} onChangeText={setMachineNotes} multiline/><Save label={editingMachineId?'Save machine changes':'Save machine'} busy={busy} onPress={()=>void saveMachine()}/>{editingMachineId?<TouchableOpacity style={styles.cancelEditWrap} onPress={clearMachine} accessibilityRole="button" accessibilityLabel="Cancel editing machine"><Text style={styles.cancelEdit}>Cancel editing</Text></TouchableOpacity>:null}</Card>:null}
 
-    {!options?<View style={styles.loading}><ActivityIndicator size="large" color={colors.brand}/><Text style={styles.helper}>Loading {tabConfig[tab].label.toLocaleLowerCase('en-US')}…</Text></View>:<>
+    {tab!=='people'?(!options?<View style={styles.loading}><ActivityIndicator size="large" color={colors.brand}/><Text style={styles.helper}>Loading {tabConfig[equipmentTab].label.toLocaleLowerCase('en-US')}…</Text></View>:<>
       {records.length?<View style={styles.searchBar}>
         <Text style={styles.searchGlyph}>⌕</Text>
-        <TextInput style={styles.searchInput} value={search} onChangeText={setSearch} placeholder={tabConfig[tab].searchPlaceholder} placeholderTextColor="#89939B" accessibilityLabel={`Search ${tabConfig[tab].label.toLocaleLowerCase('en-US')}`}/>
+        <TextInput style={styles.searchInput} value={search} onChangeText={setSearch} placeholder={tabConfig[equipmentTab].searchPlaceholder} placeholderTextColor="#89939B" accessibilityLabel={`Search ${tabConfig[equipmentTab].label.toLocaleLowerCase('en-US')}`}/>
         {search.length?<TouchableOpacity style={styles.searchClear} onPress={()=>setSearch('')} accessibilityRole="button" accessibilityLabel="Clear search"><Text style={styles.searchClearText}>×</Text></TouchableOpacity>:null}
       </View>:null}
 
-      <View style={styles.sectionHeadingRow}><Text style={styles.sectionTitle}>Active {tabConfig[tab].label}</Text><Text style={styles.sectionCount}>{activeAll.length}</Text></View>
-      {activeVisible.length?activeVisible.map(record=><Record key={record.id} record={record} busy={busy} onEdit={()=>onRecordPress(tab,record.id)} onToggle={()=>requestToggle(tab,record.id,record.title,record.isActive)}/>):<Empty title={hasQuery?'No matches':`No active ${tabConfig[tab].label.toLocaleLowerCase('en-US')} yet`} body={hasQuery?`No active ${tabConfig[tab].label.toLocaleLowerCase('en-US')} match "${search.trim()}".`:'Add one above to get started.'} onClearSearch={hasQuery?()=>setSearch(''):undefined}/>}
+      <View style={styles.sectionHeadingRow}><Text style={styles.sectionTitle}>Active {tabConfig[equipmentTab].label}</Text><Text style={styles.sectionCount}>{activeAll.length}</Text></View>
+      {activeVisible.length?activeVisible.map(record=><Record key={record.id} record={record} busy={busy} onEdit={()=>onRecordPress(equipmentTab,record.id)} onToggle={()=>requestToggle(equipmentTab,record.id,record.title,record.isActive)}/>):<Empty title={hasQuery?'No matches':`No active ${tabConfig[equipmentTab].label.toLocaleLowerCase('en-US')} yet`} body={hasQuery?`No active ${tabConfig[equipmentTab].label.toLocaleLowerCase('en-US')} match "${search.trim()}".`:'Add one above to get started.'} onClearSearch={hasQuery?()=>setSearch(''):undefined}/>}
 
-      <TouchableOpacity activeOpacity={.75} style={styles.inactiveBand} onPress={toggleInactiveSection} accessibilityRole="button" accessibilityState={{expanded:inactiveOpen}} accessibilityLabel={`Inactive ${tabConfig[tab].label}, ${inactiveAll.length} record${inactiveAll.length===1?'':'s'}`}>
+      <TouchableOpacity activeOpacity={.75} style={styles.inactiveBand} onPress={toggleInactiveSection} accessibilityRole="button" accessibilityState={{expanded:inactiveOpen}} accessibilityLabel={`Inactive ${tabConfig[equipmentTab].label}, ${inactiveAll.length} record${inactiveAll.length===1?'':'s'}`}>
         <View style={styles.flex}>
-          <Text style={styles.inactiveBandTitle}>Inactive {tabConfig[tab].label}</Text>
+          <Text style={styles.inactiveBandTitle}>Inactive {tabConfig[equipmentTab].label}</Text>
           <Text style={styles.inactiveBandHint}>{inactiveOpen?'Tap to hide':'Tap to view'} · {inactiveAll.length} record{inactiveAll.length===1?'':'s'}</Text>
         </View>
         <View style={styles.inactiveHeaderRight}><View style={styles.countBadge}><Text style={styles.countBadgeText}>{inactiveAll.length}</Text></View><Text style={styles.expandMark}>{inactiveOpen?'×':'+'}</Text></View>
       </TouchableOpacity>
-      {inactiveOpen?(inactiveVisible.length?inactiveVisible.map(record=><Record key={record.id} record={record} busy={busy} onEdit={()=>onRecordPress(tab,record.id)} onToggle={()=>requestToggle(tab,record.id,record.title,record.isActive)}/>):<Empty title={hasQuery?'No matches':`No inactive ${tabConfig[tab].label.toLocaleLowerCase('en-US')}`} body={hasQuery?`No inactive ${tabConfig[tab].label.toLocaleLowerCase('en-US')} match "${search.trim()}".`:`${tabConfig[tab].label} you deactivate will appear here.`} onClearSearch={hasQuery?()=>setSearch(''):undefined}/>):null}
-    </>}
+      {inactiveOpen?(inactiveVisible.length?inactiveVisible.map(record=><Record key={record.id} record={record} busy={busy} onEdit={()=>onRecordPress(equipmentTab,record.id)} onToggle={()=>requestToggle(equipmentTab,record.id,record.title,record.isActive)}/>):<Empty title={hasQuery?'No matches':`No inactive ${tabConfig[equipmentTab].label.toLocaleLowerCase('en-US')}`} body={hasQuery?`No inactive ${tabConfig[equipmentTab].label.toLocaleLowerCase('en-US')} match "${search.trim()}".`:`${tabConfig[equipmentTab].label} you deactivate will appear here.`} onClearSearch={hasQuery?()=>setSearch(''):undefined}/>):null}
+    </>):null}
   </ScrollView>;
 }
 
@@ -198,6 +204,8 @@ const styles=StyleSheet.create({
   editChip:{minHeight:44,justifyContent:'center',borderWidth:1,borderColor:colors.brand,borderRadius:9,paddingHorizontal:12},editChipText:{color:colors.brandDark,fontSize:12,fontWeight:'900'},
   toggleChip:{minHeight:44,justifyContent:'center',borderWidth:1,borderColor:colors.navy,borderRadius:9,paddingHorizontal:12},toggleChipText:{color:colors.navy,fontSize:12,fontWeight:'900'},
   notes:{color:colors.muted,fontSize:12,fontStyle:'italic'},
+  customLink:{minHeight:64,flexDirection:'row',alignItems:'center',gap:12,backgroundColor:colors.surface,borderRadius:14,borderWidth:1,borderColor:colors.line,borderLeftWidth:3,borderLeftColor:colors.navy,paddingHorizontal:16,paddingVertical:12},
+  customLinkTitle:{color:colors.ink,fontSize:15,fontWeight:'900'},customLinkAction:{color:colors.brandDark,fontSize:13,fontWeight:'900'},
   inactiveBand:{minHeight:56,backgroundColor:colors.creamSoft,borderRadius:14,borderWidth:1,borderColor:colors.line,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},
   inactiveBandTitle:{color:colors.ink,fontSize:15,fontWeight:'800'},inactiveBandHint:{color:colors.muted,fontSize:11,marginTop:2},
   inactiveHeaderRight:{flexDirection:'row',alignItems:'center',gap:10},

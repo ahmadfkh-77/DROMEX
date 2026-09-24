@@ -15,6 +15,7 @@ import { SignaturePad } from '../components/SignaturePad';
 import { useReducedMotion } from '../components/ExpandableMenu';
 import { colors } from '../theme';
 import { confirmedDocument } from './MakeReceiptScreen';
+import {truckCrewRoleLabel} from '../../domain/people';
 
 export function LoadHistoryScreen({ repository,supplierRepository,onOpenSupplierLoad, onCorrectLoad, onBack,initialFromDate='',initialToDate='',initialProjectName='',initialLoadId }: { repository: LoadRepository;supplierRepository:QuarryRepository;onOpenSupplierLoad:(load:QuarryPurchase)=>void; onCorrectLoad?:(load:ConfirmedLoad)=>void; onBack: () => void;initialFromDate?:string;initialToDate?:string;initialProjectName?:string;initialLoadId?:string|null }) {
   const reducedMotion=useReducedMotion();
@@ -126,7 +127,7 @@ function SelectedLoad({record,repository,onBack,onUpdate,onCorrectLoad}:{record:
   return <ScrollView scrollEnabled={!signing} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"><Header title={record.transactionNumber} onBack={onBack}/>
     {cancelled?<View style={styles.cancelledBanner}><Text style={styles.cancelledBannerTitle}>CANCELLED — NOT AN ACTIVE DELIVERY</Text><Text style={styles.cancelledBannerText}>Reason: {record.cancellationReason??'—'}</Text><Text style={styles.cancelledBannerText}>Cancelled {record.cancelledAt?new Date(record.cancelledAt).toLocaleString():'—'}</Text></View>:null}
     {error?<Feedback kind="error">{error}</Feedback>:null}{message?<Feedback kind="success">{message}</Feedback>:null}
-    <View style={styles.card}><Detail label="Customer" value={record.customerName}/><Detail label="Project / destination" value={record.projectName??record.destinationAddress??'—'}/><Detail label="Item" value={record.itemName}/><Detail label="Driver / truck" value={`${record.driverName} | ${record.truckPlate}`}/><Detail label="Quantity" value={`${record.billedQuantity?.toFixed(3)} ${record.outputUnitSymbol}`}/><Detail label="Payment" value={record.paymentStatus}/><Detail label="Signature" value={record.signatureStatus}/></View>
+    <View style={styles.card}><Detail label="Customer" value={record.customerName}/><Detail label="Project / destination" value={record.projectName??record.destinationAddress??'—'}/><Detail label="Item" value={record.itemName}/><Detail label="Driver / Operator" value={`${record.driverName} (${truckCrewRoleLabel(record.driverRole)})`}/><Detail label="Truck" value={record.truckPlate}/><Detail label="Quantity" value={`${record.billedQuantity?.toFixed(3)} ${record.outputUnitSymbol}`}/><Detail label="Payment" value={record.paymentStatus}/><Detail label="Signature" value={record.signatureStatus}/></View>
     {!cancelled?<View style={styles.manageCard}><Text style={styles.cardTitle}>Correct or cancel this confirmed load</Text><Text style={styles.helper}>Confirmed records are never edited directly. Use an audited correction for a mistaken detail, or cancel with a reason if the load should not have been recorded at all.</Text>{onCorrectLoad?<AppButton label="Correct Confirmed Load" tone="navy" onPress={onCorrectLoad}/>:null}<AppButton label="Cancel Confirmed Load" tone="danger" onPress={openCancel}/></View>:null}
     {cancelOpen?<View style={styles.cancelCard}>
       <Text style={styles.cancelTitle}>Cancel Confirmed Load</Text>

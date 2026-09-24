@@ -1,79 +1,309 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
-import {Alert,Animated,LayoutAnimation,ScrollView,StyleSheet,Text,TextInput,TouchableOpacity,View} from 'react-native';
+import {ActivityIndicator,Alert,LayoutAnimation,Pressable,ScrollView,StyleSheet,Text,TextInput,TouchableOpacity,View} from 'react-native';
+
 import type {FinancialRepository} from '../../data/repositories/FinancialRepository';
-import {emptyOpeningBalanceDraft,localFinancialDate,type FinancialOverview,type FinancialPartyType,type FinancialTarget,type OpeningBalanceDraft} from '../../domain/financials';
-import {SearchableSelect} from '../components/SearchableSelect';
-import {CollapsibleFilterCard} from '../components/CollapsibleFilterCard';
-import {DatePickerField,todayIso} from '../components/DatePickerField';
+import {
+  accountActivity,accountList,accountTotals,applicationModeLabels,oldestFirst,summarizeAccount,
+  type AccountLedger,type AccountPayment,type AccountRow,type AccountSummary,type CancelledOpeningBalance,
+} from '../../domain/accountPayments';
+import {emptyOpeningBalanceDraft,type FinancialOverview,type FinancialPartyType,type FinancialTarget,type OpeningBalanceDraft} from '../../domain/financials';
+import {AppButton} from '../components/AppPrimitives';
+import {DatePickerField,displayDate,todayIso} from '../components/DatePickerField';
 import {useReducedMotion} from '../components/ExpandableMenu';
+import {SearchableSelect} from '../components/SearchableSelect';
+import {SegmentedChoice} from '../components/SegmentedChoice';
 import {colors} from '../theme';
+import {AddPaymentScreen} from './finance/AddPaymentScreen';
+import {ApplyUnallocatedScreen} from './finance/ApplyUnallocatedScreen';
+import {FinanceRecordScreen} from './finance/FinanceRecordScreen';
+import {BODY_TEXT,CARD_BORDER,Field,FinanceHeader,MoneyBox,Notice,PaymentCard,RecordLine,Section,StatusBadge,financeStyles,targetTypeLabel} from './finance/financeParts';
+import {formatMoney} from './projectFinancialReviewPresentation';
 
+type Party={type:FinancialPartyType;id:string};
+type Route={name:'list'}|{name:'account';party:Party}|{name:'pay';party:Party;recordKey?:string;full?:boolean}|{name:'record';party:Party;recordKey:string}|{name:'apply';party:Party;paymentId:string};
+type Ledger=FinancialOverview&AccountLedger;
+type Show='all'|'customer'|'supplier';
+const PAGE=40;
+const recordKey=(target:FinancialTarget)=>`${target.type}|${target.id}`;
+/** Records that still owe money, oldest first: the order payments are applied in. */
+const oldestOpen=(targets:FinancialTarget[])=>oldestFirst(targets.filter(target=>target.remainingUsd>0));
+
+/**
+ * Reports and Finance -> Payments & Balances, as an account statement (DEC-482 / DEC-483):
+ * accounts list -> one account's statement -> Add Payment, or one record. Every figure comes from
+ * domain/accountPayments.ts; this screen arranges and labels them and adds nothing up itself.
+ */
 export function FinancialsScreen({repository,onBack,customerId,initialFromDate='',initialToDate=''}:{repository:FinancialRepository;onBack:()=>void;customerId?:string;initialFromDate?:string;initialToDate?:string}){
-  const reducedMotion=useReducedMotion();
-  const [overview,setOverview]=useState<FinancialOverview|null>(null);const [selected,setSelected]=useState<FinancialTarget|null>(null);const [focusedCustomerId,setFocusedCustomerId]=useState<string|null>(null);const [focusedSupplierId,setFocusedSupplierId]=useState<string|null>(null);const [showOpening,setShowOpening]=useState(false);const [opening,setOpening]=useState<OpeningBalanceDraft>(emptyOpeningBalanceDraft);const [amount,setAmount]=useState('');const [paymentDate,setPaymentDate]=useState(localFinancialDate());const [cancelReason,setCancelReason]=useState('');const [error,setError]=useState<string|null>(null);const [message,setMessage]=useState<string|null>(null);const [busy,setBusy]=useState(false);
-  const refresh=useCallback(async()=>{const next=await repository.getOverview();setOverview(next);setSelected((current)=>next.targets.find((t)=>t.id===current?.id&&t.type===current.type)??null);},[repository]);useEffect(()=>{void refresh();},[refresh]);
-  const parties=useMemo(()=>overview?.parties.filter((p)=>p.type===opening.partyType)??[],[opening.partyType,overview]);
-  function updateOpening<K extends keyof OpeningBalanceDraft>(key:K,value:OpeningBalanceDraft[K]){setOpening((current)=>({...current,[key]:value}));}
-  async function run(action:()=>Promise<void>,success:string){setBusy(true);setError(null);setMessage(null);try{await action();await refresh();setMessage(success);}catch(cause){setError(cause instanceof Error?cause.message:'Could not update payments.');}finally{setBusy(false);}}
-  function createOpening(){return run(async()=>{const created=await repository.createOpeningBalance(opening);setOpening(emptyOpeningBalanceDraft);setShowOpening(false);setSelected(created);},'Opening balance saved.');}
-  function recordPayment(){if(!selected)return Promise.resolve();return run(async()=>{const updated=await repository.recordPayment({targetType:selected.type,targetId:selected.id,amountUsd:amount,paymentDate});setAmount('');setSelected(updated);},'Payment recorded.');}
-  function cancelPayment(id:string){if(!cancelReason.trim()){setError('Enter a cancellation reason first.');return;}Alert.alert('Cancel this payment?','This is final. The payment remains visible but will no longer affect paid totals or balances.',[{text:'Keep payment',style:'cancel'},{text:'Cancel payment',style:'destructive',onPress:()=>void run(async()=>{const updated=await repository.cancelPayment(id,cancelReason);setCancelReason('');setSelected(updated);},'Payment cancelled and removed from the active total.')}]);}
-  if(!overview)return <View style={styles.loading} accessibilityRole="text" accessibilityLabel="Loading payments"><Text style={styles.helper}>Loading payments...</Text></View>;
-  if(selected)return <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"><Header title={selected.reference} eyebrow={selected.partyType==='customer'?'CUSTOMER RECEIVABLE':'SUPPLIER PAYABLE'} onBack={()=>{setSelected(null);setError(null);setMessage(null);}}/>{error?<Text style={styles.error} accessibilityRole="alert">{error}</Text>:null}{message?<Text style={styles.success} accessibilityRole="text">{message}</Text>:null}<View style={styles.card}><Text style={styles.cardTitle}>{selected.partyName}</Text><Text style={styles.helper}>{selected.recordDate} · {targetLabel(selected.type)}</Text><MoneyRow label="Original total" value={selected.totalUsd}/><MoneyRow label="Active payments" value={selected.paidUsd}/><MoneyRow label={selected.overpaidUsd>0?'Overpaid':'Remaining'} value={selected.overpaidUsd>0?selected.overpaidUsd:selected.remainingUsd} strong/><Text style={styles.status}>{selected.status}</Text></View>{selected.remainingUsd>0?<View style={styles.card}><Text style={styles.cardTitle}>Record in-person payment</Text><Text style={styles.helper}>This records money paid outside the app. It does not process a payment.</Text><Field label="Amount (USD) *" value={amount} onChangeText={setAmount} keyboardType="decimal-pad"/><DatePickerField label="Payment date *" value={paymentDate} onChange={setPaymentDate} maxDate={todayIso()}/><TouchableOpacity style={styles.primary} disabled={busy} onPress={()=>void recordPayment()} accessibilityRole="button" accessibilityLabel="Record payment" accessibilityState={{disabled:busy,busy}}><Text style={styles.primaryText}>{busy?'Saving...':'Record payment'}</Text></TouchableOpacity></View>:null}<View style={styles.card}><Text style={styles.cardTitle}>Payment history</Text>{selected.payments.some((p)=>p.status==='Active')?<Field label="Reason required if cancelling a payment" value={cancelReason} onChangeText={setCancelReason} multiline/>:null}{selected.payments.length?selected.payments.map((payment)=><View key={payment.id} style={styles.payment}><View style={styles.row}><Text style={styles.paymentAmount}>${payment.amountUsd.toFixed(2)}</Text><Text style={[styles.paymentStatus,payment.status==='Cancelled'&&styles.cancelled]}>{payment.status}</Text></View><Text style={styles.helper}>{payment.paymentDate}</Text>{payment.status==='Cancelled'?<Text style={styles.cancelText}>Cancelled {payment.cancelledAt?new Date(payment.cancelledAt).toLocaleString():''}: {payment.cancellationReason}</Text>:<TouchableOpacity style={styles.cancelActionWrap} disabled={busy} onPress={()=>void cancelPayment(payment.id)} accessibilityRole="button" accessibilityLabel="Cancel this payment" accessibilityHint="Requires a cancellation reason and a confirmation before it takes effect" accessibilityState={{disabled:busy}}><Text style={styles.cancelAction}>Cancel this payment</Text></TouchableOpacity>}</View>):<Text style={styles.helper}>No payments recorded.</Text>}</View></ScrollView>;
-  if(customerId)return <CustomerFinancialView customerId={customerId} overview={overview} onBack={onBack} onSelect={(target)=>{setSelected(target);setError(null);setMessage(null);}}/>;
-  if(focusedCustomerId)return <CustomerFinancialView customerId={focusedCustomerId} overview={overview} onBack={()=>setFocusedCustomerId(null)} onSelect={(target)=>setSelected(target)}/>;
-  if(focusedSupplierId)return <SupplierFinancialView supplierId={focusedSupplierId} overview={overview} onBack={()=>setFocusedSupplierId(null)} onSelect={(target)=>setSelected(target)}/>;
-  return <FinancialControlCenter overview={overview} error={error} message={message} opening={opening} parties={parties} showOpening={showOpening} busy={busy} initialFromDate={initialFromDate} initialToDate={initialToDate} onBack={onBack} onToggleOpening={()=>{if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setShowOpening(value=>!value);}} onOpeningChange={updateOpening} onOpeningPartyChange={(partyType)=>setOpening({...emptyOpeningBalanceDraft,partyType})} onCreateOpening={()=>void createOpening()} onSelectTarget={setSelected} onSelectCustomer={setFocusedCustomerId} onSelectSupplier={setFocusedSupplierId}/>;
+  const entry:Route=customerId?{name:'account',party:{type:'customer',id:customerId}}:{name:'list'};
+  const[route,setRoute]=useState<Route>(entry);
+  const[ledger,setLedger]=useState<Ledger|null>(null);
+  const[status,setStatus]=useState<'loading'|'error'|'ready'>('loading');
+  const[loadError,setLoadError]=useState<string|null>(null);
+  const[message,setMessage]=useState<string|null>(null);
+  const[reload,setReload]=useState(0);
+  const refresh=useCallback(async()=>{const next=await repository.getOverview();setLedger(next);},[repository]);
+  useEffect(()=>{let active=true;setStatus('loading');setLoadError(null);refresh().then(()=>{if(active)setStatus('ready');}).catch(cause=>{if(active){setLoadError(cause instanceof Error?cause.message:null);setStatus('error');}});return()=>{active=false;};},[refresh,reload]);
+  const go=(next:Route)=>{setMessage(null);setRoute(next);};
+  const done=async(next:Route,text:string)=>{await refresh();setRoute(next);setMessage(text);};
+
+  if(status==='error')return <View style={styles.state}><Text style={styles.stateTitle}>Payments could not be loaded</Text><Text style={styles.stateBody}>{loadError??'The records on this device could not be read.'} Nothing was changed.</Text><View style={styles.stateActions}><AppButton label="Try again" onPress={()=>setReload(value=>value+1)}/><AppButton label="Back" tone="secondary" onPress={onBack}/></View></View>;
+  if(status==='loading'||!ledger)return <View style={styles.state}><ActivityIndicator size="large" color={colors.brand}/><Text style={styles.stateBody}>Loading payments and balances…</Text></View>;
+
+  const account=(party:Party)=>{
+    const mine=<T extends {partyType:FinancialPartyType;partyId:string}>(value:T)=>value.partyType===party.type&&value.partyId===party.id;
+    const targets=ledger.targets.filter(mine),payments=ledger.accountPayments.filter(mine),cancelled=ledger.cancelledOpenings.filter(mine);
+    const name=ledger.parties.find(value=>value.type===party.type&&value.id===party.id)?.name??(party.type==='customer'?'Customer':'Supplier');
+    return {party,name,targets,payments,cancelled,summary:summarizeAccount(targets,payments,cancelled)};
+  };
+  const leaveAccount=()=>customerId?onBack():go({name:'list'});
+
+  if(route.name==='pay'){
+    const current=account(route.party);
+    const record=route.recordKey?current.targets.find(target=>recordKey(target)===route.recordKey):undefined;
+    const back:Route=record?{name:'record',party:route.party,recordKey:route.recordKey!}:{name:'account',party:route.party};
+    return <AddPaymentScreen repository={repository} partyType={route.party.type} partyId={route.party.id} name={current.name} open={oldestOpen(current.targets)} summary={current.summary} record={record} full={route.full}
+      onCancel={()=>go(back)} onSaved={text=>void done(back,text)}/>;
+  }
+  const detail=(party:Party)=><AccountDetail repository={repository} data={account(party)} message={message} onBack={leaveAccount} onPay={()=>go({name:'pay',party})}
+    onApply={payment=>go({name:'apply',party,paymentId:payment.id})} onRecord={value=>go({name:'record',party,recordKey:recordKey(value)})} onChanged={text=>void done({name:'account',party},text)}/>;
+  if(route.name==='apply'){
+    const current=account(route.party);
+    const payment=current.payments.find(value=>value.id===route.paymentId);
+    if(!payment)return detail(route.party);
+    return <ApplyUnallocatedScreen repository={repository} payment={payment} open={oldestOpen(current.targets)} onCancel={()=>go({name:'account',party:route.party})} onApplied={text=>void done({name:'account',party:route.party},text)}/>;
+  }
+  if(route.name==='record'){
+    const current=account(route.party);
+    const target=current.targets.find(value=>recordKey(value)===route.recordKey);
+    if(!target)return detail(route.party);
+    return <FinanceRecordScreen repository={repository} target={target} accountPayments={current.payments} onBack={()=>go({name:'account',party:route.party})}
+      onPay={full=>go({name:'pay',party:route.party,recordKey:route.recordKey,full})} onChanged={text=>void done({name:'account',party:route.party},text)}/>;
+  }
+  if(route.name==='account')return detail(route.party);
+  return <AccountList repository={repository} ledger={ledger} message={message} scope={{fromDate:initialFromDate,toDate:initialToDate}} onBack={onBack}
+    onOpen={row=>go({name:'account',party:{type:row.partyType,id:row.partyId}})} onChanged={text=>void done({name:'list'},text)}/>;
 }
 
-type FinanceHubTab='overview'|'customers'|'suppliers'|'activity'|'attention';
-function FinancialControlCenter({overview,error,message,opening,parties,showOpening,busy,initialFromDate,initialToDate,onBack,onToggleOpening,onOpeningChange,onOpeningPartyChange,onCreateOpening,onSelectTarget,onSelectCustomer,onSelectSupplier}:{overview:FinancialOverview;error:string|null;message:string|null;opening:OpeningBalanceDraft;parties:{id:string;name:string;type:FinancialPartyType}[];showOpening:boolean;busy:boolean;initialFromDate:string;initialToDate:string;onBack:()=>void;onToggleOpening:()=>void;onOpeningChange:<K extends keyof OpeningBalanceDraft>(key:K,value:OpeningBalanceDraft[K])=>void;onOpeningPartyChange:(type:FinancialPartyType)=>void;onCreateOpening:()=>void;onSelectTarget:(target:FinancialTarget)=>void;onSelectCustomer:(id:string)=>void;onSelectSupplier:(id:string)=>void}){
+function AccountList({repository,ledger,message,scope,onBack,onOpen,onChanged}:{repository:FinancialRepository;ledger:Ledger;message:string|null;scope:{fromDate:string;toDate:string};onBack:()=>void;onOpen:(row:AccountRow)=>void;onChanged:(text:string)=>void}){
   const reducedMotion=useReducedMotion();
-  const[tab,setTab]=useState<FinanceHubTab>('overview');const[search,setSearch]=useState('');const entrance=useState(()=>new Animated.Value(0))[0];useEffect(()=>{Animated.timing(entrance,{toValue:1,duration:reducedMotion?0:280,useNativeDriver:true}).start();},[entrance,reducedMotion]);
-  const scopedTargets=overview.targets.filter(target=>(!initialFromDate||target.recordDate.slice(0,10)>=initialFromDate)&&(!initialToDate||target.recordDate.slice(0,10)<=initialToDate));
-  const customerTargets=scopedTargets.filter(target=>target.partyType==='customer'),supplierTargets=scopedTargets.filter(target=>target.partyType==='supplier'),attention=scopedTargets.filter(target=>target.remainingUsd>0).sort((a,b)=>b.remainingUsd-a.remainingUsd);
-  const receivable=customerTargets.reduce((sum,target)=>sum+target.remainingUsd,0),payable=supplierTargets.reduce((sum,target)=>sum+target.remainingUsd,0);
-  const activity=overview.targets.flatMap(target=>target.payments.map(payment=>({target,payment}))).filter(value=>(!initialFromDate||value.payment.paymentDate>=initialFromDate)&&(!initialToDate||value.payment.paymentDate<=initialToDate)).sort((a,b)=>b.payment.paymentDate.localeCompare(a.payment.paymentDate)||b.payment.createdAt.localeCompare(a.payment.createdAt));
-  const thisMonth=localFinancialDate().slice(0,7),receivedMonth=activity.filter(value=>value.target.partyType==='customer'&&value.payment.status==='Active'&&((initialFromDate||initialToDate)||value.payment.paymentDate.startsWith(thisMonth))).reduce((sum,value)=>sum+value.payment.amountUsd,0),paidMonth=activity.filter(value=>value.target.partyType==='supplier'&&value.payment.status==='Active'&&((initialFromDate||initialToDate)||value.payment.paymentDate.startsWith(thisMonth))).reduce((sum,value)=>sum+value.payment.amountUsd,0);
-  const q=search.trim().toLocaleLowerCase('en-US');const customers=overview.parties.filter(party=>party.type==='customer'&&customerTargets.some(target=>target.partyId===party.id)&&(!q||party.name.toLocaleLowerCase('en-US').includes(q))),suppliers=overview.parties.filter(party=>party.type==='supplier'&&supplierTargets.some(target=>target.partyId===party.id)&&(!q||party.name.toLocaleLowerCase('en-US').includes(q)));
-  const changeTab=(next:FinanceHubTab)=>{if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setTab(next);};
-  const partyCard=(party:{id:string;name:string;type:FinancialPartyType})=>{const targets=scopedTargets.filter(target=>target.partyId===party.id&&target.partyType===party.type),billed=targets.reduce((sum,target)=>sum+target.totalUsd,0),paid=targets.reduce((sum,target)=>sum+target.paidUsd,0),remaining=targets.reduce((sum,target)=>sum+target.remainingUsd,0),needs=targets.filter(target=>target.remainingUsd>0).length;return <TouchableOpacity activeOpacity={.68} key={`${party.type}-${party.id}`} style={styles.hubPartyCard} onPress={()=>party.type==='customer'?onSelectCustomer(party.id):onSelectSupplier(party.id)} accessibilityRole="button" accessibilityLabel={`${party.name}, ${party.type}`} accessibilityHint={`Opens organized ${party.type} finances. Remaining balance $${remaining.toFixed(2)}.`}><View style={styles.row}><View style={styles.flex}><Text style={styles.cardTitle}>{party.name}</Text><Text style={styles.helper}>{targets.length} financial record{targets.length===1?'':'s'} · {needs} need payment</Text></View><Text style={styles.targetMoney}>${remaining.toFixed(2)}</Text></View><View style={styles.hubPartyMoney}><MiniMoney label="Billed" value={billed}/><MiniMoney label="Paid" value={paid}/><MiniMoney label="Remaining" value={remaining}/></View><Text style={styles.openHint}>Open organized {party.type} finances</Text></TouchableOpacity>};
-  return <Animated.ScrollView style={{opacity:entrance,transform:[{translateY:entrance.interpolate({inputRange:[0,1],outputRange:[12,0]})}]}} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"><Header title="Payments & balances" eyebrow="FINANCIAL RECORDS" onBack={onBack}/><Text style={styles.helper}>A clear control center for customer receivables, supplier payables, payment activity, and records requiring attention.</Text>{error?<Text style={styles.error} accessibilityRole="alert">{error}</Text>:null}{message?<Text style={styles.success} accessibilityRole="text">{message}</Text>:null}<View style={styles.hubTabs} accessibilityRole="tablist">{([['overview','Overview'],['customers','Customers'],['suppliers','Suppliers'],['activity','Activity'],['attention','Attention']] as [FinanceHubTab,string][]).map(([value,label])=><TouchableOpacity activeOpacity={.7} key={value} style={[styles.hubTab,tab===value&&styles.hubTabSelected]} onPress={()=>changeTab(value)} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{selected:tab===value}}><Text style={[styles.hubTabText,tab===value&&styles.hubTabTextSelected]}>{label}</Text></TouchableOpacity>)}</View>{tab==='overview'?<><View style={styles.financeSummaryGrid}><Summary label="Customer receivable" value={`$${receivable.toFixed(2)}`}/><Summary label="Supplier payable" value={`$${payable.toFixed(2)}`}/><Summary label="Received this month" value={`$${receivedMonth.toFixed(2)}`}/><Summary label="Paid this month" value={`$${paidMonth.toFixed(2)}`}/></View><TouchableOpacity activeOpacity={.7} style={styles.attentionShortcut} onPress={()=>changeTab('attention')} accessibilityRole="button" accessibilityLabel="Needs attention" accessibilityHint={`Opens the Attention tab. ${attention.length} unpaid or partially paid financial record${attention.length===1?'':'s'}.`}><View><Text style={styles.attentionTitle}>Needs attention</Text><Text style={styles.helper}>{attention.length} unpaid or partially paid financial record{attention.length===1?'':'s'}</Text></View><Text style={styles.expandMark}>{'>'}</Text></TouchableOpacity><TouchableOpacity activeOpacity={.7} style={styles.primary} onPress={onToggleOpening} accessibilityRole="button" accessibilityLabel={showOpening?'Close opening balance form':'Add Opening Balance'} accessibilityState={{expanded:showOpening}}><Text style={styles.primaryText}>{showOpening?'Close opening balance form':'Add Opening Balance'}</Text></TouchableOpacity>{showOpening?<OpeningBalanceForm opening={opening} parties={parties} busy={busy} onChange={onOpeningChange} onPartyChange={onOpeningPartyChange} onSave={onCreateOpening}/>:null}<Text style={styles.sectionTitle}>Quick access</Text>{customers.filter(party=>customerTargets.some(target=>target.partyId===party.id&&target.remainingUsd>0)).slice(0,2).map(partyCard)}{suppliers.filter(party=>supplierTargets.some(target=>target.partyId===party.id&&target.remainingUsd>0)).slice(0,2).map(partyCard)}</>:null}{tab==='customers'?<><Field label="Search customers" value={search} onChangeText={setSearch} placeholder="Customer name"/><Text style={styles.sectionTitle}>Customer receivables ({customers.length})</Text>{customers.map(partyCard)}</>:null}{tab==='suppliers'?<><Field label="Search suppliers" value={search} onChangeText={setSearch} placeholder="Supplier name"/><Text style={styles.sectionTitle}>Supplier payables ({suppliers.length})</Text>{suppliers.map(partyCard)}</>:null}{tab==='activity'?<><Text style={styles.sectionTitle}>Recent payment activity ({activity.length})</Text>{activity.length?activity.map(({target,payment})=><TouchableOpacity activeOpacity={.68} key={payment.id} style={styles.activityRow} onPress={()=>onSelectTarget(target)} accessibilityRole="button" accessibilityLabel={`${target.partyName}, ${target.partyType==='customer'?'received':'paid'} $${payment.amountUsd.toFixed(2)}, ${payment.status}`}><View style={styles.row}><View style={styles.flex}><Text style={styles.targetReference}>{target.partyName}</Text><Text style={styles.helper}>{payment.paymentDate} · {target.reference}</Text></View><Text style={[styles.activityAmount,payment.status==='Cancelled'&&styles.cancelled]}>${payment.amountUsd.toFixed(2)}</Text></View><Text style={[styles.paymentStatus,payment.status==='Cancelled'&&styles.cancelled]}>{target.partyType==='customer'?'Received':'Paid'} · {payment.status}</Text></TouchableOpacity>):<Text style={styles.emptyFinance}>No payment activity yet.</Text>}</>:null}{tab==='attention'?<><Text style={styles.sectionTitle}>Needs attention ({attention.length})</Text><Text style={styles.helper}>Highest remaining balances appear first. Open any row to record the exact receipt, purchase, or opening-balance payment.</Text>{attention.map(target=><FinanceTargetRow key={`${target.type}-${target.id}`} target={target} onPress={()=>onSelectTarget(target)}/>)}</>:null}</Animated.ScrollView>;
+  const[search,setSearch]=useState('');
+  const[show,setShow]=useState<Show>('all');
+  const[owingOnly,setOwingOnly]=useState(false);
+  const[limit,setLimit]=useState(PAGE);
+  const[openingOpen,setOpeningOpen]=useState(false);
+  const rows=useMemo(()=>accountList(ledger,ledger.accountPayments,ledger.cancelledOpenings),[ledger]);
+  const totals=useMemo(()=>accountTotals(rows),[rows]);
+  const query=search.trim().toLocaleLowerCase();
+  const visible=rows.filter(row=>(show==='all'||row.partyType===show)&&(!owingOnly||row.summary.balanceUsd>0)&&(!query||row.name.toLocaleLowerCase().includes(query)));
+  const toggleOpening=()=>{if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.create(200,'easeInEaseOut','opacity'));setOpeningOpen(value=>!value);};
+  return <ScrollView contentContainerStyle={financeStyles.content} keyboardShouldPersistTaps="handled">
+    <FinanceHeader eyebrow="REPORTS AND FINANCE" title="Payments & Balances" onBack={onBack}/>
+    {message?<Notice kind="success">{message}</Notice>:null}
+    {scope.fromDate||scope.toDate?<Notice kind="info">{`Opened from the dashboard for ${scope.fromDate?displayDate(scope.fromDate):'the start'} to ${scope.toDate?displayDate(scope.toDate):'today'}. Balances here are current and cover all dates.`}</Notice>:null}
+    <View style={financeStyles.wrapRow}>
+      <MoneyBox role="balance" label="Customers owe you" value={totals.receivableUsd} note={`${totals.customerAccounts} customer account${totals.customerAccounts===1?'':'s'}`}/>
+      <MoneyBox role="billed" label="You owe suppliers" value={totals.payableUsd} note={`${totals.supplierAccounts} supplier account${totals.supplierAccounts===1?'':'s'}`}/>
+    </View>
+    {totals.customerCreditUsd>0||totals.supplierCreditUsd>0?<Text style={financeStyles.meta}>{[totals.customerCreditUsd>0?`Customers have ${formatMoney(totals.customerCreditUsd)} in credit`:null,totals.supplierCreditUsd>0?`you have ${formatMoney(totals.supplierCreditUsd)} in credit with suppliers`:null].filter(Boolean).join('; ')}. Credit is never subtracted from the other side.</Text>:null}
+
+    <View style={styles.searchBar}>
+      <TextInput style={styles.searchInput} value={search} onChangeText={setSearch} placeholder="Search customers and suppliers" placeholderTextColor="#6B7681" accessibilityLabel="Search accounts"/>
+      {search?<TouchableOpacity style={styles.clear} onPress={()=>setSearch('')} accessibilityRole="button" accessibilityLabel="Clear search"><Text style={styles.clearText}>×</Text></TouchableOpacity>:null}
+    </View>
+    <SegmentedChoice mode="tabs" label="Show" options={[{id:'all' as Show,label:'All'},{id:'customer' as Show,label:'Customers'},{id:'supplier' as Show,label:'Suppliers'}]} selectedId={show} onSelect={setShow}/>
+    <TouchableOpacity style={[styles.filterChip,owingOnly&&styles.filterChipOn]} onPress={()=>setOwingOnly(value=>!value)} accessibilityRole="checkbox" accessibilityState={{checked:owingOnly}} accessibilityLabel="Only accounts with a balance owed">
+      <Text style={[styles.filterChipText,owingOnly&&styles.filterChipTextOn]}>{owingOnly?'✓ ':''}Only accounts with a balance owed</Text>
+    </TouchableOpacity>
+
+    <View style={styles.listHead}><Text style={styles.listTitle}>Accounts</Text><Text style={financeStyles.meta}>{visible.length} of {rows.length}</Text></View>
+    {visible.length?<View style={styles.stack}>{visible.slice(0,limit).map(row=><AccountRowCard key={`${row.partyType}|${row.partyId}`} row={row} onPress={()=>onOpen(row)}/>)}</View>
+      :<Text style={financeStyles.empty}>{rows.length?'No account matches this search or filter.':'No customer or supplier has a priced record, payment or Open Balance yet. Accounts appear here once one exists.'}</Text>}
+    {visible.length>limit?<AppButton label={`Show ${Math.min(PAGE,visible.length-limit)} more accounts`} tone="secondary" onPress={()=>setLimit(value=>value+PAGE)}/>:null}
+
+    <Section title="Add Open Balance" summary="Carry forward an old paper-book balance for a customer or supplier" open={openingOpen} onToggle={toggleOpening}>
+      <OpeningBalanceForm repository={repository} parties={ledger.parties} onSaved={text=>{setOpeningOpen(false);onChanged(text);}}/>
+    </Section>
+  </ScrollView>;
 }
 
-function OpeningBalanceForm({opening,parties,busy,onChange,onPartyChange,onSave}:{opening:OpeningBalanceDraft;parties:{id:string;name:string;type:FinancialPartyType}[];busy:boolean;onChange:<K extends keyof OpeningBalanceDraft>(key:K,value:OpeningBalanceDraft[K])=>void;onPartyChange:(type:FinancialPartyType)=>void;onSave:()=>void}){const available=parties.filter(party=>party.type===opening.partyType);return <View style={styles.card}><Text style={styles.cardTitle}>Old paper-book balance</Text><View style={styles.chips}><Chip label="Customer receivable" selected={opening.partyType==='customer'} onPress={()=>onPartyChange('customer')}/><Chip label="Supplier payable" selected={opening.partyType==='supplier'} onPress={()=>onPartyChange('supplier')}/></View><SearchableSelect label={`${opening.partyType==='customer'?'Customer':'Supplier'} *`} options={available.map(party=>({id:party.id,label:party.name}))} selectedId={opening.partyId} onSelect={id=>onChange('partyId',id)} placeholder={`Select ${opening.partyType}`}/><Field label="Original amount (USD) *" value={opening.amountUsd} onChangeText={value=>onChange('amountUsd',value)} keyboardType="decimal-pad"/><DatePickerField label="As-of date *" value={opening.asOfDate} onChange={value=>onChange('asOfDate',value)} maxDate={todayIso()}/><Field label="Paper reference" value={opening.reference} onChangeText={value=>onChange('reference',value)}/><Field label="Notes" value={opening.notes} onChangeText={value=>onChange('notes',value)} multiline/><TouchableOpacity activeOpacity={.7} style={styles.dark} disabled={busy} onPress={onSave} accessibilityRole="button" accessibilityLabel="Save opening balance" accessibilityState={{disabled:busy,busy}}><Text style={styles.darkText}>{busy?'Saving...':'Save opening balance'}</Text></TouchableOpacity></View>}
+/** One account in the list: its balance, what was paid, and how many records are still open. */
+function AccountRowCard({row,onPress}:{row:AccountRow;onPress:()=>void}){
+  const {summary}=row;
+  const state=summary.balanceUsd>0?'Owes':summary.creditUsd>0?'In credit':'Settled';
+  const figure=summary.balanceUsd>0?summary.balanceUsd:summary.creditUsd;
+  return <Pressable onPress={onPress} style={({pressed})=>[styles.accountCard,pressed&&styles.pressed]} android_ripple={{color:'#EFE9DF'}} accessibilityRole="button"
+    accessibilityLabel={`${row.name}, ${row.partyType}. ${state}${state==='Settled'?'':` ${formatMoney(figure)}`}. Paid ${formatMoney(summary.paidUsd)}. ${summary.openRecordCount} open record${summary.openRecordCount===1?'':'s'}.`} accessibilityHint="Opens the account statement">
+    <View style={styles.accountTop}>
+      <View style={financeStyles.flex}>
+        <Text style={styles.accountName} numberOfLines={2}>{row.name}</Text>
+        <Text style={financeStyles.meta}>{row.partyType==='customer'?'Customer':'Supplier'}</Text>
+      </View>
+      <View style={styles.accountRight}>
+        <Text style={financeStyles.meta}>{state}</Text>
+        <Text style={[styles.accountBalance,summary.balanceUsd<=0&&styles.accountSettled]}>{state==='Settled'?formatMoney(0):formatMoney(figure)}</Text>
+      </View>
+    </View>
+    <View style={styles.accountBottom}>
+      <Text style={financeStyles.meta}>Paid <Text style={styles.strong}>{formatMoney(summary.paidUsd)}</Text></Text>
+      <Text style={financeStyles.meta}><Text style={styles.strong}>{summary.openRecordCount}</Text> open record{summary.openRecordCount===1?'':'s'}</Text>
+      {summary.cancelledCount?<Text style={financeStyles.meta}>{summary.cancelledCount} cancelled</Text>:null}
+    </View>
+  </Pressable>;
+}
 
-function SupplierFinancialView({supplierId,overview,onBack,onSelect}:{supplierId:string;overview:FinancialOverview;onBack:()=>void;onSelect:(target:FinancialTarget)=>void}){const party=overview.parties.find(value=>value.id===supplierId&&value.type==='supplier'),targets=overview.targets.filter(target=>target.partyType==='supplier'&&target.partyId===supplierId),purchases=targets.filter(target=>target.type==='quarryPurchase'),fuelDeliveries=targets.filter(target=>target.type==='fuelDelivery'),openings=targets.filter(target=>target.type==='openingBalance'),billed=targets.reduce((sum,target)=>sum+target.totalUsd,0),paid=targets.reduce((sum,target)=>sum+target.paidUsd,0),remaining=targets.reduce((sum,target)=>sum+target.remainingUsd,0);const reducedMotion=useReducedMotion();const[expanded,setExpanded]=useState<Set<string>>(()=>new Set());const entrance=useState(()=>new Animated.Value(0))[0];useEffect(()=>{Animated.timing(entrance,{toValue:1,duration:reducedMotion?0:280,useNativeDriver:true}).start();},[entrance,reducedMotion]);const toggle=(key:string)=>{if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setExpanded(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});};const section=(key:string,title:string,rows:FinancialTarget[])=><View style={styles.financeSection}><TouchableOpacity activeOpacity={.7} style={styles.financeSectionHeader} onPress={()=>toggle(key)} accessibilityRole="button" accessibilityLabel={`${title}, ${rows.length} record${rows.length===1?'':'s'}`} accessibilityState={{expanded:expanded.has(key)}}><View style={styles.flex}><Text style={styles.financeSectionTitle}>{title}</Text><Text style={styles.helper}>{rows.length} record{rows.length===1?'':'s'}</Text></View><Text style={styles.expandMark}>{expanded.has(key)?'×':'+'}</Text></TouchableOpacity>{expanded.has(key)?<View style={styles.financeRecords}>{rows.length?rows.map(target=><FinanceTargetRow key={target.id} target={target} onPress={()=>onSelect(target)}/>):<Text style={styles.emptyFinance}>No records.</Text>}</View>:null}</View>;return <Animated.ScrollView style={{opacity:entrance}} contentContainerStyle={styles.content}><Header title={party?.name??'Supplier'} eyebrow="SUPPLIER PAYMENTS & BALANCES" onBack={onBack}/><View style={styles.financeSummaryGrid}><Summary label="Total purchased" value={`$${billed.toFixed(2)}`}/><Summary label="Total paid" value={`$${paid.toFixed(2)}`}/><Summary label="Remaining" value={`$${remaining.toFixed(2)}`}/><Summary label="Needs payment" value={String(targets.filter(target=>target.remainingUsd>0).length)}/></View>{section('attention','Needs attention',targets.filter(target=>target.remainingUsd>0))}{section('purchases','Supplier loads',purchases)}{section('fuel','Fuel deliveries',fuelDeliveries)}{section('opening','Opening balances',openings)}{section('paid','Paid history',targets.filter(target=>target.status==='Paid'))}</Animated.ScrollView>}
+type AccountData={party:Party;name:string;targets:FinancialTarget[];payments:AccountPayment[];cancelled:CancelledOpeningBalance[];summary:AccountSummary};
 
-type CustomerFinanceFilter='needs'|'partial'|'paid'|'all';
-type CustomerFinanceSort='newest'|'oldest'|'remaining';
-function CustomerFinancialView({customerId,overview,onBack,onSelect}:{customerId:string;overview:FinancialOverview;onBack:()=>void;onSelect:(target:FinancialTarget)=>void}){
-  const party=overview.parties.find(value=>value.id===customerId&&value.type==='customer');
-  const allTargets=useMemo(()=>overview.targets.filter(target=>target.partyType==='customer'&&target.partyId===customerId),[customerId,overview.targets]);
+/** One account's statement: balance, the single Add Payment action, then its records and history. */
+function AccountDetail({repository,data,message,onBack,onPay,onApply,onRecord,onChanged}:{repository:FinancialRepository;data:AccountData;message:string|null;onBack:()=>void;onPay:()=>void;onApply:(payment:AccountPayment)=>void;onRecord:(target:FinancialTarget)=>void;onChanged:(text:string)=>void}){
   const reducedMotion=useReducedMotion();
-  const [search,setSearch]=useState('');const [filter,setFilter]=useState<CustomerFinanceFilter>('needs');const [sort,setSort]=useState<CustomerFinanceSort>('newest');const [fromDate,setFromDate]=useState('');const [toDate,setToDate]=useState('');const [expanded,setExpanded]=useState<Set<string>>(()=>new Set());
-  const entrance=useState(()=>new Animated.Value(0))[0];useEffect(()=>{Animated.timing(entrance,{toValue:1,duration:reducedMotion?0:280,useNativeDriver:true}).start();},[entrance,reducedMotion]);
-  const toggle=(key:string)=>{if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setExpanded(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});};
-  const matches=useCallback((target:FinancialTarget)=>{const q=search.trim().toLocaleLowerCase('en-US');const searchable=[target.reference,target.projectName,target.itemName].filter(Boolean).join(' ').toLocaleLowerCase('en-US');if(q&&!searchable.includes(q))return false;if(fromDate&&target.recordDate.slice(0,10)<fromDate)return false;if(toDate&&target.recordDate.slice(0,10)>toDate)return false;if(filter==='needs'&&target.remainingUsd<=0)return false;if(filter==='partial'&&target.status!=='Partially Paid')return false;if(filter==='paid'&&target.status!=='Paid')return false;return true;},[filter,fromDate,search,toDate]);
-  const visible=useMemo(()=>allTargets.filter(matches).sort((a,b)=>sort==='remaining'?b.remainingUsd-a.remainingUsd:sort==='oldest'?a.recordDate.localeCompare(b.recordDate):b.recordDate.localeCompare(a.recordDate)),[allTargets,matches,sort]);
-  const loads=visible.filter(target=>target.type==='load'),openings=visible.filter(target=>target.type==='openingBalance'),direct=loads.filter(target=>!target.projectId),attention=allTargets.filter(target=>target.remainingUsd>0).sort((a,b)=>b.remainingUsd-a.remainingUsd),paidHistory=allTargets.filter(target=>target.status==='Paid').sort((a,b)=>b.recordDate.localeCompare(a.recordDate));
-  const projectGroups=useMemo(()=>{const map=new Map<string,{name:string;status:string|null;targets:FinancialTarget[]}>();for(const target of loads){if(!target.projectId)continue;const current:{name:string;status:string|null;targets:FinancialTarget[]}=map.get(target.projectId)??{name:target.projectName??'Historical project',status:target.projectStatus??null,targets:[]};current.targets.push(target);map.set(target.projectId,current);}return [...map.entries()].sort((a,b)=>a[1].name.localeCompare(b[1].name));},[loads]);
-  const billed=allTargets.reduce((sum,target)=>sum+target.totalUsd,0),paid=allTargets.reduce((sum,target)=>sum+target.paidUsd,0),remaining=allTargets.reduce((sum,target)=>sum+target.remainingUsd,0),unpaid=allTargets.filter(target=>target.remainingUsd>0).length;
-  const section=(key:string,title:string,subtitle:string,targets:FinancialTarget[],accent=false)=><View style={[styles.financeSection,accent&&styles.attentionSection]}><TouchableOpacity activeOpacity={.72} style={styles.financeSectionHeader} onPress={()=>toggle(key)} accessibilityRole="button" accessibilityLabel={`${title}. ${subtitle}`} accessibilityState={{expanded:expanded.has(key)}}><View style={styles.flex}><Text style={[styles.financeSectionTitle,accent&&styles.attentionTitle]}>{title}</Text><Text style={styles.helper}>{subtitle}</Text></View><Text style={styles.expandMark}>{expanded.has(key)?'×':'+'}</Text></TouchableOpacity>{expanded.has(key)?<View style={styles.financeRecords}>{targets.length?targets.map(target=><FinanceTargetRow key={`${target.type}-${target.id}`} target={target} onPress={()=>onSelect(target)}/>):<Text style={styles.emptyFinance}>No matching records in this section.</Text>}</View>:null}</View>;
-  return <Animated.ScrollView style={{opacity:entrance,transform:[{translateY:entrance.interpolate({inputRange:[0,1],outputRange:[12,0]})}]}} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"><Header title={party?.name??'Customer'} eyebrow="CUSTOMER PAYMENTS & BALANCES" onBack={onBack}/><Text style={styles.helper}>Billing is organized by project. Direct purchases and paper-book opening balances remain separate.</Text><View style={styles.financeSummaryGrid}><Summary label="Total billed" value={`$${billed.toFixed(2)}`}/><Summary label="Total paid" value={`$${paid.toFixed(2)}`}/><Summary label="Remaining" value={`$${remaining.toFixed(2)}`}/><Summary label="Needs payment" value={String(unpaid)}/></View>{attention.length?section('attention','Needs attention',`${attention.length} unpaid or partially paid record${attention.length===1?'':'s'} across all projects`,attention,true):null}<CollapsibleFilterCard title="Filter customer billing" summary={`${visible.length} matching financial record${visible.length===1?'':'s'}`}><Field label="Search receipt, project, or material" value={search} onChangeText={setSearch} placeholder="Search customer billing"/><View style={styles.chips} accessibilityRole="radiogroup"><Chip label="Needs payment" selected={filter==='needs'} onPress={()=>setFilter('needs')}/><Chip label="Partially paid" selected={filter==='partial'} onPress={()=>setFilter('partial')}/><Chip label="Paid" selected={filter==='paid'} onPress={()=>setFilter('paid')}/><Chip label="All" selected={filter==='all'} onPress={()=>setFilter('all')}/></View><View style={styles.dateRow}><View style={styles.flex}><DatePickerField label="From" value={fromDate} onChange={setFromDate} maxDate={toDate||todayIso()} allowClear/></View><View style={styles.flex}><DatePickerField label="To" value={toDate} onChange={setToDate} minDate={fromDate||undefined} maxDate={todayIso()} allowClear/></View></View><Text style={styles.label}>Sort records</Text><View style={styles.chips} accessibilityRole="radiogroup"><Chip label="Newest" selected={sort==='newest'} onPress={()=>setSort('newest')}/><Chip label="Oldest" selected={sort==='oldest'} onPress={()=>setSort('oldest')}/><Chip label="Highest remaining" selected={sort==='remaining'} onPress={()=>setSort('remaining')}/></View></CollapsibleFilterCard><View style={styles.row}><Text style={styles.sectionTitle}>Billing by project</Text><Text style={styles.countBadge}>{visible.length}</Text></View>{projectGroups.map(([id,group])=>{const total=group.targets.reduce((sum,target)=>sum+target.totalUsd,0),groupPaid=group.targets.reduce((sum,target)=>sum+target.paidUsd,0),groupRemaining=group.targets.reduce((sum,target)=>sum+target.remainingUsd,0);return <View key={id} style={styles.projectFinance}><TouchableOpacity activeOpacity={.72} style={styles.projectFinanceHeader} onPress={()=>toggle(`project:${id}`)} accessibilityRole="button" accessibilityLabel={`${group.name}, ${group.status??'Historical'}, ${group.targets.length} matching receipt${group.targets.length===1?'':'s'}`} accessibilityState={{expanded:expanded.has(`project:${id}`)}}><View style={styles.flex}><View style={styles.row}><Text style={styles.projectFinanceTitle}>{group.name}</Text><Text style={styles.projectStatus}>{group.status??'Historical'}</Text></View><View style={styles.projectMoneyGrid}><MiniMoney label="Billed" value={total}/><MiniMoney label="Paid" value={groupPaid}/><MiniMoney label="Remaining" value={groupRemaining}/></View><Text style={styles.helper}>{group.targets.length} matching receipt{group.targets.length===1?'':'s'}</Text></View><Text style={styles.expandMark}>{expanded.has(`project:${id}`)?'×':'+'}</Text></TouchableOpacity>{expanded.has(`project:${id}`)?<View style={styles.financeRecords}>{group.targets.map(target=><FinanceTargetRow key={target.id} target={target} onPress={()=>onSelect(target)}/>)}</View>:null}</View>;})}{section('direct','Direct Purchases / No Project',`${direct.length} matching receipt${direct.length===1?'':'s'} not assigned to a project`,direct)}{section('opening','Opening Balances',`${openings.length} matching carried-forward paper balance${openings.length===1?'':'s'}`,openings)}{section('paid','Paid History',`${paidHistory.length} fully settled record${paidHistory.length===1?'':'s'} kept out of the urgent list`,paidHistory)}</Animated.ScrollView>;
+  const[open,setOpen]=useState<Set<string>>(()=>new Set(['open']));
+  const[activityLimit,setActivityLimit]=useState(PAGE);
+  const[cancelling,setCancelling]=useState<string|null>(null);
+  const[reason,setReason]=useState('');
+  const[busy,setBusy]=useState(false);
+  const[error,setError]=useState<string|null>(null);
+  const toggle=(key:string)=>{if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.create(200,'easeInEaseOut','opacity'));setOpen(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});};
+  const {summary}=data;
+  const openRecords=oldestOpen(data.targets);
+  const settled=data.targets.filter(target=>target.remainingUsd<=0);
+  const recordPayments=data.targets.flatMap(target=>target.payments.filter(payment=>!payment.accountPaymentId).map(payment=>({target,payment})));
+  const activity=useMemo(()=>accountActivity(data.targets,data.payments,data.cancelled),[data]);
+  const state=summary.balanceUsd>0?'Balance owed':summary.creditUsd>0?'In credit':'Settled';
+
+  function cancelPayment(payment:AccountPayment){
+    if(!reason.trim()){setError('Enter the reason for cancelling this payment first.');return;}
+    Alert.alert(`Cancel the ${formatMoney(payment.amountUsd)} payment?`,'The payment and every amount it applied are cancelled together. They stay visible in history and no longer count.',[
+      {text:'Keep payment',style:'cancel'},
+      {text:'Cancel payment',style:'destructive',onPress:()=>void (async()=>{setBusy(true);setError(null);try{await repository.cancelAccountPayment(payment.id,reason);setReason('');setCancelling(null);onChanged('Payment cancelled. It remains in history.');}catch(cause){setError(cause instanceof Error?cause.message:'The payment could not be cancelled.');}finally{setBusy(false);}})()},
+    ]);
+  }
+
+  return <ScrollView contentContainerStyle={financeStyles.content} keyboardShouldPersistTaps="handled">
+    <FinanceHeader eyebrow={data.party.type==='customer'?'CUSTOMER ACCOUNT':'SUPPLIER ACCOUNT'} title={data.name} onBack={onBack}/>
+    {message?<Notice kind="success">{message}</Notice>:null}
+    {error?<Notice kind="error">{error}</Notice>:null}
+
+    <View style={styles.balanceCard} accessible accessibilityRole="summary" accessibilityLabel={`${state} ${formatMoney(summary.balanceUsd>0?summary.balanceUsd:summary.creditUsd)}. Billed ${formatMoney(summary.billedUsd)}. Paid ${formatMoney(summary.paidUsd)}. Unallocated ${formatMoney(summary.unallocatedUsd)}. ${summary.openRecordCount} open records.`}>
+      <Text style={styles.balanceLabel}>{state}</Text>
+      <Text style={[styles.balanceValue,summary.balanceUsd<=0&&styles.accountSettled]}>{formatMoney(summary.balanceUsd>0?summary.balanceUsd:summary.creditUsd)}</Text>
+      <Text style={financeStyles.meta}>{summary.openRecordCount} open record{summary.openRecordCount===1?'':'s'} · {formatMoney(summary.outstandingRecordsUsd)} still owed on records</Text>
+      <View style={financeStyles.wrapRow}>
+        <MoneyBox role="billed" label="Billed" value={summary.billedUsd}/>
+        <MoneyBox role="paid" label="Paid" value={summary.paidUsd}/>
+        <MoneyBox role="unallocated" label="Unallocated" value={summary.unallocatedUsd} note="paid, not on any record"/>
+      </View>
+    </View>
+    <AppButton label="Add Payment" hint="Record one payment and choose how it is applied" onPress={onPay}/>
+
+    <Section title="Open records" summary={openRecords.length?`${openRecords.length} unpaid or partly paid, oldest first`:'Nothing is owed on any record'} open={open.has('open')} onToggle={()=>toggle('open')}>
+      {openRecords.length?openRecords.map(target=><RecordLine key={recordKey(target)} target={target} onPress={()=>onRecord(target)}/>):<Text style={financeStyles.empty}>No open records on this account.</Text>}
+    </Section>
+
+    <Section title="Payment history" summary={`${data.payments.length+recordPayments.length} payment${data.payments.length+recordPayments.length===1?'':'s'}`} open={open.has('payments')} onToggle={()=>toggle('payments')}>
+      {data.payments.map(payment=><PaymentCard key={payment.id} payment={payment}>
+        {payment.status==='Active'&&payment.unallocatedUsd>0&&cancelling!==payment.id?<AppButton label="Apply unallocated payment" tone="navy" hint={`Put ${formatMoney(payment.unallocatedUsd)} onto records without re-entering the payment`} onPress={()=>onApply(payment)}/>:null}
+        {payment.status==='Active'?(cancelling===payment.id?<View style={styles.cancelBox}>
+          <Field label="Reason for cancelling this payment *" value={reason} onChangeText={setReason} multiline/>
+          <View style={financeStyles.row}>
+            <View style={financeStyles.flex}><AppButton label="Keep" tone="secondary" onPress={()=>{setCancelling(null);setReason('');}}/></View>
+            <View style={financeStyles.flex}><AppButton label="Cancel payment" tone="danger" busy={busy} onPress={()=>cancelPayment(payment)}/></View>
+          </View>
+        </View>:<TouchableOpacity style={styles.link} onPress={()=>{setCancelling(payment.id);setReason('');setError(null);}} accessibilityRole="button" accessibilityLabel={`Cancel the ${formatMoney(payment.amountUsd)} payment`}><Text style={styles.linkText}>Cancel this payment</Text></TouchableOpacity>):null}
+      </PaymentCard>)}
+      {recordPayments.map(({target,payment})=><Pressable key={payment.id} onPress={()=>onRecord(target)} style={({pressed})=>[styles.legacy,pressed&&styles.pressed]} accessibilityRole="button" accessibilityLabel={`${formatMoney(payment.amountUsd)} on ${payment.paymentDate}, recorded on ${target.reference}. ${payment.status}.`} accessibilityHint="Opens the record this payment was made on">
+        <View style={financeStyles.flex}><Text style={[styles.strongLine,payment.status==='Cancelled'&&styles.struck]}>{formatMoney(payment.amountUsd)}</Text><Text style={financeStyles.meta}>{payment.paymentDate} · recorded on {target.reference}</Text></View>
+        <StatusBadge word={payment.status==='Cancelled'?'Cancelled':'Active'} label={payment.status==='Cancelled'?'Cancelled':'Recorded'}/>
+      </Pressable>)}
+      {!data.payments.length&&!recordPayments.length?<Text style={financeStyles.empty}>No payments recorded for this account yet.</Text>:null}
+    </Section>
+
+    {settled.length?<Section title="Paid records" summary={`${settled.length} fully paid or with nothing due`} open={open.has('settled')} onToggle={()=>toggle('settled')}>
+      {settled.map(target=><RecordLine key={recordKey(target)} target={target} onPress={()=>onRecord(target)}/>)}
+    </Section>:null}
+
+    <Section title="Cancelled balances" summary={data.cancelled.length?`${data.cancelled.length} Open Balance${data.cancelled.length===1?'':'s'} cancelled, not owed`:'None cancelled'} open={open.has('cancelled')} onToggle={()=>toggle('cancelled')}>
+      {data.cancelled.length?data.cancelled.map(opening=><View key={opening.id} style={styles.cancelledCard} accessible accessibilityLabel={`Open Balance ${opening.reference}, ${formatMoney(opening.amountUsd)}, as of ${opening.asOfDate}. Cancelled ${opening.cancelledAt.slice(0,10)}. Reason: ${opening.cancellationReason}.`}>
+        <View style={styles.accountTop}>
+          <View style={financeStyles.flex}><Text style={[styles.strongLine,styles.struck]}>{formatMoney(opening.amountUsd)}</Text><Text style={financeStyles.meta}>{opening.reference} · as of {opening.asOfDate}</Text></View>
+          <StatusBadge word="Cancelled"/>
+        </View>
+        <Text style={financeStyles.meta}>Cancelled {opening.cancelledAt.slice(0,10)}{opening.statusBeforeCancellation?`, was ${opening.statusBeforeCancellation}`:''}. Reason: {opening.cancellationReason}</Text>
+      </View>):<Text style={financeStyles.empty}>No Open Balance on this account has been cancelled.</Text>}
+    </Section>
+
+    <Section title="Account activity" summary={`${activity.length} dated event${activity.length===1?'':'s'}, newest first`} open={open.has('activity')} onToggle={()=>toggle('activity')}>
+      {activity.length?activity.slice(0,activityLimit).map((event,index)=><View key={`${event.kind}-${index}`} style={styles.event}>
+        <Text style={styles.eventDate}>{event.date}</Text>
+        <View style={financeStyles.flex}>{event.kind==='record'?<Text style={styles.eventText}>{targetTypeLabel(event.target.type)} {event.target.reference} · {formatMoney(event.target.totalUsd)}</Text>
+          :event.kind==='payment'?<Text style={styles.eventText}>Payment {formatMoney(event.payment.amountUsd)} · {applicationModeLabels[event.payment.mode]}</Text>
+          :event.kind==='paymentCancelled'?<Text style={styles.eventText}>Payment {formatMoney(event.payment.amountUsd)} cancelled: {event.payment.cancellationReason}</Text>
+          :event.kind==='applied'?<Text style={styles.eventText}>{formatMoney(event.amountUsd)} of the {event.payment.paymentDate} payment applied to {event.references.join(', ')}</Text>
+          :<Text style={styles.eventText}>Open Balance {event.opening.reference} cancelled: {event.opening.cancellationReason}</Text>}</View>
+      </View>):<Text style={financeStyles.empty}>No activity yet.</Text>}
+      {activity.length>activityLimit?<AppButton label="Show older activity" tone="secondary" onPress={()=>setActivityLimit(value=>value+PAGE)}/>:null}
+    </Section>
+  </ScrollView>;
+}
+
+function OpeningBalanceForm({repository,parties,onSaved}:{repository:FinancialRepository;parties:FinancialOverview['parties'];onSaved:(text:string)=>void}){
+  const[draft,setDraft]=useState<OpeningBalanceDraft>(emptyOpeningBalanceDraft);
+  const[busy,setBusy]=useState(false);
+  const[error,setError]=useState<string|null>(null);
+  const set=<K extends keyof OpeningBalanceDraft>(key:K,value:OpeningBalanceDraft[K])=>setDraft(current=>({...current,[key]:value}));
+  const available=parties.filter(party=>party.type===draft.partyType);
+  async function save(){setBusy(true);setError(null);try{await repository.createOpeningBalance(draft);setDraft(emptyOpeningBalanceDraft);onSaved('Open Balance saved.');}catch(cause){setError(cause instanceof Error?cause.message:'The Open Balance could not be saved.');}finally{setBusy(false);}}
+  return <View style={styles.form}>
+    <SegmentedChoice label="Balance type" options={[{id:'customer' as FinancialPartyType,label:'Customer owes you'},{id:'supplier' as FinancialPartyType,label:'You owe supplier'}]} selectedId={draft.partyType} onSelect={partyType=>setDraft({...emptyOpeningBalanceDraft,partyType})}/>
+    <SearchableSelect label={`${draft.partyType==='customer'?'Customer':'Supplier'} *`} options={available.map(party=>({id:party.id,label:party.name}))} selectedId={draft.partyId} onSelect={id=>set('partyId',id)} placeholder={`Select ${draft.partyType}`}/>
+    <Field label="Original amount (USD) *" value={draft.amountUsd} onChangeText={value=>set('amountUsd',value)} keyboardType="decimal-pad"/>
+    <DatePickerField label="As-of date *" value={draft.asOfDate} onChange={value=>set('asOfDate',value)} maxDate={todayIso()}/>
+    <Field label="Paper reference" value={draft.reference} onChangeText={value=>set('reference',value)}/>
+    <Field label="Notes" value={draft.notes} onChangeText={value=>set('notes',value)} multiline/>
+    {error?<Notice kind="error">{error}</Notice>:null}
+    <AppButton label="Save Open Balance" tone="navy" busy={busy} onPress={()=>void save()}/>
+  </View>;
 }
 
 // The project-scoped, read-only review lives in its own screen file with its own stylesheet so it
-// cannot restyle the customer, supplier, and control-center views above. It is re-exported here so
-// the Project Command Center's existing import path and navigation contract stay unchanged.
+// cannot restyle the account views above. It is re-exported here so the Project Command Center's
+// existing import path and navigation contract stay unchanged.
 export {ProjectFinancialReview} from './ProjectFinancialReviewScreen';
 
-function FinanceTargetRow({target,onPress}:{target:FinancialTarget;onPress:()=>void}){return <TouchableOpacity activeOpacity={.68} style={styles.financeTarget} onPress={onPress} accessibilityRole="button" accessibilityLabel={`${target.reference}, remaining $${target.remainingUsd.toFixed(2)}, ${target.status}`} accessibilityHint="Opens this record to review or record a payment"><View style={styles.row}><View style={styles.flex}><Text style={styles.targetReference}>{target.reference}</Text><Text style={styles.helper}>{target.recordDate.slice(0,10)}{target.itemName?` · ${target.itemName}`:''}</Text>{target.quantity!=null?<Text style={styles.quantity}>{target.quantity.toFixed(3)} {target.unitSymbol}</Text>:null}</View><View style={styles.targetRight}><Text style={styles.targetMoney}>${target.remainingUsd.toFixed(2)}</Text><Text style={[styles.statusPill,target.status==='Paid'&&styles.statusPaid,target.status==='Partially Paid'&&styles.statusPartial]}>{target.status}</Text></View></View><Text style={styles.helper}>Paid ${target.paidUsd.toFixed(2)} of ${target.totalUsd.toFixed(2)} · {target.payments.length} payment event{target.payments.length===1?'':'s'}</Text></TouchableOpacity>}
-function MiniMoney({label,value}:{label:string;value:number}){return <View accessibilityRole="text" accessibilityLabel={`${label} $${value.toFixed(2)}`}><Text style={styles.miniMoney}>${value.toFixed(2)}</Text><Text style={styles.miniLabel}>{label}</Text></View>}
-const targetLabel=(type:FinancialTarget['type'])=>type==='load'?'Load receipt':type==='quarryPurchase'?'Supplier Load':type==='fuelDelivery'?'Fuel Delivery':'Opening balance';
-function Header({title,eyebrow,onBack}:{title:string;eyebrow:string;onBack:()=>void}){return <View style={styles.header}><TouchableOpacity style={styles.back} onPress={onBack} accessibilityRole="button" accessibilityLabel="Back"><Text style={styles.backText}>Back</Text></TouchableOpacity><View style={styles.flex}><Text style={styles.eyebrow}>{eyebrow}</Text><Text style={styles.title}>{title}</Text></View></View>;}
-function Field({label,...props}:{label:string;value:string;onChangeText:(v:string)=>void;placeholder?:string;multiline?:boolean;keyboardType?:'default'|'decimal-pad'}){return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput style={[styles.input,props.multiline&&styles.multiline]} placeholderTextColor="#89939B" accessibilityLabel={label} {...props}/></View>;}
-function MoneyRow({label,value,strong=false}:{label:string;value:number;strong?:boolean}){return <View style={styles.row} accessibilityRole="text" accessibilityLabel={`${label} $${value.toFixed(2)}`}><Text style={styles.helper}>{label}</Text><Text style={[styles.money,strong&&styles.moneyStrong]}>${value.toFixed(2)}</Text></View>;}
-function Chip({label,selected,onPress}:{label:string;selected:boolean;onPress:()=>void}){return <TouchableOpacity style={[styles.chip,selected&&styles.chipSelected]} onPress={onPress} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{selected}}><Text style={[styles.chipText,selected&&styles.chipTextSelected]}>{label}</Text></TouchableOpacity>;}
-function Summary({label,value}:{label:string;value:string}){const visibleLabel=label==='Received this month'?'Received in current scope':label==='Paid this month'?'Paid in current scope':label;return <View style={styles.summaryBox} accessibilityRole="text" accessibilityLabel={`${visibleLabel} ${value}`}><Text style={styles.summaryValue}>{value}</Text><Text style={styles.helper}>{visibleLabel}</Text></View>;}
-const styles=StyleSheet.create({loading:{flex:1,alignItems:'center',justifyContent:'center'},content:{padding:20,paddingBottom:42,gap:15},header:{flexDirection:'row',alignItems:'center',gap:14},back:{minHeight:48,minWidth:48,backgroundColor:colors.surface,paddingHorizontal:14,borderRadius:10,justifyContent:'center',alignItems:'center'},backText:{color:colors.ink,fontWeight:'800'},eyebrow:{color:colors.brand,fontSize:11,fontWeight:'900',letterSpacing:1.3},title:{color:colors.ink,fontSize:27,fontWeight:'900'},helper:{color:colors.muted,fontSize:12,lineHeight:18},flex:{flex:1},card:{backgroundColor:colors.surface,borderRadius:15,padding:16,gap:11},cardTitle:{color:colors.ink,fontSize:17,fontWeight:'900'},primary:{minHeight:48,backgroundColor:colors.brand,borderRadius:12,padding:14,alignItems:'center',justifyContent:'center'},primaryText:{color:'#FFF',fontWeight:'900'},dark:{minHeight:48,backgroundColor:colors.ink,borderRadius:11,padding:14,alignItems:'center',justifyContent:'center'},darkText:{color:'#FFF',fontWeight:'900'},field:{gap:6},label:{color:colors.ink,fontWeight:'800',fontSize:13},input:{minHeight:48,borderWidth:1,borderColor:colors.line,borderRadius:10,padding:12,color:colors.ink,backgroundColor:'#FCFBF8'},multiline:{minHeight:70,textAlignVertical:'top'},chips:{flexDirection:'row',flexWrap:'wrap',gap:8},chip:{minHeight:48,flexGrow:1,borderWidth:1,borderColor:colors.line,borderRadius:10,padding:10,alignItems:'center',justifyContent:'center'},chipSelected:{borderColor:colors.brand,backgroundColor:'#FBE9E4'},chipText:{color:colors.muted,fontWeight:'800',fontSize:12},chipTextSelected:{color:colors.brandDark},row:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},money:{color:colors.ink,fontWeight:'800'},moneyStrong:{fontSize:19},status:{alignSelf:'flex-start',backgroundColor:'#EEEAE2',paddingHorizontal:10,paddingVertical:6,borderRadius:14,color:colors.brandDark,fontWeight:'900'},summary:{flexDirection:'row',gap:10},summaryBox:{flex:1,minWidth:'45%',backgroundColor:colors.surface,borderRadius:13,padding:14,borderTopWidth:3,borderTopColor:colors.navy},summaryValue:{color:colors.ink,fontSize:20,fontWeight:'900'},sectionTitle:{color:colors.ink,fontSize:19,fontWeight:'900'},target:{backgroundColor:colors.surface,borderRadius:14,padding:15,gap:8},targetMoney:{color:colors.brandDark,fontSize:18,fontWeight:'900'},statusSmall:{color:colors.brandDark,fontWeight:'900',fontSize:12},payment:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.line,paddingTop:10,gap:4},paymentAmount:{color:colors.ink,fontSize:17,fontWeight:'900'},paymentStatus:{color:colors.success,fontWeight:'900'},cancelled:{color:colors.danger},cancelText:{color:colors.danger,fontSize:12},cancelAction:{color:colors.danger,fontWeight:'900'},cancelActionWrap:{minHeight:48,justifyContent:'center',alignSelf:'flex-start'},error:{color:colors.danger,backgroundColor:'#FCE8E6',padding:12,borderRadius:10,fontWeight:'700'},success:{color:colors.success,backgroundColor:'#E5F3EC',padding:12,borderRadius:10,fontWeight:'700'},financeSummaryGrid:{flexDirection:'row',flexWrap:'wrap',gap:10},filterCard:{backgroundColor:colors.surface,borderRadius:15,padding:15,gap:13},dateRow:{flexDirection:'row',gap:9},financeSection:{backgroundColor:colors.surface,borderRadius:15,overflow:'hidden',borderWidth:1,borderColor:colors.line},attentionSection:{borderColor:colors.warning,backgroundColor:'#FFF3D8'},financeSectionHeader:{minHeight:48,padding:15,flexDirection:'row',alignItems:'center',gap:12},financeSectionTitle:{color:colors.ink,fontSize:17,fontWeight:'900'},attentionTitle:{color:colors.warning,fontSize:17,fontWeight:'900'},expandMark:{color:colors.brandDark,fontSize:25,fontWeight:'700',minWidth:24,textAlign:'center'},financeRecords:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.line},emptyFinance:{color:colors.muted,padding:15,textAlign:'center'},projectFinance:{backgroundColor:colors.surface,borderRadius:15,overflow:'hidden',borderLeftWidth:4,borderLeftColor:colors.navy},projectFinanceHeader:{minHeight:48,padding:15,flexDirection:'row',alignItems:'center',gap:10},projectFinanceTitle:{color:colors.ink,fontSize:17,fontWeight:'900',flex:1},projectStatus:{color:colors.success,textTransform:'capitalize',fontSize:11,fontWeight:'900',backgroundColor:'#E5F3EC',paddingHorizontal:8,paddingVertical:4,borderRadius:12},projectMoneyGrid:{flexDirection:'row',justifyContent:'space-between',gap:10,marginVertical:10},miniMoney:{color:colors.ink,fontWeight:'900',fontSize:14},miniLabel:{color:colors.muted,fontSize:10,marginTop:2},financeTarget:{minHeight:48,padding:14,gap:6,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.line,backgroundColor:'#FFFEFC'},targetReference:{color:colors.ink,fontWeight:'900',fontSize:15},quantity:{color:colors.brandDark,fontSize:12,fontWeight:'800',marginTop:3},targetRight:{alignItems:'flex-end',gap:5},statusPill:{color:colors.danger,backgroundColor:'#FCE8E6',paddingHorizontal:8,paddingVertical:4,borderRadius:12,fontSize:10,fontWeight:'900'},statusPaid:{color:colors.success,backgroundColor:'#E5F3EC'},statusPartial:{color:colors.warning,backgroundColor:'#FFF3D8'},countBadge:{color:colors.brandDark,fontWeight:'900',backgroundColor:'#E8F3FB',paddingHorizontal:10,paddingVertical:5,borderRadius:14},hubTabs:{flexDirection:'row',flexWrap:'wrap',gap:7},hubTab:{minHeight:48,flexGrow:1,borderWidth:1,borderColor:colors.line,borderRadius:10,paddingHorizontal:10,paddingVertical:9,alignItems:'center',justifyContent:'center',backgroundColor:colors.surface},hubTabSelected:{backgroundColor:colors.navy,borderColor:colors.navy},hubTabText:{color:colors.muted,fontSize:11,fontWeight:'900'},hubTabTextSelected:{color:'#FFF'},hubPartyCard:{minHeight:48,backgroundColor:colors.surface,borderRadius:15,padding:15,gap:9,borderLeftWidth:4,borderLeftColor:colors.navy},hubPartyMoney:{flexDirection:'row',justifyContent:'space-between',gap:9},openHint:{color:colors.brandDark,fontSize:11,fontWeight:'900'},attentionShortcut:{minHeight:48,backgroundColor:'#FFF3D8',borderRadius:14,padding:15,borderLeftWidth:4,borderLeftColor:colors.warning,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},activityRow:{minHeight:48,backgroundColor:colors.surface,borderRadius:14,padding:14,gap:5,borderLeftWidth:4,borderLeftColor:colors.navy},activityAmount:{color:colors.brandDark,fontSize:16,fontWeight:'900'}});
+const styles=StyleSheet.create({
+  pressed:{backgroundColor:'#F7F4EE'},
+  state:{flex:1,alignItems:'center',justifyContent:'center',gap:12,padding:24},
+  stateTitle:{color:colors.ink,fontSize:19,fontWeight:'800',textAlign:'center'},
+  stateBody:{color:BODY_TEXT,fontSize:14,lineHeight:20,textAlign:'center',maxWidth:320},
+  stateActions:{alignSelf:'stretch',gap:10},
+  searchBar:{flexDirection:'row',alignItems:'center',minHeight:52,backgroundColor:colors.surface,borderRadius:14,borderWidth:1,borderColor:CARD_BORDER,paddingLeft:14},
+  searchInput:{flex:1,color:colors.ink,fontSize:15,paddingVertical:12},
+  clear:{minWidth:48,minHeight:48,alignItems:'center',justifyContent:'center'},clearText:{color:BODY_TEXT,fontSize:22,fontWeight:'700'},
+  filterChip:{alignSelf:'flex-start',minHeight:44,paddingHorizontal:14,borderRadius:22,borderWidth:1,borderColor:CARD_BORDER,backgroundColor:colors.surface,justifyContent:'center'},
+  filterChipOn:{backgroundColor:colors.navy,borderColor:colors.navy},
+  filterChipText:{color:colors.ink,fontWeight:'600',fontSize:13},filterChipTextOn:{color:'#FFF8ED'},
+  listHead:{flexDirection:'row',alignItems:'baseline',justifyContent:'space-between',marginTop:4},
+  listTitle:{color:colors.ink,fontSize:18,fontWeight:'800'},
+  stack:{gap:10},
+  accountCard:{backgroundColor:colors.surface,borderRadius:14,borderWidth:1,borderColor:CARD_BORDER,padding:14,gap:10,shadowColor:'#17212B',shadowOpacity:.06,shadowRadius:5,shadowOffset:{width:0,height:2},elevation:1},
+  accountTop:{flexDirection:'row',alignItems:'flex-start',gap:12},
+  accountName:{color:colors.ink,fontSize:16,lineHeight:21,fontWeight:'700'},
+  accountRight:{alignItems:'flex-end',flexShrink:0,maxWidth:'48%'},
+  accountBalance:{color:colors.navy,fontSize:18,fontWeight:'800',fontVariant:['tabular-nums']},
+  accountSettled:{color:'#1F6446'},
+  accountBottom:{flexDirection:'row',flexWrap:'wrap',columnGap:14,rowGap:2,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.line,paddingTop:8},
+  strong:{color:colors.ink,fontWeight:'700',fontVariant:['tabular-nums']},
+  balanceCard:{backgroundColor:colors.surface,borderRadius:16,borderWidth:1,borderColor:CARD_BORDER,padding:16,gap:8},
+  balanceLabel:{color:BODY_TEXT,fontSize:13,fontWeight:'700'},
+  balanceValue:{color:colors.navy,fontSize:30,fontWeight:'800',fontVariant:['tabular-nums']},
+  cancelBox:{gap:10,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.line,paddingTop:10},
+  link:{minHeight:44,justifyContent:'center',alignSelf:'flex-start'},
+  linkText:{color:colors.danger,fontWeight:'700',fontSize:13},
+  legacy:{flexDirection:'row',alignItems:'center',gap:12,backgroundColor:colors.surface,borderRadius:12,borderWidth:1,borderColor:'#E3DBCD',padding:12,minHeight:56},
+  strongLine:{color:colors.ink,fontSize:15,fontWeight:'700',fontVariant:['tabular-nums']},
+  struck:{textDecorationLine:'line-through',color:colors.muted},
+  cancelledCard:{backgroundColor:colors.surface,borderRadius:12,borderWidth:1,borderColor:'#EFD3CF',padding:12,gap:6},
+  event:{flexDirection:'row',gap:12,paddingVertical:8,paddingHorizontal:4,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.line},
+  eventDate:{color:colors.navy,fontSize:12,fontWeight:'700',width:84,fontVariant:['tabular-nums']},
+  eventText:{color:colors.ink,fontSize:13,lineHeight:18},
+  form:{gap:12,padding:4},
+});

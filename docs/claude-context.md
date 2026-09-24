@@ -565,6 +565,191 @@ values on its next save.
   Unassigned fills were visible and inspectable, and the signed APK was
   confirmed working. Build 19 is now the accepted internal artifact.
 
+## Wall Construction consumption improvements — feature branch, not released (2026-09-17)
+
+- **Branch** `feature/android-wall-consumption-improvements`, developed in the
+  separate worktree `C:\Users\fakih\Desktop\Dromex\DROMEX-wall-worktree` so the
+  web authentication work in the main checkout was never touched. Not merged,
+  no APK, release metadata unchanged (still 0.16.0 / build 19).
+- **Decisions** DEC-450 to DEC-456 (numbered above the web branch's
+  in-progress DEC-434 to DEC-444 to avoid a collision when the branches meet).
+- **Database versions 37 and 38** (DEC-454, DEC-456): `wall_concrete_purposes` table and
+  nullable saved-purpose, correction, and volume-calculation columns on
+  `wall_consumptions` (migration 37's area columns remain unused).
+  Structure-only; no existing row is changed. Backups carry the new data
+  automatically because they serialize the whole SQLite database.
+- **Volume calculation** (DEC-455, superseding DEC-450's covered area during
+  Expo device testing): optional for Stone and Ready Mix, the section 1 inputs
+  and `calculateWallVolume` without allowance; the net volume fills the
+  consumed quantity, which stays editable; the snapshot is stored with the
+  record; an uncalculated quantity reads "Entered directly".
+- **Saved purposes** (DEC-451): normalized, case-insensitive unique against
+  saved and built-in purposes, label snapshotted on each record, no rename or
+  delete.
+- **Corrections** (DEC-452): `WallRepository.correctConsumption` corrects in
+  place with a required reason and a before/after `correction_history_json`
+  trail; the wall and project are not correctable.
+- **Daily Report** (DEC-453): `ProjectReportRepository.listLinkedWallWork` links
+  by project and `used_on` = work date and is read at generation time like every
+  other linked section. Editor section `08 Wall Construction` (later sections
+  renumbered 09–13), PDF section `Wall construction that day`, and a
+  `Wall Construction` workbook sheet share `describeWallConsumptionQuantity`, so
+  the three cannot disagree.
+- **Wall diagram and layers** (DEC-457, DEC-458, migration 39): `src/domain/wallDiagram.ts`
+  builds a deterministic element model; `wallDiagramToSvg` serializes it for the PDF and
+  `WallDiagramView` renders the same model with `react-native-svg` on the phone. Layers are
+  optional, ordered by phase, validated against the wall thickness within 5 mm, and never
+  auto-adjusted. No generated imagery, no stored bitmap, no external reference.
+- **Base and curing** (DEC-459, DEC-460, migration 40, refined by DEC-463): `src/domain/wallBase.ts`
+  holds the lifecycle (planned, constructed, curing, cured) and the shared base volume.
+  `SqliteWallRepository.assertWallHasBase` gates `addConsumption` and `saveLayers` on **a base
+  existing**, nothing more — `walls.base_required` is 0 for every wall that existed before
+  migration 40, so legacy walls stay usable with no invented base. **Curing itself never gates
+  wall work** (DEC-463): `describeWallStageLock`'s `locked` is true only when a required base is
+  missing, `validateWallWorkDate` no longer refuses a date for curing chronology, and
+  `describeWallWorkDateNotice` gives a purely informational note instead. Reverting a cured base to
+  curing, and correcting its curing/cured dates, never touch existing wall records. Daily Reports
+  show base events on their own date and the stage reached by that date, never a later one, plus a
+  concise "Base curing not confirmed on this work date" note beside any wall material recorded
+  before the base reached cured — the material is never hidden.
+- **Composite foundation model** (DEC-461, DEC-462): `src/domain/wallFoundation.ts` holds the
+  Stone-core/estimated-concrete math (aggregate active quantity, capacity refusal, variance,
+  Simple/Detailed geometry validation); `src/domain/wallFoundationDiagram.ts` draws the Stone core
+  inside the outer foundation boundary, reusing `wallDiagramToSvg` for serialization, and exposes
+  `foundationDiagramDragBounds`/`viewBoxPointFromTouch`/`stoneCorePositionFromViewBoxPoint` for the
+  Simple-mode drag gesture (DEC-464). `SqliteWallRepository` addresses composition directly by
+  `foundationId` (`getFoundationComposition`, `setFoundationMode`,
+  `saveStoneCorePosition`/`saveStoneCoreOffsets`, `addFoundationCompositionRecord` /
+  `cancelFoundationCompositionRecord` / `correctFoundationCompositionRecord`) against
+  `foundation_composition_records`, and revalidates active Stone against the net volume whenever
+  `correctFoundation` changes a foundation's own geometry.
+- **Project → Construction Section → Foundation → Wall** (DEC-464, DEC-465, migration 42):
+  `src/domain/constructionSections.ts` and `src/domain/foundations.ts` add the two new entities;
+  `foundations` reuses `wallBase.ts`'s shared volume/status functions (narrowed to `Pick`/`Omit`
+  types so both the legacy per-wall base and the new independent Foundation satisfy them without
+  duplicating the logic). `walls.foundationId` (nullable, unique where set) replaces the old
+  1:1 base-per-wall relationship for anything created after this phase; `wall_bases`/
+  `wall_base_composition_records` are **never dropped or renamed** by migration 42 — see its own
+  comment for why (migrations 37-41's own tests replay against an already-current database,
+  relying on those two tables always being safe to recreate with `IF NOT EXISTS`). The UI:
+  `WallConstructionScreen.tsx` is now a Section/Foundation directory (plus an untouched "Legacy
+  walls" area for `base_required = 0` walls), `FoundationWorkspaceScreen.tsx` is the five-stage
+  workspace (`FoundationStageStepper.tsx`, `FoundationGeometryForm.tsx`,
+  `FoundationCuringPanel.tsx`), and `FoundationDiagramView.tsx` gained a real `PanResponder` drag
+  for the Simple-mode Stone core, committed once per gesture on release. The Daily Report PDF and
+  workbook now group by Construction Section → Foundation → linked wall/activity
+  (`LinkedFoundationActivity` for a foundation with no wall linked yet).
+- **Cyclopean lift model** (DEC-466, migration 43, commits `a7ec062`, `7581799`, `5894039`): a
+  foundation or wall is built as an ordered series of lifts — place Stone, then pour the concrete
+  matrix around that same Stone — in `src/domain/wallCyclopeanLift.ts`, persisted one row per
+  aggregate in `cyclopean_lifts` so a concrete phase can never pair with the wrong lift. The
+  separated workflow screens sit under `FoundationConstructionNavigator.tsx`, and
+  `src/domain/cyclopeanLiftDiagram.ts` draws one lift, a whole parent's stack, or a combined
+  foundation + wall, with real finger dragging of the Stone region in Simple and Detailed modes.
+- **Cyclopean construction in the Daily Report** (DEC-467): `src/domain/cyclopeanLiftReport.ts`
+  projects each lift back to the report's own work date — a later Stone placement, concrete pour or
+  correction is removed rather than blanked, a concrete phase is always dropped when its Stone phase
+  is not yet visible, and status/totals are then re-derived with Phase 1's own `deriveLiftStatus`
+  and `reconcileLifts`, so the report holds no arithmetic of its own. The PDF gains
+  `Foundation Cyclopean Lifts` and `Wall Cyclopean Lifts` groups inside the existing
+  `Wall construction that day` section, each lift carrying its own Phase 4 figure; the workbook gains
+  a `Cyclopean Lifts` sheet (numeric cells, frozen filterable header, empty is never written as
+  zero). Curing stays informational, and a pre-lift foundation keeps its
+  `Imported legacy composite stage` block with nothing invented for it.
+- **Foundation records capacity, not consumption** (DEC-468, migration 44): found during Phase 6
+  device testing — a `planned` foundation could not be saved without claiming a consumed quantity,
+  because `foundations.quantity` was `NOT NULL CHECK (quantity > 0)`, and the form additionally
+  validated a *substituted* calculated volume so Save looked enabled while the repository refused the
+  real `null`. Migration 44 rebuilds only `foundations` so `material_type`/`quantity`/`quantity_unit`
+  are nullable and all-or-nothing (enforced by a table CHECK); the material selector, consumed
+  quantity, unit, purpose, consumption date, manual override and "Use Calculated" are removed from the
+  Foundation screens; the result is labelled **Structural envelope volume**; and actual Stone and
+  concrete are recorded only through Cyclopean Lift phases. An existing populated record survives
+  untouched and is shown read-only as **Legacy foundation material record**.
+- **Nine device-testing corrections** (DEC-469): found by the Owner using the workflow on a real
+  phone, all invisible to typecheck and the automated suite. Stone was drawn at ~11% of the envelope
+  area instead of its true volume share (both axes now scale by `sqrt(ratio)`); poured concrete lost
+  its hatch so colour alone distinguished it; the Stone editor showed a stale estimated concrete
+  (9 m³ beside 4.5 m³ of Stone in a 9 m³ lift); Detailed-mode offsets could not accept a decimal at
+  all and lagged while typing; Back could not return from the Concrete Matrix to the Stone phase
+  (replaced by the unit-tested `ui/navigation/foundationViewStack.ts` history stack); History was
+  permanently empty because it read only corrections; and `correctLift` had no UI entry point at all,
+  which is why no correction could ever be written. Plus the Owner's wording change
+  ("Cyclopean Lifts" → "Lifts" in-app) and an explanation of the Structural capacity figures.
+- **Verification**: typecheck clean and the complete Vitest suite green — **1172 tests across 82
+  files** after DEC-475. The React Native screens are verified by typecheck and source-contract tests
+  plus the Owner's own Expo Go session, which confirmed the DEC-468 foundation fix and the
+  Stone → Concrete flow end to end. The Owner confirmed the DEC-469 fixes, the
+  DEC-473 rename, migration 45, the DEC-474 Foundation structural-envelope diagram and the corrected
+  PDF wording in an Expo Go session on 2026-09-19, including that existing Lift records survived the
+  `cyclopean_lifts` → `construction_lifts` rename. **That acceptance covers Expo Go only. No APK has
+  been built or installed, so upgrade-install behaviour against the Owner's real on-phone database is
+  still unverified — Expo Go uses its own separate database.**
+
+## People roles, directories, supervisors and totals — feature branch, not released (2026-09-23)
+
+- **Branch** `feature/android-people-directories-supervisors-totals`, created from the synchronized
+  build-20 commit `0dc768b` in `C:\Users\fakih\Desktop\Dromex\DROMEX-wall-worktree`. Not merged, no APK,
+  release metadata unchanged (still 0.17.0 / build 20).
+- **Decisions** DEC-476 to DEC-481; open questions OQ-166 and OQ-167.
+- **Database version 46** (one forward-only step; 1–45 untouched):
+  - `driver_profiles` is the unified People table (legacy name kept so every foreign key stays valid) with
+    `person_role`, `job_title`, `legacy_worker_id`, `role_history_json`; `worker_profiles` rows are moved
+    in, verified, then the table is dropped. Idempotent and completes an interrupted run.
+  - `loads.driver_role` (NULL on older receipts, displayed as Driver).
+  - `daily_project_reports.operators_json`, `custom_resources_json`, `supervisor_signoffs_json`.
+  - `custom_directories`, `custom_directory_entries`, `supervisors` (unique normalized-name indexes).
+  - No normalization runs inside the migration, so none had to be frozen.
+- **New modules**: domain `people`, `customDirectories`, `supervisors`, `supplierLoadGroups`,
+  `projectTotals`; repositories `SqliteCustomDirectoryRepository`, `SqliteSupervisorRepository`,
+  `SqliteProjectTotalsRepository` (People lives on `LoadRepository`: `listPeople`, `createPerson`,
+  `updatePerson`, `setPersonActive`); PDF sections in `services/dailyReportSectionsTemplate.ts`;
+  screens `CustomDirectoriesScreen`, `SupervisorsScreen`, `ProjectTotalsScreen`; shared components
+  `FocusedSheet`, `SegmentedChoice`, `PeopleDirectory`, `CustomResourcePicker`, `SupervisorSignoffPicker`.
+- **Signatures** are stroke JSON in the database (never files): backups carry them automatically; the sync
+  queue and any cloud row never carry them (`cloudSafeRow`); every stroke is validated on save and print.
+- **Totals** aggregate in SQL; delivered and used never combine; units never convert; construction sources
+  never add to each other or to Daily Report use (no record links them).
+- **Workbook**: new sheets (`Custom Resources`, `Supervisor Sign-off`, `Supplier Load Subtotals`) are
+  appended after Photos so every earlier sheet keeps its position.
+- **Tests**: 98 files, 1,349 tests green; typecheck clean. Physical Expo acceptance pending.
+- **Known limitations**: Waste and Supplier Load driver pickers remain Drivers-only (OQ-166); the financial
+  Receipt still does not print the person (OQ-167); the dormant cloud sync schema was not extended to the new
+  tables (their outbox entries would be reported as unsupported types, as consulting agencies already are);
+  the deprecated, unrouted `DriversTrucksScreen` was only adjusted to compile.
+
+## Release — DROMEX 0.19.0, Android build 22 (2026-09-24)
+
+- **Build 22 — 0.19.0**, three commits on `feature/android-payment-and-balances-redesign`, created from
+  the build-21 commit `d9c3e7f` in `C:\Users\fakih\Desktop\Dromex\DROMEX-wall-worktree`. Not merged into
+  `main`.
+  - `7ff538a` — Projects list, Project Totals, Project Command Center action cards and Project Financial
+    Review redesign (DEC-484, presentation only; `feature/android-project-list-and-totals-redesign` points
+    here). Verified on its own before committing: typecheck clean, 102 files / 1,384 tests green.
+  - `569915a` — account payments, Apply unallocated payment, Open Balance cancellation and the Payments &
+    Balances account statement (DEC-482, DEC-483, DEC-485, DEC-486), **database version 47**.
+  - `c47b058` — release metadata: 0.18.0 → 0.19.0, versionCode 21 → 22 in `package.json`, `app.json`,
+    `src/appVersion.ts` and `CLAUDE.md`.
+- **Database version 47** (one forward-only step; 1–46 untouched): `opening_balances` gains `status`
+  (Active/Cancelled, default Active), `cancellation_reason`, `cancelled_at`, `status_before_cancellation`;
+  new `account_payments` table; `payment_entries.account_payment_id` (NULL for every existing payment).
+  No existing row changes meaning. Backups carry the new data automatically; `opening_balances` and
+  `account_payments` were added to the backup record counts, and `account_payments` to the dormant sync
+  table order (rank 35, before `payment_entries`).
+- **Tests**: 106 files, 1,435 tests green; typecheck clean. Each feature was physically tested in Expo Go
+  and approved by the Owner before committing.
+- **EAS build**: `c334e581-1fba-4be4-a9b7-abad44c3015c`, built from commit `c47b058` with eas-cli 24.7.0;
+  profile `preview`, APK, account `drofk12`. Remote credentials reused unchanged
+  (`Using Keystore from configuration: Build Credentials wtQXwzktVi (default)`), so it installs in place.
+- **Artifact**: `output/DROMEX-0.19.0-build22.apk`, 83,556,498 bytes (~80 MB). SHA-256:
+  `1b21d35146f7da3efc44d334369574a043bf31fce172fdc7d1ed011ecc0b1283`. Ignored by `output/*.apk` and
+  untracked (DEC-396); builds 13, 20 and 21 in `output/` are untouched.
+- **Physically verified.** The Owner installed build 22 in place on their phone and confirmed it installed
+  and works. Build 22 is now the accepted internal artifact; build 20 stays the previous accepted installer.
+  Build 21 was a preview that was never separately accepted and is superseded by build 22.
+- **Known follow-up**: the workbook's supplier Total Billed still excludes supplier Open Balances (predates
+  DEC-482, recorded in DEC-486 and the SRS).
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:
