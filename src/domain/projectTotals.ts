@@ -101,6 +101,23 @@ export function buildItemLedger(data: ProjectTotalsData, filters: ProjectTotalsF
     .sort((a, b) => byLabel(a.itemName, b.itemName) || a.itemKey.localeCompare(b.itemKey));
 }
 
+/**
+ * An item's delivery sources as the drill-down lists them: outside suppliers first, then the company's
+ * own receipt loads as one separate row. Together they account for the item's whole Delivered total;
+ * the company row is not presented as a supplier.
+ */
+export function splitItemSources(item: ItemLedgerEntry): { suppliers: ItemLedgerSupplier[]; company: ItemLedgerSupplier | null } {
+  return {
+    suppliers: item.suppliers.filter((value) => value.source === 'supplier_delivery'),
+    company: item.suppliers.find((value) => value.source === 'company_delivery') ?? null,
+  };
+}
+
+/** How many filters currently narrow the totals; a From/To range counts once. */
+export function countActiveTotalsFilters(filters: ProjectTotalsFilters): number {
+  return [filters.fromDate || filters.toDate, filters.itemKey, filters.supplierKey, filters.unitKey, filters.view !== 'all'].filter(Boolean).length;
+}
+
 export type FuelSummary = { fuelType: FuelType; litres: number; recordCount: number; equipment: { equipmentName: string; litres: number; recordCount: number }[] };
 
 export function summarizeFuel(rows: readonly FuelTotal[]): FuelSummary[] {

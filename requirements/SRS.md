@@ -2152,3 +2152,26 @@ DEC-476 to DEC-481. Not released; no APK built. Physical acceptance pending.
 
 ### Status
 Implemented with automated tests (98 files, 1,349+ tests green, typecheck clean). Not yet accepted on a physical device.
+
+## Projects List, Project Totals and Project Screens Redesign
+
+DEC-484. Presentation only: no calculation, schema, record, backup, sync, PDF or Excel behaviour changes. Physical acceptance pending.
+
+### Projects list
+- FR-PL-1: A project card shall show only the project name, its status in words (Active or Completed), its location, its start date, and the date of its latest recorded work when one exists. A missing start date or location shall read *not recorded*; a missing last activity shall not be shown.
+- FR-PL-2: Last activity shall be the latest effective date among Active loads, Active supplier loads, daily reports (work date), Active equipment fuel fills, Active waste dumps (work date), project issues and project photos. Schedule plans and wall or pavement edits shall never count. It shall be read-only and derived; nothing is stored.
+- FR-PL-3: The card shall have one tap target that opens the Project Command Center and one Manage control whose sheet offers Edit information, Change start date and Mark completed / Reactivate project, preserving every existing rule of those actions.
+- FR-PL-4: Loading, load failure with retry, empty and no-match states shall be explicit; long and Arabic names shall wrap without forced left alignment.
+
+### Project Totals presentation
+- FR-PT-7: Each item shall be its own card showing its whole-project Delivered and Used per unit in two separately labelled boxes; an absent measure reads *Not recorded* in its unit.
+- FR-PT-8: `+` shall open and `×` close an item's sources, listing suppliers first and the company's own deliveries last, labelled as own loads and not a supplier. A source shall open a focused view of its delivered totals and contributing records, stating that use is not recorded per supplier.
+- FR-PT-9: Date, item, supplier, unit and Delivered / Used filters shall sit behind one closed-by-default control that names the covered period and the number of active filters.
+
+### Project Command Center and Project Financial Review
+- FR-PS-1: Project Command Center actions shall be separate bordered cards with no coloured side stripe and no ordinal number.
+- FR-PS-2: Project Financial Review's Customer Revenue, Supplier Payables and Project Costs, and each supplier, shall be separate `+` / `×` cards, closed by default, with the headline figure visible when closed. Billed, Paid, Outstanding and cost shall each have their own quiet box colour and a written label.
+
+### Status
+Implemented with automated tests. Not yet accepted on a physical device.
+

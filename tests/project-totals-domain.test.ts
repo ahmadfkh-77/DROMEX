@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 
 import {
-  buildItemLedger,describeTotalsRange,emptyTotalsFilters,formatTotalQuantity,summarizeConstruction,summarizeFuel,totalsFilterChoices,validateTotalsFilters,
+  buildItemLedger,countActiveTotalsFilters,describeTotalsRange,emptyTotalsFilters,formatTotalQuantity,splitItemSources,summarizeConstruction,summarizeFuel,totalsFilterChoices,validateTotalsFilters,
   type ProjectTotalsData,
 } from '../src/domain/projectTotals';
 
@@ -123,5 +123,39 @@ describe('filters and wording',()=>{
     expect(formatTotalQuantity(1.23456,'m³')).toBe('1.235 m³');
     expect(formatTotalQuantity(.0004,'t')).toBe('0.00040 t');
     expect(formatTotalQuantity(-3,'t')).toBe('-3 t');
+  });
+});
+
+describe('item sources for the item -> supplier drill-down',()=>{
+  const ledger=buildItemLedger(data,emptyTotalsFilters());
+  const sand=ledger.find(item=>item.itemKey==='id:sand')!;
+  it('lists outside suppliers apart from the company\'s own deliveries',()=>{
+    const sources=splitItemSources(sand);
+    expect(sources.suppliers.map(value=>value.supplierName)).toEqual(['Alpha Quarry','Beta Quarry']);
+    expect(sources.company).toMatchObject({supplierKey:'company',units:[{unitKey:'unit_ton',quantity:10,recordCount:1}]});
+  });
+  it('accounts for the whole delivered total per unit: suppliers plus company deliveries',()=>{
+    const {suppliers,company}=splitItemSources(sand);
+    const tonnes=[...suppliers,...(company?[company]:[])].flatMap(value=>value.units).filter(unit=>unit.unitKey==='unit_ton').map(unit=>unit.quantity);
+    expect(tonnes.reduce((sum,value)=>sum+value,0)).toBe(sand.units.find(unit=>unit.unitKey==='unit_ton')!.delivered!.quantity);
+  });
+  it('shows a single supplier alone and no company row when the company delivered nothing',()=>{
+    const asphalt=splitItemSources(ledger.find(item=>item.itemKey==='id:asphalt')!);
+    expect(asphalt.suppliers.map(value=>value.supplierName)).toEqual(['Alpha Quarry']);
+    expect(asphalt.company).toBeNull();
+  });
+  it('has no source rows for an item that was only recorded as used',()=>{
+    expect(splitItemSources(ledger.find(item=>item.itemKey==='id:cement')!)).toEqual({suppliers:[],company:null});
+  });
+  it('never lists a supplier with no record for this item',()=>{
+    for(const item of ledger)for(const supplier of item.suppliers)expect(supplier.units.every(unit=>unit.recordCount>0)).toBe(true);
+    expect(ledger.find(item=>item.itemKey==='id:asphalt')!.suppliers.some(value=>value.supplierName==='Beta Quarry')).toBe(false);
+  });
+});
+
+describe('filter summary',()=>{
+  it('counts only the filters that narrow the totals, a date range counting once',()=>{
+    expect(countActiveTotalsFilters(emptyTotalsFilters())).toBe(0);
+    expect(countActiveTotalsFilters({...emptyTotalsFilters(),fromDate:'2026-08-01',toDate:'2026-08-31',supplierKey:'id:sup_a',view:'used'})).toBe(3);
   });
 });

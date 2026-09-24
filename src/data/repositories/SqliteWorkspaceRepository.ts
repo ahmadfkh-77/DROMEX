@@ -50,6 +50,21 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository{
     return{project,metrics:{loads:loads?.count??0,netTonnes:Number(loads?.value??0)/1000,dailyReports:reports?.count??0,wasteDumps:waste?.count??0,fuelLitres:Number(fuel?.value??0),quarryPurchases:quarry?.count??0,scheduled:scheduled?.count??0,pavementCalculations:pavement?.count??0,walls:walls?.count??0,openIssues:openIssues?.count??0},activities:activities.map(activity),issues:issues.map(issue),photos:photos.map(photo)};
   }
 
+  async getLastRecordedActivityDates():Promise<Record<string,string>>{
+    // Effective dates, as the rest of the app records them: a report's and a waste dump's work date,
+    // every other record's confirmation or creation instant in local time.
+    const rows=await this.db.getAllAsync<{project_id:string;day:string|null}>(`SELECT project_id,MAX(day) day FROM (
+        SELECT project_id,date(confirmed_at,'localtime') day FROM loads WHERE is_archived=0 AND status='Active'
+        UNION ALL SELECT project_id,date(confirmed_at,'localtime') FROM quarry_purchases WHERE status='Active'
+        UNION ALL SELECT project_id,work_date FROM daily_project_reports
+        UNION ALL SELECT project_id,date(confirmed_at,'localtime') FROM fuel_movements WHERE movement_type='fill' AND status='Active'
+        UNION ALL SELECT project_id,work_date FROM waste_dumps WHERE status='Active'
+        UNION ALL SELECT project_id,date(created_at,'localtime') FROM project_issues
+        UNION ALL SELECT project_id,date(created_at,'localtime') FROM project_media
+      ) WHERE project_id IS NOT NULL AND day IS NOT NULL GROUP BY project_id`);
+    return Object.fromEntries(rows.filter(row=>row.day).map(row=>[row.project_id,row.day as string]));
+  }
+
   async listProjectActivities(projectId:string,fromDate='',toDate=''):Promise<WorkspaceActivity[]>{
     if(fromDate&&toDate&&fromDate>toDate)throw new Error('From date cannot be after To date.');
     const project=await this.db.getFirstAsync<{start_date:string|null;end_date:string|null;created_at:string;updated_at:string;status:Project['status']}>(`SELECT start_date,end_date,created_at,updated_at,status FROM projects WHERE id=? AND is_archived=0`,projectId);if(!project)throw new Error('Project was not found.');const projectStart=project.start_date??project.created_at.slice(0,10),projectEnd=project.status==='completed'?(project.end_date??project.updated_at.slice(0,10)):this.today();if(fromDate&&fromDate<projectStart)throw new Error(`From date cannot be before the project start date (${projectStart}).`);if(toDate&&toDate<projectStart)throw new Error(`To date cannot be before the project start date (${projectStart}).`);if(fromDate&&fromDate>projectEnd)throw new Error(`From date cannot be after the project ${project.status==='completed'?'finish date':'current date'} (${projectEnd}).`);if(toDate&&toDate>projectEnd)throw new Error(`To date cannot be after the project ${project.status==='completed'?'finish date':'current date'} (${projectEnd}).`);
