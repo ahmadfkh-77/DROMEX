@@ -3,7 +3,7 @@ import { twoFactor } from 'better-auth/plugins';
 import type { Pool } from 'pg';
 
 import { hashPassword, verifyPassword } from './hashing.ts';
-import { createPrincipalRepository } from './principal.ts';
+import { createPrincipalRepository, passwordResetInProgress } from './principal.ts';
 import { createRateLimitStorage } from './rate-limit-storage.ts';
 import { generateRecoveryCodes } from './recovery-codes.ts';
 
@@ -349,6 +349,14 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
       },
     },
 
+    // DEC-441 (4): a reset token's verification identifier is stored only as a
+    // SHA-256 hash. The runtime instance issues no reset tokens (its reset
+    // routes are never forwarded); the override is pinned here so that stays
+    // true even if that ever changed. Other identifiers keep their default.
+    verification: {
+      storeIdentifier: { default: 'plain', overrides: { 'reset-password:': 'hashed' } },
+    },
+
     session: {
       expiresIn: SESSION_EXPIRES_IN_SECONDS,
       updateAge: SESSION_UPDATE_AGE_SECONDS,
@@ -401,6 +409,8 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
             if (principal === null || principal.status !== 'active') {
               return false;
             }
+            // DEC-487 (3): no session begins while a password reset is being written.
+            if (await passwordResetInProgress(input.database, session.userId)) return false;
           },
         },
       },

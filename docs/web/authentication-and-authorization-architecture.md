@@ -1725,16 +1725,18 @@ resort, and the single-Owner rule never bent to provide either.
 ## 14A. Transactional email, Admin invitations, and password reset
 
 Status: **approved design (DEC-439 through DEC-442, closing OQ-161,
-2026-09-16); only the provider-neutral email transport foundation is
+2026-09-16); the provider-neutral email transport foundation is
 implemented locally (checkpoint 4A), and Owner-side Admin invitation
-issuance (checkpoint 4B1) and restricted Admin invitation acceptance
-(checkpoint 4B2, DEC-444) are implemented against disposable databases only
-(below); password reset is not. Nothing is production configured or
-physically verified.** No reset route, page, real
-invitation, Resend account, API key, DNS record, or secret file exists, and
-no email has been sent. The rest of the Accounts and Sessions phase (§23) has
-not started. The Owner activation command and the terminal
-recovery command are unchanged and still refuse every run.
+issuance (checkpoint 4B1), restricted Admin invitation acceptance
+(checkpoint 4B2, DEC-444), and password reset with the common-password
+blocklist (checkpoint 4C, DEC-487, DEC-488) are implemented against
+disposable databases only (below). Nothing is production configured or
+physically verified.** No real reset, invitation, account, Resend account,
+API key, DNS record, or secret file exists, and no email has been sent; the
+running server still reads no email configuration (checkpoint 4D). The rest
+of the Accounts and Sessions phase (§23) has not started. The Owner
+activation command and the terminal recovery command are unchanged and still
+refuse every run.
 
 **Owner activation gate (DEC-443).** Closing OQ-161 by design does not
 unblock real Owner activation. The Owner activation command may be enabled
@@ -2413,12 +2415,230 @@ and are not kept.
 - Behaviour under a least-privilege runtime database role is not verified;
   that role is not provisioned.
 
+### Implemented password reset (Phase 2C checkpoint 4C, local development only)
+
+Status: **implemented and locally verified against disposable PostgreSQL
+18.6 databases on exact Node 24.20.0 (DEC-441, DEC-442, DEC-487, DEC-488);
+not production-verified.** Every test identity is
+synthetic, every email goes to the capture transport, and the running server
+still reads no email configuration, so a real deployment would record every
+reset email as `not_sent` (`email_disabled`) until checkpoint 4D. No Owner
+exists; the Owner activation and terminal recovery commands still refuse
+every run. The verification record is in
+[testing-and-production-readiness.md](testing-and-production-readiness.md#phase-2c-password-reset-checkpoint-4c-local-verification).
+
+**Why DROMEX owns the token (DEC-487 (1), (2)).** Better Auth 1.7.4's
+`requestPasswordReset` and `resetPassword` are its only supported way to set
+a password without a session or the current password (its admin plugin is
+excluded by DEC-422, and DEC-431 forbids writing its rows). Its native flow
+issues a 24-character token, never supersedes older ones, knows nothing
+about DROMEX principals, redirects with the token in a query string, and
+deletes sessions only after the update. DROMEX therefore owns the only
+token a user ever sees and uses Better Auth solely for the final write.
+
+| Concern | Where it lives |
+|---|---|
+| Public token, lifecycle, eligibility, limits, audit | `src/password-reset/password-reset.ts`, table `dromex_password_reset` (migration `0010`) |
+| Token (256 bits, labelled SHA-256 `dromex/password-reset/v1`) | `src/password-reset/reset-token.ts` |
+| Reset and password-changed emails | `src/password-reset/reset-email.ts` |
+| Final password write | `src/password-reset/reset-identity.ts`: an unmounted internal Better Auth instance, imported only by the service |
+| Bounded background job queue | `src/password-reset/reset-queue.ts` |
+| HTTP routes | `src/password-reset/reset-http.ts` |
+| Pages | `apps/web/src/password-reset/` (`/forgot-password`, `/reset-password`) |
+| Common-password blocklist | `src/auth/password-policy.ts`, `src/auth/common-passwords.txt`, `tools/derive-common-password-blocklist.ts` |
+
+**Routes.** A ninth route classification, `password-reset`, admits a request
+only with an exact trusted `Origin` (403 otherwise) and never consults a
+session. Every handler requires `application/json` (415) and a body of
+exactly the listed keys (400 `invalid_request`), and every response,
+including a refusal by the guard, carries `Cache-Control: no-store` and
+`Referrer-Policy: no-referrer`.
+
+| Route | Body | Success | Refusals |
+|---|---|---|---|
+| `POST /api/password-reset/request` | `{ email }` (a string) | `202 { "status": "requested" }`, identical for every address | `429 too_many_requests` with `Retry-After`, for the per-network-source limit only |
+| `POST /api/password-reset/inspect` | `{ token }` | `200 { "next": "choose_password" }`; nothing changes | `400 reset_link_invalid`; `429` |
+| `POST /api/password-reset/complete` | `{ token, newPassword }` | `200 { "signInRequired": true }`, the session and challenge cookies expired | `400 reset_link_invalid`; `400 password_rejected` with `reason` `too_short`, `too_long`, or `common`; `500 reset_failed`; `429` |
+
+Better Auth's own `/request-password-reset`, `/reset-password`, and
+`/reset-password/:token` stay a plain 404, because the transport forwards
+only its allowlisted paths; a boundary test asserts it.
+
+**The neutral request (DEC-487 (5)).** The handler checks the body shape and
+the per-source limit, offers `{ normalised address, client address }` to a
+bounded in-process queue (50 jobs, one at a time), and returns. The address
+is looked up only by the job, after the response, so the response is
+byte-identical (status, body, and every header but `Date`) for known,
+unknown, disabled, pending, principal-less, limited, malformed, and
+dropped requests. An integration test holds the queue and proves no row,
+audit entry, or email exists when the responses are compared. Queued jobs
+are lost if the process stops; the requester simply asks again.
+
+**Eligibility (DEC-441 (1), DEC-487 (4)).** A Better Auth identity with a
+credential account and a DROMEX principal that is `active` or `pending`.
+Disabled accounts and identities without a principal are suppressed and
+audited (at most once per account per minute); unknown addresses leave no
+row, audit entry, or log line. A reset of a pending invitee changes only its
+password: the principal stays `pending`, its invitation is untouched, and
+setup resumes under DEC-444 by proving the new password.
+
+**Issuance (the job).** Under a per-account transaction-scoped advisory
+lock: sweep due and abandoned resets; lock the account; refuse an
+ineligible one; refuse while another reset is being written; apply the
+limits; mark the open `issued` row `superseded`; insert the new row
+(`issued`, delivery `sending`) with only the token hash; commit; then render
+`<configured origin>/reset-password#<token>` and hand one email to the
+transport outside any lock, recording its truthful outcome as 4B1 does.
+
+**Completion.** Under a per-account session-level advisory lock held across
+the whole operation (a second concurrent completion receives
+`reset_link_invalid` at once):
+
+1. The new password is checked against the shared policy **before** anything
+   is claimed, so a rejected password never uses up the link.
+2. One transaction locks the row, ends it if due (audited), refuses it if it
+   is not `issued` or the account is no longer eligible (audited), counts the
+   account's sessions, moves it to `claimed`, and **stamps
+   `dromex_principal.credentials_changed_at`**. From that moment every gate
+   refuses every earlier session.
+3. The internal capability writes the password: `requestPasswordReset` for
+   exactly that account, its token captured in memory by `sendResetPassword`
+   (no email, log, or URL), then `resetPassword` at once. That token expires
+   within 60 seconds, its verification identifier is stored as a SHA-256 hash
+   (`verification.storeIdentifier`, also pinned in the runtime configuration),
+   `revokeSessionsOnPasswordReset` deletes the account's sessions, the session
+   hook refuses every session, and sign-up stays disabled.
+4. A second transaction stamps `credentials_changed_at` again (closing the gap
+   between the claim and the write), completes the reset, counts the sessions
+   left, and audits the revoked count and, if any remain,
+   `password_reset_session_revocation_incomplete`. Such a session predates the
+   stamp and is refused by every gate.
+5. A password-changed email is queued. Nothing signs the user in, and nothing
+   calls a two-factor API: the factor, its recovery codes, and
+   `mfa_completed_at` are unchanged, and the next sign-in needs the new
+   password and an authenticator code (DEC-441 (8), DEC-487 (6)).
+
+Any failure after the claim ends the reset `failed` (`write_failed`,
+`completion_failed`) and is audited; sessions stay ended and the user asks
+again. A crash leaves the row `claimed`; after 120 seconds the next reset
+operation sweeps it to `failed` (`claim_abandoned`).
+
+**The credential-change session rule (DEC-487 (3)).** `sessionPredatesCredentialChange`
+(`src/auth/principal.ts`) refuses a session created before
+`credentials_changed_at`, or with no usable creation time. It is applied in
+the ordinary and Owner gates, the Owner recovery gate (ending that recovery),
+and the invitation setup-session gate. Every session-creation hook (runtime,
+invitation setup, terminal recovery) also refuses a new session while a
+reset for that account is `claimed` and less than 120 seconds old. The column
+only moves forward (database trigger). In the recovery and setup-session
+gates the rule is a backstop: Better Auth's own deletion already removes
+those sessions, which is why removing the rule there is not caught by a test
+(mutation survivors I20 and I21, recorded in the testing document).
+
+**Clock domain.** `credentials_changed_at` is stamped from the API process's
+clock, not the database's, because Better Auth sets each session's
+`createdAt` from the API process's clock and the rule compares the two. This
+was found during 4C verification on the Windows host, where PostgreSQL runs
+in Docker's WSL virtual machine: with a database-clock stamp, sessions
+created seconds after a reset were refused. `mfa_completed_at` is still
+stamped from the database clock by earlier checkpoints, so the same skew can
+affect the MFA completion rule; that is recorded under residual risks and not
+changed here.
+
+**Common-password blocklist (DEC-488).** `checkNewPassword` refuses a
+password outside 15 to 128 UTF-16 code units, one whose NFKC form is shorter
+than 15, or one whose NFKC, lower-cased form is on the committed list. It is
+applied inside every identity port that hands Better Auth a new password
+(`owner-identity.ts`, `enrolment-identity.ts`, `reset-identity.ts`), and by
+the callers first so the user sees the reason: terminal Owner activation
+(`common_password`), invitation setup (`password_rejected`), and reset
+(`password_rejected` with `reason: "common"`). A source-scanning boundary test
+proves every Better Auth password write is in one of those three modules,
+that each applies the policy, and that no other Better Auth password API
+(`changePassword`, `setPassword`, `setUserPassword`, `internalAdapter.updatePassword`)
+is called. It is deliberately not in the hash function, because Better Auth
+also hashes candidate passwords while signing in unknown accounts, where a
+refusal would reveal whether an account exists. Existing passwords are not
+re-checked.
+
+| Blocklist fact | Value |
+|---|---|
+| Source | UK NCSC "PwnedPasswordsTop100k", as mirrored in SecLists `Passwords/Common-Credentials/100k-most-used-passwords-NCSC.txt` (NCSC's own page has been removed) |
+| Pinned commit | `a23e8a413d8facdad2aa8093492f396e19ab64c1` (MIT licence) |
+| Source file | 835,538 bytes, 99,839 non-empty entries, SHA-256 `c2e5696882c603b76bb67a47ee970897e5a76fc4c3f5547abe3d0ca340c576e0`, downloaded once on 2026-09-26 at development time |
+| Derivation | NFKC, lower case, 15 to 128 UTF-16 code units, unique, sorted: 329 entries |
+| Integrity | SHA-256 of the entries joined by `\n` (line-ending independent), `70e286518746e80dd6670c62cdd6aa775b2f0bb83802dfa4033e7f397a26211d`, verified when the server is built; a mismatch stops startup |
+| Updates | Only by a reviewed repository change: pin the new source, run `node tools/derive-common-password-blocklist.ts <source>`, update the pinned hashes |
+| Runtime network use | None |
+
+**Limitations of the blocklist.** Because DROMEX already requires 15
+characters, the list catches only long common values; it does not score
+strength, detect keyboard walks or repetition beyond the listed values, check
+context words such as the user's name or address, or consult a breach
+corpus. Some source entries are literal encoded strings (`$hex[...]`) kept as
+they appear.
+
+**Rate limits and noise** (implementation detail under DEC-441 (9)):
+
+| Boundary | Limit | When exceeded |
+|---|---|---|
+| Request, per network source | 5 per 15 minutes | `429` |
+| Request, per account (counted from rows, no address stored) | 1 per 60 s, 3 per hour, 6 per 24 hours | same `202`; no new token, so the latest link stays valid; audited `rate_limited` at most once per minute |
+| Request, global | 30 issued per hour | same `202`; audited `global_limit` |
+| Request queue | 50 waiting jobs | dropped; same `202` |
+| Inspect, per source | 10 per minute | `429` |
+| Complete, per source | 10 per minute | `429` |
+| Complete, per reset | 5 per 15 minutes | `429`; the link is never locked permanently |
+
+Unknown or malformed tokens and unknown addresses are never audited.
+
+**Audit (DEC-441 (10)).** Closed events `password_reset_requested`,
+`_request_suppressed` (`account_disabled`, `not_eligible`, `rate_limited`,
+`global_limit`, `reset_in_progress`), `_superseded`, `_expired`,
+`_delivery_accepted`, `_delivery_failed`, `_rejected` (`reset_expired`,
+`reset_superseded`, `reset_used`, `account_disabled`, `not_eligible`,
+`password_rejected`), `_claimed`, `_failed` (`write_failed`,
+`completion_failed`, `claim_abandoned`), `_sessions_revoked` (with the count),
+`_session_revocation_incomplete`, `_completed`, and
+`password_changed_notification_accepted` / `_failed`. Each carries a new
+plain `password_reset_id` reference, the account's id and name snapshot, a
+reason code, and the client address; never an address, token, token hash,
+link, or password.
+
+**The pages.** `/forgot-password` and `/reset-password` are plain development
+preview pages like `/invitation`. The token is read from the fragment once,
+removed from the address bar and history before any request, kept in memory
+only (surviving a network error so the user can retry), and sent only in a
+same-origin POST body. Expired, used, superseded, and unknown links share
+one message (DEC-442 (2)). Every string is in `password-reset/strings.ts` for
+a later translation; the address field is `dir="ltr"`, the layout uses
+logical properties, and focus moves to the heading on each state change.
+
+**Known limits and residual risks of checkpoint 4C:**
+
+- Email configuration is not read by the running server (checkpoint 4D), so
+  no reset email can leave a real deployment yet.
+- Queued request jobs are in memory and lost on a crash.
+- Many network sources can exhaust one account's issuance quota and delay
+  its owner's own reset for up to 24 hours; the latest link stays valid.
+- Someone who controls a user's mailbox can reset the password and cause a
+  nuisance lockout, never access (DEC-441 (2)); visible through the
+  password-changed email and the audit.
+- The internal write depends on Better Auth 1.7.4 awaiting
+  `sendResetPassword` when no background handler is configured; the
+  integration suite fails if that changes.
+- `mfa_completed_at` is stamped from the database clock (above).
+- Reset pages send `no-referrer` by `<meta>` and API header; production page
+  headers and CSP belong to the Hardening phase.
+- Behaviour under a least-privilege runtime database role is not verified.
+
 ### Deliberately left to the implementation phase
 
-Password reset (checkpoint 4C); a recovery path for an invitee who lost the
-authenticator before activation (OQ-168); listing pending identities for the
-Owner (checkpoint 4E2); reading email configuration in the running server. (Whether design closure satisfies DEC-435 (6) is no longer open: it
-does not, and DEC-443 sets the gate above.)
+A recovery path for an invitee who lost the authenticator before activation
+(OQ-168); listing pending identities for the Owner (checkpoint 4E2); reading
+email configuration in the running server (checkpoint 4D). (Whether design
+closure satisfies DEC-435 (6) is no longer open: it does not, and DEC-443
+sets the gate above.)
 
 ### Sources (accessed 2026-09-16)
 

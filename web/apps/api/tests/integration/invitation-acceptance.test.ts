@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Writable } from 'node:stream';
 
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
@@ -15,6 +16,7 @@ import {
   type AcceptanceInterruption,
   type InvitationAcceptance,
 } from '../../src/invitations/invitation-acceptance.ts';
+import { generateResetToken } from '../../src/password-reset/reset-token.ts';
 import { buildServer } from '../../src/server.ts';
 import {
   enrollSyntheticMfa,
@@ -825,6 +827,38 @@ describe('re-inviting a pending identity resumes it after password proof (DEC-44
     expect(await principalOf(created.invitee.userId)).toMatchObject({ status: 'active' });
   });
 
+  it('lets a pending invitee reset a forgotten password, ending its setup session and resuming only with the new one (DEC-487 (4))', async () => {
+    const email = freshEmail();
+    const { token, id } = await invite(email);
+    const created = await createPassword(email, token);
+
+    // The reset link, as the password-reset service would have issued it.
+    const reset = generateResetToken();
+    await pool.query(
+      `INSERT INTO dromex_password_reset (user_id, token_hash, status, expires_at, delivery_id, delivery_status, delivery_attempts)
+       VALUES ($1, $2, 'issued', CURRENT_TIMESTAMP + interval '30 minutes', $3, 'provider_accepted', 1)`,
+      [created.invitee.userId, reset.hash, randomUUID()],
+    );
+    const newPassword = freshPassword();
+    const completed = await acceptance('/api/password-reset/complete', { token: reset.token, newPassword }, { ip: nextAddress() });
+    expect(completed.statusCode, completed.body).toBe(200);
+
+    // Still pending, the invitation untouched, and the old setup session ended.
+    expect(await principalOf(created.invitee.userId)).toMatchObject({ status: 'pending', mfa_completed_at: null });
+    expect(await invitationStatus(id)).toBe('pending');
+    const stale = await acceptance(TOTP, { code: await created.invitee.totp.next() }, { ip: nextAddress(), cookie: created.cookie });
+    expect(stale.statusCode).toBe(401);
+
+    // Setup resumes under the same invitation only with the new password.
+    expect((await acceptance(PASSWORD, { token, password: created.invitee.password }, { ip: nextAddress() })).json()).toEqual({
+      error: 'invalid_password',
+    });
+    const resumed = await acceptance(PASSWORD, { token, password: newPassword }, { ip: nextAddress() });
+    expect(resumed.statusCode, resumed.body).toBe(200);
+    expect(resumed.json().next).toBe('verify_totp');
+    expect(await principalOf(created.invitee.userId)).toMatchObject({ status: 'pending' });
+  });
+
   it('refuses a wrong password without any change, and never lets a new invitation replace the password', async () => {
     const email = freshEmail();
     const { token } = await invite(email);
@@ -1249,6 +1283,8 @@ describe('Owner protection and duplicate-email protection', () => {
     for (const [payload, error] of [
       [{ token, name: 'Synthetic Invitee', password: 'too short' }, 'password_rejected'],
       [{ token, name: 'Synthetic Invitee', password: 'x'.repeat(129) }, 'password_rejected'],
+      // DEC-488: a common password is refused in any letter case.
+      [{ token, name: 'Synthetic Invitee', password: '1Q2W3E4R5T6Y7U8I9O0P' }, 'password_rejected'],
       [{ token, name: '', password: freshPassword() }, 'invalid_name'],
       [{ token, name: 'someone@example.test', password: freshPassword() }, 'invalid_name'],
       [{ token, name: 'Line\nBreak', password: freshPassword() }, 'invalid_name'],

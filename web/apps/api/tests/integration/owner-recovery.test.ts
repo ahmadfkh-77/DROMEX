@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Writable } from 'node:stream';
 
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
@@ -7,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AuthSettings } from '../../src/auth/config.ts';
 import { generateRecoveryCodes } from '../../src/auth/recovery-codes.ts';
 import { createTotpReplayGuard } from '../../src/auth/totp-replay.ts';
+import { generateResetToken } from '../../src/password-reset/reset-token.ts';
 import { buildServer } from '../../src/server.ts';
 import {
   enrollSyntheticMfa,
@@ -449,6 +451,25 @@ describe('Owner recovery against PostgreSQL 18.6', () => {
       expect((await get('/api/session', recoveryCookie)).statusCode).toBe(401);
       const revoked = (await auditEvents()).find((event) => event.event_type === 'other_sessions_revoked');
       expect(revoked).toMatchObject({ outcome: 'success', actor_user_id: owner.id, revoked_session_count: 2 });
+    });
+
+    it('ends a recovery session when the Owner password is reset meanwhile, and restores no access (DEC-487 (3))', async () => {
+      const owner = await enrolled('owner');
+      const recoveryCookie = await enterRecovery(owner);
+      const reset = generateResetToken();
+      await pool.query(
+        `INSERT INTO dromex_password_reset (user_id, token_hash, status, expires_at, delivery_id, delivery_status, delivery_attempts)
+         VALUES ($1, $2, 'issued', CURRENT_TIMESTAMP + interval '30 minutes', $3, 'provider_accepted', 1)`,
+        [owner.id, reset.hash, randomUUID()],
+      );
+      const newPassword = 'a synthetic owner passphrase after reset';
+      const completed = await post('/api/password-reset/complete', { token: reset.token, newPassword });
+      expect(completed.statusCode, completed.body).toBe(200);
+
+      expect((await startReplacementWith(recoveryCookie, newPassword)).statusCode).toBe(401);
+      await expectNoBusinessAccess(recoveryCookie);
+      // The reset restores nothing: MFA completion stays cleared by the recovery.
+      expect(await mfaCompletedAt(owner.id)).toBeNull();
     });
 
     it('refuses a non-Owner principal, and a disabled Owner, before any recovery state exists', async () => {
@@ -1402,6 +1423,8 @@ describe('Owner recovery against PostgreSQL 18.6', () => {
         { column_name: 'invitation_id', data_type: 'bigint' },
         { column_name: 'occurred_at', data_type: 'timestamp with time zone' },
         { column_name: 'outcome', data_type: 'text' },
+        // DEC-487 (migration 0010): a plain reset reference, never an address or token.
+        { column_name: 'password_reset_id', data_type: 'bigint' },
         { column_name: 'reason', data_type: 'text' },
         { column_name: 'recovery_id', data_type: 'bigint' },
         { column_name: 'revoked_session_count', data_type: 'integer' },

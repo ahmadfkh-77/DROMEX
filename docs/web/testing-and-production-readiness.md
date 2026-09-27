@@ -909,15 +909,156 @@ Not verified:
 - Behaviour under a least-privilege runtime database role, which is not
   provisioned.
 
+## Phase 2C password reset (checkpoint 4C): local verification
+
+Status: **implemented and locally verified on exact Node 24.20.0 in a
+disposable container (2026-09-26), after an earlier provisional pass on the
+Windows host. Not production-verified.** No real account, reset, or email
+exists; every email went to the capture transport.
+
+**Authoritative run (Owner-authorised, 2026-09-26).** A temporary directory
+held exactly 152 files: the Git-tracked `web/` files plus the 23 new 4C
+files, with `.env`, `.env.*` (including `.env.example`), `node_modules`,
+`.git`, caches, logs, outputs, APKs, and everything outside `web/` excluded.
+The list was printed and checked before copying, and the copy was scanned
+for excluded paths and secret-shaped content before Docker started (the only
+matches were an error-code name, the synthetic test-key generator, and a test
+string asserting that key-shaped content is refused). It was mounted
+read-only into disposable `node:24.20.0-trixie-slim` containers with the
+Docker socket for Testcontainers only; no development database or volume was
+mounted, and nothing was uploaded. The per-file SHA-256 list, the working
+tree checked against it afterwards (identical), and both run logs are kept
+with the session record; the copy and the containers were then removed, and
+every pre-existing container, image, and volume was confirmed unchanged.
+
+| Step (Node v24.20.0) | Result |
+|---|---|
+| `npm ci` from the committed lockfile | 406 packages; lockfile byte-identical afterwards |
+| Workspace typecheck | Exit 0 |
+| API unit, including the POSIX key-file permission tests | **530/530** |
+| API integration against disposable PostgreSQL 18.6 | **395/395**, including `password-reset.test.ts` 23/23 |
+| Measured timing, full run | medians 10.96 to 12.71 ms (spread 1.76 ms); alone, 12.84 to 13.78 ms (spread 0.94 ms) |
+| Unit mutations | 19/20 killed; U11 equivalent (as below) |
+| Integration mutations | 17/22 killed; five redundant-layer survivors (below) |
+| Container copy after all 42 mutations | Byte-identical to the source |
+| Leftover Better Auth verification rows after a reset | **0 in 10 of 10 repeated runs**, and none in the full run |
+| Playwright | Not run in the container: the slim image has no browsers, and installing them was outside the approved network scope. The host result (51/51) stands |
+
+The four host sign-in failures **did not occur** on Node 24.20.0, where the
+API and PostgreSQL share one clock, confirming the clock-skew diagnosis
+below; the two host-only Node 22 child-process failures also passed.
+
+**Tests written for 4C:**
+
+| File | Covers |
+|---|---|
+| `tests/unit/password-policy.test.ts` | NFKC and case normalisation; derivation (length window, dedupe, sort, CRLF); provenance; the committed file normalised, unique, sorted, and matching its pinned hash; a tampered file refused; length boundaries; every committed entry refused in any case; NFKC-padded passwords refused; no trimming |
+| `tests/unit/password-policy-boundary.test.ts` | Exactly three modules write a new password to Better Auth, each applies the policy; no other Better Auth password API is called; the hash function carries no policy |
+| `tests/unit/password-reset-token.test.ts` | 256 bits, base64url, uniqueness, labelled hash, no collision with invitation or plain hashes, shape checks |
+| `tests/unit/password-reset-email.test.ts` | Message validation passes; fragment-only link on the configured origin; no token in metadata; delivery-bound idempotency key; 30 minutes, single use, "not changed", authenticator reminder, DEC-442 sentence; no business terms; password-changed content |
+| `tests/unit/password-reset-queue.test.ts` | Offer never runs the job in the caller; capacity drop; one-at-a-time order and drain; error name only; close |
+| `tests/unit/password-reset-boundary.test.ts` | The write capability's single importer, sole export, no handler, no environment, pinned settings, Better Auth construction allowlist, hashed identifiers in the runtime config, every Better Auth reset route a 404 |
+| `tests/unit/route-access.test.ts`, `auth-http.test.ts`, `security-audit.test.ts`, `owner-input.test.ts`, and two boundary tests | The ninth classification and the three routes; Origin refusals with `no-store` and `no-referrer`; the credential-change gate rule at the exact millisecond boundary; the reset audit reference and vocabulary; `common_password` at Owner activation |
+| `tests/integration/password-reset.test.ts` (23 tests) | End to end; the Owner; a pending invitee; neutral responses with the queue held (no row, audit, or email before release); cooldown, supersession, hourly and global limits; per-source `429`; queue overflow; expiry at 29:54 and 30:00; replay; five concurrent completions; unknown tokens unaudited; disabled after issue; password policy without using up the link; failed delivery; write failure; a crash after the claim, the claim-window refusal, and the sweep; a surviving session audited; no secret in logs or audit; hostile `Host`; hashed, short-lived Better Auth identifier; measured timing |
+| `tests/integration/invitation-acceptance.test.ts` (+1, +1 case) | A pending invitee's reset ends its setup session and setup resumes only with the new password; a common password refused at setup |
+| `tests/integration/owner-recovery.test.ts` (+1) | A reset during an Owner recovery ends the recovery session and restores nothing |
+| `tests/integration/dromex-migrations.test.ts` (+10) | Migration `0010`: columns, hash and lifetime checks, one open reset per account, lifecycle trigger, failure reason, delivery status once, forward-only `credentials_changed_at`, audit vocabulary and reference, no rewrite of existing principals, idempotence |
+| `e2e/password-reset.spec.ts` (8 tests × 3 widths) | Neutral confirmation and focus; rate limit, network failure, empty address; `dir="ltr"`, autocomplete, no overflow; the home-page link; fragment removal from the address bar and history, POST-body-only token, no Referer, no storage, no off-origin request; the generic unusable-link and missing-fragment states; client checks and every server refusal with the token kept in memory; linked error descriptions |
+
+**Provisional host results (2026-09-26, before the authoritative run;
+Windows host, Node 22.17.1, Docker Desktop 28.5.1):**
+
+| Suite | Result |
+|---|---|
+| Workspace typecheck (`api`, `web`) | Clean |
+| API unit | 517 passed, 11 skipped, 2 failed: the two known host-only Node 22 failures spawning a `.ts` child process (`ERR_UNKNOWN_FILE_EXTENSION`), unrelated to 4C |
+| API integration | 391 of 395 passed; `password-reset.test.ts` 23/23. The 4 failures were sign-ins refused just after a fixture stamped `mfa_completed_at` with the database clock (below); a different set failed on the previous run |
+| Playwright | 51/51 (17 tests × 375, 768, 1280 px) |
+| Android typecheck | Clean |
+| Android suite | 1,433 of 1,435 on a loaded machine; the two failing files (`demo-backup`, `financial-overview-index`) passed 5/5 when rerun alone. No file outside `web/`, `docs/web/`, and `requirements/decisions.md` changed |
+| Manifests and lockfile | Unchanged |
+
+**Measured timing on the host** (40 interleaved rounds per account type, real
+scheduler, 2026-09-26; Node 24.20.0 figures are in the table above): median / 95th percentile in ms: known 5.57 / 7.25,
+unknown 5.59 / 7.03, disabled 5.77 / 6.98, pending 5.83 / 7.05,
+principal-less 5.71 / 7.34. The medians differ by at most 0.26 ms; the test
+fails above 10 ms. The structural test additionally proves nothing is looked
+up before the response.
+
+**Host clock skew, measured.** The disposable PostgreSQL clock was 443 to
+444 ms ahead of the Windows host clock (five samples, 4 to 18 ms round trip).
+Better Auth sets a session's `createdAt` from the API process's clock, so a
+database-clock stamp compared with it can refuse a session created within
+that margin. This is why `credentials_changed_at` is stamped from the API
+clock (DEC-487), and it explains the intermittent host-only sign-in failures
+earlier checkpoints recorded without investigating: the fixtures and
+`mfa_completed_at` still use the database clock. Inside one container host,
+as on the VPS, the clocks agree.
+
+**Mutation testing.** Each mutation was applied alone, the named tests run,
+and the file restored and confirmed byte-identical by SHA-256, first on the
+host (`git status` unchanged afterwards) and then repeated on Node 24.20.0 in
+the container's own copy (identical to the source afterwards). The Node
+24.20.0 results are authoritative and are the ones below; they differ from
+the host only for I20, see the correction.
+
+- Unit, 19 of 20 killed: blocklist lookup, NFKC length, letter case, hash
+  verification, the Owner draft and invitation port checks, the hash label,
+  a 128-bit token, a query-string token, a token-derived idempotency key,
+  an unbounded queue, a job run in the caller, an error message reported,
+  the gate rule and its boundary, the Origin check, the audit reference,
+  plain runtime identifiers, and sessions kept after reset. **Equivalent:**
+  removing "within 30 minutes" from one line leaves the expiry stated in the
+  next.
+- Integration, 17 of 22 killed: an awaited lookup, disabled or pending
+  eligibility, a replayed link (with and without the claim row check),
+  supersession, cooldown, the global limit, the policy after the claim, the
+  first credential stamp, the claim-time session hook, plain Better Auth
+  identifiers, a logged token, a hostile link origin, a failed delivery
+  reported as accepted, the abandoned-claim sweep, and a reset that alters an
+  invitation. **Survivors, all redundant layers:** the per-row expiry check
+  (the sweep that precedes it already ends the row); the second credential
+  stamp (the session hook refuses every session during the claim); the
+  per-account completion lock (the row lock and status check already enforce
+  single use); and the Owner recovery and invitation setup-session rules
+  (Better Auth's deletion already removed those sessions; the rules are the
+  backstop if it does not).
+- **Correction (I20).** On the host, removing the rule from the Owner
+  recovery gate appeared killed. On Node 24.20.0 it survives: the host
+  failure came from the clock-skew sign-in refusal, not from the mutation, so
+  the host result was a false kill.
+
+**Test-first discipline, stated plainly.** The password policy, audit
+writer, gate rule, route classification, token, and email modules were
+driven by failing tests first. The queue, the service, the migration, and
+the reset identity were written before their tests (the migration tests
+could not run while Docker was stopped); the mutation results above are the
+evidence that those tests can fail.
+
+**The leftover verification row.** In one of five host runs, one Better
+Auth verification row was seen after a completed reset; it was not
+reproduced on the host afterwards, nor in 11 Node 24.20.0 runs (10 repeated
+diagnostic runs and the full suite), and its cause is not identified. The
+test asserts the property that matters for any row present: its identifier
+is a SHA-256 hash, never `reset-password:<token>`, and it expires within 60
+seconds. The token behind it exists only in server memory, and every Better
+Auth reset route is a 404, so it cannot be used from outside.
+
+**Not verified:** Playwright on Node 24.20.0 (host only); any real delivery
+or configured sending identity; production headers and CSP; behaviour under
+a least-privilege runtime database role; a physical reset rehearsal.
+**Not production-verified.**
+
 ## Planned tests: email, Admin invitations, and password reset
 
-Status: **planned only (DEC-439 through DEC-442).** The transport-level rows
+Status: **planned design, now covered by checkpoints 4A to 4C (DEC-439
+through DEC-442).** The transport-level rows
 below (provider failure, secret handling, webhooks) are now covered by
 checkpoint 4A above, and the Owner-side invitation rows (issuance, expiry,
 supersession, cancellation, delivery failure, audit, content) by checkpoint
-4B1; the acceptance, enrolment, reset, enumeration, session, and page rows
-are not written or run, and nothing they would test exists. Each is to be written as
-a failing test before the implementation it covers. Governing design:
+4B1; the acceptance and enrolment rows by checkpoint 4B2; and the reset,
+enumeration, session, and page rows by checkpoint 4C (above; Node 24.20.0,
+Playwright on the host). Governing design:
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#14a-transactional-email-admin-invitations-and-password-reset).
 
 **No real email in any test.** Automated tests use the deterministic capture
@@ -981,7 +1122,9 @@ evidence. Today, none of them are.
 - [x] Email delivery mechanism chosen (OQ-161, closed by DEC-439 through
       DEC-442) — **approved design only, not implemented**
 - [ ] Admin invitations, restricted Admin enrolment, and password reset
-      implemented and verified by the planned tests above
+      implemented and verified by the planned tests above — **implemented
+      and verified locally on Node 24.20.0 (checkpoints 4B1, 4B2, 4C);
+      not production-verified**
 - [ ] Email delivery production configured and physically verified by the
       Owner: Resend account created; current plan and terms confirmed,
       including whether the Free plan permits DROMEX's business use; the

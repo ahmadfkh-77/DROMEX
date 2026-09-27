@@ -32,6 +32,12 @@ import type { FastifyInstance, RouteOptions } from 'fastify';
  *                     runs. The route itself establishes the invitee from the
  *                     invitation token or a bound setup session, re-checks the
  *                     invitation, and never grants business access.
+ * - `password-reset`  reachable only to request or complete a password reset
+ *                     (DEC-441, DEC-487), without any session. The guard
+ *                     requires an exact trusted Origin before the handler
+ *                     runs. The route never reads a session, never signs
+ *                     anyone in, and establishes everything from the request
+ *                     body alone.
  *
  * The classification itself does not authenticate anything; the
  * authentication guard in `auth/http.ts` enforces it per request. What this
@@ -46,6 +52,7 @@ export const ROUTE_ACCESS = [
   'recovery',
   'owner',
   'invitation',
+  'password-reset',
 ] as const;
 
 export type RouteAccess = (typeof ROUTE_ACCESS)[number];

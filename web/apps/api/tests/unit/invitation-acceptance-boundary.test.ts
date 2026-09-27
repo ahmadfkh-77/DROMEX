@@ -92,9 +92,16 @@ describe('internal invitation sign-up capability boundary (DEC-444 (5))', () => 
     }
     expect(signUp.sort()).toEqual([label(ENROLMENT_IDENTITY), label(OWNER_IDENTITY)].sort());
     expect(enabledSignUp.sort()).toEqual([label(ENROLMENT_IDENTITY), label(OWNER_IDENTITY)].sort());
-    // The terminal recovery identity (DEC-437) builds an instance too, with sign-up still disabled.
+    // The terminal recovery identity (DEC-437) and the password-write identity
+    // (DEC-487 (2)) build instances too, with sign-up still disabled.
     expect(constructions.sort()).toEqual(
-      [label(RUNTIME_INSTANCE), label(ENROLMENT_IDENTITY), label(OWNER_IDENTITY), 'provisioning/terminal-recovery-identity.ts'].sort(),
+      [
+        label(RUNTIME_INSTANCE),
+        label(ENROLMENT_IDENTITY),
+        label(OWNER_IDENTITY),
+        'provisioning/terminal-recovery-identity.ts',
+        'password-reset/reset-identity.ts',
+      ].sort(),
     );
   });
 

@@ -189,6 +189,9 @@ describe('Owner provisioning isolation from the running server', () => {
         ['POST /api/owner/invitations', 'owner'],
         ['POST /api/owner/invitations/:id/cancel', 'owner'],
         ['POST /api/owner/invitations/:id/resend', 'owner'],
+        ['POST /api/password-reset/complete', 'password-reset'],
+        ['POST /api/password-reset/inspect', 'password-reset'],
+        ['POST /api/password-reset/request', 'password-reset'],
       ]);
     } finally {
       await settle();

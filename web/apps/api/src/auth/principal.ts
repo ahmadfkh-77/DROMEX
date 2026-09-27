@@ -32,6 +32,12 @@ export interface Principal {
    * authenticated. An active status alone never implies MFA.
    */
   mfaCompletedAt: Date | null;
+  /**
+   * When the password last changed through password reset (DEC-487 (3)),
+   * read from the database. Every session gate refuses a session created
+   * before it. `null` means the password never changed that way.
+   */
+  credentialsChangedAt: Date | null;
 }
 
 export interface PrincipalRepository {
@@ -44,6 +50,7 @@ interface PrincipalRow {
   status: PrincipalStatus;
   is_owner: boolean;
   mfa_completed_at: Date | null;
+  credentials_changed_at: Date | null;
 }
 
 /**
@@ -58,7 +65,7 @@ export function createPrincipalRepository(pool: Pool): PrincipalRepository {
       // Parameterised, always. The identifier originates from a session and
       // is never concatenated into SQL (ASVS 1.2.4).
       const { rows } = await pool.query<PrincipalRow>(
-        `SELECT user_id, status, is_owner, mfa_completed_at
+        `SELECT user_id, status, is_owner, mfa_completed_at, credentials_changed_at
            FROM dromex_principal
           WHERE user_id = $1`,
         [userId],
@@ -74,6 +81,7 @@ export function createPrincipalRepository(pool: Pool): PrincipalRepository {
         status: row.status,
         isOwner: row.is_owner,
         mfaCompletedAt: row.mfa_completed_at instanceof Date ? row.mfa_completed_at : null,
+        credentialsChangedAt: row.credentials_changed_at instanceof Date ? row.credentials_changed_at : null,
       };
     },
   };
@@ -108,4 +116,47 @@ export async function requireActivePrincipal(
   }
 
   return principal;
+}
+
+/**
+ * The credential-change session rule (DEC-487 (3)): whether a session created
+ * at `createdAt` began before the principal's last password change, and so
+ * must be refused. A session with no usable creation time counts as older.
+ */
+export function sessionPredatesCredentialChange(
+  principal: Pick<Principal, 'credentialsChangedAt'>,
+  createdAt: Date | null,
+): boolean {
+  if (principal.credentialsChangedAt === null) return false;
+  if (createdAt === null || !Number.isFinite(createdAt.getTime())) return true;
+  return createdAt.getTime() < principal.credentialsChangedAt.getTime();
+}
+
+/**
+ * How long a claimed password reset blocks new sessions. The password write
+ * takes well under this; a claim older than it is treated as crashed, swept to
+ * `failed`, and no longer blocks sign-in (DEC-487 (3)).
+ */
+export const PASSWORD_RESET_CLAIM_WINDOW_SECONDS = 120;
+
+/** Anything that runs a parameterised query: a pool or a transaction client. */
+interface QueryRunner {
+  query<R extends object>(text: string, values: unknown[]): Promise<{ rows: R[] }>;
+}
+
+/**
+ * Whether a password reset for this user is being written right now. Every
+ * session-creation hook refuses a new session while it is, so no session can
+ * begin between the claim and the password change and outlive it.
+ */
+export async function passwordResetInProgress(db: QueryRunner, userId: string): Promise<boolean> {
+  const { rows } = await db.query<{ busy: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM dromex_password_reset
+        WHERE user_id = $1 AND status = 'claimed'
+          AND claimed_at > CURRENT_TIMESTAMP - make_interval(secs => $2)
+     ) AS busy`,
+    [userId, PASSWORD_RESET_CLAIM_WINDOW_SECONDS],
+  );
+  return rows[0]?.busy === true;
 }

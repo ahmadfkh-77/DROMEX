@@ -4,6 +4,7 @@ import { DROMEX_CLIENT_IP_HEADER, type AuthCookieNames } from './config.ts';
 import {
   PrincipalAccessDeniedError,
   requireActivePrincipal,
+  sessionPredatesCredentialChange,
   type Principal,
   type PrincipalRepository,
 } from './principal.ts';
@@ -347,6 +348,9 @@ async function gateIdentity(view: SessionView, deps: AuthRoutesDependencies): Pr
   if (!view.twoFactorEnabled) return null;
   if (!(principal.mfaCompletedAt instanceof Date)) return null;
   if (view.createdAt === null || view.createdAt.getTime() < principal.mfaCompletedAt.getTime()) return null;
+  // DEC-487 (3): a password reset ends every session created before it,
+  // whether or not Better Auth's own session deletion completed.
+  if (sessionPredatesCredentialChange(principal, view.createdAt)) return null;
   // DEC-436: a session ever bound to an Owner recovery never becomes an
   // ordinary session, even after MFA is complete again.
   if (await deps.recoverySessions.isRecoverySession(view.sessionId)) return null;
@@ -421,6 +425,13 @@ export function registerAuthenticationGuard(app: FastifyInstance, deps: AuthRout
     // Invitation acceptance (DEC-444): a cross-origin caller is refused before
     // the handler runs; the handler establishes and re-checks everything else.
     if (access === 'invitation') {
+      if (!hasTrustedOrigin(request, deps)) return reply.code(403).send(FORBIDDEN);
+      return;
+    }
+
+    // Password reset (DEC-487): the same Origin rule, and no session is ever
+    // consulted. The handler establishes everything from the body alone.
+    if (access === 'password-reset') {
       if (!hasTrustedOrigin(request, deps)) return reply.code(403).send(FORBIDDEN);
       return;
     }

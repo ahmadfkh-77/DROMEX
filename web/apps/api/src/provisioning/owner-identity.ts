@@ -3,7 +3,9 @@ import { isAPIError } from 'better-auth/api';
 import type { Pool } from 'pg';
 
 import { createAuthOptions, createTwoFactorPlugin, type AuthSettings } from '../auth/config.ts';
+import { checkNewPassword } from '../auth/password-policy.ts';
 import { createPrincipalRepository } from '../auth/principal.ts';
+import { OwnerProvisioningError } from './errors.ts';
 import type { OwnerInput } from './owner-input.ts';
 
 /**
@@ -113,6 +115,10 @@ export function createOwnerProvisioningIdentity(settings: AuthSettings, pool: Po
 
   return {
     async create(input) {
+      // DEC-488, enforced at the port as well as in draft validation, so no
+      // caller can hand Better Auth a password the policy refuses.
+      const policy = checkNewPassword(input.password);
+      if (!policy.ok) throw new OwnerProvisioningError(policy.reason === 'common' ? 'common_password' : 'invalid_password');
       const result = await auth.api.signUpEmail({
         body: { name: input.name, email: input.email, password: input.password },
       });

@@ -5,7 +5,7 @@
  * structured shape: an event type from a closed list, an outcome, the acting
  * user and a snapshot of their name, a web recovery reference, a constrained
  * reason code, a revoked-session count, a client address, a terminal recovery
- * run reference, an incident reference, and an Admin invitation reference. Anything else — an unknown type,
+ * run reference, an incident reference, an Admin invitation reference, and a password reset reference. Anything else — an unknown type,
  * an extra property, a reason that is not a short lower-case identifier, an
  * incident reference that is not `INC-YYYYMMDD-NN` — is refused before a
  * statement is sent, so no caller can pass a password, code, secret, cookie,
@@ -68,6 +68,21 @@ export const SECURITY_AUDIT_EVENT_TYPES = [
   'admin_invitation_recovery_codes_issued',
   'admin_invitation_sessions_revoked',
   'admin_invitation_accepted',
+  // Password reset (DEC-441, DEC-487).
+  'password_reset_requested',
+  'password_reset_request_suppressed',
+  'password_reset_superseded',
+  'password_reset_expired',
+  'password_reset_delivery_accepted',
+  'password_reset_delivery_failed',
+  'password_reset_rejected',
+  'password_reset_claimed',
+  'password_reset_failed',
+  'password_reset_sessions_revoked',
+  'password_reset_session_revocation_incomplete',
+  'password_reset_completed',
+  'password_changed_notification_accepted',
+  'password_changed_notification_failed',
 ] as const;
 
 export type SecurityAuditEventType = (typeof SECURITY_AUDIT_EVENT_TYPES)[number];
@@ -94,6 +109,8 @@ export interface SecurityAuditEvent {
   incidentReference: string | null;
   /** The Admin invitation's database identifier, as a decimal string. Never an address. */
   invitationId: string | null;
+  /** The password reset's database identifier, as a decimal string. Never an address or token. */
+  passwordResetId: string | null;
 }
 
 /** Anything that runs a parameterised statement: a pool or a client in a transaction. */
@@ -120,6 +137,7 @@ const EVENT_KEYS = [
   'incidentReference',
   'invitationId',
   'outcome',
+  'passwordResetId',
   'reason',
   'recoveryId',
   'revokedSessionCount',
@@ -139,8 +157,8 @@ const MAX_USER_ID_LENGTH = 255;
 const INSERT = `
   INSERT INTO dromex_audit_event
     (event_type, outcome, actor_user_id, actor_name, recovery_id, reason, revoked_session_count, client_address,
-     terminal_recovery_id, incident_reference, invitation_id)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`;
+     terminal_recovery_id, incident_reference, invitation_id, password_reset_id)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -155,7 +173,7 @@ function nullableMatch(value: unknown, pattern: RegExp): boolean {
   return value === null || (typeof value === 'string' && pattern.test(value));
 }
 
-/** The eleven statement values, in column order, or a thrown refusal. */
+/** The twelve statement values, in column order, or a thrown refusal. */
 function valuesOf(event: unknown): unknown[] {
   if (!isPlainObject(event) || !hasExactly(event, EVENT_KEYS)) throw new SecurityAuditValidationError('event shape');
 
@@ -170,6 +188,7 @@ function valuesOf(event: unknown): unknown[] {
     terminalRecoveryId,
     incidentReference,
     invitationId,
+    passwordResetId,
   } = event;
 
   if (typeof type !== 'string' || !EVENT_TYPES.has(type)) throw new SecurityAuditValidationError('event type');
@@ -202,6 +221,7 @@ function valuesOf(event: unknown): unknown[] {
   }
   if (!nullableMatch(incidentReference, INCIDENT_REFERENCE)) throw new SecurityAuditValidationError('incident reference');
   if (!nullableMatch(invitationId, DATABASE_ID)) throw new SecurityAuditValidationError('invitation reference');
+  if (!nullableMatch(passwordResetId, DATABASE_ID)) throw new SecurityAuditValidationError('password reset reference');
 
   return [
     type,
@@ -215,6 +235,7 @@ function valuesOf(event: unknown): unknown[] {
     terminalRecoveryId,
     incidentReference,
     invitationId,
+    passwordResetId,
   ];
 }
 
@@ -231,6 +252,7 @@ export function securityEvent(
     terminalRecoveryId?: string | null;
     incidentReference?: string | null;
     invitationId?: string | null;
+    passwordResetId?: string | null;
   } = {},
 ): SecurityAuditEvent {
   return {
@@ -244,6 +266,7 @@ export function securityEvent(
     terminalRecoveryId: extra.terminalRecoveryId ?? null,
     incidentReference: extra.incidentReference ?? null,
     invitationId: extra.invitationId ?? null,
+    passwordResetId: extra.passwordResetId ?? null,
   };
 }
 

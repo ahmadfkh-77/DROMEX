@@ -1,4 +1,8 @@
+import type { ComponentType } from 'react';
+
 import { InvitationPage } from './invitation/InvitationPage.tsx';
+import { ForgotPasswordPage } from './password-reset/ForgotPasswordPage.tsx';
+import { ResetPasswordPage } from './password-reset/ResetPasswordPage.tsx';
 
 const STYLES = `
   :root {
@@ -88,7 +92,14 @@ const STYLES = `
     cursor: pointer;
   }
   .form button:disabled { opacity: 0.6; cursor: progress; }
-  .codes { margin: 0; padding-left: 1.5rem; display: grid; gap: 0.35rem; }
+  .codes { margin: 0; padding-inline-start: 1.5rem; display: grid; gap: 0.35rem; }
+  .hint { margin: 0; font-size: 0.875rem; color: var(--ink); opacity: 0.8; }
+  .link { color: var(--structural-navy); font-weight: 700; text-underline-offset: 0.2em; }
+  .link:focus-visible, .form button:focus-visible, .form input:focus-visible, h1:focus-visible {
+    outline: 3px solid var(--signal-orange);
+    outline-offset: 2px;
+  }
+  h1:focus { outline: none; }
   .alert {
     border-left: 3px solid var(--signal-orange);
     background: var(--surface);
@@ -97,15 +108,20 @@ const STYLES = `
   }
 `;
 
-/** The invitation page is the only other path the preview serves (DEC-442). */
-const INVITATION_PATH = '/invitation';
+/** The other paths the preview serves: invitation and password reset (DEC-442). */
+const PAGES: Record<string, ComponentType> = {
+  '/invitation': InvitationPage,
+  '/forgot-password': ForgotPasswordPage,
+  '/reset-password': ResetPasswordPage,
+};
 
 export function App() {
-  if (window.location.pathname === INVITATION_PATH) {
+  const Page = PAGES[window.location.pathname];
+  if (Page !== undefined) {
     return (
       <>
         <style>{STYLES}</style>
-        <InvitationPage />
+        <Page />
       </>
     );
   }
@@ -141,8 +157,10 @@ export function App() {
           <section className="card">
             <h2>Sign-in</h2>
             <p>
-              Not built yet. The approach is still an open question, so no accounts,
-              sessions, or recovery exist.
+              No designed sign-in screen yet, and no real account exists.{' '}
+              <a className="link" href="/forgot-password">
+                Forgot password?
+              </a>
             </p>
           </section>
         </div>

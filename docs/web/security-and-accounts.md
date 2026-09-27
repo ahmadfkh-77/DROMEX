@@ -17,8 +17,11 @@ recovery for an Owner who knows the current password but cannot complete MFA
 exists and is tested on disposable databases only: it prefers supported
 authenticator replacement and retrieval of one stored code, and permits a
 narrowly scoped two-operation factor reset only when neither is possible
-(DEC-437); its command refuses every run. No password recovery, account
-management, Owner readiness enforcement, permissions, or deployment exists.
+(DEC-437); its command refuses every run. Email password reset is
+implemented and tested on disposable databases only (checkpoint 4C,
+DEC-487, DEC-488); the running server reads no email configuration yet. No
+account management, Owner readiness enforcement, permissions, or deployment
+exists.
 
 The full authentication and authorization architecture — candidate research,
 the selected system and why, the threat model, session and MFA design, the
@@ -99,12 +102,13 @@ default Owner, and no shared credential. The password is entered through a
 hidden terminal prompt and is never accepted from a command argument, the
 environment, a file, or piped input. Initial Owner creation needs no email
 delivery. Admin invitations and self-service password recovery depend on
-email, which is now designed but not built (see below). The detail, including
+email, which is designed and implemented locally but not configured in the
+running server or production (see below). The detail, including
 the honest non-atomic boundary between Better
 Auth and DROMEX, is in
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#owner-provisioning-tooling-phase-2c-checkpoint-3e-disposable-databases-only).
 
-## Email, invitations, and password reset: designed; transport foundation only
+## Email, invitations, and password reset: implemented locally; not production configured
 
 **OQ-161 is closed as a design decision** (DEC-439 through DEC-442,
 2026-09-16). Only the provider-neutral email transport foundation of DEC-439
@@ -115,9 +119,9 @@ conflict or unclassifiable 409 never is), tested
 locally and not wired to the server. Nothing below is production configured
 or physically verified: no Resend account, DNS record, API key, or secret
 file exists, and no email has been sent. The Owner's side of Admin
-invitations (checkpoint 4B1) and restricted invitation acceptance
-(checkpoint 4B2, DEC-444) are implemented against disposable databases;
-password reset is not. The full design, failure
+invitations (checkpoint 4B1), restricted invitation acceptance
+(checkpoint 4B2, DEC-444), and password reset (checkpoint 4C, DEC-487,
+DEC-488) are implemented against disposable databases. The full design, failure
 behaviour, and dated sources are in
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#14a-transactional-email-admin-invitations-and-password-reset).
 
@@ -147,7 +151,8 @@ behaviour, and dated sources are in
   protected route, and both the database and every application gate refuse
   it. The Owner may invite the same address again; the identity is resumed,
   never duplicated, and only after proof of its existing password. A
-  forgotten password waits for password reset (checkpoint 4C); a lost
+  forgotten password is reset by email (checkpoint 4C, DEC-487 (4)): the
+  identity stays pending and setup resumes with the new password; a lost
   authenticator before activation has no path yet (OQ-168). An active or
   disabled completed account is still ineligible for a new invitation.
 - **Validity at every step (DEC-444 (3)).** Every state-changing acceptance
@@ -158,9 +163,17 @@ behaviour, and dated sources are in
   server-internal Better Auth instance that is never mounted on a route and
   is reachable only from the acceptance service; architectural tests prove
   it.
-- **Password reset (DEC-441).** Available to every enabled account,
-  including the Owner; single-use, 30 minutes, same response for every
-  address, all sessions revoked, and MFA never removed or bypassed.
+- **Password reset (DEC-441, DEC-487).** Available to active and pending
+  accounts, including the Owner; a DROMEX-owned 256-bit token in the link
+  fragment, stored only as a hash, single-use, 30 minutes, superseded by a
+  newer request; one identical `202` for every address (only a per-network
+  limit answers `429`); every session ended by the `credentials_changed_at`
+  rule as well as by Better Auth; never signs in; MFA never removed,
+  bypassed, or required at completion; a password-changed email follows.
+  **Implemented (checkpoint 4C, disposable databases only).**
+- **Common passwords (DEC-488).** Every path that creates or changes a
+  password refuses entries on an offline, pinned NCSC top-100,000 list;
+  nothing is checked over the network.
 - **Links and content (DEC-442).** Tokens only in the URL fragment; no
   third-party content or tracking; English-only emails with no business or
   secret information.

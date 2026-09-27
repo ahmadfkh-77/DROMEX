@@ -50,6 +50,7 @@ describe('principal lookup', () => {
       status: 'active',
       isOwner: false,
       mfaCompletedAt: null,
+      credentialsChangedAt: null,
     });
   });
 

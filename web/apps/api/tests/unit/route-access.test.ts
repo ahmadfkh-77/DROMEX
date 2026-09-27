@@ -43,7 +43,7 @@ describe('route access classification (default-deny registration)', () => {
     }).toThrow(/access/i);
   });
 
-  it('accepts each of the eight recognised classifications', async () => {
+  it('accepts each of the nine recognised classifications', async () => {
     app = await build();
 
     expect(() => {
@@ -55,6 +55,7 @@ describe('route access classification (default-deny registration)', () => {
       app!.post('/f', { config: { access: 'recovery' } }, async () => ({ ok: true }));
       app!.get('/g', { config: { access: 'owner' } }, async () => ({ ok: true }));
       app!.post('/h', { config: { access: 'invitation' } }, async () => ({ ok: true }));
+      app!.post('/i', { config: { access: 'password-reset' } }, async () => ({ ok: true }));
     }).not.toThrow();
   });
 
@@ -116,7 +117,30 @@ describe('route access classification (default-deny registration)', () => {
       ['POST /api/owner/invitations', 'owner'],
       ['POST /api/owner/invitations/:id/cancel', 'owner'],
       ['POST /api/owner/invitations/:id/resend', 'owner'],
+      ['POST /api/password-reset/complete', 'password-reset'],
+      ['POST /api/password-reset/inspect', 'password-reset'],
+      ['POST /api/password-reset/request', 'password-reset'],
     ]);
+  });
+
+  it('refuses every password-reset route from a missing or foreign Origin, before any database work (DEC-487)', async () => {
+    app = await build();
+    await app.ready();
+
+    for (const url of ['/api/password-reset/request', '/api/password-reset/inspect', '/api/password-reset/complete']) {
+      for (const headers of [{}, { origin: 'https://evil.example' }, { origin: 'http://127.0.0.1:5173.evil.example' }]) {
+        const response = await app.inject({
+          method: 'POST',
+          url,
+          headers: { ...headers, 'content-type': 'application/json' },
+          payload: { email: 'person@example.test' },
+        });
+        expect(response.statusCode, url).toBe(403);
+        expect(response.json()).toEqual({ error: 'forbidden' });
+        expect(response.headers['cache-control']).toBe('no-store');
+        expect(response.headers['referrer-policy']).toBe('no-referrer');
+      }
+    }
   });
 
   it('refuses every Owner invitation route without a session, before any database work', async () => {

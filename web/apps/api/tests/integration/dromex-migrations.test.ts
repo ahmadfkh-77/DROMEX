@@ -17,7 +17,7 @@ const BETTER_AUTH_MIGRATION = fileURLToPath(
 );
 
 const BETTER_AUTH_TABLES = ['user', 'session', 'account', 'verification', 'rateLimit'];
-const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009'];
+const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010'];
 
 describe('DROMEX migration mechanism', () => {
   let database: EphemeralDatabase;
@@ -287,6 +287,201 @@ describe('DROMEX migration mechanism', () => {
     });
   });
 
+  describe('password reset and the credential-change session rule (0010, DEC-441, DEC-487)', () => {
+    async function seedReset(values: Record<string, unknown>) {
+      const row = {
+        token_hash: Buffer.alloc(32, Math.floor(Math.random() * 255)),
+        status: 'issued',
+        expires_at: null,
+        delivery_id: crypto.randomUUID(),
+        delivery_status: 'sending',
+        ...values,
+      };
+      const columns = Object.keys(row).filter((column) => column !== 'expires_at');
+      return pool.query<{ id: string }>(
+        `INSERT INTO dromex_password_reset (${columns.join(', ')}, expires_at)
+         VALUES (${columns.map((_, index) => `$${index + 1}`).join(', ')},
+                 COALESCE($${columns.length + 1}::timestamptz, CURRENT_TIMESTAMP + interval '30 minutes'))
+         RETURNING id::text`,
+        [...columns.map((column) => row[column as keyof typeof row]), row.expires_at],
+      );
+    }
+
+    beforeEach(async () => {
+      await applyMigrations(pool, await loadDromexMigrations());
+      await seedUser(pool, 'resetter');
+      await pool.query(`INSERT INTO dromex_principal (user_id, status) VALUES ('resetter', 'active')`);
+    });
+
+    it('holds only a token hash: no column for a token, address, link, password, or message', async () => {
+      const { rows } = await pool.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'dromex_password_reset' ORDER BY column_name`,
+      );
+      expect(rows.map((row) => row.column_name)).toEqual([
+        'claimed_at',
+        'created_at',
+        'delivery_attempts',
+        'delivery_id',
+        'delivery_reason',
+        'delivery_status',
+        'delivery_updated_at',
+        'end_reason',
+        'ended_at',
+        'expires_at',
+        'id',
+        'status',
+        'supersedes_id',
+        'token_hash',
+        'user_id',
+      ]);
+    });
+
+    it('requires a unique 32-byte hash and exactly a 30-minute lifetime', async () => {
+      await expect(seedReset({ user_id: 'resetter', token_hash: Buffer.alloc(31, 1) })).rejects.toThrow(/check constraint/i);
+      await expect(
+        seedReset({ user_id: 'resetter', expires_at: new Date(Date.now() + 31 * 60_000) }),
+      ).rejects.toThrow(/check constraint/i);
+      await seedReset({ user_id: 'resetter', token_hash: Buffer.alloc(32, 7) });
+      await seedUser(pool, 'other_resetter');
+      await expect(seedReset({ user_id: 'other_resetter', token_hash: Buffer.alloc(32, 7) })).rejects.toThrow(/duplicate key|unique/i);
+    });
+
+    it('allows at most one open (issued or claimed) reset per account', async () => {
+      await seedReset({ user_id: 'resetter' });
+      await expect(seedReset({ user_id: 'resetter' })).rejects.toThrow(/duplicate key|unique/i);
+    });
+
+    it('enforces the lifecycle, keeps identifying columns immutable, and never deletes', async () => {
+      const { rows } = await seedReset({ user_id: 'resetter' });
+      const id = rows[0]!.id;
+      const set = (sql: string) => pool.query(`UPDATE dromex_password_reset SET ${sql} WHERE id = $1`, [id]);
+
+      await expect(set(`status = 'completed', ended_at = CURRENT_TIMESTAMP, claimed_at = CURRENT_TIMESTAMP`)).rejects.toThrow(
+        /password reset transition/i,
+      );
+      await expect(set(`token_hash = $2`.replace('$2', `'\\x${'ab'.repeat(32)}'`))).rejects.toThrow(/immutable/i);
+      await expect(set(`expires_at = expires_at + interval '1 hour'`)).rejects.toThrow(/immutable|check constraint/i);
+      await expect(set(`status = 'claimed'`)).rejects.toThrow(/check constraint/i);
+      await set(`status = 'claimed', claimed_at = CURRENT_TIMESTAMP`);
+      await expect(set(`status = 'issued', claimed_at = NULL`)).rejects.toThrow(/password reset transition/i);
+      await set(`status = 'completed', ended_at = CURRENT_TIMESTAMP`);
+      await expect(set(`status = 'failed', end_reason = 'unexpected_failure'`)).rejects.toThrow(/password reset transition/i);
+      await expect(pool.query(`DELETE FROM dromex_password_reset WHERE id = $1`, [id])).rejects.toThrow(/never deleted/i);
+      await expect(pool.query(`DELETE FROM "user" WHERE id = 'resetter'`)).rejects.toThrow(/RESTRICT|foreign key/i);
+    });
+
+    it('requires a reason exactly when a reset failed, and ties the end time to the open states', async () => {
+      const { rows } = await seedReset({ user_id: 'resetter' });
+      const id = rows[0]!.id;
+      const set = (sql: string) => pool.query(`UPDATE dromex_password_reset SET ${sql} WHERE id = $1`, [id]);
+      await expect(set(`status = 'failed', ended_at = CURRENT_TIMESTAMP`)).rejects.toThrow(/check constraint/i);
+      await expect(set(`status = 'expired'`)).rejects.toThrow(/check constraint/i);
+      await set(`status = 'failed', ended_at = CURRENT_TIMESTAMP, end_reason = 'not_eligible'`);
+    });
+
+    it('lets delivery status leave sending once and never return', async () => {
+      const { rows } = await seedReset({ user_id: 'resetter' });
+      const id = rows[0]!.id;
+      const set = (sql: string) => pool.query(`UPDATE dromex_password_reset SET ${sql} WHERE id = $1`, [id]);
+      await expect(set(`delivery_status = 'failed'`)).rejects.toThrow(/check constraint/i);
+      await set(`delivery_status = 'provider_accepted', delivery_attempts = 1`);
+      await expect(set(`delivery_status = 'failed', delivery_reason = 'timeout'`)).rejects.toThrow(/delivery/i);
+    });
+
+    it('adds a nullable credentials_changed_at to principals that only ever moves forward', async () => {
+      const read = async () =>
+        (await pool.query(`SELECT credentials_changed_at FROM dromex_principal WHERE user_id = 'resetter'`)).rows[0]!
+          .credentials_changed_at as Date | null;
+      const set = (sql: string) => pool.query(`UPDATE dromex_principal SET ${sql} WHERE user_id = 'resetter'`);
+
+      expect(await read()).toBeNull();
+      await set(`credentials_changed_at = '2026-09-26T10:00:00Z'`);
+      await set(`credentials_changed_at = '2026-09-26T10:00:00Z'`);
+      await set(`credentials_changed_at = '2026-09-26T11:00:00Z'`);
+      await expect(set(`credentials_changed_at = '2026-09-26T10:30:00Z'`)).rejects.toThrow(/credentials_changed_at/i);
+      await expect(set(`credentials_changed_at = NULL`)).rejects.toThrow(/credentials_changed_at/i);
+      // A pending principal may carry it: a pending invitee may reset (DEC-487 (4)).
+      await seedUser(pool, 'pending_resetter');
+      await pool.query(
+        `INSERT INTO dromex_principal (user_id, status, credentials_changed_at) VALUES ('pending_resetter', 'pending', CURRENT_TIMESTAMP)`,
+      );
+    });
+
+    it('accepts the password-reset audit vocabulary and reference, and still refuses unknown events', async () => {
+      for (const type of [
+        'password_reset_requested',
+        'password_reset_request_suppressed',
+        'password_reset_superseded',
+        'password_reset_expired',
+        'password_reset_delivery_accepted',
+        'password_reset_delivery_failed',
+        'password_reset_rejected',
+        'password_reset_claimed',
+        'password_reset_failed',
+        'password_reset_sessions_revoked',
+        'password_reset_session_revocation_incomplete',
+        'password_reset_completed',
+        'password_changed_notification_accepted',
+        'password_changed_notification_failed',
+        'admin_invitation_accepted',
+        'recovery_code_accepted',
+      ]) {
+        await pool.query(`INSERT INTO dromex_audit_event (event_type, outcome, password_reset_id) VALUES ($1, 'success', 5)`, [type]);
+      }
+      await expect(
+        pool.query(`INSERT INTO dromex_audit_event (event_type, outcome) VALUES ('password_reset_token', 'success')`),
+      ).rejects.toThrow(/check constraint/i);
+      await expect(
+        pool.query(`INSERT INTO dromex_audit_event (event_type, outcome, password_reset_id) VALUES ('password_reset_requested', 'success', 0)`),
+      ).rejects.toThrow(/check constraint/i);
+    });
+  });
+
+  it('preserves existing principals exactly when 0010 is applied over 0009', async () => {
+    const migrations = await loadDromexMigrations();
+    await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0009'));
+    await seedUser(pool, 'kept_owner');
+    await seedUser(pool, 'kept_pending');
+    await pool.query(
+      `INSERT INTO dromex_principal (user_id, status, is_owner, mfa_completed_at, created_at, updated_at) VALUES
+         ('kept_owner', 'active', TRUE, '2026-09-01T10:00:00Z', '2026-09-01T09:00:00Z', '2026-09-01T10:00:00Z'),
+         ('kept_pending', 'pending', FALSE, NULL, '2026-09-02T09:00:00Z', '2026-09-02T09:00:00Z')`,
+    );
+    const snapshot = async () =>
+      (await pool.query(`SELECT user_id, status, is_owner, mfa_completed_at, created_at, updated_at FROM dromex_principal ORDER BY user_id`))
+        .rows;
+    const before = await snapshot();
+
+    const result = await applyMigrations(pool, migrations);
+    expect(result.applied).toEqual(['0010']);
+    expect(await snapshot()).toEqual(before);
+    const added = await pool.query(`SELECT count(*)::int AS n FROM dromex_principal WHERE credentials_changed_at IS NOT NULL`);
+    expect(added.rows[0]!.n).toBe(0);
+  });
+
+  it('applies 0010 idempotently: running its SQL again changes nothing', async () => {
+    const migrations = await loadDromexMigrations();
+    await applyMigrations(pool, migrations);
+    const sql = migrations.find((migration) => migration.id === '0010')!.sql;
+    const shape = async () =>
+      (
+        await pool.query(
+          `SELECT conrelid::regclass::text AS relation, conname::text AS name, pg_get_constraintdef(oid) AS definition
+             FROM pg_constraint WHERE connamespace = 'public'::regnamespace
+           UNION ALL
+           SELECT tgrelid::regclass::text, tgname::text, pg_get_triggerdef(oid) FROM pg_trigger WHERE NOT tgisinternal
+           UNION ALL
+           SELECT tablename::text, indexname::text, indexdef FROM pg_indexes WHERE schemaname = 'public'
+           ORDER BY 1, 2, 3`,
+        )
+      ).rows;
+    const before = await shape();
+    await pool.query(sql);
+    await pool.query(sql);
+    expect(await shape()).toEqual(before);
+  });
+
   it('preserves existing principals exactly when 0009 is applied over 0008 (DEC-444 (4))', async () => {
     const migrations = await loadDromexMigrations();
     await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0008'));
@@ -302,14 +497,16 @@ describe('DROMEX migration mechanism', () => {
     const snapshot = async () => (await pool.query(`SELECT * FROM dromex_principal ORDER BY user_id`)).rows;
     const before = await snapshot();
 
-    const result = await applyMigrations(pool, migrations);
+    const result = await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0009'));
     expect(result.applied).toEqual(['0009']);
     expect(await snapshot()).toEqual(before);
   });
 
   it('applies 0009 idempotently: running its SQL again changes nothing', async () => {
     const migrations = await loadDromexMigrations();
-    await applyMigrations(pool, migrations);
+    // Up to 0009 only: a later migration legitimately replaces the audit
+    // vocabulary that 0009 would restore.
+    await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0009'));
     const sql = migrations.find((migration) => migration.id === '0009')!.sql;
     const shape = async () =>
       (
@@ -703,6 +900,7 @@ describe('DROMEX migration mechanism', () => {
       'dromex_migration',
       'dromex_owner_bootstrap',
       'dromex_owner_recovery',
+      'dromex_password_reset',
       'dromex_principal',
       'dromex_rate_limit',
       'dromex_recovery_session',

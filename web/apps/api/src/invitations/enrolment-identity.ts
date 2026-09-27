@@ -3,6 +3,8 @@ import { isAPIError } from 'better-auth/api';
 import type { Pool } from 'pg';
 
 import { createAuthOptions, createTwoFactorPlugin, type AuthSettings } from '../auth/config.ts';
+import { checkNewPassword } from '../auth/password-policy.ts';
+import { PASSWORD_RESET_CLAIM_WINDOW_SECONDS } from '../auth/principal.ts';
 
 /**
  * The server-internal Better Auth capability that creates and enrols an
@@ -52,6 +54,8 @@ export interface EnrolmentSession {
   sessionId: string;
   userId: string;
   name: string;
+  /** When Better Auth created the session; `null` when unusable. */
+  createdAt: Date | null;
 }
 
 export interface EnrolmentIdentityPort {
@@ -89,6 +93,12 @@ const ADMISSION = `
        AND (
              (p.user_id IS NULL AND e.user_id IS NULL)
           OR (p.status = 'pending' AND NOT p.is_owner AND e.user_id = u.id)
+           )
+       -- DEC-487 (3): no session begins while a password reset is being written.
+       AND NOT EXISTS (
+             SELECT 1 FROM dromex_password_reset r
+              WHERE r.user_id = u.id AND r.status = 'claimed'
+                AND r.claimed_at > CURRENT_TIMESTAMP - make_interval(secs => $2)
            )
   ) AS admitted`;
 
@@ -138,7 +148,10 @@ export function createEnrolmentIdentity(settings: AuthSettings, pool: Pool): Enr
         create: {
           // A failed lookup throws, which also refuses the session.
           before: async (session) => {
-            const { rows } = await pool.query<{ admitted: boolean }>(ADMISSION, [session.userId]);
+            const { rows } = await pool.query<{ admitted: boolean }>(ADMISSION, [
+              session.userId,
+              PASSWORD_RESET_CLAIM_WINDOW_SECONDS,
+            ]);
             if (rows[0]?.admitted !== true) return false;
           },
         },
@@ -148,6 +161,8 @@ export function createEnrolmentIdentity(settings: AuthSettings, pool: Pool): Enr
 
   return {
     async create({ name, email, password }) {
+      // DEC-488, enforced at the port as well as by the acceptance service.
+      if (!checkNewPassword(password).ok) return 'rejected';
       try {
         const result = await auth.api.signUpEmail({ body: { name, email, password } });
         return { userId: result.user.id };
@@ -192,7 +207,13 @@ export function createEnrolmentIdentity(settings: AuthSettings, pool: Pool): Enr
     async session(pair) {
       const result = await auth.api.getSession({ headers: headersFor(pair) });
       if (result === null || typeof result.session?.id !== 'string' || typeof result.user?.id !== 'string') return null;
-      return { sessionId: result.session.id, userId: result.user.id, name: result.user.name };
+      const createdAt = new Date(result.session.createdAt);
+      return {
+        sessionId: result.session.id,
+        userId: result.user.id,
+        name: result.user.name,
+        createdAt: Number.isFinite(createdAt.getTime()) ? createdAt : null,
+      };
     },
 
     async enableTotp({ pair, password }) {

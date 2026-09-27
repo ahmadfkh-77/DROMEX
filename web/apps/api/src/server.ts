@@ -10,6 +10,7 @@ import {
   type AuthRoutesDependencies,
 } from './auth/http.ts';
 import { createAuth } from './auth/instance.ts';
+import { commonPasswordBlocklistSize } from './auth/password-policy.ts';
 import { createOwnerRecovery } from './auth/owner-recovery.ts';
 import { createPrincipalRepository } from './auth/principal.ts';
 import { registerRecoveryRoutes, type RecoveryBackend } from './auth/recovery-http.ts';
@@ -22,6 +23,12 @@ import { createAdminInvitationService, type InvitationDelivery } from './invitat
 import { registerInvitationAcceptanceRoutes } from './invitations/acceptance-http.ts';
 import { createInvitationAcceptance } from './invitations/invitation-acceptance.ts';
 import { registerInvitationRoutes } from './invitations/invitation-http.ts';
+import {
+  createPasswordResetService,
+  type PasswordResetDependencies,
+  type PasswordResetService,
+} from './password-reset/password-reset.ts';
+import { registerPasswordResetRoutes } from './password-reset/reset-http.ts';
 import { registerRouteAccessGuard } from './routeAccess.ts';
 
 export interface BuildServerOptions {
@@ -38,6 +45,14 @@ export interface BuildServerOptions {
    * invitations are still recorded, and honestly reported as not sent.
    */
   email?: InvitationDelivery;
+  /**
+   * Test seams for password reset: job scheduling, the password-write
+   * identity, interruption points, and access to the service so a test can
+   * wait for queued jobs. Production passes nothing.
+   */
+  passwordResetTestSeams?: Pick<PasswordResetDependencies, 'schedule' | 'identity' | 'interrupt'> & {
+    expose?: (service: PasswordResetService) => void;
+  };
 }
 
 /**
@@ -108,6 +123,9 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
       : false,
   });
 
+  // DEC-488: a missing or altered common-password blocklist stops startup.
+  commonPasswordBlocklistSize();
+
   // One pool serves readiness, Better Auth, and principal lookups alike.
   const pool = createPool(options.databaseUrl);
 
@@ -141,6 +159,17 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   const invitations = createAdminInvitationService({ pool, audit, delivery });
   // Owns the server-internal, never-routed sign-up capability (DEC-444 (5)).
   const acceptance = createInvitationAcceptance({ pool, audit, settings: options.auth });
+  // Owns the server-internal, never-routed password-write capability (DEC-487 (2)).
+  const { expose, ...resetSeams } = options.passwordResetTestSeams ?? {};
+  const resets = createPasswordResetService({
+    pool,
+    audit,
+    settings: options.auth,
+    delivery,
+    ...resetSeams,
+    onJobError: (name) => app.log.error({ errorName: name }, 'password reset job failed'),
+  });
+  expose?.(resets);
 
   const authDependencies: AuthRoutesDependencies = {
     backend: {
@@ -193,8 +222,11 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   registerAuthRoutes(app, authDependencies);
   registerInvitationRoutes(app, invitations);
   registerInvitationAcceptanceRoutes(app, { acceptance, cookies: authDependencies.cookies });
+  registerPasswordResetRoutes(app, { resets, cookies: authDependencies.cookies });
 
   app.addHook('onClose', async () => {
+    // Queued reset jobs finish before the pool they use closes.
+    await resets.close().catch(() => undefined);
     await pool.end().catch(() => undefined);
   });
 

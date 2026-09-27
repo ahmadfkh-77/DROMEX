@@ -85,6 +85,14 @@ describe('Owner draft validation', () => {
     expect(error.code).toBe('invalid_password');
   });
 
+  it('refuses a password on the common-password blocklist, in any letter case (DEC-488)', () => {
+    for (const common of ['1q2w3e4r5t6y7u8i9o0p', '1Q2W3E4R5T6Y7U8I9O0P']) {
+      const error = refusalOf(() => validateOwnerDraft(draft({ password: common, passwordConfirmation: common })));
+      expect(error.code).toBe('common_password');
+      expect(error.message).not.toContain(common);
+    }
+  });
+
   it('passes the password through exactly, never trimming it', () => {
     const spaced = '  synthetic owner phrase  ';
     expect(

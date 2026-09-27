@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
-import { takeInvitationToken } from './fragment.ts';
+import { takeFragmentToken } from '../security/fragment-token.ts';
 
 /**
  * Admin invitation acceptance (DEC-440, DEC-442, DEC-444). A development
@@ -75,7 +75,7 @@ export function InvitationPage() {
     // React's development double effect must not read the fragment twice.
     if (started.current) return;
     started.current = true;
-    token.current = takeInvitationToken(window.location, window.history);
+    token.current = takeFragmentToken(window.location, window.history);
     if (token.current === null) {
       setStep({ kind: 'invalid' });
       return;

@@ -105,9 +105,14 @@ const ACTIVE: Principal = {
   status: 'active',
   isOwner: false,
   mfaCompletedAt: MFA_COMPLETED_AT,
+  credentialsChangedAt: null,
 };
 const DISABLED: Principal = { ...ACTIVE, status: 'disabled' };
 const MFA_INCOMPLETE: Principal = { ...ACTIVE, mfaCompletedAt: null };
+/** DEC-487 (3): the password changed one millisecond after the session was created. */
+const CREDENTIALS_CHANGED: Principal = { ...ACTIVE, credentialsChangedAt: new Date(Date.parse(SESSION_CREATED_AT) + 1) };
+/** The password changed exactly when the session was created: still admitted. */
+const CREDENTIALS_CHANGED_AT_SESSION: Principal = { ...ACTIVE, credentialsChangedAt: new Date(SESSION_CREATED_AT) };
 
 const apps: FastifyInstance[] = [];
 
@@ -561,6 +566,7 @@ describe('authentication transport', () => {
       ['incomplete DROMEX MFA', MFA_INCOMPLETE, sessionBody()],
       ['Better Auth reporting no enrolled factor', ACTIVE, sessionBody({ twoFactorEnabled: false })],
       ['a session created before MFA completion', ACTIVE, sessionBody({ createdAt: '2026-09-13T08:59:59.999Z' })],
+      ['a session created before the last password change', CREDENTIALS_CHANGED, sessionBody()],
     ] as const)('revokes the new session and refuses for %s', async (_label, principal, body) => {
       const backend = fakeBackend({ getSession: vi.fn(async () => jsonResponse(200, body)) });
       const app = await buildApp(deps(backend, principalRepository(principal)));
@@ -764,6 +770,7 @@ describe('authentication transport', () => {
         [sessionBody({ createdAt: '2026-09-13T08:59:59.999Z' }), ACTIVE],
         [sessionBody({ createdAt: 'not-a-date' }), ACTIVE],
         [sessionBody({ createdAt: undefined }), ACTIVE],
+        [sessionBody(), CREDENTIALS_CHANGED],
       ];
 
       for (const [body, principal] of cases) {
@@ -775,6 +782,19 @@ describe('authentication transport', () => {
           status: 401,
           body: JSON.stringify({ error: 'unauthorized' }),
         });
+      }
+    });
+
+    it('admits a session created exactly when the password last changed, and refuses one a millisecond older (DEC-487)', async () => {
+      for (const [principal, status] of [
+        [CREDENTIALS_CHANGED_AT_SESSION, 200],
+        [CREDENTIALS_CHANGED, 401],
+      ] as const) {
+        const app = await buildApp(
+          deps(fakeBackend({ getSession: vi.fn(async () => jsonResponse(200, sessionBody())) }), principalRepository(principal)),
+        );
+        const response = await app.inject({ method: 'GET', url: '/api/session' });
+        expect(response.statusCode).toBe(status);
       }
     });
 

@@ -1,4 +1,4 @@
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../auth/config.ts';
+import { checkNewPassword } from '../auth/password-policy.ts';
 import { OwnerProvisioningError } from './errors.ts';
 
 /** What an operator enters. */
@@ -36,7 +36,7 @@ const CONTROL_CHARACTER = /\p{Cc}/u;
  * Better Auth call is made.
  *
  * Password length uses the same constants and the same measure Better Auth
- * applies. Surrounding whitespace in a password is permitted and preserved,
+ * applies, and the shared policy also refuses common passwords (DEC-488). Surrounding whitespace in a password is permitted and preserved,
  * matching the existing policy: `hashPassword` passes passwords through
  * unchanged, and trimming here would silently change the credential.
  */
@@ -52,12 +52,11 @@ export function validateOwnerDraft(draft: OwnerDraft): OwnerInput {
   }
 
   const { password, passwordConfirmation } = draft;
-  if (
-    typeof password !== 'string' ||
-    password.length < PASSWORD_MIN_LENGTH ||
-    password.length > PASSWORD_MAX_LENGTH
-  ) {
-    throw new OwnerProvisioningError('invalid_password');
+  // The shared policy (DEC-488): length exactly as Better Auth measures it,
+  // then the common-password blocklist.
+  const policy = checkNewPassword(password);
+  if (!policy.ok) {
+    throw new OwnerProvisioningError(policy.reason === 'common' ? 'common_password' : 'invalid_password');
   }
 
   if (passwordConfirmation !== password) {

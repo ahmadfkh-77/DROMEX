@@ -4,7 +4,7 @@ import { parseEnvelope } from 'better-auth/crypto';
 import type { Pool } from 'pg';
 
 import { createAuthOptions, createTwoFactorPlugin, type AuthSettings } from '../auth/config.ts';
-import { createPrincipalRepository } from '../auth/principal.ts';
+import { createPrincipalRepository, passwordResetInProgress } from '../auth/principal.ts';
 import { normalizeRecoveryCode } from '../auth/recovery-codes.ts';
 
 /**
@@ -111,6 +111,8 @@ export function createTerminalRecoveryIdentity(settings: AuthSettings, pool: Poo
             if (targetUserId === null || session.userId !== targetUserId) return false;
             const principal = await principals.findByUserId(session.userId);
             if (principal === null || principal.status !== 'active' || principal.isOwner !== true) return false;
+            // DEC-487 (3): no session begins while a password reset is being written.
+            if (await passwordResetInProgress(pool, session.userId)) return false;
           },
         },
       },

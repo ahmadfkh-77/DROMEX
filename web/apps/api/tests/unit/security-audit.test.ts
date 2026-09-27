@@ -35,6 +35,7 @@ const VALID: SecurityAuditEvent = {
   terminalRecoveryId: null,
   incidentReference: null,
   invitationId: null,
+  passwordResetId: null,
 };
 
 describe('security audit writer', () => {
@@ -59,6 +60,7 @@ describe('security audit writer', () => {
       null,
       null,
       null,
+      null,
     ]);
   });
 
@@ -76,6 +78,7 @@ describe('security audit writer', () => {
       terminalRecoveryId: '7',
       incidentReference: 'INC-20260915-01',
       invitationId: null,
+      passwordResetId: null,
     });
 
     expect(statements[0]!.values).toEqual([
@@ -89,6 +92,7 @@ describe('security audit writer', () => {
       null,
       '7',
       'INC-20260915-01',
+      null,
       null,
     ]);
   });
@@ -107,6 +111,7 @@ describe('security audit writer', () => {
       terminalRecoveryId: null,
       incidentReference: null,
       invitationId: null,
+      passwordResetId: null,
     });
 
     expect(statements[0]!.values).toEqual([
@@ -116,6 +121,7 @@ describe('security audit writer', () => {
       null,
       null,
       'invalid_code',
+      null,
       null,
       null,
       null,
@@ -138,6 +144,7 @@ describe('security audit writer', () => {
       terminalRecoveryId: null,
       incidentReference: null,
       invitationId: '12',
+      passwordResetId: null,
     });
 
     expect(statements[0]!.text).toContain('invitation_id');
@@ -153,6 +160,60 @@ describe('security audit writer', () => {
       null,
       null,
       '12',
+      null,
+    ]);
+  });
+
+  it('writes a password-reset event with its reset reference and no address, token, or hash', async () => {
+    const { db, statements } = recordingDatabase();
+
+    await createSecurityAudit(db).record({
+      type: 'password_reset_sessions_revoked',
+      outcome: 'success',
+      actor: { userId: 'user_synthetic', name: 'Synthetic Admin' },
+      recoveryId: null,
+      reason: null,
+      revokedSessionCount: 3,
+      clientAddress: '198.51.100.7',
+      terminalRecoveryId: null,
+      incidentReference: null,
+      invitationId: null,
+      passwordResetId: '9',
+    });
+
+    expect(statements[0]!.text).toContain('password_reset_id');
+    expect(statements[0]!.values).toEqual([
+      'password_reset_sessions_revoked',
+      'success',
+      'user_synthetic',
+      'Synthetic Admin',
+      null,
+      null,
+      3,
+      '198.51.100.7',
+      null,
+      null,
+      null,
+      '9',
+    ]);
+  });
+
+  it('accepts exactly the closed password-reset event vocabulary', () => {
+    expect(SECURITY_AUDIT_EVENT_TYPES.filter((type) => type.startsWith('password_'))).toEqual([
+      'password_reset_requested',
+      'password_reset_request_suppressed',
+      'password_reset_superseded',
+      'password_reset_expired',
+      'password_reset_delivery_accepted',
+      'password_reset_delivery_failed',
+      'password_reset_rejected',
+      'password_reset_claimed',
+      'password_reset_failed',
+      'password_reset_sessions_revoked',
+      'password_reset_session_revocation_incomplete',
+      'password_reset_completed',
+      'password_changed_notification_accepted',
+      'password_changed_notification_failed',
     ]);
   });
 
@@ -203,6 +264,10 @@ describe('security audit writer', () => {
     ['a zero invitation reference', { ...VALID, invitationId: '0' }],
     ['an invitation reference carrying an address', { ...VALID, invitationId: 'new.admin@example.test' }],
     ['a numeric invitation reference', { ...VALID, invitationId: 12 }],
+    ['a missing password-reset reference', (({ passwordResetId: _omit, ...rest }) => rest)(VALID)],
+    ['a zero password-reset reference', { ...VALID, passwordResetId: '0' }],
+    ['a password-reset reference carrying a token', { ...VALID, passwordResetId: 'A'.repeat(43) }],
+    ['a numeric password-reset reference', { ...VALID, passwordResetId: 9 }],
   ])('refuses %s before touching the database', async (_label, event) => {
     const { db, statements } = recordingDatabase();
 

@@ -1,6 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
 
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, type AuthSettings } from '../auth/config.ts';
+import { PASSWORD_MAX_LENGTH, type AuthSettings } from '../auth/config.ts';
+import { checkNewPassword } from '../auth/password-policy.ts';
+import { sessionPredatesCredentialChange } from '../auth/principal.ts';
 import { createRateLimitStorage, type RateLimitRule } from '../auth/rate-limit-storage.ts';
 import { RECOVERY_CODE_COUNT } from '../auth/recovery-codes.ts';
 import { securityEvent, type SecurityAudit, type SecurityAuditActor, type SecurityAuditEventType } from '../auth/security-audit.ts';
@@ -181,8 +183,9 @@ function isPasswordShaped(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= PASSWORD_MAX_LENGTH;
 }
 
+/** The shared new-password policy: length, then the common-password blocklist (DEC-488). */
 function meetsPasswordPolicy(value: unknown): value is string {
-  return typeof value === 'string' && value.length >= PASSWORD_MIN_LENGTH && value.length <= PASSWORD_MAX_LENGTH;
+  return checkNewPassword(value).ok;
 }
 
 function isCanonicalCodeSet(codes: unknown): codes is string[] {
@@ -421,10 +424,12 @@ export function createInvitationAcceptance(deps: InvitationAcceptanceDependencie
     if (pair === null) return null;
     const session = await identity.session(pair);
     if (session === null) return null;
-    const { rows } = await pool.query<EnrolmentRow & { bound_invitation_id: string }>(
-      `SELECT e.id::text, e.email, e.user_id, e.invitation_id::text, e.step, s.invitation_id::text AS bound_invitation_id
+    const { rows } = await pool.query<EnrolmentRow & { bound_invitation_id: string; credentials_changed_at: Date | null }>(
+      `SELECT e.id::text, e.email, e.user_id, e.invitation_id::text, e.step, s.invitation_id::text AS bound_invitation_id,
+              p.credentials_changed_at
          FROM dromex_admin_enrolment_session s
          JOIN dromex_admin_enrolment e ON e.id = s.enrolment_id
+         LEFT JOIN dromex_principal p ON p.user_id = e.user_id
         WHERE s.session_id = $1`,
       [session.sessionId],
     );
@@ -432,7 +437,9 @@ export function createInvitationAcceptance(deps: InvitationAcceptanceDependencie
     if (row === undefined || row.user_id !== session.userId || row.bound_invitation_id !== row.invitation_id || row.step === 'completed') {
       return null;
     }
-    const { bound_invitation_id: _bound, ...enrolment } = row;
+    // DEC-487 (3): a password reset of a pending invitee ends its setup sessions.
+    if (sessionPredatesCredentialChange({ credentialsChangedAt: row.credentials_changed_at }, session.createdAt)) return null;
+    const { bound_invitation_id: _bound, credentials_changed_at: _changed, ...enrolment } = row;
     return { enrolment, actor: { userId: session.userId, name: session.name } };
   }
 

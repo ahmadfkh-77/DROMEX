@@ -32,6 +32,7 @@ import {
   type OwnerRecovery,
   type RecoveryActor,
 } from './owner-recovery.ts';
+import { sessionPredatesCredentialChange } from './principal.ts';
 import { RECOVERY_CODE_COUNT, normalizeRecoveryCode } from './recovery-codes.ts';
 import { securityEvent, type SecurityAudit } from './security-audit.ts';
 
@@ -252,7 +253,9 @@ function recoveryGateFor(step: OpenRecoveryStep, deps: RecoveryRoutesDependencie
       principal === null ||
       principal.status !== 'active' ||
       principal.isOwner !== true ||
-      principal.mfaCompletedAt !== null
+      principal.mfaCompletedAt !== null ||
+      // DEC-487 (3): a password reset since this session began ends the recovery.
+      sessionPredatesCredentialChange(principal, view.createdAt)
     ) {
       await deps.recovery.end(found, 'failed', 'not_eligible', actor, request.ip);
       await revokeQuietly(request, deps, sessionPair);

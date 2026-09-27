@@ -12,6 +12,7 @@ export type OwnerProvisioningCode =
   | 'invalid_name'
   | 'invalid_email'
   | 'invalid_password'
+  | 'common_password'
   | 'confirmation_mismatch'
   | 'not_interactive'
   | 'cancelled'
@@ -29,6 +30,7 @@ const MESSAGES: Record<OwnerProvisioningCode, string> = {
   invalid_name: 'The Owner name must be 1 to 100 characters with no control characters.',
   invalid_email: 'The Owner email address is not valid.',
   invalid_password: 'The password must be 15 to 128 characters.',
+  common_password: 'That password is too common. Choose a longer, less predictable passphrase.',
   confirmation_mismatch: 'The password confirmation does not match.',
   not_interactive: 'Owner provisioning requires an interactive terminal.',
   cancelled: 'Owner provisioning was cancelled. Nothing was created.',
