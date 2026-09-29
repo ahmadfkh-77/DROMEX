@@ -1049,6 +1049,178 @@ or configured sending identity; production headers and CSP; behaviour under
 a least-privilege runtime database role; a physical reset rehearsal.
 **Not production-verified.**
 
+## Phase 2C running-server email configuration (checkpoint 4D): local verification
+
+Status: **implemented and locally verified on exact Node 24.20.0 (DEC-489);
+not production-verified.** Final verification is recorded at the end of this
+paragraph block (2026-09-29). The table below
+records the 2026-09-27 run. The tests changed on 2026-09-28 (the
+runtime-compatibility correction was narrowed to two classes, a focused
+compatibility test was added, and the provider-failure test was split per
+scenario), and the reruns that day on a heavily loaded host were not green:
+failures rotated across timing-, TOTP-, and rate-limit-sensitive tests
+outside 4D. One 4D test, the six-scenario provider-failure test, exceeded its
+120-second budget once and was then split per scenario; in the run after the
+split no 4D test failed.
+
+In a later session on 2026-09-28 (host CPU 26 to 42 per cent, 4.5 GB free),
+the valid results
+were: Node 24.20.0 unit **574/574**; unit mutations **19/19 killed**
+(including R01 and U15, which restore the parameter properties), tree
+byte-identical afterwards; host typecheck clean; host API unit 555 passed,
+17 skipped (POSIX-only), 2 known Node 22 `ERR_UNKNOWN_FILE_EXTENSION`
+failures; Playwright **51/51**; `npm audit` 0 vulnerabilities. The full
+integration suite failed 49 of 405 (all ten 4D integration tests passed),
+and the failing tests changed on every rerun. The cause was measured: a
+monitor inside the container logged the Docker VM's wall clock stepping by
+about 60,913 seconds (roughly 16.9 hours) back and forth 21 times in about
+six minutes, relative to the monotonic clock. TOTP codes, sessions, and
+rate-limit windows checked across such a step fail at random. The committed
+HEAD `fc63764` showed the same failures in the same environment, and no code
+defect was demonstrated, so no code was changed.
+
+**Final verification (2026-09-29), after Docker Desktop and WSL were
+restarted.** A clock check ran before any test: over 150 seconds an
+in-container monitor saw 0 wall-clock steps (largest deviation from the
+monotonic clock 11 ms), and 11 host-versus-container samples stayed within 38
+to 225 ms, inside the sampling round trip. On exact Node 24.20.0 with
+disposable PostgreSQL 18.6, from a 154-file copy byte-identical to the
+working tree: the complete integration suite passed **405/405** in one run
+(16 files, including all 10 `email-runtime.test.ts` tests), and the six
+integration mutations I01 to I06 were **all killed**, with the tree
+byte-identical afterwards. Totals across 4D: unit 574/574, integration
+405/405, mutations **25/25** killed (19 unit, 6 integration). The npm install
+twice skipped the Linux Rolldown binding on a slow network; the runner now
+checks for it and retried. Docker's containers (10), volumes (14), and images
+(15) matched the baseline afterwards, and the throwaway npm cache volume was
+removed. **Not production-verified.** No
+real provider, account, key, secret file, sending identity, or email exists;
+every key was a generated synthetic value in a temporary file, and every
+Resend request went to a scripted in-memory `fetch`. No schema change: no
+migration file changed, and the delivery states and the `email_disabled`
+reason already existed (migrations `0008`, `0010`).
+
+**Authoritative run (Node v24.20.0).** A temporary directory held exactly 154
+files: the Git-tracked `web/` files plus the 2 new 4D test files, with
+`.env`, `.env.*` (including `.env.example`), `node_modules`, `.git`, caches,
+logs, outputs, APKs, and everything outside `web/` excluded. The list was
+checked before copying and the copy scanned for secret-shaped content (the
+only matches were error-code names, labelled synthetic test strings, and the
+development Compose file's variable interpolation). It was mounted read-only
+into disposable `node:24.20.0-trixie-slim` containers with the Docker socket
+for Testcontainers only; no development database or volume was mounted. The
+working tree matched the copy's per-file SHA-256 list afterwards (154 of 154),
+the copy was removed, and Docker's containers (10), volumes (14), and images
+(15) were identical to the list recorded before the run.
+
+| Step (Node v24.20.0) | Result |
+|---|---|
+| `npm ci` from the committed lockfile | Lockfile byte-identical afterwards |
+| Workspace typecheck | Exit 0 |
+| API unit, including the POSIX key-file and real-process startup tests | **571/571**, none skipped |
+| API integration against disposable PostgreSQL 18.6 | **400/400** (Testcontainers' Ryuk reaper disabled; see below) |
+| Unit and integration together, final run | **971/971** |
+| `tests/integration/email-runtime.test.ts` alone | 5/5 |
+| Mutations | **24/24 killed**; the container's copy byte-identical afterwards |
+| Playwright | Not run in the container (no browsers in the slim image); host result below |
+
+**Integration runs, stated plainly.** The first full integration run passed
+399 of 400; the one failure was not identified because the output was
+filtered. The second run failed across 16 files with `Connection terminated
+unexpectedly` at `CREATE DATABASE`: the disposable PostgreSQL container was
+ended mid-run, consistent with Testcontainers' Ryuk reaper losing its session
+through `host.docker.internal`. With Ryuk disabled (the global setup already
+stops the container on teardown, and no container was left behind), the
+suite passed 400/400, and the final combined run passed 971/971.
+
+**Host results (Windows, Node 22.17.1, Docker Desktop 28.5.1):**
+
+| Suite | Result |
+|---|---|
+| Workspace typecheck (`api`, `web`) | Clean |
+| API unit | 552 passed, 17 skipped (POSIX-only), 2 failed: the two known host-only Node 22 failures spawning a `.ts` child (`ERR_UNKNOWN_FILE_EXTENSION`) in `owner-command` and `owner-recovery-command`, confirmed by their error code |
+| API integration | 15 failures in sign-in-dependent tests across 7 files (the documented host clock-skew pattern, 4C above); the new disabled-mode test was among them once and passed when rerun alone |
+| Playwright invitation and password-reset suites | 39/39 (13 tests × 375, 768, 1280 px). The first cold run failed 6 tests at 375 px only; that project then passed 13/13 and the full rerun 39/39. No `web/apps/web` file changed |
+| Android typecheck | Clean |
+| Android suite | 1,435/1,435 (106 files). An earlier run under load failed three backup-related files, which passed 38/38 alone; no Android file changed |
+| `npm audit` (web workspace) | 0 vulnerabilities |
+| Manifests, lockfiles, migrations | Unchanged |
+
+**Test-first evidence.**
+
+- **RED.** Before any implementation, 32 new tests failed because
+  `loadEmailSettings` and `createEmailDelivery` did not exist and
+  `RuntimeConfig.email` was undefined, and every real-process startup test
+  failed. The startup failures exposed a pre-existing defect:
+  `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`, because TypeScript parameter
+  properties in `owner-recovery.ts` and `admin-invitations.ts` cannot run
+  under Node's type stripping. A link-origin test failed because
+  `https://*.example.test` was accepted.
+- **Runtime-compatibility correction, verified on exact Node 24.20.0.**
+  Against the committed code (`fc63764`), plain Node 24.20.0 refused
+  `server.ts`, `admin-invitations.ts`, `owner-recovery.ts`, and
+  `owner-mfa-reset.ts` with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`, and the real
+  entry point exited before listening; the two terminal commands loaded.
+  After converting only the two classes on the server's import path, the
+  same check showed those modules loading and the real entry point listening
+  (`/health` 200, `emailDelivery: "disabled"`); `owner-mfa-reset.ts`, which
+  no production path imports, is deliberately unchanged and still refused.
+  An earlier draft also converted it and added `erasableSyntaxOnly` to the
+  API `tsconfig.json`; both were reverted to the committed content. The
+  focused test (`runtime compatibility of the production import path`, 3
+  tests) fails when either conversion is undone (R01, U15).
+- **GREEN.** Each was then made to pass by the implementation. Four failures
+  after the first implementation were mistakes in the tests themselves (a
+  display name of `DROMEX` that also appears in every setting name, and a
+  provider case that kept a key-file path and so hit an earlier, correct
+  refusal); they were corrected without changing the code under test.
+- **Guards, not RED.** The three new boundary tests (business modules behind
+  the provider-neutral interface; `process.env` only in the entry block and
+  the offline schema tool; no email, debug, or webhook route) passed on first
+  run, because they describe properties the code already had. Mutations U16
+  and U17 show they fail when those properties break.
+
+**Tests written for 4D:**
+
+| File | Covers |
+|---|---|
+| `tests/unit/email-config.test.ts` (+16) | Disabled by default in every environment; complete Resend settings holding only the path; optional display name; partial configuration naming the missing setting; public settings without a provider refused, never a fallback; `capture` refused in the running server; unsupported provider or enabled-flag values; invalid sender, display name, Reply-To, and link origin without echo; HTTPS in production; the trusted-origin rule; a key pasted into a public setting; a directly supplied key in either mode; only the given environment read |
+| `tests/unit/email-transports.test.ts` (+5) | Disabled builds nothing, opens nothing, and uses no network; Windows refused without opening; `capture` refused by the builder; on POSIX, the key read exactly once with `O_NOFOLLOW` and `O_NONBLOCK`, the identity returned, no request at creation, and the key never exposed; missing, empty, oversized, group- or world-readable, symbolic-link, directory, FIFO, two-key, and non-UTF-8 files refused with fixed messages naming neither the path nor the content (an unreadable file too when not run as root) |
+| `tests/unit/runtime-config.test.ts` (+5) | Email disabled by default; Resend settings carried with the path only; the link origin checked against the parsed trusted origins; partial and ambient configuration refused without echo; the ambient process environment never read |
+| `tests/unit/email-boundary.test.ts` (+3) | Business modules import only the message and result types; `process.env` only in the entry block and the schema tool; no email, debug, or webhook route |
+| `tests/unit/server-email-startup.test.ts` (new, 12) | In process: disabled startup opens nothing and uses no network; route surface identical to a server built without email; with Resend (POSIX) the key is read once, nothing is sent, `/health` and `/ready` answer without the provider, and neither logs nor `/ready` reveal email configuration; an insecure key file fails closed. As a real process with an explicit environment only: disabled startup answers `/health`; partial, settings-without-provider, direct-key, `capture`, and unopenable-file configurations exit 1 with one line and no stack, value, or path; on POSIX a valid synthetic key file starts and a `0644` file is refused |
+| `tests/integration/email-runtime.test.ts` (new, 5) | Configuration parsed from an explicit environment object: disabled mode records invitations and resets as `not_sent` and contacts nothing; Resend mode sends the invitation, reset, and password-changed emails through one transport with the configured sender, Reply-To, and origin despite a hostile `Host`, reads the key once, and logs no key, path, token, body, or password; 503, timeout, 422, 401, in-progress 409 then success, and conflicting 409 recorded truthfully with one idempotency key and a byte-identical body per logical email; the public reset response identical for known, unknown, and disabled addresses while only the known account reaches the provider; `/health` and `/ready` without provider calls |
+
+**Mutation testing** (each applied alone to the container's copy, the named
+tests run, and the file restored and verified by SHA-256; all 24 killed):
+
+- Settings: accepting public settings while disabled (U01); accepting
+  `capture` (U02); dropping the trusted-origin rule (U03); dropping the
+  secret-like check (U04); making Reply-To optional (U05); skipping sender
+  address validation (U06) or display-name validation (U07); an error that
+  repeats the sender (U08); taking the first trusted origin instead of the
+  configured one (U09).
+- Shared rules: accepting a `*` host in the link origin (U10); widening the
+  key-file permission mask so world-readable files pass (U18).
+- Composition: building a transport in disabled mode (U11); ignoring email
+  settings in the runtime configuration (U12); an entry point that bypasses
+  `buildServerFromConfig` (U13); logging the email settings (U14);
+  reintroducing a parameter property on the entry point's import graph (U15).
+- Boundaries: an invitation module reading `process.env` (U16); the
+  password-reset module importing the Resend transport (U17).
+- Integration: the server dropping the built delivery (I01); password reset
+  given no delivery (I02); the password-changed link built from another
+  origin (I03); a new idempotency key per attempt (I04); four attempts
+  instead of three (I05); disabled delivery recorded as provider-accepted
+  (I06).
+
+**Not verified:** any real provider call, key, secret file, or sending
+identity; the production Docker Compose secret mount (its owner and mode
+inside the container, and the `node` user ID, are operational checks);
+Playwright on Node 24.20.0; the unreadable-file refusal under Node 24.20.0,
+because the container ran as root; behaviour under a least-privilege runtime
+database role. **Not production-verified.**
+
 ## Planned tests: email, Admin invitations, and password reset
 
 Status: **planned design, now covered by checkpoints 4A to 4C (DEC-439

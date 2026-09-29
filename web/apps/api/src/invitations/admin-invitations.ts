@@ -122,11 +122,13 @@ const DATABASE_ID = /^[1-9][0-9]{0,18}$/;
 
 /** Refusals carry no detail beyond their code; this never leaves the module. */
 class Refusal extends Error {
-  constructor(
-    readonly code: InvitationFailure,
-    readonly retryAfterSeconds = 0,
-  ) {
+  readonly code: InvitationFailure;
+  readonly retryAfterSeconds: number;
+
+  constructor(code: InvitationFailure, retryAfterSeconds = 0) {
     super('Invitation operation refused.');
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
     this.name = 'InvitationRefusal';
   }
 }

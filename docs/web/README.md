@@ -13,7 +13,7 @@ describes a rule, it cites the decision that established it.
 | --- | --- | --- |
 | [architecture.md](architecture.md) | Service boundaries, technology baseline, how the web system relates to the existing Android application | **Partly implemented** (Phase 1 skeleton only) |
 | [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Partly implemented** (local development only: password-plus-TOTP sign-in, sign-out, sanitized session endpoint, active-principal and mandatory-MFA enforcement, Owner recovery-code sign-in with restricted authenticator replacement, and a security audit foundation; terminal Owner activation and terminal emergency Owner recovery tested on disposable databases only, both commands refuse every run, and no Owner exists; no public registration, password recovery, or account management) |
-| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, the sign-in, TOTP verification, sign-out, and session transport, mandatory MFA, TOTP replay protection, versioned secrets, recovery-code issuance, resumable terminal Owner activation whose command refuses every run, recovery-code sign-in with a restricted recovery state and supported authenticator replacement, the security audit foundation, and terminal emergency Owner recovery with the DEC-437 last-resort reset, whose command refuses every run, the email transport foundation (checkpoint 4A, not wired to the server), Owner-managed Admin invitations (checkpoint 4B1), and restricted invitation acceptance with the `pending` lifecycle and a never-routed internal sign-up capability (checkpoint 4B2), and password reset with a DROMEX-owned fragment token, a never-routed internal password-write capability, the credential-change session rule, and the offline common-password blocklist (checkpoint 4C). No Owner, real invitation, Admin, or reset, Owner readiness enforcement, email configuration in the running server, email sending, permissions, designed UI, or deployment) |
+| [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, the sign-in, TOTP verification, sign-out, and session transport, mandatory MFA, TOTP replay protection, versioned secrets, recovery-code issuance, resumable terminal Owner activation whose command refuses every run, recovery-code sign-in with a restricted recovery state and supported authenticator replacement, the security audit foundation, and terminal emergency Owner recovery with the DEC-437 last-resort reset, whose command refuses every run, the email transport foundation (checkpoint 4A), Owner-managed Admin invitations (checkpoint 4B1), and restricted invitation acceptance with the `pending` lifecycle and a never-routed internal sign-up capability (checkpoint 4B2), and password reset with a DROMEX-owned fragment token, a never-routed internal password-write capability, the credential-change session rule, and the offline common-password blocklist (checkpoint 4C), and the running server's email configuration, disabled by default and failing closed on any partial configuration (checkpoint 4D). No Owner, real invitation, Admin, or reset, Owner readiness enforcement, configured email provider, email sending, permissions, designed UI, or deployment) |
 | [postgresql-strategy.md](postgresql-strategy.md) | Schema approach, identifier preservation, roles, the PostgreSQL 18 volume rule | **Partly implemented** (development service only, no schema) |
 | [synchronization-strategy.md](synchronization-strategy.md) | Android synchronisation protocol and conflict rules | **Planned** (not implemented) |
 | [docker-vps-strategy.md](docker-vps-strategy.md) | Local Docker topology, port exposure rules, production deployment plan | **Partly implemented** (local development only) |
@@ -48,9 +48,10 @@ What does **not** exist, and must not be assumed to exist:
   DEC-444), and password reset with the common-password blocklist
   (checkpoint 4C, DEC-487, DEC-488) exist, tested against capture
   transports, disposable databases, and a stubbed browser API only; the
-  running server reads no email configuration (checkpoint 4D), no real
-  invitation, Admin, or reset exists, and there is no provider account, API
-  key, DNS configuration, secret file, or email,
+  running server reads email configuration (checkpoint 4D, DEC-489) but
+  defaults to disabled and has no provider configured, no real invitation,
+  Admin, or reset exists, and there is no provider account, API key, DNS
+  configuration, secret file, or email,
 - a real Owner: terminal activation exists and is tested against disposable
   databases, but its command refuses every run. OQ-161's design closure does
   not unblock it: enabling it requires the DEC-443 gate. Password reset is now
@@ -107,9 +108,10 @@ The Android application is unchanged and remains offline-first on local SQLite
 | DEC-444 | Interrupted invitation setup leaves a never-deleted, unusable `pending` principal; re-invitation resumes it only after proof of the existing password; invitation validity re-checked at every acceptance step; a server-internal, never-routed Better Auth sign-up capability creates the invited identity (implemented locally in checkpoint 4B2) |
 | DEC-487 | Password reset: a DROMEX-owned 256-bit fragment token and lifecycle; an unmounted internal Better Auth capability performs only the final password write; the `credentials_changed_at` rule ends every earlier session at every gate; pending invitees may reset without activation; one neutral `202`, with `429` only per network source; no TOTP at completion and MFA never touched (implemented locally in checkpoint 4C) |
 | DEC-488 | An offline, pinned common-password blocklist (NCSC top 100,000 via SecLists) refuses common passwords on every path that creates or changes a password; no runtime network check (implemented locally in checkpoint 4C) |
+| DEC-489 | The running API reads email configuration in exactly two modes: disabled by default, or Resend only when the key-file path, sender, Reply-To, and a trusted HTTPS link origin are all valid; partial, ambient-key, or `capture` configuration stops startup; delivery built once at startup and shared by invitations, reset, and password-changed; startup never contacts the provider (implemented locally in checkpoint 4D; no provider configured) |
 
 Full detail for DEC-418 through DEC-437, and for DEC-439 through DEC-444 and
-DEC-487 and DEC-488 (§14A), is in
+DEC-487 to DEC-489 (§14A), is in
 [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md).
 DEC-438 is an Android decision and is not a web governing decision.
 
@@ -122,5 +124,6 @@ lifetime values), **OQ-162** (Android authentication model), **OQ-163**
 who lost the authenticator before activation). **OQ-157** (authentication solution) is
 closed by DEC-418. **OQ-161** (email delivery mechanism) is closed as a design
 decision by DEC-439 through DEC-442; password reset is implemented locally
-(checkpoint 4C), production configuration is pending, and Owner activation
+(checkpoint 4C), the running server reads email configuration (checkpoint
+4D), production configuration is pending, and Owner activation
 stays blocked (DEC-443).

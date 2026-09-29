@@ -89,8 +89,11 @@ interface RecoveryRow {
 }
 
 class RecoveryRefusal extends Error {
-  constructor(readonly reason: 'not_eligible' | 'recovery_in_progress') {
+  readonly reason: 'not_eligible' | 'recovery_in_progress';
+
+  constructor(reason: 'not_eligible' | 'recovery_in_progress') {
     super('Owner recovery refused.');
+    this.reason = reason;
     this.name = 'RecoveryRefusal';
   }
 }

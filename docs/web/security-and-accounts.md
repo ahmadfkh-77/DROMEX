@@ -19,7 +19,9 @@ authenticator replacement and retrieval of one stored code, and permits a
 narrowly scoped two-operation factor reset only when neither is possible
 (DEC-437); its command refuses every run. Email password reset is
 implemented and tested on disposable databases only (checkpoint 4C,
-DEC-487, DEC-488); the running server reads no email configuration yet. No
+DEC-487, DEC-488); the running server reads email configuration
+(checkpoint 4D, DEC-489) but runs disabled, because no provider is
+configured. No
 account management, Owner readiness enforcement, permissions, or deployment
 exists.
 
@@ -116,7 +118,10 @@ is implemented (checkpoint 4A): disabled, capture, and Resend transports,
 the secure key-file loader, message validation, and bounded retries (a
 documented in-progress idempotency 409 is retried with the same key; a
 conflict or unclassifiable 409 never is), tested
-locally and not wired to the server. Nothing below is production configured
+locally. Checkpoint 4D (DEC-489) wires it to the running server: disabled by
+default, or Resend only when every public setting is valid and the key is
+read from its secret file, with any partial or invalid configuration
+stopping startup. Nothing below is production configured
 or physically verified: no Resend account, DNS record, API key, or secret
 file exists, and no email has been sent. The Owner's side of Admin
 invitations (checkpoint 4B1), restricted invitation acceptance

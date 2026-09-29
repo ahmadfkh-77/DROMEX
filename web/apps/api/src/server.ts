@@ -19,6 +19,9 @@ import { createTotpReplayGuard } from './auth/totp-replay.ts';
 import { loadRuntimeConfig, type RuntimeConfig } from './config/runtime.ts';
 import { checkDatabase, createPool } from './db.ts';
 import { parseLinkOrigin } from './email/message.ts';
+import type { ResendDependencies } from './email/resend.ts';
+import type { SecretFileOptions } from './email/secret-file.ts';
+import { createEmailDelivery } from './email/transport.ts';
 import { createAdminInvitationService, type InvitationDelivery } from './invitations/admin-invitations.ts';
 import { registerInvitationAcceptanceRoutes } from './invitations/acceptance-http.ts';
 import { createInvitationAcceptance } from './invitations/invitation-acceptance.ts';
@@ -41,8 +44,11 @@ export interface BuildServerOptions {
   /** Captures structured logs, so tests can prove what is never written. */
   logStream?: Writable;
   /**
-   * How invitation emails are sent. Absent means email is not configured:
-   * invitations are still recorded, and honestly reported as not sent.
+   * How invitation, password-reset, and password-changed emails are sent; the
+   * one delivery serves all three. Absent means email is not configured:
+   * invitations and resets are still recorded, and honestly reported as not
+   * sent. The running server builds it from configuration through
+   * {@link buildServerFromConfig}; tests may inject a capture transport.
    */
   email?: InvitationDelivery;
   /**
@@ -233,6 +239,49 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   return app;
 }
 
+export interface ServerStartupOptions
+  extends Pick<BuildServerOptions, 'logger' | 'logStream' | 'passwordResetTestSeams'> {
+  /** Test seam: the key file opener and platform. The running server passes nothing. */
+  secretFile?: SecretFileOptions;
+  /** Test seam: Resend's `fetch`, clock, and timers. The running server passes nothing. */
+  resend?: Partial<ResendDependencies>;
+}
+
+/**
+ * Builds the API from validated runtime configuration, as the entry point does
+ * (DEC-489). Email delivery is built exactly once, here, and injected: when
+ * disabled nothing is built and no file is opened; when Resend is configured
+ * its key is read once through the secure secret-file loader. Startup checks
+ * local configuration only: it sends nothing and never contacts the provider,
+ * so a provider outage cannot stop the API from starting.
+ */
+export async function buildServerFromConfig(
+  config: RuntimeConfig,
+  options: ServerStartupOptions = {},
+): Promise<FastifyInstance> {
+  const { secretFile, resend, ...server } = options;
+  const email = await createEmailDelivery(config.email, {
+    environment: config.auth.environment,
+    ...(secretFile === undefined ? {} : { secretFile }),
+    ...(resend === undefined ? {} : { resend }),
+  });
+
+  const app = await buildServer({
+    databaseUrl: config.databaseUrl,
+    auth: config.auth,
+    ...server,
+    ...(email === null ? {} : { email }),
+  });
+  // The mode only: never the sender, the key file, or any other value.
+  app.log.info(
+    { emailDelivery: config.email.kind },
+    email === null
+      ? 'email delivery is disabled; invitation and password emails are recorded as not sent'
+      : 'email delivery is enabled; nothing is sent at startup',
+  );
+  return app;
+}
+
 function exitWithConfigurationError(cause: unknown): never {
   // Messages from configuration validation name variables, never values.
   const message = cause instanceof Error ? cause.message : 'Unknown configuration error.';
@@ -251,7 +300,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
   try {
     config = loadRuntimeConfig(process.env);
-    app = await buildServer({ databaseUrl: config.databaseUrl, auth: config.auth, logger: true });
+    app = await buildServerFromConfig(config, { logger: true });
   } catch (cause) {
     exitWithConfigurationError(cause);
   }

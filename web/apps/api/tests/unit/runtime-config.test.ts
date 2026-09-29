@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { loadRuntimeConfig } from '../../src/config/runtime.ts';
 import { syntheticSecret } from '../helpers/auth-settings.ts';
@@ -129,5 +129,79 @@ describe('runtime configuration', () => {
     for (const port of ['abc', '0', '70000', '3000.5']) {
       expect(() => loadRuntimeConfig(validEnvironment({ API_PORT: port }))).toThrow(/API_PORT/);
     }
+  });
+});
+
+describe('runtime email configuration (checkpoint 4D, DEC-489)', () => {
+  const LINK = 'https://app.example.test';
+  const KEY_FILE = '/run/secrets/dromex_resend_api_key';
+
+  function emailEnvironment(overrides: Record<string, string | undefined> = {}) {
+    return validEnvironment({
+      DROMEX_ENVIRONMENT: 'production',
+      DROMEX_AUTH_BASE_URL: 'https://api.example.test',
+      DROMEX_AUTH_TRUSTED_ORIGINS: LINK,
+      DROMEX_EMAIL_TRANSPORT: 'resend',
+      DROMEX_EMAIL_RESEND_API_KEY_FILE: KEY_FILE,
+      DROMEX_EMAIL_FROM_ADDRESS: 'no-reply@notify.example.test',
+      DROMEX_EMAIL_FROM_NAME: 'DROMEX',
+      DROMEX_EMAIL_REPLY_TO: 'support@example.test',
+      DROMEX_EMAIL_LINK_ORIGIN: LINK,
+      ...overrides,
+    });
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('is disabled by default, so local development needs no email setting', () => {
+    expect(loadRuntimeConfig(validEnvironment()).email).toEqual({ kind: 'disabled' });
+  });
+
+  it('carries the validated Resend settings, holding only the key file path', () => {
+    expect(loadRuntimeConfig(emailEnvironment()).email).toEqual({
+      kind: 'resend',
+      apiKeyFile: KEY_FILE,
+      from: { address: 'no-reply@notify.example.test', name: 'DROMEX' },
+      replyTo: 'support@example.test',
+      linkOrigin: LINK,
+    });
+  });
+
+  it('checks the link origin against the parsed trusted origins', () => {
+    expect(rejection(emailEnvironment({ DROMEX_AUTH_TRUSTED_ORIGINS: 'https://other.example.test' }))).toMatch(
+      /DROMEX_EMAIL_LINK_ORIGIN/,
+    );
+    expect(
+      loadRuntimeConfig(emailEnvironment({ DROMEX_AUTH_TRUSTED_ORIGINS: ` https://other.example.test , ${LINK} ` })).email,
+    ).toMatchObject({ kind: 'resend', linkOrigin: LINK });
+  });
+
+  it('fails closed on partial or ambient email configuration without echoing values', () => {
+    const key = `re_SYNTHETIC_TEST_ONLY_${syntheticSecret()}`;
+    const cases: Array<Record<string, string | undefined>> = [
+      emailEnvironment({ DROMEX_EMAIL_REPLY_TO: undefined }),
+      emailEnvironment({ DROMEX_EMAIL_TRANSPORT: undefined, DROMEX_EMAIL_RESEND_API_KEY_FILE: undefined }),
+      validEnvironment({ DROMEX_EMAIL_LINK_ORIGIN: LINK }),
+      validEnvironment({ RESEND_API_KEY: key }),
+      emailEnvironment({ DROMEX_EMAIL_RESEND_API_KEY: key }),
+    ];
+    for (const environment of cases) {
+      const text = rejection(environment);
+      expect(text).toMatch(/DROMEX_EMAIL_|provider key/);
+      expect(text).not.toContain(key);
+      expect(text).not.toContain(KEY_FILE);
+      expect(text).not.toContain('support@example.test');
+    }
+  });
+
+  it('never reads the ambient process environment', () => {
+    vi.stubEnv('DROMEX_EMAIL_TRANSPORT', 'resend');
+    vi.stubEnv('DROMEX_EMAIL_RESEND_API_KEY_FILE', KEY_FILE);
+    vi.stubEnv('DROMEX_EMAIL_LINK_ORIGIN', LINK);
+    vi.stubEnv('RESEND_API_KEY', `re_SYNTHETIC_TEST_ONLY_${syntheticSecret()}`);
+
+    expect(loadRuntimeConfig(validEnvironment()).email).toEqual({ kind: 'disabled' });
   });
 });

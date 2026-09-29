@@ -1,7 +1,13 @@
 import type { AuthEnvironment } from '../auth/config.ts';
-import type { EmailTransportConfig } from './config.ts';
+import type { EmailSettings, EmailTransportConfig } from './config.ts';
 import { EmailConfigurationError } from './errors.ts';
-import { parseLinkOrigin, validateEmailMessage, type EmailContentPolicy, type EmailMessage } from './message.ts';
+import {
+  parseLinkOrigin,
+  validateEmailMessage,
+  type EmailContentPolicy,
+  type EmailMessage,
+  type EmailSender,
+} from './message.ts';
 import { createResendTransport, type ResendDependencies } from './resend.ts';
 import type { EmailSendResult, EmailTransport } from './result.ts';
 import { loadResendApiKey, type SecretFileOptions } from './secret-file.ts';
@@ -148,6 +154,56 @@ export async function createEmailTransport(
         apiKey,
         policy,
         ...(options.resend === undefined ? {} : { dependencies: options.resend }),
+      });
+    }
+    default:
+      throw new EmailConfigurationError('transport_unsupported');
+  }
+}
+
+/** How invitation and password emails leave the running server: one transport and one sending identity. */
+export interface EmailDelivery {
+  readonly transport: EmailTransport;
+  readonly from: Readonly<EmailSender>;
+  readonly replyTo: string;
+  readonly linkOrigin: string;
+}
+
+export interface EmailDeliveryOptions {
+  environment: AuthEnvironment;
+  secretFile?: SecretFileOptions;
+  resend?: Partial<ResendDependencies>;
+}
+
+/**
+ * Builds the running server's delivery once, at startup (DEC-489). Disabled
+ * settings build nothing and open nothing, and the caller then records every
+ * email honestly as not sent. Resend settings read the key exactly once,
+ * through the secure secret-file loader; nothing is sent and the provider is
+ * never contacted here.
+ */
+export async function createEmailDelivery(
+  settings: EmailSettings,
+  options: EmailDeliveryOptions,
+): Promise<EmailDelivery | null> {
+  switch (settings.kind) {
+    case 'disabled':
+      return null;
+    case 'resend': {
+      const transport = await createEmailTransport(
+        { kind: 'resend', apiKeyFile: settings.apiKeyFile },
+        {
+          environment: options.environment,
+          linkOrigin: settings.linkOrigin,
+          ...(options.secretFile === undefined ? {} : { secretFile: options.secretFile }),
+          ...(options.resend === undefined ? {} : { resend: options.resend }),
+        },
+      );
+      return Object.freeze({
+        transport,
+        from: Object.freeze({ ...settings.from }),
+        replyTo: settings.replyTo,
+        linkOrigin: settings.linkOrigin,
       });
     }
     default:

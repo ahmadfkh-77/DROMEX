@@ -86,6 +86,7 @@ const DOMAIN_LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const TOP_LEVEL_LABEL = /^[a-z]{2,63}$/;
 const DISPLAY_NAME = /^[\p{L}\p{N} .'&()_-]+$/u;
 const IDEMPOTENCY_KEY = /^([a-z_]+)\/([A-Za-z0-9-]{8,128})$/;
+const ORIGIN_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$|^\[::1\]$/;
 
 const SECRET_LIKE: readonly RegExp[] = [
   /\bre_[A-Za-z0-9_-]{8,}/,
@@ -132,7 +133,7 @@ export function isValidEmailAddress(value: unknown): value is string {
   return TOP_LEVEL_LABEL.test(labels[labels.length - 1]!);
 }
 
-function isValidSender(value: unknown): value is EmailSender {
+export function isValidSender(value: unknown): value is EmailSender {
   if (!isPlainObject(value)) return false;
   if (Object.keys(value).some((key) => !SENDER_FIELDS.has(key))) return false;
   if (!isValidEmailAddress(value['address'])) return false;
@@ -191,6 +192,11 @@ function linksAllowed(message: EmailMessage, origin: string): boolean {
   return true;
 }
 
+/** Whether a header-level value matches a provider-key, bearer-token, or private-key pattern. */
+export function isSecretLike(value: string): boolean {
+  return SECRET_LIKE.some((pattern) => pattern.test(value));
+}
+
 function metadataOf(message: EmailMessage): string[] {
   return [
     message.idempotencyKey,
@@ -215,6 +221,9 @@ export function parseLinkOrigin(value: string, environment: string): string {
     throw invalid();
   }
   if (url.origin !== value || url.username !== '' || url.password !== '') throw invalid();
+  // The URL parser accepts characters such as `*` in a host; an origin is one
+  // exact host, so only DNS labels, an IPv4 address, or IPv6 loopback pass.
+  if (!ORIGIN_HOST.test(url.hostname)) throw invalid();
 
   if (url.protocol === 'https:') return url.origin;
   const loopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]';
@@ -247,7 +256,7 @@ export function validateEmailMessage(value: unknown, policy: EmailContentPolicy)
   const message = value as unknown as EmailMessage;
   if (hasUnsafeHtml(message.html)) return fail('unsafe_content');
   if (!linksAllowed(message, policy.linkOrigin)) return fail('link_not_allowed');
-  if (metadataOf(message).some((field) => SECRET_LIKE.some((pattern) => pattern.test(field)))) {
+  if (metadataOf(message).some(isSecretLike)) {
     return fail('secret_like_value');
   }
 

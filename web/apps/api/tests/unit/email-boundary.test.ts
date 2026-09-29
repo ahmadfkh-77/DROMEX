@@ -74,3 +74,62 @@ describe('email transport foundation boundaries (DEC-439)', () => {
     }
   });
 });
+
+async function sourcesUnder(directory: string): Promise<Array<{ file: string; text: string }>> {
+  const entries = await readdir(directory, { recursive: true, withFileTypes: true });
+  const files = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
+    .map((entry) => join(entry.parentPath, entry.name))
+    .sort();
+  return Promise.all(files.map(async (file) => ({ file, text: await readFile(file, 'utf8') })));
+}
+
+function importsOf(text: string): string[] {
+  return [
+    ...text.matchAll(/^\s*(?:import|export)\b[^;]*?\bfrom\s+['"]([^'"]+)['"]/gm),
+    ...text.matchAll(/^\s*import\s+['"]([^'"]+)['"]/gm),
+    ...text.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]/g),
+  ].map((match) => match[1]!);
+}
+
+describe('running-server email wiring boundaries (checkpoint 4D, DEC-489)', () => {
+  it('keeps business services behind the provider-neutral interface', async () => {
+    for (const folder of ['invitations', 'password-reset']) {
+      for (const { file, text } of await sourcesUnder(join(SRC, folder))) {
+        const email = importsOf(text)
+          .map((specifier) => resolve(dirname(file), specifier))
+          .filter((target) => target.startsWith(EMAIL))
+          .map((target) => target.slice(EMAIL.length + 1));
+        for (const target of email) {
+          expect(['message.ts', 'result.ts'], `${file} imports email/${target}`).toContain(target);
+        }
+        expect(text, file).not.toMatch(
+          /process\.env|api\.resend\.com|createResendTransport|loadResendApiKey|createEmailTransport|createEmailDelivery|loadEmail(?:Settings|TransportConfig)/,
+        );
+      }
+    }
+  });
+
+  it('reads the process environment only in the server entry block and the offline schema tool', async () => {
+    const readers = (await sourcesUnder(SRC)).filter(({ text }) => /process\.env\b/.test(text.replace(/^\s*(?:\*|\/\/).*$/gm, '')));
+    expect(readers.map(({ file }) => file.slice(SRC.length).replaceAll('\\', '/')).sort()).toEqual([
+      'auth/schema-generation.config.ts',
+      'server.ts',
+    ]);
+
+    const server = readers.find(({ file }) => file.endsWith('server.ts'))!.text;
+    const entry = server.indexOf('if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {');
+    expect(entry).toBeGreaterThan(0);
+    const before = server.slice(0, entry).replace(/^\s*(?:\*|\/\/).*$/gm, '');
+    expect(before).not.toMatch(/process\.env\b/);
+    expect(server.slice(entry).match(/process\.env\b/g)).toEqual(['process.env']);
+  });
+
+  it('adds no email testing, debug, status, or webhook route', async () => {
+    for (const { file, text } of await sourcesUnder(SRC)) {
+      for (const match of text.matchAll(/\bapp\.(?:get|post|put|patch|delete|head|all|route)\s*\(\s*['"`]([^'"`]+)/g)) {
+        expect(match[1], file).not.toMatch(/email|mail|debug|webhook|provider|resend|delivery/i);
+      }
+    }
+  });
+});

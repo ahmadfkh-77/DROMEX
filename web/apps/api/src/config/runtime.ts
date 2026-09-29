@@ -1,4 +1,5 @@
 import type { AuthEnvironment, AuthSecret, AuthSettings } from '../auth/config.ts';
+import { loadEmailSettings, type EmailSettings } from '../email/config.ts';
 
 /**
  * Validated process configuration, read once at process start.
@@ -20,6 +21,8 @@ export interface RuntimeConfig {
   host: string;
   port: number;
   auth: AuthSettings;
+  /** Email delivery settings (DEC-489): disabled unless explicitly and completely configured. */
+  email: EmailSettings;
 }
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -111,20 +114,22 @@ function parsePort(env: Environment): number {
 export function loadRuntimeConfig(env: Environment): RuntimeConfig {
   refuseAmbiguousSecrets(env);
   const host = env['API_HOST'];
+  const auth: AuthSettings = {
+    environment: parseEnvironment(env),
+    secrets: parseSecrets(env),
+    baseURL: required(env, 'DROMEX_AUTH_BASE_URL'),
+    trustedOrigins: required(env, 'DROMEX_AUTH_TRUSTED_ORIGINS')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin !== ''),
+    allowInsecureCookies: parseBoolean(env, 'DROMEX_AUTH_ALLOW_INSECURE_COOKIES'),
+  };
 
   return {
     databaseUrl: required(env, 'DATABASE_URL'),
     host: host !== undefined && host.trim() !== '' ? host : '0.0.0.0',
     port: parsePort(env),
-    auth: {
-      environment: parseEnvironment(env),
-      secrets: parseSecrets(env),
-      baseURL: required(env, 'DROMEX_AUTH_BASE_URL'),
-      trustedOrigins: required(env, 'DROMEX_AUTH_TRUSTED_ORIGINS')
-        .split(',')
-        .map((origin) => origin.trim())
-        .filter((origin) => origin !== ''),
-      allowInsecureCookies: parseBoolean(env, 'DROMEX_AUTH_ALLOW_INSECURE_COOKIES'),
-    },
+    auth,
+    email: loadEmailSettings(env, auth),
   };
 }

@@ -1733,7 +1733,8 @@ blocklist (checkpoint 4C, DEC-487, DEC-488) are implemented against
 disposable databases only (below). Nothing is production configured or
 physically verified.** No real reset, invitation, account, Resend account,
 API key, DNS record, or secret file exists, and no email has been sent; the
-running server still reads no email configuration (checkpoint 4D). The rest
+running server reads email configuration since checkpoint 4D (DEC-489), but
+no provider is configured, so every real deployment runs disabled. The rest
 of the Accounts and Sessions phase (§23) has not started. The Owner
 activation command and the terminal recovery command are unchanged and still
 refuse every run.
@@ -1929,7 +1930,9 @@ the metadata, and the Resend transport also refuses any field containing its
 own key. This is a strict guard for DROMEX-authored static templates, not a
 general HTML sanitizer.
 
-**Selection** (`loadEmailTransportConfig`, not yet called by the server):
+**Selection** (`loadEmailTransportConfig`; since checkpoint 4D the running
+server calls it through `loadEmailSettings`, which also refuses `capture`,
+below):
 `DROMEX_EMAIL_TRANSPORT` unset or empty means `disabled`; `capture` is
 refused in production; `resend` requires `DROMEX_EMAIL_RESEND_API_KEY_FILE`,
 an absolute path, and that variable is refused for any other transport. A
@@ -2031,8 +2034,10 @@ side: create, list, resend, cancel, expiry, delivery handoff, and audit.
 Acceptance and restricted enrolment were added by checkpoint 4B2 (next
 section), which also refines the `account_exists` rule below. No
 email has been sent; tests use the capture transport and scripted fakes.
-The running server entry point passes no email configuration, so a real
-deployment would record invitations as `not_sent` (`email_disabled`). No
+At 4B1 the running server entry point passed no email configuration, so a
+real deployment would record invitations as `not_sent` (`email_disabled`);
+checkpoint 4D added the configuration path, still with no provider
+configured. No
 Owner exists and Owner activation still refuses every run.
 
 **Routes.** A seventh route classification, `owner`, admits only what
@@ -2147,7 +2152,8 @@ row holds an address, token, hash, link, or message body.
   account management is part of checkpoint 4E2.
 - `list` is capped at 200 rows with no pagination.
 - The `sending` state is not reconciled automatically after a crash.
-- Email configuration is not yet read from the process environment.
+- Email configuration was not yet read from the process environment
+  (resolved by checkpoint 4D).
 
 ### Implemented invitation acceptance (Phase 2C checkpoint 4B2, local development only)
 
@@ -2157,9 +2163,10 @@ DEC-444).** An invited Admin can now accept an invitation end to end on a
 development machine: create or prove a password, enrol TOTP, receive ten
 recovery codes once, acknowledge them, and be activated, after which only a
 fresh password-and-TOTP sign-in grants access. No real invitation, account,
-or email exists; every test identity is synthetic. The running server entry
-point still passes no email configuration, so no invitation email could be
-delivered by a real deployment. No Owner exists, and the Owner activation and
+or email exists; every test identity is synthetic. At 4B2 the running server
+entry point still passed no email configuration (added by checkpoint 4D, with
+no provider configured), so no invitation email could be delivered by a real
+deployment. No Owner exists, and the Owner activation and
 terminal recovery commands still refuse every run.
 
 **The `pending` principal lifecycle (DEC-444 (4)).** Migration `0009` widens
@@ -2420,9 +2427,9 @@ and are not kept.
 Status: **implemented and locally verified against disposable PostgreSQL
 18.6 databases on exact Node 24.20.0 (DEC-441, DEC-442, DEC-487, DEC-488);
 not production-verified.** Every test identity is
-synthetic, every email goes to the capture transport, and the running server
-still reads no email configuration, so a real deployment would record every
-reset email as `not_sent` (`email_disabled`) until checkpoint 4D. No Owner
+synthetic, every email goes to the capture transport, and, until checkpoint
+4D wired email configuration into the running server, a real deployment
+would have recorded every reset email as `not_sent` (`email_disabled`). No Owner
 exists; the Owner activation and terminal recovery commands still refuse
 every run. The verification record is in
 [testing-and-production-readiness.md](testing-and-production-readiness.md#phase-2c-password-reset-checkpoint-4c-local-verification).
@@ -2616,8 +2623,9 @@ logical properties, and focus moves to the heading on each state change.
 
 **Known limits and residual risks of checkpoint 4C:**
 
-- Email configuration is not read by the running server (checkpoint 4D), so
-  no reset email can leave a real deployment yet.
+- Email configuration was not read by the running server; checkpoint 4D
+  added it (below), but no provider is configured, so no reset email can
+  leave a real deployment yet.
 - Queued request jobs are in memory and lost on a crash.
 - Many network sources can exhaust one account's issuance quota and delay
   its owner's own reset for up to 24 hours; the latest link stays valid.
@@ -2632,13 +2640,169 @@ logical properties, and focus moves to the heading on each state change.
   headers and CSP belong to the Hardening phase.
 - Behaviour under a least-privilege runtime database role is not verified.
 
+### Implemented running-server email configuration (Phase 2C checkpoint 4D, local development only)
+
+Status: **implemented and tested locally (DEC-489); no real provider, key,
+secret file, or sending identity was configured, and no email was sent.**
+The running API now reads email configuration, so the configuration path
+exists end to end, but every real deployment today runs **disabled** until
+the Owner performs the production setup below. The Owner activation and
+terminal recovery commands still refuse every run; 4D satisfies no item of
+the DEC-443 gate by itself. The verification record is in
+[testing-and-production-readiness.md](testing-and-production-readiness.md#phase-2c-running-server-email-configuration-checkpoint-4d-local-verification).
+
+**Configuration source (verified in code).** The entry point
+(`server.ts`) is the only code that reads `process.env`; it passes it once to
+`loadRuntimeConfig`, which now returns `email` settings from
+`loadEmailSettings` (`email/config.ts`). `buildServerFromConfig` then builds
+the delivery once with `createEmailDelivery` (`email/transport.ts`) and
+injects it into `buildServer`, which hands the same delivery to Admin
+invitations, password reset, and the password-changed notification. No
+business module reads the environment or imports the Resend transport, the
+key loader, or the configuration loader; a boundary test enforces this. The
+existing selector names are reused; the four public-identity names below are
+new, because none existed before 4D.
+
+| Setting | Disabled mode | Resend mode |
+|---|---|---|
+| `DROMEX_EMAIL_TRANSPORT` | unset, empty, or `disabled` | `resend` (this is the enabled flag; there is no second one) |
+| `DROMEX_EMAIL_RESEND_API_KEY_FILE` | refused | required; an absolute path |
+| `DROMEX_EMAIL_FROM_ADDRESS` | refused | required; one lower-case address, no display-name syntax |
+| `DROMEX_EMAIL_FROM_NAME` | refused | optional; a plain display name (the 4A sender rule) |
+| `DROMEX_EMAIL_REPLY_TO` | refused | required; one lower-case address |
+| `DROMEX_EMAIL_LINK_ORIGIN` | refused | required; one exact origin, HTTPS in production (HTTP only for a loopback host elsewhere), and also listed in `DROMEX_AUTH_TRUSTED_ORIGINS` |
+
+**Disabled mode** is the default and the local-development mode. No transport
+is created, no file is opened, and no request is made. Invitations and resets
+are still recorded and are reported truthfully as `not_sent`
+(`email_disabled`), exactly as before; the startup log records
+`emailDelivery: "disabled"` and that emails are recorded as not sent. It
+never claims a send.
+
+**Resend mode.** Startup validates every public setting, then reads the key
+once through the unchanged 4A secret-file loader (`O_NOFOLLOW`,
+`O_NONBLOCK`, `fstat` on the opened descriptor, regular file, no group or
+other permission bit, 1 to 512 bytes, UTF-8, one key with at most one final
+newline; refused outright on Windows). Nothing is sent and the provider is
+never contacted at startup, so `/health`, `/ready`, and startup itself stay
+independent of Resend. Retries, the idempotency and 409 rules, the no-tracking
+and no-webhook rules, and the rule that delivery status never grants anything
+are unchanged from 4A to 4C.
+
+**Fail-closed startup.** Each of these stops the process with exit code 1
+and one fixed line, `The API cannot start: <message>`, that names settings
+and never a value, path, or key, with no stack trace:
+
+- partial Resend configuration (any required setting missing);
+- any public setting present while email is disabled (never a silent
+  fallback to disabled);
+- a key supplied directly as `RESEND_API_KEY`,
+  `DROMEX_EMAIL_RESEND_API_KEY`, `DROMEX_EMAIL_API_KEY`, or
+  `POSTMARK_SERVER_TOKEN`, in either mode;
+- an unsupported transport value (for example `true` or `postmark`), or
+  `capture`, which is for automated tests only and is refused in the running
+  server (DEC-489 (3));
+- an invalid sender, display name, Reply-To, or link origin, a link origin
+  that is not a trusted origin, or any public setting that looks like a
+  credential;
+- a key file that is missing, unreadable, empty, oversized, not UTF-8, not
+  exactly one key, a symbolic link, a directory, a FIFO, or group- or
+  world-accessible.
+
+**Link origin.** Links are built only from `DROMEX_EMAIL_LINK_ORIGIN`, never
+from a request's `Host` header (tested with a hostile `Host`). It must also be
+a trusted origin because the invitation and reset pages post back to the API
+from it and those routes require an exact trusted `Origin`; any other origin
+would make every emailed link fail. 4D also tightened the shared 4A
+link-origin rule: the URL parser accepts `*` in a host, so
+`https://*.example.test` was previously accepted as an exact origin; the host
+must now be DNS labels, an IPv4 address, or `[::1]`.
+
+**Docker Compose secret-mount design (production; not implemented, not
+performed).** The development Compose file is unchanged and runs disabled.
+In production the Owner creates the key file on the host, outside the
+repository and every image, and mounts it as a Compose secret:
+
+```yaml
+# Shape only. The host path, and the real values of every setting, are
+# operational setup performed by the Owner on the server.
+services:
+  api:
+    environment:
+      DROMEX_EMAIL_TRANSPORT: resend
+      DROMEX_EMAIL_RESEND_API_KEY_FILE: /run/secrets/dromex_resend_api_key
+      DROMEX_EMAIL_FROM_ADDRESS: no-reply@notify.<production domain>
+      DROMEX_EMAIL_FROM_NAME: DROMEX
+      DROMEX_EMAIL_REPLY_TO: <monitored company mailbox>
+      DROMEX_EMAIL_LINK_ORIGIN: https://<application origin>
+    secrets:
+      - dromex_resend_api_key
+secrets:
+  dromex_resend_api_key:
+    file: <host path chosen by the Owner>
+```
+
+The API image runs as the non-root `node` user. The loader does not check
+ownership, but the kernel must still let that user open the file, so the host
+file must be owned by the user ID the container runs as, with mode `0400` or
+`0600`. (The 4A note that a root-owned `0400` secret "remains readable by
+design" means only that the loader does not refuse it for its owner; a
+non-root container process cannot open such a file, and startup then fails
+closed as `api_key_file_unavailable`.) **Unverified, and an operational
+check before production:** how the production Docker Compose version carries
+a file secret's owner and mode into the container, and the numeric user ID
+of `node` in the pinned image. If the mounted file is unreadable or shows
+group or other permission, the API refuses to start rather than running
+without email.
+
+**What remains before real email** (all Owner-performed, none by Claude):
+the Resend account and plan check; domain verification with SPF, DKIM, and
+DMARC; the monitored Reply-To mailbox; a sending-only key restricted to the
+notification domain written into the host file; the production Compose
+settings above; confirmation that the mounted file passes the loader; and a
+real controlled delivery. Owner activation additionally needs the physically
+rehearsed reset and its own separate approval (DEC-443).
+
+**Runtime-compatibility correction (a pre-existing defect found in 4D).**
+The real entry point (`node apps/api/src/server.ts`, the container's command)
+could not start. Verified on exact Node 24.20.0 against the committed code
+(`fc63764`): `server.ts`, `admin-invitations.ts`, and `owner-recovery.ts`
+were each refused with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` ("TypeScript
+parameter property is not supported in strip-only mode"), and the entry point
+exited before listening. Two error classes on the server's import path
+(`RecoveryRefusal` in `owner-recovery.ts`, since checkpoint 3F-C, and
+`Refusal` in `admin-invitations.ts`, since 4B1) used TypeScript parameter
+properties, which Node's type stripping refuses. Vitest transpiles sources,
+so no test noticed. Only those two classes changed: each now declares its
+fields explicitly, with identical behaviour. A focused test loads
+`server.ts` and both modules in a real Node process, and another starts the
+real entry point.
+
+`FactorResetRefused` in `owner-mfa-reset.ts` also uses a parameter property
+and is also refused by Node 24.20.0, but no production import path reaches it
+today: only `terminal-recovery.ts` imports it, and only
+`terminal-recovery-prompt.ts` imports that, which nothing in the source
+imports (the terminal recovery command is disabled). It is therefore
+deliberately left unchanged in 4D. **Whoever wires the terminal recovery
+command must convert it the same way, or the command will not load.**
+
+**Known limits of checkpoint 4D:**
+
+- The Resend-mode tests that read a real key file run only on POSIX (the
+  disposable Node 24.20.0 Linux container), because the loader refuses
+  Windows by design.
+- The key stays in process memory as a JavaScript string (4A limit).
+- The startup log states the mode (`disabled` or `resend`); no route reveals
+  it.
+- The development Compose `api` service passes no authentication settings, so
+  it cannot start as it stands; this predates 4D and is unchanged.
+
 ### Deliberately left to the implementation phase
 
 A recovery path for an invitee who lost the authenticator before activation
-(OQ-168); listing pending identities for the Owner (checkpoint 4E2); reading
-email configuration in the running server (checkpoint 4D). (Whether design
-closure satisfies DEC-435 (6) is no longer open: it does not, and DEC-443
-sets the gate above.)
+(OQ-168); listing pending identities for the Owner (checkpoint 4E2).
+(Whether design closure satisfies DEC-435 (6) is no longer open: it does
+not, and DEC-443 sets the gate above.)
 
 ### Sources (accessed 2026-09-16)
 
