@@ -3,6 +3,9 @@ import { pathToFileURL } from 'node:url';
 
 import Fastify, { type FastifyInstance } from 'fastify';
 
+import { registerAccountRoutes } from './accounts/account-http.ts';
+import { createAdminAccountService, type SessionControlPort } from './accounts/admin-accounts.ts';
+import { createSessionControl } from './accounts/session-control.ts';
 import { authCookieNames, type AuthSettings } from './auth/config.ts';
 import {
   registerAuthenticationGuard,
@@ -14,7 +17,7 @@ import { commonPasswordBlocklistSize } from './auth/password-policy.ts';
 import { createOwnerRecovery } from './auth/owner-recovery.ts';
 import { createPrincipalRepository } from './auth/principal.ts';
 import { registerRecoveryRoutes, type RecoveryBackend } from './auth/recovery-http.ts';
-import { createSecurityAudit } from './auth/security-audit.ts';
+import { createSecurityAudit, securityEvent } from './auth/security-audit.ts';
 import { createTotpReplayGuard } from './auth/totp-replay.ts';
 import { loadRuntimeConfig, type RuntimeConfig } from './config/runtime.ts';
 import { checkDatabase, createPool } from './db.ts';
@@ -59,7 +62,16 @@ export interface BuildServerOptions {
   passwordResetTestSeams?: Pick<PasswordResetDependencies, 'schedule' | 'identity' | 'interrupt'> & {
     expose?: (service: PasswordResetService) => void;
   };
+  /**
+   * Test seam for account management: wraps the Better Auth session-control
+   * port, so a test can make session cleanup fail after a committed change.
+   * Production passes nothing.
+   */
+  accountTestSeams?: { wrapSessionControl?: (control: SessionControlPort) => SessionControlPort };
 }
+
+/** The audit column accepts only an address; anything else is recorded as unknown. */
+const AUDITABLE_ADDRESS = /^[0-9A-Fa-f:.]{1,45}$/;
 
 /**
  * Defence in depth. Fastify's default serializers already record only the
@@ -176,6 +188,15 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
     onJobError: (name) => app.log.error({ errorName: name }, 'password reset job failed'),
   });
   expose?.(resets);
+  // Owner account and session management (checkpoint 4E). The session-control
+  // port is the only route into Better Auth's session store (DEC-431).
+  const sessionControl = createSessionControl(auth);
+  const accounts = createAdminAccountService({
+    pool,
+    audit,
+    sessions: options.accountTestSeams?.wrapSessionControl?.(sessionControl) ?? sessionControl,
+    onCleanupError: (name) => app.log.error({ errorName: name }, 'account session cleanup failed'),
+  });
 
   const authDependencies: AuthRoutesDependencies = {
     backend: {
@@ -186,6 +207,12 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
     principals: createPrincipalRepository(pool),
     replay: createTotpReplayGuard(pool),
     recoverySessions: recovery,
+    ownerRefusals: {
+      recordOwnerRefusal: (actor, clientAddress) =>
+        audit.record(
+          securityEvent('owner_route_refused', 'failure', actor, null, AUDITABLE_ADDRESS.test(clientAddress) ? clientAddress : null),
+        ),
+    },
     cookies: authCookieNames(auth.options),
     // Already validated and normalised by createAuth, which would have thrown.
     baseURL: new URL(options.auth.baseURL).origin,
@@ -227,6 +254,7 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   registerRecoveryRoutes(app, { ...authDependencies, recovery, audit, recoveryBackend });
   registerAuthRoutes(app, authDependencies);
   registerInvitationRoutes(app, invitations);
+  registerAccountRoutes(app, accounts);
   registerInvitationAcceptanceRoutes(app, { acceptance, cookies: authDependencies.cookies });
   registerPasswordResetRoutes(app, { resets, cookies: authDependencies.cookies });
 

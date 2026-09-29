@@ -1471,9 +1471,11 @@ subsection records the confirmed requirements only.
   recovery procedure are **not in production**. Parts are implemented and
   verified only against disposable databases (see
   `docs/web/README.md`), including Admin invitation issuance and restricted
-  acceptance (checkpoints 4B1 and 4B2); password reset, the permission
-  model, and every production configuration are not implemented. This
-  subsection records confirmed requirements, not production behaviour.
+  acceptance (checkpoints 4B1 and 4B2), password reset (checkpoint 4C), and
+  Owner account and session management (checkpoint 4E, DEC-490, pending
+  Owner review); the permission model and every production configuration
+  are not implemented. This subsection records confirmed requirements, not
+  production behaviour.
 
 ## 15. Constraints
 

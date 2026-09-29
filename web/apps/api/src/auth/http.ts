@@ -5,6 +5,7 @@ import {
   PrincipalAccessDeniedError,
   requireActivePrincipal,
   sessionPredatesCredentialChange,
+  sessionPredatesOwnerRevocation,
   type Principal,
   type PrincipalRepository,
 } from './principal.ts';
@@ -53,12 +54,23 @@ export interface RecoverySessionGate {
   isRecoverySession(sessionId: string): Promise<boolean>;
 }
 
+/**
+ * Records an authenticated, non-Owner principal refused at an Owner route
+ * (checkpoint 4E): a denied attempt at a sensitive action, audited with the
+ * actor and the client address only. A failure to record never admits.
+ */
+export interface OwnerRefusalAudit {
+  recordOwnerRefusal(actor: { userId: string; name: string }, clientAddress: string): Promise<void>;
+}
+
 export interface AuthRoutesDependencies {
   backend: AuthBackend;
   principals: PrincipalRepository;
   replay: TotpReplayGuard;
   /** Denies every session ever bound to an Owner recovery. */
   recoverySessions: RecoverySessionGate;
+  /** Audits a non-Owner refused at an Owner route. */
+  ownerRefusals: OwnerRefusalAudit;
   cookies: AuthCookieNames;
   /** Canonical origin used to build the internal request URL. */
   baseURL: string;
@@ -153,6 +165,9 @@ function assertDependencies(deps: AuthRoutesDependencies | undefined): asserts d
   }
   if (typeof deps.recoverySessions?.isRecoverySession !== 'function') {
     throw new Error('Authentication requires a recovery-session gate.');
+  }
+  if (typeof deps.ownerRefusals?.recordOwnerRefusal !== 'function') {
+    throw new Error('Authentication requires an Owner refusal audit.');
   }
   if (!deps.cookies?.sessionToken || !deps.cookies.twoFactor || !deps.cookies.trustDevice) {
     throw new Error('Authentication requires the authentication cookie names.');
@@ -351,6 +366,9 @@ async function gateIdentity(view: SessionView, deps: AuthRoutesDependencies): Pr
   // DEC-487 (3): a password reset ends every session created before it,
   // whether or not Better Auth's own session deletion completed.
   if (sessionPredatesCredentialChange(principal, view.createdAt)) return null;
+  // Checkpoint 4E: the Owner disabled, re-enabled, or signed this account out
+  // everywhere after the session began.
+  if (sessionPredatesOwnerRevocation(principal, view.createdAt)) return null;
   // DEC-436: a session ever bound to an Owner recovery never becomes an
   // ordinary session, even after MFA is complete again.
   if (await deps.recoverySessions.isRecoverySession(view.sessionId)) return null;
@@ -470,7 +488,17 @@ export function registerAuthenticationGuard(app: FastifyInstance, deps: AuthRout
       try {
         const identity = await resolveIdentity(toBackendHeaders(request, deps), deps, reply);
         if (identity === null) return reply.code(401).send(UNAUTHORIZED);
-        if (access === 'owner' && identity.principal.isOwner !== true) return reply.code(403).send(FORBIDDEN);
+        if (access === 'owner' && identity.principal.isOwner !== true) {
+          try {
+            await deps.ownerRefusals.recordOwnerRefusal(
+              { userId: identity.user.id, name: identity.user.name },
+              request.ip,
+            );
+          } catch (error) {
+            request.log.warn({ errorName: errorName(error) }, 'recording an Owner route refusal failed');
+          }
+          return reply.code(403).send(FORBIDDEN);
+        }
         request.dromexIdentity = identity;
         return;
       } catch (error) {

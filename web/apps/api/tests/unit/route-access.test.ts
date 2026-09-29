@@ -96,10 +96,14 @@ describe('route access classification (default-deny registration)', () => {
     await app.ready();
 
     expect([...app.routeAccess.entries()].sort(([a], [b]) => a.localeCompare(b))).toEqual([
+      ['GET /api/owner/accounts', 'owner'],
+      ['GET /api/owner/accounts/:userId', 'owner'],
       ['GET /api/owner/invitations', 'owner'],
       ['GET /api/session', 'authenticated'],
       ['GET /health', 'public'],
       ['GET /ready', 'public'],
+      ['HEAD /api/owner/accounts', 'owner'],
+      ['HEAD /api/owner/accounts/:userId', 'owner'],
       ['HEAD /api/owner/invitations', 'owner'],
       ['HEAD /api/session', 'authenticated'],
       ['HEAD /health', 'public'],
@@ -114,6 +118,10 @@ describe('route access classification (default-deny registration)', () => {
       ['POST /api/invitation/inspect', 'invitation'],
       ['POST /api/invitation/password', 'invitation'],
       ['POST /api/invitation/totp', 'invitation'],
+      ['POST /api/owner/accounts/:userId/disable', 'owner'],
+      ['POST /api/owner/accounts/:userId/enable', 'owner'],
+      ['POST /api/owner/accounts/:userId/sessions/:sessionRef/revoke', 'owner'],
+      ['POST /api/owner/accounts/:userId/sessions/revoke-all', 'owner'],
       ['POST /api/owner/invitations', 'owner'],
       ['POST /api/owner/invitations/:id/cancel', 'owner'],
       ['POST /api/owner/invitations/:id/resend', 'owner'],
@@ -161,6 +169,48 @@ describe('route access classification (default-deny registration)', () => {
       });
       expect(response.statusCode, `${method} ${url}`).toBe(401);
       expect(response.json()).toEqual({ error: 'unauthorized' });
+    }
+  });
+
+  it('refuses every Owner account route without a session, before any database work (checkpoint 4E)', async () => {
+    app = await build();
+    await app.ready();
+
+    const target = 'user_synthetic_admin';
+    for (const [method, url] of [
+      ['GET', '/api/owner/accounts'],
+      ['GET', `/api/owner/accounts/${target}`],
+      ['POST', `/api/owner/accounts/${target}/disable`],
+      ['POST', `/api/owner/accounts/${target}/enable`],
+      ['POST', `/api/owner/accounts/${target}/sessions/revoke-all`],
+      ['POST', `/api/owner/accounts/${target}/sessions/${'0'.repeat(32)}/revoke`],
+    ] as const) {
+      const response = await app.inject({
+        method,
+        url,
+        headers: { origin: 'http://127.0.0.1:5173', 'content-type': 'application/json' },
+        ...(method === 'POST' ? { payload: { reason: 'Synthetic reason' } } : {}),
+      });
+      expect(response.statusCode, `${method} ${url}`).toBe(401);
+      expect(response.json()).toEqual({ error: 'unauthorized' });
+    }
+  });
+
+  it('refuses every state-changing Owner account route from a missing or foreign Origin, before resolving a session', async () => {
+    app = await build();
+    await app.ready();
+
+    for (const url of [
+      '/api/owner/accounts/user_x/disable',
+      '/api/owner/accounts/user_x/enable',
+      '/api/owner/accounts/user_x/sessions/revoke-all',
+      `/api/owner/accounts/user_x/sessions/${'a'.repeat(32)}/revoke`,
+    ]) {
+      for (const headers of [{}, { origin: 'https://evil.example.test' }, { origin: 'null' }]) {
+        const response = await app.inject({ method: 'POST', url, headers, payload: {} });
+        expect(response.statusCode, url).toBe(403);
+        expect(response.json()).toEqual({ error: 'forbidden' });
+      }
     }
   });
 

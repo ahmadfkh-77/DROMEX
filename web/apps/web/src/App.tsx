@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 
+import { AccountsPage } from './accounts/AccountsPage.tsx';
 import { InvitationPage } from './invitation/InvitationPage.tsx';
 import { ForgotPasswordPage } from './password-reset/ForgotPasswordPage.tsx';
 import { ResetPasswordPage } from './password-reset/ResetPasswordPage.tsx';
@@ -115,8 +116,13 @@ const PAGES: Record<string, ComponentType> = {
   '/reset-password': ResetPasswordPage,
 };
 
+/** Owner account management (checkpoint 4E): the list and one account per path. */
+function isAccountsPath(pathname: string): boolean {
+  return pathname === '/owner/accounts' || pathname === '/owner/accounts/' || pathname.startsWith('/owner/accounts/');
+}
+
 export function App() {
-  const Page = PAGES[window.location.pathname];
+  const Page = isAccountsPath(window.location.pathname) ? AccountsPage : PAGES[window.location.pathname];
   if (Page !== undefined) {
     return (
       <>
@@ -160,6 +166,15 @@ export function App() {
               No designed sign-in screen yet, and no real account exists.{' '}
               <a className="link" href="/forgot-password">
                 Forgot password?
+              </a>
+            </p>
+          </section>
+          <section className="card">
+            <h2>Accounts</h2>
+            <p>
+              For the Owner: Admin accounts, invitations, and sessions.{' '}
+              <a className="link" href="/owner/accounts">
+                Open accounts
               </a>
             </p>
           </section>

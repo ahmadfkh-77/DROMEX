@@ -5,7 +5,8 @@
  * structured shape: an event type from a closed list, an outcome, the acting
  * user and a snapshot of their name, a web recovery reference, a constrained
  * reason code, a revoked-session count, a client address, a terminal recovery
- * run reference, an incident reference, an Admin invitation reference, and a password reset reference. Anything else — an unknown type,
+ * run reference, an incident reference, an Admin invitation reference, a password reset reference, the account an Owner
+ * acted on, and an account status-change reference. Anything else — an unknown type,
  * an extra property, a reason that is not a short lower-case identifier, an
  * incident reference that is not `INC-YYYYMMDD-NN` — is refused before a
  * statement is sent, so no caller can pass a password, code, secret, cookie,
@@ -83,6 +84,14 @@ export const SECURITY_AUDIT_EVENT_TYPES = [
   'password_reset_completed',
   'password_changed_notification_accepted',
   'password_changed_notification_failed',
+  // Owner account and session management (checkpoint 4E).
+  'admin_account_disabled',
+  'admin_account_enabled',
+  'admin_account_sessions_revoked',
+  'admin_account_session_revoked',
+  'admin_account_session_cleanup_incomplete',
+  'admin_account_action_refused',
+  'owner_route_refused',
 ] as const;
 
 export type SecurityAuditEventType = (typeof SECURITY_AUDIT_EVENT_TYPES)[number];
@@ -111,6 +120,10 @@ export interface SecurityAuditEvent {
   invitationId: string | null;
   /** The password reset's database identifier, as a decimal string. Never an address or token. */
   passwordResetId: string | null;
+  /** The Better Auth user id of the account an Owner acted on. Never an address. */
+  targetUserId: string | null;
+  /** The account status change's database identifier, as a decimal string. Never the reason text. */
+  accountChangeId: string | null;
 }
 
 /** Anything that runs a parameterised statement: a pool or a client in a transaction. */
@@ -132,6 +145,7 @@ export class SecurityAuditValidationError extends Error {
 
 /** Sorted, because the shape check compares sorted keys. */
 const EVENT_KEYS = [
+  'accountChangeId',
   'actor',
   'clientAddress',
   'incidentReference',
@@ -141,6 +155,7 @@ const EVENT_KEYS = [
   'reason',
   'recoveryId',
   'revokedSessionCount',
+  'targetUserId',
   'terminalRecoveryId',
   'type',
 ];
@@ -153,12 +168,14 @@ const CLIENT_ADDRESS = /^[0-9A-Fa-f:.]{1,45}$/;
 const INCIDENT_REFERENCE = /^INC-[0-9]{8}-[0-9]{2}$/;
 const MAX_NAME_LENGTH = 200;
 const MAX_USER_ID_LENGTH = 255;
+/** A Better Auth identifier: never an address, a space, or free text. */
+const TARGET_USER_ID = /^[A-Za-z0-9_-]{1,255}$/;
 
 const INSERT = `
   INSERT INTO dromex_audit_event
     (event_type, outcome, actor_user_id, actor_name, recovery_id, reason, revoked_session_count, client_address,
-     terminal_recovery_id, incident_reference, invitation_id, password_reset_id)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`;
+     terminal_recovery_id, incident_reference, invitation_id, password_reset_id, target_user_id, account_change_id)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -173,7 +190,7 @@ function nullableMatch(value: unknown, pattern: RegExp): boolean {
   return value === null || (typeof value === 'string' && pattern.test(value));
 }
 
-/** The twelve statement values, in column order, or a thrown refusal. */
+/** The fourteen statement values, in column order, or a thrown refusal. */
 function valuesOf(event: unknown): unknown[] {
   if (!isPlainObject(event) || !hasExactly(event, EVENT_KEYS)) throw new SecurityAuditValidationError('event shape');
 
@@ -189,6 +206,8 @@ function valuesOf(event: unknown): unknown[] {
     incidentReference,
     invitationId,
     passwordResetId,
+    targetUserId,
+    accountChangeId,
   } = event;
 
   if (typeof type !== 'string' || !EVENT_TYPES.has(type)) throw new SecurityAuditValidationError('event type');
@@ -222,6 +241,8 @@ function valuesOf(event: unknown): unknown[] {
   if (!nullableMatch(incidentReference, INCIDENT_REFERENCE)) throw new SecurityAuditValidationError('incident reference');
   if (!nullableMatch(invitationId, DATABASE_ID)) throw new SecurityAuditValidationError('invitation reference');
   if (!nullableMatch(passwordResetId, DATABASE_ID)) throw new SecurityAuditValidationError('password reset reference');
+  if (!nullableMatch(targetUserId, TARGET_USER_ID)) throw new SecurityAuditValidationError('target reference');
+  if (!nullableMatch(accountChangeId, DATABASE_ID)) throw new SecurityAuditValidationError('status-change reference');
 
   return [
     type,
@@ -236,6 +257,8 @@ function valuesOf(event: unknown): unknown[] {
     incidentReference,
     invitationId,
     passwordResetId,
+    targetUserId,
+    accountChangeId,
   ];
 }
 
@@ -253,6 +276,8 @@ export function securityEvent(
     incidentReference?: string | null;
     invitationId?: string | null;
     passwordResetId?: string | null;
+    targetUserId?: string | null;
+    accountChangeId?: string | null;
   } = {},
 ): SecurityAuditEvent {
   return {
@@ -267,6 +292,8 @@ export function securityEvent(
     incidentReference: extra.incidentReference ?? null,
     invitationId: extra.invitationId ?? null,
     passwordResetId: extra.passwordResetId ?? null,
+    targetUserId: extra.targetUserId ?? null,
+    accountChangeId: extra.accountChangeId ?? null,
   };
 }
 

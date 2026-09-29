@@ -51,6 +51,7 @@ describe('principal lookup', () => {
       isOwner: false,
       mfaCompletedAt: null,
       credentialsChangedAt: null,
+      sessionsRevokedAt: null,
     });
   });
 

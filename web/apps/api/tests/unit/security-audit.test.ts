@@ -36,6 +36,8 @@ const VALID: SecurityAuditEvent = {
   incidentReference: null,
   invitationId: null,
   passwordResetId: null,
+  targetUserId: null,
+  accountChangeId: null,
 };
 
 describe('security audit writer', () => {
@@ -61,6 +63,8 @@ describe('security audit writer', () => {
       null,
       null,
       null,
+      null,
+      null,
     ]);
   });
 
@@ -79,6 +83,8 @@ describe('security audit writer', () => {
       incidentReference: 'INC-20260915-01',
       invitationId: null,
       passwordResetId: null,
+      targetUserId: null,
+      accountChangeId: null,
     });
 
     expect(statements[0]!.values).toEqual([
@@ -92,6 +98,8 @@ describe('security audit writer', () => {
       null,
       '7',
       'INC-20260915-01',
+      null,
+      null,
       null,
       null,
     ]);
@@ -112,6 +120,8 @@ describe('security audit writer', () => {
       incidentReference: null,
       invitationId: null,
       passwordResetId: null,
+      targetUserId: null,
+      accountChangeId: null,
     });
 
     expect(statements[0]!.values).toEqual([
@@ -121,6 +131,8 @@ describe('security audit writer', () => {
       null,
       null,
       'invalid_code',
+      null,
+      null,
       null,
       null,
       null,
@@ -145,6 +157,8 @@ describe('security audit writer', () => {
       incidentReference: null,
       invitationId: '12',
       passwordResetId: null,
+      targetUserId: null,
+      accountChangeId: null,
     });
 
     expect(statements[0]!.text).toContain('invitation_id');
@@ -160,6 +174,8 @@ describe('security audit writer', () => {
       null,
       null,
       '12',
+      null,
+      null,
       null,
     ]);
   });
@@ -179,6 +195,8 @@ describe('security audit writer', () => {
       incidentReference: null,
       invitationId: null,
       passwordResetId: '9',
+      targetUserId: null,
+      accountChangeId: null,
     });
 
     expect(statements[0]!.text).toContain('password_reset_id');
@@ -195,6 +213,61 @@ describe('security audit writer', () => {
       null,
       null,
       '9',
+      null,
+      null,
+    ]);
+  });
+
+  it('writes an account-management event with its target and status-change reference, and nothing else', async () => {
+    const { db, statements } = recordingDatabase();
+
+    await createSecurityAudit(db).record({
+      type: 'admin_account_disabled',
+      outcome: 'success',
+      actor: { userId: 'user_owner', name: 'Synthetic Owner' },
+      recoveryId: null,
+      reason: null,
+      revokedSessionCount: 2,
+      clientAddress: '198.51.100.7',
+      terminalRecoveryId: null,
+      incidentReference: null,
+      invitationId: null,
+      passwordResetId: null,
+      targetUserId: 'user_admin',
+      accountChangeId: '5',
+    });
+
+    expect(statements[0]!.text).toContain('target_user_id');
+    expect(statements[0]!.text).toContain('account_change_id');
+    expect(statements[0]!.values).toEqual([
+      'admin_account_disabled',
+      'success',
+      'user_owner',
+      'Synthetic Owner',
+      null,
+      null,
+      2,
+      '198.51.100.7',
+      null,
+      null,
+      null,
+      null,
+      'user_admin',
+      '5',
+    ]);
+  });
+
+  it('accepts exactly the closed account-management event vocabulary', () => {
+    expect(
+      SECURITY_AUDIT_EVENT_TYPES.filter((type) => type.startsWith('admin_account_') || type.startsWith('owner_route_')),
+    ).toEqual([
+      'admin_account_disabled',
+      'admin_account_enabled',
+      'admin_account_sessions_revoked',
+      'admin_account_session_revoked',
+      'admin_account_session_cleanup_incomplete',
+      'admin_account_action_refused',
+      'owner_route_refused',
     ]);
   });
 
@@ -268,6 +341,15 @@ describe('security audit writer', () => {
     ['a zero password-reset reference', { ...VALID, passwordResetId: '0' }],
     ['a password-reset reference carrying a token', { ...VALID, passwordResetId: 'A'.repeat(43) }],
     ['a numeric password-reset reference', { ...VALID, passwordResetId: 9 }],
+    ['a missing target reference', (({ targetUserId: _omit, ...rest }) => rest)(VALID)],
+    ['an empty target reference', { ...VALID, targetUserId: '' }],
+    ['a target reference carrying an address', { ...VALID, targetUserId: 'admin@example.test' }],
+    ['a target reference carrying free text', { ...VALID, targetUserId: 'user admin; reason=lost phone' }],
+    ['an overlong target reference', { ...VALID, targetUserId: 'u'.repeat(256) }],
+    ['a missing status-change reference', (({ accountChangeId: _omit, ...rest }) => rest)(VALID)],
+    ['a zero status-change reference', { ...VALID, accountChangeId: '0' }],
+    ['a status-change reference carrying the reason text', { ...VALID, accountChangeId: 'left the company' }],
+    ['a numeric status-change reference', { ...VALID, accountChangeId: 5 }],
   ])('refuses %s before touching the database', async (_label, event) => {
     const { db, statements } = recordingDatabase();
 

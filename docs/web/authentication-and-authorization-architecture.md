@@ -6,9 +6,12 @@ Argon2id hashing, the Better Auth configuration and schema, the DROMEX
 principal and its migrations, the minimal sign-in, sign-out, and session
 transport (see §11, "Implemented transport"), and Owner provisioning tooling
 that is **not approved for real use** before MFA (see §11, "Owner provisioning
-tooling"). No Owner exists. Everything else here — MFA, recovery, Owner
-readiness enforcement, permissions, account management, audit events, the
-frontend, and any deployment — remains **design only**. Nothing is
+tooling"). No Owner exists. Later checkpoints implemented more locally, each
+recorded in its own section: MFA and Owner recovery (§11), the security audit
+foundation (§13), email, invitations, and password reset (§14A), and Owner
+account and session management (§14A, checkpoint 4E). Owner readiness
+enforcement, permissions, the designed authentication screens, and any
+deployment remain **design only**. Nothing is
 merged, released, or deployed. This document records the approved design so
 that no future session has to reconstruct it from chat history.
 
@@ -1734,8 +1737,10 @@ disposable databases only (below). Nothing is production configured or
 physically verified.** No real reset, invitation, account, Resend account,
 API key, DNS record, or secret file exists, and no email has been sent; the
 running server reads email configuration since checkpoint 4D (DEC-489), but
-no provider is configured, so every real deployment runs disabled. The rest
-of the Accounts and Sessions phase (§23) has not started. The Owner
+no provider is configured, so every real deployment runs disabled. Owner
+account and session management (checkpoint 4E, DEC-490) is implemented against
+disposable databases only (below); of the rest of the Accounts and Sessions
+phase (§23), runtime Owner readiness enforcement has not started. The Owner
 activation command and the terminal recovery command are unchanged and still
 refuse every run.
 
@@ -2148,8 +2153,9 @@ row holds an address, token, hash, link, or message body.
 - A resend supersedes the old invitation even if its email is still in the
   provider's retry window; the old link then fails generically.
 - The Owner's route authorization refusals by the guard (401 and 403) are
-  not audited; refusals inside the use case are. Denied-attempt auditing for
-  account management is part of checkpoint 4E2.
+  not audited; refusals inside the use case are. *Resolved by checkpoint 4E:*
+  the guard now audits an authenticated non-Owner refused at any `owner`
+  route as `owner_route_refused`; unauthenticated refusals stay unaudited.
 - `list` is capped at 200 rows with no pagination.
 - The `sending` state is not reconciled automatically after a crash.
 - Email configuration was not yet read from the process environment
@@ -2411,8 +2417,9 @@ and are not kept.
   name snapshot.
 - Owner cancellation or resend does not itself revoke setup sessions; they
   are refused and revoked on their next use.
-- A pending identity is not yet listed for the Owner; account management is
-  checkpoint 4E2.
+- A pending identity is not yet listed for the Owner. *Resolved by checkpoint
+  4E:* the Owner's Accounts list shows it as enrolment in progress, or by its
+  newest invitation's end.
 - The page is a plain development preview, and the API and page are not
   served from one origin outside development (the Vite proxy stands in).
 - Recovery codes remain Better Auth's reversible encrypted storage (DEC-435).
@@ -2797,10 +2804,184 @@ command must convert it the same way, or the command will not load.**
 - The development Compose `api` service passes no authentication settings, so
   it cannot start as it stands; this predates 4D and is unchanged.
 
+### Implemented Owner account and session management (Phase 2C checkpoint 4E, local development only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases and a stubbed browser API only (DEC-490, proposed and pending Owner
+review). Not production-verified.** No real Owner, Admin, session, invitation,
+or email exists. This implements DEC-408's Owner-only account management and
+the disabling part of DEC-427. It does not start the permission model: there
+is no role, template, permission block, project scope, or effective-access
+computation, and none is implied by anything below. (Earlier sections of this
+document referred to this work as checkpoint 4E2.)
+
+**Routes.** Six, each classified `owner`: the guard admits only a fully
+authenticated, MFA-complete Owner session and, for `POST`, an exact trusted
+Origin; the use case then re-reads the caller's principal and admits only the
+active, MFA-complete Owner (DEC-428). Every response carries
+`Cache-Control: no-store`.
+
+| Route | Does | Body |
+|---|---|---|
+| `GET /api/owner/accounts` | Every non-Owner principal (active, disabled, pending) and the newest invitation of every address that has no principal | none |
+| `GET /api/owner/accounts/:userId` | One account in detail | none |
+| `POST /api/owner/accounts/:userId/disable` | Disables an active Admin and ends every session | exactly `{ "reason" }` |
+| `POST /api/owner/accounts/:userId/enable` | Re-enables a disabled Admin; no earlier session returns | exactly `{ "reason" }` |
+| `POST /api/owner/accounts/:userId/sessions/revoke-all` | Ends every session of an active or disabled Admin | empty |
+| `POST /api/owner/accounts/:userId/sessions/:sessionRef/revoke` | Ends one session of an active Admin | empty |
+
+Refusals are fixed codes: `forbidden` (403), `not_found` and
+`session_not_found` (404), `invalid_reason` and `invalid_request` (400), and
+`owner_protected`, `account_not_active`, and `account_not_disabled` (409).
+Invitations keep their existing routes (§14A, checkpoint 4B1) unchanged; the
+Accounts screen calls them.
+
+**States.** Plain language, derived only from recorded facts: *active* and
+*disabled* from the principal; a `pending` principal is *enrolment in
+progress*, *invitation expired*, or *invitation cancelled* from its newest
+invitation; an address with no principal is *invitation pending*,
+*enrolment in progress* (an identity exists but setup has not recorded a
+principal), *invitation expired*, or *invitation cancelled*. Superseded and
+accepted invitations appear only as an account's invitation history.
+
+**What the Owner sees.** Name, address, state, the identity's creation time,
+setup completion where the enrolment recorded it, the newest invitation's
+status and times, and the last status change with its reason, time, and the
+changer's name. For an active account only, the sessions the ordinary gate
+would admit now (unexpired, created no earlier than MFA completion, the last
+password change, or the Owner's last revocation, with an enabled factor, and
+never bound to a recovery or setup), each with its sign-in and expiry time
+and an **opaque reference**: the first 128 bits of a labelled SHA-256 of
+Better Auth's session identifier. Never a token, session identifier, IP
+address, user agent, factor or recovery-code state, invitation token or hash,
+or the audit trail. DROMEX records no "last activity", so none is shown; an
+unrecorded fact reads "Not recorded".
+
+**The session rule (DEC-490 (2)).** `dromex_principal.sessions_revoked_at`
+(DROMEX migration `0011`) only moves forward, has no backfill, and is stamped
+from the API process's clock, as `credentials_changed_at` is (DEC-487), when
+the Owner disables, re-enables, or signs out an Admin everywhere. The
+ordinary gate (`gateIdentity`) refuses a session created before it, beside
+the MFA-completion and credential-change rules. The Owner recovery gate and
+the invitation setup gate do not need it: the Owner is never a target, and a
+pending identity cannot be disabled or signed out.
+
+**Disabling, step by step.** One DROMEX transaction checks the Owner, locks
+the target principal `FOR UPDATE`, refuses the Owner, an unknown account, a
+non-active account, or an invalid reason, counts the sessions the gate would
+admit, sets `status = 'disabled'` and the stamp, inserts the reason into
+`dromex_account_status_change`, and writes `admin_account_disabled` with the
+count, then commits. From that commit every gate refuses every session of the
+account, the session-creation hook refuses new ones (the principal is no
+longer active), password reset suppresses the address (DEC-487 (4)), and an
+invitation to it is refused as `account_exists` (DEC-444 (2)). Only then does
+Better Auth delete the session rows (below). Re-enabling is the same shape and
+stamps again, so a session created in the instant before the disable
+committed still cannot return; the Admin must sign in with password and TOTP.
+Re-enabling deletes nothing: every earlier session is already refused, and a
+deletion could remove a session the Admin legitimately began a moment later.
+Revoking every session stamps without changing the status, and is allowed on a
+disabled account too, which retries a cleanup that failed at disable time.
+
+**Better Auth's rows (DEC-490 (3)).** Better Auth 1.7.4's public endpoints
+revoke only the caller's own sessions; revoking another user's needs its admin
+plugin, which DROMEX excludes (DEC-422) and which would add schema, and
+DEC-431 forbids DROMEX SQL on its rows. The deletion therefore goes through
+the internal adapter Better Auth exposes on `auth.$context`, limited to
+`listSessions`, `deleteSession`, and `deleteUserSessions`, in
+`src/accounts/session-control.ts`. Boundary tests prove that it is the only
+module reaching `$context` or `internalAdapter`, that the server alone imports
+it, that it uses exactly those three operations and no SQL, and that it
+deletes only a session of the named user by Better Auth identifier, never a
+token supplied from outside. After a disable or a revoke-all, a deletion that fails or leaves rows is audited as
+`admin_account_session_cleanup_incomplete` (reason `cleanup_failed` or
+`sessions_remaining`) and is not reported to the Owner as a failed action,
+because the gate already refuses those sessions. A single-session revocation
+instead deletes the session while the account is locked and audits only once
+the deletion happened, so a failed deletion changes nothing and returns an
+error.
+
+**The reason (DEC-490 (4)).** Required for disable and re-enable: one line of
+3 to 500 characters once trimmed, measured in characters, with no C0 or C1
+control character and no bidirectional embedding, override, or isolate.
+`src/accounts/account-reason.ts` and a database check enforce the same rule.
+Arabic and mixed-direction text are accepted. It is stored in
+`dromex_account_status_change` (append-only by trigger: no update, delete, or
+truncate; foreign keys restricted; an account can never change its own
+status), shown to the Owner, and never written to the audit trail or a log.
+The confirmation tells the Owner never to include a password or code.
+
+**Audit (DEC-490 (5)).** Events `admin_account_disabled`,
+`admin_account_enabled` (each with the status-change reference and, for a
+disable, the count of sessions ended), `admin_account_sessions_revoked`
+(count), `admin_account_session_revoked` (count 1),
+`admin_account_session_cleanup_incomplete`, `admin_account_action_refused`
+(reason `forbidden`, `not_found`, `owner_protected`, `invalid_reason`,
+`account_not_active`, `account_not_disabled`, or `session_not_found`), and
+`owner_route_refused`. Events gain `target_user_id`, a restricted foreign key
+to the Better Auth user, so it can hold only a real user identifier, and
+`account_change_id`. The guard now records `owner_route_refused`, with the
+actor and address only, whenever an authenticated non-Owner reaches any
+`owner` route, including the invitation routes; a failure to record never
+admits. This closes the 4B1 limit that guard refusals were not audited.
+Requests without a usable session, and viewing, are not audited.
+
+**Screens.** `/owner/accounts` and `/owner/accounts/<id>` in the development
+preview: a ledger of Admin accounts and of invitations without an account,
+the existing invite form, and one account with its facts, sessions, and a
+separate Actions panel. Each state is a text pill with a drawn shape, never
+colour alone. Disabling, re-enabling, and each revocation go through a native
+modal dialog that names the person and the consequences, starts on the reason
+or on "Keep as is", closes on Escape, and returns focus to the control that
+opened it. Loading, empty, failed, signed-out, and not-Owner states are
+explicit. The page asks `/api/session` first and never calls an Owner route
+for a signed-out visitor or an Admin, but that is convenience only: the API is
+the boundary. **There is still no web sign-in screen**, so the page is
+reachable only with a session obtained another way; it is verified against a
+stubbed API, as the invitation and reset pages are.
+
+**Why no deletion.** Loads, reports, corrections, and payments reference a
+user by a stable identifier (DEC-427), and the principal and audit foreign
+keys are `RESTRICT`. Disabling removes all access while every historical
+record keeps its author, and re-enabling needs no re-creation. A deletion
+path would either break that history or need a tombstone design nobody has
+approved.
+
+**Known limits and residual risks of checkpoint 4E:**
+
+- **Internal-adapter dependency.** `auth.$context.internalAdapter` is typed
+  and exported by Better Auth for plugins but is not its documented public
+  server API. A Better Auth upgrade (DEC-431) must re-run the boundary and
+  integration tests; if the adapter changes, cleanup fails closed into the
+  audited `cleanup_incomplete` path and the gate still refuses the sessions.
+- **Clock.** The session rule compares the API clock with Better Auth's
+  session creation time, which comes from the same process. A host whose
+  clock steps backwards could briefly admit or refuse a session near the
+  boundary; production runs the API and database on one host.
+- **Single-session revocation** deletes before its audit row commits. If the
+  commit itself then failed, the session would be gone without its audit row.
+  That fails safe for access but leaves an audit gap.
+- **Lists are bounded:** 200 accounts, 200 invitation addresses, and 50
+  sessions per account, with no pagination.
+- **The Owner's own sessions** are not listed or managed here; Owner session
+  management and recovery remain the terminal and recovery flows (DEC-436,
+  DEC-437).
+- **A lost authenticator before activation** still has no recovery (OQ-168).
+  A disabled Admin who lost their authenticator has none either: re-enabling
+  restores sign-in with the existing factor only, and resetting an Admin's
+  factor is not designed.
+- **Fastify's default `414` body** for an over-long path parameter echoes the
+  caller's own path. That affects every parameterised route since 4B1, is
+  unchanged here, and is recorded for the hardening phase.
+- Behaviour under a least-privilege runtime database role is not verified;
+  that role is not provisioned. The append-only triggers stop application
+  defects, not the table owner.
+
 ### Deliberately left to the implementation phase
 
 A recovery path for an invitee who lost the authenticator before activation
-(OQ-168); listing pending identities for the Owner (checkpoint 4E2).
+(OQ-168). (Listing pending identities for the Owner was done in checkpoint
+4E, below.)
 (Whether design closure satisfies DEC-435 (6) is no longer open: it does
 not, and DEC-443 sets the gate above.)
 
@@ -2980,6 +3161,13 @@ replicate that pairing.
 
 Tone: calm and trustworthy, no alarming iconography, no red unless
 genuinely destructive, no gradients or glass, no decorative animation.
+
+*Checkpoint 4E note:* the Owner's account and session screens implemented in
+4E (§14A) deliberately show no IP address, user agent, device detail, or
+last-seen time, on the Owner's 4E directive, and no template, MFA, or
+last-sign-in columns, because those facts are not recorded or not approved.
+The device-and-session and user-management rows above remain the fuller
+future design.
 
 ## 18. Accessibility requirements
 

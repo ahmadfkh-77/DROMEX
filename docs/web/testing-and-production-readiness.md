@@ -1221,6 +1221,116 @@ Playwright on Node 24.20.0; the unreadable-file refusal under Node 24.20.0,
 because the container ran as root; behaviour under a least-privilege runtime
 database role. **Not production-verified.**
 
+## Phase 2C Owner account and session management (checkpoint 4E): local verification
+
+Status: **implemented and locally verified on exact Node 24.20.0 in
+disposable containers (2026-09-29 and 2026-09-30; DEC-490, pending Owner
+review). Not production-verified.** No real Owner, Admin, session,
+invitation, or email exists. Every identity was synthetic, every address used
+a reserved test domain, and email went only to the capture transport.
+
+**Clock and environment.** Before any time-sensitive test, a 120-second
+in-container monitor saw 0 wall-clock steps (largest deviation 110 ms from
+the monotonic clock). A monitor inside each verification container ran for
+the whole run and again recorded 0 steps. Docker Desktop 28.5.1. The copy
+held exactly the 169 Git-tracked and new `web/` files, with `.env*`,
+`node_modules`, and caches excluded. It was scanned for secret-shaped content
+(the only matches were error-code names, the synthetic test-key prefix, and a
+test asserting that key-shaped content is refused), mounted read-only with the
+Docker socket for Testcontainers only, and confirmed byte-identical to the
+working tree by SHA-256. No development database or volume was mounted.
+
+| Step (Node v24.20.0) | Result |
+|---|---|
+| `npm ci` from the committed lockfile | Exit 0; lockfile byte-identical afterwards |
+| Workspace typecheck (`api`, `web`) | Exit 0 |
+| API unit, including the POSIX key-file tests | **618/618** |
+| API integration against disposable PostgreSQL 18.6 | **437/437**, including `admin-accounts.test.ts` 16/16 and `dromex-migrations.test.ts` 65/65 |
+| Mutations | **32 of 35 killed**, every file restored byte-identical (below) |
+| Playwright (Windows host) | **96/96** (32 tests × 375, 768, 1280 px), 45 of them new |
+| `npm audit` (web workspace) | 0 vulnerabilities |
+| Android typecheck | Clean; no Android file changed |
+
+**One run was not clean, and why.** The first full integration run of the
+final tree passed 437 of 437 but exited 1. After the last migration test,
+PostgreSQL's `57P01` ("terminating connection due to administrator command")
+reached a pool client with no error listener. That is the file's existing
+teardown, `pool.end()` followed by `DROP DATABASE … WITH (FORCE)`, racing
+a connection that was still closing. The file then passed 65 of 65 in five
+isolated runs with no error, and one further full run passed 437 of 437 with
+no error. No code was changed for it. It is recorded below as a known
+intermittent harness race.
+
+**Test-first evidence.** Each layer was written test-first and seen failing
+for the expected reason before its implementation existed. Unit: 15 failures
+plus two missing modules (the audit fields and vocabulary, the gate rule, the
+refusal audit, the route surface, the reason rule, the session-control
+boundary). Integration: 19 migration failures and a suite that could not
+start (`sessions_revoked_at` did not exist). Playwright: 15 of 15 failing
+with no page. Two later additions were closed by mutations instead: the
+direct use-case authorization test (mutation I01) and the rule that
+re-enabling deletes nothing (I05b, which restores the earlier behaviour and
+is killed).
+
+**Tests written for 4E:**
+
+| File | Covers |
+|---|---|
+| `tests/unit/account-reason.test.ts` | Trimming; Arabic and mixed direction; 3 and 500 character boundaries measured in code points; missing, non-string, blank, line breaks, tabs, NUL, C1, bidirectional overrides, embeddings, isolates, lone surrogates |
+| `tests/unit/session-control-boundary.test.ts` | Server is the sole importer; one export; the only module reaching `$context` or `internalAdapter`; exactly three session operations and no SQL; deletes only the named user's session by identifier, never an outside token; revoke-all reports what remains |
+| `tests/unit/auth-http.test.ts` (+) | The `sessions_revoked_at` rule at the exact millisecond; Owner-route refusals audited with actor and address only; still refused when auditing fails; no audit or admission without a usable session, for disabled, pending, or revoked principals; the Owner admitted unaudited; the new required dependency |
+| `tests/unit/security-audit.test.ts` (+) | Target and status-change references written; closed account vocabulary; free-text, address-shaped, overlong, and numeric references refused before any statement |
+| `tests/unit/route-access.test.ts`, `owner-provisioning-boundary.test.ts` (+) | Exactly six new `owner` routes (plus HEAD); every one refused without a session and every write refused from a missing or foreign Origin, before any database work |
+| `tests/integration/admin-accounts.test.ts` (16) | The list and detail with exact safe key sets and no token, identifier, address, or agent; honest unknowns; opaque session references; an Admin refused and audited on all seven attempts; missing, forged, and cross-origin callers; the use case refusing an Admin and an MFA-incomplete Owner without the guard (DEC-428); reason validation; disable locking the Admin out of sessions, sign-in, reset, and re-invitation; re-enable never reviving a session even after a failed cleanup; Owner self-action refused; pending and missing targets; one-session and all-session revocation, including another Admin's session through the wrong account; concurrent disables, revocations, and re-enables; no reason, session value, password, or address in any audit row or log |
+| `tests/integration/dromex-migrations.test.ts` (+) | Migration `0011`: forward-only `sessions_revoked_at`; the status-change columns; every reason and self-change refusal in the database; append-only history; restricted foreign keys; the audit vocabulary and references; no rewrite of existing principals; idempotence. The `0010` idempotence and preservation tests are now bounded to `0010`, as the `0009` ones already were |
+| `tests/integration/auth-flow`, `owner-recovery`, `principal`, `rate-limit-storage` (+) | The migration count and ledger, the audit column list, and the principal shape |
+| `e2e/accounts.spec.ts` (15 × 3 widths) | Grouped states with text and shape; empty, failed, and retried loads; signed-out and Admin visitors refused without calling Owner routes; invite, resend, and cancel through the existing routes; keyboard opening with a visible focus ring; honest facts; disable, re-enable, and both revocations only after a confirmation that names the person, with exact request bodies; Escape and focus return; server refusal and refresh; ended session and network failure; long, Arabic, and mixed-direction text within the viewport |
+
+**Mutation testing.** Each mutation was applied alone to the container's own
+copy, the named tests run, and the file restored and confirmed byte-identical
+by SHA-256.
+
+- Unit, 12 of 13 killed: the gate cut-off and its boundary; the guard's
+  refusal audit, and admitting when that audit fails; the audit target and
+  status-change reference; the reason's bidirectional, length, and trim
+  rules; single revocation by an outside identifier; revoke-all's remaining
+  count; the `owner` route classification. **Survived, equivalent:** U11
+  removes the owning-user filter inside session control, but Better Auth's
+  `listSessions(userId)` already returns only that user's sessions.
+- Integration, 20 of 22 killed: the use case's Owner check; the
+  `sessions_revoked_at` stamp; disable cleanup; re-enable not cleaning up;
+  single deletion; the service's reason check; the active-only disable;
+  the disable audit; the cleanup-incomplete audit; strict bodies; the session
+  list's cut-off; the row lock (the concurrency test); the server's refusal
+  audit; the Owner hidden from the list and the detail; and four database
+  rules (bidirectional reasons, self-change, a backwards stamp, rewritten
+  history). **Survived, redundant layers:** I02 and I03 each remove one of
+  the two Owner self-protection checks, and the other still refuses. I21
+  removes both together and is killed.
+
+**Other scans.** No `debugger`, `.only`, `.skip`, `console.log`, or TODO
+marker in the changed files; no trailing whitespace or mixed line endings; no
+temporary file left (the one visual-capture spec was deleted after use); no
+historical DROMEX or Android migration changed; no manifest, lockfile, or
+Compose file changed. A scan for invisible characters found literal
+bidirectional control characters in five files, introduced by an editing
+tool that turned `U+202E`-style escapes into the characters themselves. All
+eight lines were converted back to visible escapes with identical behaviour,
+and the final scan is clean. The Resend transport is exercised only against a
+scripted in-memory `fetch`, and the account suite uses the capture
+transport, so no real network email request can occur.
+
+**Docker, before and after.** Every pre-existing container, volume, and image
+is unchanged. One exited verification container that this checkpoint created
+(`dromex-4e-final`) was left in place, because the session's rules forbid
+deleting containers.
+
+**Known limits:** the teardown race above; Playwright runs on the Windows
+host only (the slim Node image has no browsers); the pages are verified
+against a stubbed API, and there is no web sign-in screen; behaviour under a
+least-privilege runtime database role is not verified. **Not
+production-verified.**
+
 ## Planned tests: email, Admin invitations, and password reset
 
 Status: **planned design, now covered by checkpoints 4A to 4C (DEC-439
@@ -1297,6 +1407,11 @@ evidence. Today, none of them are.
       implemented and verified by the planned tests above — **implemented
       and verified locally on Node 24.20.0 (checkpoints 4B1, 4B2, 4C);
       not production-verified**
+- [ ] Owner account and session management (DEC-408, DEC-427, DEC-490):
+      Owner-only list and detail, disable and re-enable with a reason, and
+      one and all-session revocation — **implemented and verified locally on
+      Node 24.20.0 (checkpoint 4E); not production-verified, and DEC-490 is
+      pending Owner review**
 - [ ] Email delivery production configured and physically verified by the
       Owner: Resend account created; current plan and terms confirmed,
       including whether the Free plan permits DROMEX's business use; the

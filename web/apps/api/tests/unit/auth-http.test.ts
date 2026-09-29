@@ -9,6 +9,7 @@ import {
   registerAuthRoutes,
   type AuthBackend,
   type AuthRoutesDependencies,
+  type OwnerRefusalAudit,
   type RecoverySessionGate,
 } from '../../src/auth/http.ts';
 import type { Principal, PrincipalRepository } from '../../src/auth/principal.ts';
@@ -106,6 +107,7 @@ const ACTIVE: Principal = {
   isOwner: false,
   mfaCompletedAt: MFA_COMPLETED_AT,
   credentialsChangedAt: null,
+  sessionsRevokedAt: null,
 };
 const DISABLED: Principal = { ...ACTIVE, status: 'disabled' };
 const MFA_INCOMPLETE: Principal = { ...ACTIVE, mfaCompletedAt: null };
@@ -113,6 +115,10 @@ const MFA_INCOMPLETE: Principal = { ...ACTIVE, mfaCompletedAt: null };
 const CREDENTIALS_CHANGED: Principal = { ...ACTIVE, credentialsChangedAt: new Date(Date.parse(SESSION_CREATED_AT) + 1) };
 /** The password changed exactly when the session was created: still admitted. */
 const CREDENTIALS_CHANGED_AT_SESSION: Principal = { ...ACTIVE, credentialsChangedAt: new Date(SESSION_CREATED_AT) };
+/** Checkpoint 4E: the Owner revoked every session one millisecond after this one was created. */
+const SESSIONS_REVOKED: Principal = { ...ACTIVE, sessionsRevokedAt: new Date(Date.parse(SESSION_CREATED_AT) + 1) };
+/** Sessions were revoked exactly when this one was created: still admitted. */
+const SESSIONS_REVOKED_AT_SESSION: Principal = { ...ACTIVE, sessionsRevokedAt: new Date(SESSION_CREATED_AT) };
 
 const apps: FastifyInstance[] = [];
 
@@ -131,17 +137,28 @@ function recoveryGate(isRecovery: boolean) {
   return { isRecoverySession: vi.fn(async (_sessionId: string) => isRecovery) } satisfies RecoverySessionGate;
 }
 
+/** Records every Owner-route refusal the guard reports. */
+function ownerRefusalRecorder(failure?: Error) {
+  return {
+    recordOwnerRefusal: vi.fn(async (_actor: { userId: string; name: string }, _clientAddress: string) => {
+      if (failure) throw failure;
+    }),
+  } satisfies OwnerRefusalAudit;
+}
+
 function deps(
   backend: AuthBackend,
   principals: PrincipalRepository = principalRepository(ACTIVE),
   replay: TotpReplayGuard = replayGuard(),
   recoverySessions: RecoverySessionGate = recoveryGate(false),
+  ownerRefusals: OwnerRefusalAudit = ownerRefusalRecorder(),
 ): AuthRoutesDependencies {
   return {
     backend,
     principals,
     replay,
     recoverySessions,
+    ownerRefusals,
     cookies: COOKIES,
     baseURL: TEST_BASE_URL,
     trustedOrigins: [TEST_TRUSTED_ORIGIN],
@@ -771,6 +788,7 @@ describe('authentication transport', () => {
         [sessionBody({ createdAt: 'not-a-date' }), ACTIVE],
         [sessionBody({ createdAt: undefined }), ACTIVE],
         [sessionBody(), CREDENTIALS_CHANGED],
+        [sessionBody(), SESSIONS_REVOKED],
       ];
 
       for (const [body, principal] of cases) {
@@ -789,6 +807,19 @@ describe('authentication transport', () => {
       for (const [principal, status] of [
         [CREDENTIALS_CHANGED_AT_SESSION, 200],
         [CREDENTIALS_CHANGED, 401],
+      ] as const) {
+        const app = await buildApp(
+          deps(fakeBackend({ getSession: vi.fn(async () => jsonResponse(200, sessionBody())) }), principalRepository(principal)),
+        );
+        const response = await app.inject({ method: 'GET', url: '/api/session' });
+        expect(response.statusCode).toBe(status);
+      }
+    });
+
+    it('admits a session created exactly when the Owner revoked sessions, and refuses one a millisecond older (checkpoint 4E)', async () => {
+      for (const [principal, status] of [
+        [SESSIONS_REVOKED_AT_SESSION, 200],
+        [SESSIONS_REVOKED, 401],
       ] as const) {
         const app = await buildApp(
           deps(fakeBackend({ getSession: vi.fn(async () => jsonResponse(200, sessionBody())) }), principalRepository(principal)),
@@ -913,6 +944,86 @@ describe('authentication transport', () => {
     expect(() =>
       registerAuthenticationGuard(app, { ...deps(fakeBackend()), recoverySessions: undefined as never }),
     ).toThrow(/recovery/i);
+    expect(() =>
+      registerAuthenticationGuard(app, { ...deps(fakeBackend()), ownerRefusals: undefined as never }),
+    ).toThrow(/owner/i);
+  });
+
+  describe('Owner routes', () => {
+    async function ownerApp(principal: Principal | null, ownerRefusals: OwnerRefusalAudit, session: unknown = sessionBody()) {
+      const app = Fastify({ logger: false });
+      const dependencies = deps(
+        fakeBackend({ getSession: vi.fn(async () => jsonResponse(200, session)) }),
+        principalRepository(principal),
+        replayGuard(),
+        recoveryGate(false),
+        ownerRefusals,
+      );
+      registerRouteAccessGuard(app);
+      registerAuthenticationGuard(app, dependencies);
+      const reached = vi.fn();
+      app.get('/owner-probe', { config: { access: 'owner' } }, async () => {
+        reached();
+        return { reached: true };
+      });
+      await app.ready();
+      apps.push(app);
+      return { app, reached };
+    }
+
+    it('audits an authenticated non-Owner reaching an Owner route, naming the actor and address only', async () => {
+      const ownerRefusals = ownerRefusalRecorder();
+      const { app, reached } = await ownerApp(ACTIVE, ownerRefusals);
+
+      const response = await app.inject({ method: 'GET', url: '/owner-probe', remoteAddress: '198.51.100.9' });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ error: 'forbidden' });
+      expect(reached).not.toHaveBeenCalled();
+      expect(ownerRefusals.recordOwnerRefusal).toHaveBeenCalledTimes(1);
+      expect(ownerRefusals.recordOwnerRefusal).toHaveBeenCalledWith(
+        { userId: 'user_synthetic', name: 'Synthetic Person' },
+        '198.51.100.9',
+      );
+    });
+
+    it('still refuses the non-Owner when recording the refusal fails', async () => {
+      const { app, reached } = await ownerApp(ACTIVE, ownerRefusalRecorder(new Error('audit failure detail')));
+
+      const response = await app.inject({ method: 'GET', url: '/owner-probe' });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.body).not.toContain('detail');
+      expect(reached).not.toHaveBeenCalled();
+    });
+
+    it('neither audits nor admits a caller with no usable session, a disabled principal, or a revoked session', async () => {
+      for (const [principal, session] of [
+        [ACTIVE, null],
+        [null, sessionBody()],
+        [DISABLED, sessionBody()],
+        [{ ...SESSIONS_REVOKED, isOwner: true }, sessionBody()],
+        [{ ...ACTIVE, status: 'pending' as const }, sessionBody()],
+      ] as const) {
+        const ownerRefusals = ownerRefusalRecorder();
+        const { app, reached } = await ownerApp(principal, ownerRefusals, session);
+        const response = await app.inject({ method: 'GET', url: '/owner-probe' });
+        expect(response.statusCode).toBe(401);
+        expect(reached).not.toHaveBeenCalled();
+        expect(ownerRefusals.recordOwnerRefusal).not.toHaveBeenCalled();
+      }
+    });
+
+    it('admits the Owner without recording a refusal', async () => {
+      const ownerRefusals = ownerRefusalRecorder();
+      const { app, reached } = await ownerApp({ ...ACTIVE, isOwner: true }, ownerRefusals);
+
+      const response = await app.inject({ method: 'GET', url: '/owner-probe' });
+
+      expect(response.statusCode).toBe(200);
+      expect(reached).toHaveBeenCalledTimes(1);
+      expect(ownerRefusals.recordOwnerRefusal).not.toHaveBeenCalled();
+    });
   });
 
   it('writes no password, TOTP code, cookie, or session token to the log', async () => {

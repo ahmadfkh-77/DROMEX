@@ -17,7 +17,7 @@ const BETTER_AUTH_MIGRATION = fileURLToPath(
 );
 
 const BETTER_AUTH_TABLES = ['user', 'session', 'account', 'verification', 'rateLimit'];
-const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010'];
+const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011'];
 
 describe('DROMEX migration mechanism', () => {
   let database: EphemeralDatabase;
@@ -438,6 +438,159 @@ describe('DROMEX migration mechanism', () => {
     });
   });
 
+  describe('Owner account and session management (0011, checkpoint 4E)', () => {
+    beforeEach(async () => {
+      await applyMigrations(pool, await loadDromexMigrations());
+      await seedUser(pool, 'acct_owner');
+      await seedUser(pool, 'acct_admin');
+      await pool.query(
+        `INSERT INTO dromex_principal (user_id, status, is_owner, mfa_completed_at) VALUES
+           ('acct_owner', 'active', TRUE, CURRENT_TIMESTAMP), ('acct_admin', 'active', FALSE, CURRENT_TIMESTAMP)`,
+      );
+    });
+
+    const change = (values: { user?: string; by?: string; action?: string; reason?: string }) =>
+      pool.query<{ id: string }>(
+        `INSERT INTO dromex_account_status_change (user_id, action, reason, changed_by_user_id)
+         VALUES ($1, $2, $3, $4) RETURNING id::text`,
+        [values.user ?? 'acct_admin', values.action ?? 'disabled', values.reason ?? 'Left the company', values.by ?? 'acct_owner'],
+      );
+
+    it('adds a nullable sessions_revoked_at to principals that only ever moves forward', async () => {
+      const read = async () =>
+        (await pool.query(`SELECT sessions_revoked_at FROM dromex_principal WHERE user_id = 'acct_admin'`)).rows[0]!
+          .sessions_revoked_at as Date | null;
+      const set = (sql: string) => pool.query(`UPDATE dromex_principal SET ${sql} WHERE user_id = 'acct_admin'`);
+
+      expect(await read()).toBeNull();
+      await set(`sessions_revoked_at = '2026-09-29T10:00:00Z'`);
+      await set(`sessions_revoked_at = '2026-09-29T10:00:00Z'`);
+      await set(`sessions_revoked_at = '2026-09-29T11:00:00Z'`);
+      expect((await read())!.toISOString()).toBe('2026-09-29T11:00:00.000Z');
+      await expect(set(`sessions_revoked_at = '2026-09-29T10:30:00Z'`)).rejects.toThrow(/sessions_revoked_at/i);
+      await expect(set(`sessions_revoked_at = NULL`)).rejects.toThrow(/sessions_revoked_at/i);
+    });
+
+    it('holds a status change with exactly an account, an action, a reason, an actor, and a time', async () => {
+      const { rows } = await pool.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'dromex_account_status_change' ORDER BY column_name`,
+      );
+      expect(rows.map((row) => row.column_name)).toEqual(['action', 'changed_at', 'changed_by_user_id', 'id', 'reason', 'user_id']);
+      await change({});
+      await change({ action: 'enabled', reason: 'غادر ثم عاد — returned to Site 4' });
+    });
+
+    it.each([
+      ['an unknown action', { action: 'deleted' }],
+      ['a reason that is too short', { reason: 'ab' }],
+      ['a reason that is too long', { reason: 'a'.repeat(501) }],
+      ['a reason with surrounding whitespace', { reason: ' Left the company ' }],
+      ['a reason with a line break', { reason: 'Left\nthe company' }],
+      ['a reason with a tab', { reason: 'Left\tthe company' }],
+      ['a reason with a right-to-left override', { reason: 'Left \u202Eynapmoc' }],
+      ['a reason with a directional isolate', { reason: 'Left \u2066the company\u2069' }],
+      ['an account changing its own status', { user: 'acct_owner', by: 'acct_owner' }],
+    ])('refuses %s', async (_label, values) => {
+      await expect(change(values)).rejects.toThrow(/check constraint/i);
+    });
+
+    it('measures the reason in characters, accepting 500 astral characters', async () => {
+      await change({ reason: '🏗'.repeat(500) });
+      await expect(change({ reason: '🏗'.repeat(501) })).rejects.toThrow(/check constraint/i);
+    });
+
+    it('keeps status changes as history: never updated, never deleted, and never orphaned', async () => {
+      const { rows } = await change({});
+      const id = rows[0]!.id;
+      await expect(
+        pool.query(`UPDATE dromex_account_status_change SET reason = 'Rewritten reason' WHERE id = $1`, [id]),
+      ).rejects.toThrow(/never changed or deleted/i);
+      await expect(pool.query(`DELETE FROM dromex_account_status_change WHERE id = $1`, [id])).rejects.toThrow(
+        /never changed or deleted/i,
+      );
+      await expect(pool.query(`TRUNCATE dromex_account_status_change`)).rejects.toThrow(/never changed or deleted/i);
+      await expect(pool.query(`DELETE FROM "user" WHERE id = 'acct_admin'`)).rejects.toThrow(/RESTRICT|foreign key/i);
+    });
+
+    it('accepts the account-management audit vocabulary, target, and change reference, and still refuses unknown events', async () => {
+      const { rows } = await change({});
+      for (const type of [
+        'admin_account_disabled',
+        'admin_account_enabled',
+        'admin_account_sessions_revoked',
+        'admin_account_session_revoked',
+        'admin_account_session_cleanup_incomplete',
+        'admin_account_action_refused',
+        'owner_route_refused',
+        'password_changed_notification_failed',
+        'recovery_code_accepted',
+      ]) {
+        await pool.query(
+          `INSERT INTO dromex_audit_event (event_type, outcome, target_user_id, account_change_id) VALUES ($1, 'success', 'acct_admin', $2)`,
+          [type, rows[0]!.id],
+        );
+      }
+      await expect(
+        pool.query(`INSERT INTO dromex_audit_event (event_type, outcome) VALUES ('admin_account_deleted', 'success')`),
+      ).rejects.toThrow(/check constraint/i);
+      await expect(
+        pool.query(`INSERT INTO dromex_audit_event (event_type, outcome, account_change_id) VALUES ('admin_account_disabled', 'success', 0)`),
+      ).rejects.toThrow(/check constraint/i);
+      await expect(
+        pool.query(`INSERT INTO dromex_audit_event (event_type, outcome, target_user_id) VALUES ('admin_account_disabled', 'success', 'nobody')`),
+      ).rejects.toThrow(/foreign key/i);
+    });
+  });
+
+  it('preserves existing principals exactly when 0011 is applied over 0010', async () => {
+    const migrations = await loadDromexMigrations();
+    await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0010'));
+    await seedUser(pool, 'kept_owner');
+    await seedUser(pool, 'kept_disabled');
+    await pool.query(
+      `INSERT INTO dromex_principal (user_id, status, is_owner, mfa_completed_at, credentials_changed_at, created_at, updated_at) VALUES
+         ('kept_owner', 'active', TRUE, '2026-09-01T10:00:00Z', NULL, '2026-09-01T09:00:00Z', '2026-09-01T10:00:00Z'),
+         ('kept_disabled', 'disabled', FALSE, '2026-09-03T10:00:00Z', '2026-09-04T10:00:00Z', '2026-09-03T09:00:00Z', '2026-09-04T11:00:00Z')`,
+    );
+    const snapshot = async () =>
+      (
+        await pool.query(
+          `SELECT user_id, status, is_owner, mfa_completed_at, credentials_changed_at, created_at, updated_at
+             FROM dromex_principal ORDER BY user_id`,
+        )
+      ).rows;
+    const before = await snapshot();
+
+    const result = await applyMigrations(pool, migrations);
+    expect(result.applied).toEqual(['0011']);
+    expect(await snapshot()).toEqual(before);
+    const stamped = await pool.query(`SELECT count(*)::int AS n FROM dromex_principal WHERE sessions_revoked_at IS NOT NULL`);
+    expect(stamped.rows[0]!.n).toBe(0);
+  });
+
+  it('applies 0011 idempotently: running its SQL again changes nothing', async () => {
+    const migrations = await loadDromexMigrations();
+    await applyMigrations(pool, migrations);
+    const sql = migrations.find((migration) => migration.id === '0011')!.sql;
+    const shape = async () =>
+      (
+        await pool.query(
+          `SELECT conrelid::regclass::text AS relation, conname::text AS name, pg_get_constraintdef(oid) AS definition
+             FROM pg_constraint WHERE connamespace = 'public'::regnamespace
+           UNION ALL
+           SELECT tgrelid::regclass::text, tgname::text, pg_get_triggerdef(oid) FROM pg_trigger WHERE NOT tgisinternal
+           UNION ALL
+           SELECT tablename::text, indexname::text, indexdef FROM pg_indexes WHERE schemaname = 'public'
+           ORDER BY 1, 2, 3`,
+        )
+      ).rows;
+    const before = await shape();
+    await pool.query(sql);
+    await pool.query(sql);
+    expect(await shape()).toEqual(before);
+  });
+
   it('preserves existing principals exactly when 0010 is applied over 0009', async () => {
     const migrations = await loadDromexMigrations();
     await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0009'));
@@ -453,7 +606,7 @@ describe('DROMEX migration mechanism', () => {
         .rows;
     const before = await snapshot();
 
-    const result = await applyMigrations(pool, migrations);
+    const result = await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0010'));
     expect(result.applied).toEqual(['0010']);
     expect(await snapshot()).toEqual(before);
     const added = await pool.query(`SELECT count(*)::int AS n FROM dromex_principal WHERE credentials_changed_at IS NOT NULL`);
@@ -462,7 +615,9 @@ describe('DROMEX migration mechanism', () => {
 
   it('applies 0010 idempotently: running its SQL again changes nothing', async () => {
     const migrations = await loadDromexMigrations();
-    await applyMigrations(pool, migrations);
+    // Up to 0010 only: 0011 legitimately replaces the audit vocabulary that
+    // 0010 would restore.
+    await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0010'));
     const sql = migrations.find((migration) => migration.id === '0010')!.sql;
     const shape = async () =>
       (
@@ -893,6 +1048,7 @@ describe('DROMEX migration mechanism', () => {
     // Only the DROMEX-owned objects are added.
     const dromexTables = tables.filter((name) => name.startsWith('dromex_')).sort();
     expect(dromexTables).toEqual([
+      'dromex_account_status_change',
       'dromex_admin_enrolment',
       'dromex_admin_enrolment_session',
       'dromex_admin_invitation',

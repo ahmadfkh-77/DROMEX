@@ -1413,6 +1413,8 @@ describe('Owner recovery against PostgreSQL 18.6', () => {
           WHERE table_schema = 'public' AND table_name = 'dromex_audit_event' ORDER BY column_name`,
       );
       expect(columns).toEqual([
+        // Checkpoint 4E (migration 0011): a plain status-change reference, never the reason text.
+        { column_name: 'account_change_id', data_type: 'bigint' },
         { column_name: 'actor_name', data_type: 'text' },
         { column_name: 'actor_user_id', data_type: 'text' },
         { column_name: 'client_address', data_type: 'text' },
@@ -1428,6 +1430,8 @@ describe('Owner recovery against PostgreSQL 18.6', () => {
         { column_name: 'reason', data_type: 'text' },
         { column_name: 'recovery_id', data_type: 'bigint' },
         { column_name: 'revoked_session_count', data_type: 'integer' },
+        // Checkpoint 4E (migration 0011): a foreign key to a Better Auth user id, never free text.
+        { column_name: 'target_user_id', data_type: 'text' },
         { column_name: 'terminal_recovery_id', data_type: 'bigint' },
       ]);
 

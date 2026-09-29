@@ -38,6 +38,12 @@ export interface Principal {
    * before it. `null` means the password never changed that way.
    */
   credentialsChangedAt: Date | null;
+  /**
+   * When the Owner last ended every session of this principal (checkpoint 4E):
+   * by disabling, re-enabling, or revoking all sessions. The ordinary gate
+   * refuses a session created before it. `null` means never.
+   */
+  sessionsRevokedAt: Date | null;
 }
 
 export interface PrincipalRepository {
@@ -51,6 +57,7 @@ interface PrincipalRow {
   is_owner: boolean;
   mfa_completed_at: Date | null;
   credentials_changed_at: Date | null;
+  sessions_revoked_at: Date | null;
 }
 
 /**
@@ -65,7 +72,7 @@ export function createPrincipalRepository(pool: Pool): PrincipalRepository {
       // Parameterised, always. The identifier originates from a session and
       // is never concatenated into SQL (ASVS 1.2.4).
       const { rows } = await pool.query<PrincipalRow>(
-        `SELECT user_id, status, is_owner, mfa_completed_at, credentials_changed_at
+        `SELECT user_id, status, is_owner, mfa_completed_at, credentials_changed_at, sessions_revoked_at
            FROM dromex_principal
           WHERE user_id = $1`,
         [userId],
@@ -82,6 +89,7 @@ export function createPrincipalRepository(pool: Pool): PrincipalRepository {
         isOwner: row.is_owner,
         mfaCompletedAt: row.mfa_completed_at instanceof Date ? row.mfa_completed_at : null,
         credentialsChangedAt: row.credentials_changed_at instanceof Date ? row.credentials_changed_at : null,
+        sessionsRevokedAt: row.sessions_revoked_at instanceof Date ? row.sessions_revoked_at : null,
       };
     },
   };
@@ -130,6 +138,23 @@ export function sessionPredatesCredentialChange(
   if (principal.credentialsChangedAt === null) return false;
   if (createdAt === null || !Number.isFinite(createdAt.getTime())) return true;
   return createdAt.getTime() < principal.credentialsChangedAt.getTime();
+}
+
+/**
+ * The Owner session rule (checkpoint 4E): whether a session created at
+ * `createdAt` began before the Owner last ended every session of this
+ * principal, and so must be refused. It is what keeps re-enabling an account
+ * from reviving any session that existed before it was disabled, whether or
+ * not Better Auth's own deletion completed. A session with no usable creation
+ * time counts as older.
+ */
+export function sessionPredatesOwnerRevocation(
+  principal: Pick<Principal, 'sessionsRevokedAt'>,
+  createdAt: Date | null,
+): boolean {
+  if (principal.sessionsRevokedAt === null) return false;
+  if (createdAt === null || !Number.isFinite(createdAt.getTime())) return true;
+  return createdAt.getTime() < principal.sessionsRevokedAt.getTime();
 }
 
 /**

@@ -164,14 +164,19 @@ describe('Owner provisioning isolation from the running server', () => {
       await app.ready();
       const routes = [...app.routeAccess.entries()].sort(([a], [b]) => a.localeCompare(b));
 
-      // The Owner invitation routes (checkpoint 4B1) and the invitation
-      // acceptance routes (checkpoint 4B2) are the only additions since
+      // The Owner invitation routes (checkpoint 4B1), the invitation
+      // acceptance routes (checkpoint 4B2), password reset (checkpoint 4C), and
+      // the Owner account routes (checkpoint 4E) are the only additions since
       // provisioning; none of them is a provisioning or sign-up route.
       expect(routes).toEqual([
+        ['GET /api/owner/accounts', 'owner'],
+        ['GET /api/owner/accounts/:userId', 'owner'],
         ['GET /api/owner/invitations', 'owner'],
         ['GET /api/session', 'authenticated'],
         ['GET /health', 'public'],
         ['GET /ready', 'public'],
+        ['HEAD /api/owner/accounts', 'owner'],
+        ['HEAD /api/owner/accounts/:userId', 'owner'],
         ['HEAD /api/owner/invitations', 'owner'],
         ['HEAD /api/session', 'authenticated'],
         ['HEAD /health', 'public'],
@@ -186,6 +191,10 @@ describe('Owner provisioning isolation from the running server', () => {
         ['POST /api/invitation/inspect', 'invitation'],
         ['POST /api/invitation/password', 'invitation'],
         ['POST /api/invitation/totp', 'invitation'],
+        ['POST /api/owner/accounts/:userId/disable', 'owner'],
+        ['POST /api/owner/accounts/:userId/enable', 'owner'],
+        ['POST /api/owner/accounts/:userId/sessions/:sessionRef/revoke', 'owner'],
+        ['POST /api/owner/accounts/:userId/sessions/revoke-all', 'owner'],
         ['POST /api/owner/invitations', 'owner'],
         ['POST /api/owner/invitations/:id/cancel', 'owner'],
         ['POST /api/owner/invitations/:id/resend', 'owner'],

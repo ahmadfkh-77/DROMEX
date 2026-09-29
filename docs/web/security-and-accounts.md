@@ -21,9 +21,11 @@ narrowly scoped two-operation factor reset only when neither is possible
 implemented and tested on disposable databases only (checkpoint 4C,
 DEC-487, DEC-488); the running server reads email configuration
 (checkpoint 4D, DEC-489) but runs disabled, because no provider is
-configured. No
-account management, Owner readiness enforcement, permissions, or deployment
-exists.
+configured. Owner account and session management (list and inspect Admin
+accounts and invitations, disable and re-enable an Admin with a reason, and
+revoke one or every session of an Admin) is implemented and tested on
+disposable databases only (checkpoint 4E, DEC-490, pending Owner review). No
+Owner readiness enforcement, permission model, or deployment exists.
 
 The full authentication and authorization architecture — candidate research,
 the selected system and why, the threat model, session and MFA design, the
@@ -60,6 +62,36 @@ An Admin cannot disable, delete, demote, or replace the Owner. The
 single-Owner constraint will be enforced by a database constraint, not only by
 application logic, following the singleton pattern the SQLite schema already
 uses for the company record.
+
+## Owner account and session management: implemented locally
+
+Checkpoint 4E (DEC-490, proposed and pending Owner review) implements the
+Owner-only part of DEC-408 and the disabling part of DEC-427, against
+disposable databases and a stubbed browser API only. The full description is
+in
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#implemented-owner-account-and-session-management-phase-2c-checkpoint-4e-local-development-only).
+
+- **Owner only, checked twice.** Six `owner` routes; the guard admits only the
+  MFA-complete Owner and the use case checks again. An Admin reaching any
+  Owner route is refused and the attempt is audited.
+- **The Owner is never a target.** Disabling, re-enabling, or signing out the
+  Owner's own account is refused and audited; the database refuses any
+  account changing its own status.
+- **Disable.** Requires a reason (3 to 500 characters, one line). In one
+  transaction the account becomes `disabled` and every existing session is
+  ended through the `sessions_revoked_at` rule; the disabled Admin cannot
+  sign in, use any session, reset a password into access, or be invited
+  again. Better Auth's session rows are then deleted as cleanup.
+- **Re-enable.** Requires a reason; restores sign-in with the existing
+  password and authenticator, and no earlier session ever returns.
+- **Sessions.** The Owner sees each usable session's sign-in and expiry time
+  and can end one session or all of them. No token, session identifier, IP
+  address, user agent, or invented last-activity time is shown.
+- **No deletion.** Accounts are disabled, never deleted, so every record keeps
+  its author.
+- **Not started:** the permission model (templates, permission blocks,
+  overrides, project scope), Owner readiness enforcement, resetting an
+  Admin's factor, and a designed sign-in screen.
 
 ## Authentication solution: selected, partly implemented
 
