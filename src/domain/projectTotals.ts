@@ -192,3 +192,14 @@ export function totalsFilterChoices(data: ProjectTotalsData): { items: TotalsCho
     units: unique([...data.deliveries, ...data.usage].map((row) => ({ id: row.unitKey, label: row.unitSymbol }))),
   };
 }
+
+/** DEC-489. One equipment fill to the project, as the Project Totals PDF lists it. Money in US-dollar cents, only where recorded. */
+export type ProjectFuelFill = { id: string; confirmedAt: string; equipmentName: string; fuelType: FuelType; litres: number; pricePerLitreCents: number | null; costCents: number | null };
+
+/** Fills per fuel type and equipment (diesel never added to gasoline), and the cost of priced fills only. */
+export function summarizeFuelFills(fills: readonly ProjectFuelFill[]): { types: FuelSummary[]; cost: { totalCents: number | null; pricedCount: number; unpricedCount: number } } {
+  const types = summarizeFuel(fills.map((fill) => ({ fuelType: fill.fuelType, equipmentName: fill.equipmentName, litres: fill.litres, recordCount: 1 })));
+  let totalCents: number | null = null; let pricedCount = 0;
+  for (const fill of fills) if (fill.costCents != null) { totalCents = (totalCents ?? 0) + fill.costCents; pricedCount += 1; }
+  return { types, cost: { totalCents, pricedCount, unpricedCount: fills.length - pricedCount } };
+}

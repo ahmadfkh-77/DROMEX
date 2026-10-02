@@ -11,7 +11,7 @@ import {
   buildMaterialTree,COMPANY_SUPPLIER_KEY,countCompanyFilters,treeTotals,unitDifferences,emptyCompanyTotalsFilters,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,NO_PROJECT_KEY,
   type CompanyTotalsData,type CompanyTotalsFilters,type MaterialNode,type ProjectNode,type SupplierNode,type TotalsView,type UnitMeasures,
 } from '../../../domain/companyTotals';
-import {describeTotalsRange,formatTotalQuantity,validateTotalsFilters} from '../../../domain/projectTotals';
+import {describeTotalsRange,formatTotalQuantity,validateTotalsFilters,type ProjectFuelFill} from '../../../domain/projectTotals';
 import type {DocumentStart} from '../../documentFlow';
 import {colors} from '../../theme';
 import {formatDay} from '../../totalsPresentation';
@@ -41,10 +41,12 @@ const unique=(values:Choice[])=>[...new Map(values.map(value=>[value.id,value]))
  * one summary band and one ruled list; every figure comes from buildMaterialTree. The parent owns the
  * level so its Back button can step up one level at a time.
  */
-export function TotalsExplorer({scope,totals,documents,series,profiles,level,onLevel,onOpenRecord,onOpenReport,onCreateDocument,onFilters,refreshToken=0}:{
+export function TotalsExplorer({scope,totals,documents,series,profiles,loadFuelFills,level,onLevel,onOpenRecord,onOpenReport,onCreateDocument,onFilters,refreshToken=0}:{
   scope:ExplorerScope;totals:CompanyTotalsRepository;documents:BusinessDocumentRepository;series:LoadNumberSeriesRepository;
   /** Company name and logo for the Totals PDF; without it the Export PDF action is not offered. */
   profiles?:ProfileRepository;
+  /** Project Totals only: the project's fuel fills for a date range, offered as an optional PDF section. */
+  loadFuelFills?:(range:{fromDate:string;toDate:string})=>Promise<ProjectFuelFill[]>;
   level:ExplorerLevel;onLevel:(level:ExplorerLevel)=>void;onOpenRecord:(record:RecordSnapshot)=>void;onOpenReport:(usage:UsageRecord)=>void;onCreateDocument:(start:DocumentStart)=>void;
   /** Reports the filters, so a parent can show other sections for the same dates and view. */
   onFilters?:(filters:CompanyTotalsFilters)=>void;refreshToken?:number;
@@ -68,6 +70,9 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,level,onL
   const[exportOpen,setExportOpen]=useState(false);
   const[exportPrices,setExportPrices]=useState<'without'|'with'>('without');
   const[exportProject,setExportProject]=useState<'show'|'hide'>('show');
+  const[exportFuel,setExportFuel]=useState<'leave'|'include'>('leave');
+  /** Fuel belongs to the whole project, so it is offered on the project's top level only. */
+  const fuelChoiceShown=Boolean(loadFuelFills)&&scope.kind==='project'&&!level.material;
   const[exportMessage,setExportMessage]=useState<{kind:'success'|'error';text:string}|null>(null);
 
   const issues=validateTotalsFilters({fromDate:filters.fromDate,toDate:filters.toDate,itemKey:'',supplierKey:'',unitKey:'',view:'all'});
@@ -150,11 +155,12 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,level,onL
   if(status==='loading'||!data)return <>{filterBlock}<View style={styles.center}><ActivityIndicator color={colors.brand}/><Text style={styles.helper}>Calculating totals…</Text></View></>;
 
   /** DEC-487. The PDF covers exactly what is on screen: the filters and the level drilled into. */
-  const exportPdf=async(includePrices:boolean,showProject:boolean)=>{
+  const exportPdf=async(includePrices:boolean,showProject:boolean,includeFuel:boolean)=>{
     if(!profiles)return;
     setExporting(true);setExportMessage(null);
     try{
       // On the records level the PDF is a Loads History: every load behind these totals, listed.
+      const fuel=includeFuel&&fuelChoiceShown?await loadFuelFills!({fromDate:filters.fromDate,toDate:filters.toDate}):undefined;
       const [current,company,history]=await Promise.all([totals.getCompanyTotals(nodeFilters),profiles.getCompanySettings(),atRecords?totals.listRecords(nodeFilters,5000):Promise.resolve(undefined)]);
       const label=(list:Choice[],id:string)=>list.find(value=>value.id===id)?.label??id;
       const labels=[rangeLabel,...trail.slice(1),
@@ -167,13 +173,13 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,level,onL
         ...(filters.inclusion!=='all'?[`Document status: ${inclusionFilterLabels[filters.inclusion]}`]:[])];
       const title=atRecords?'Loads History':scope.kind==='project'?'Project Totals':'Company Totals';
       const parts=[level.material?.name,scope.kind==='project'?scope.projectName:level.project?.name,level.supplier?.key?level.supplier.name:undefined];
-      await exportAndShareTotals({companyName:company.companyName,logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,data:current,records:history,issuedTo:issuedTo(level.supplier,history),
+      await exportAndShareTotals({companyName:company.companyName,logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,fuel,data:current,records:history,issuedTo:issuedTo(level.supplier,history),
         fileName:{scopeName:parts.filter(Boolean).join(' ')||null,fromDate:filters.fromDate,toDate:filters.toDate}});
       setExportMessage({kind:'success',text:`${title} PDF ready to share, ${includePrices?'with recorded prices':'without prices'}.`});
     }catch(cause){setExportMessage({kind:'error',text:cause instanceof Error?cause.message:'The PDF could not be created.'});}
     finally{setExporting(false);}
   };
-  const askExport=()=>{setExportPrices('without');setExportProject('show');setExportOpen(true);};
+  const askExport=()=>{setExportPrices('without');setExportProject('show');setExportFuel('leave');setExportOpen(true);};
   const createButton=<>
     <QuietButton label="Create document" onPress={()=>openStart()} hint="Choose records, who the document is for, and its type"/>
     {profiles?<QuietButton label={exporting?'Preparing PDF…':'Export PDF'} onPress={askExport} disabled={exporting} hint="Without prices or with recorded prices"/>:null}
@@ -252,9 +258,11 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,level,onL
     {body}
     <UsageSheet query={usage} totals={totals} onClose={()=>setUsage(null)} onOpen={report=>{setUsage(null);onOpenReport(report);}}/>
     <FocusedSheet visible={exportOpen} eyebrow="EXPORT PDF" title={atRecords?'Loads History':scope.kind==='project'?'Project Totals':'Company Totals'} onClose={()=>setExportOpen(false)}
-      footer={<SheetActions primaryLabel="Export PDF" onCancel={()=>setExportOpen(false)} onPrimary={()=>{setExportOpen(false);void exportPdf(exportPrices==='with',exportProject==='show');}}/>}>
+      footer={<SheetActions primaryLabel="Export PDF" onCancel={()=>setExportOpen(false)} onPrimary={()=>{setExportOpen(false);void exportPdf(exportPrices==='with',exportProject==='show',exportFuel==='include');}}/>}>
       <Text style={styles.helper}>{atRecords?'Every load listed here, with its totals. It is not an invoice or bill.':'Covers the filters and the level you are looking at.'}</Text>
       <SegmentedChoice label="Prices" options={[{id:'without',label:'Without prices'},{id:'with',label:'With prices'}]} selectedId={exportPrices} onSelect={setExportPrices}/>
+      {fuelChoiceShown?<SegmentedChoice label="Fuel" options={[{id:'leave',label:'Leave out'},{id:'include',label:'Include fuel list'}]} selectedId={exportFuel} onSelect={setExportFuel}/>:null}
+      {fuelChoiceShown&&exportFuel==='include'?<Text style={styles.helper}>Adds fuel per type and equipment and every fill in the Covering dates. Prices and cost appear only with prices.</Text>:null}
       {atRecords?<SegmentedChoice label="Project column" options={[{id:'show',label:'Show project'},{id:'hide',label:'Hide project'}]} selectedId={exportProject} onSelect={setExportProject}/>:null}
     </FocusedSheet>
     <DocumentStartSheet visible={!!start} documents={documents} query={start} onClose={()=>setStart(null)} onStart={value=>{setStart(null);setSelecting(false);setSelected(new Set());onCreateDocument(value);}}/>

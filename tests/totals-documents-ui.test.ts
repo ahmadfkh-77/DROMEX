@@ -176,3 +176,12 @@ describe('Owner corrections after device testing',()=>{
     expect(read('src/ui/screens/QuarryPurchasesScreen.tsx')).toContain('if(openedDirectly.current&&selected.id===initialPurchaseId){onBack();return;}');
   });
 });
+
+describe('fuel in the Project Totals PDF',()=>{
+  it('offers a Fuel choice on the project’s top level and loads the fills only when chosen',()=>{
+    expect(explorer).toContain('label="Fuel"');
+    expect(explorer).toContain("{id:'leave',label:'Leave out'},{id:'include',label:'Include fuel list'}");
+    expect(explorer).toContain("fuelChoiceShown?await loadFuelFills!({fromDate:filters.fromDate,toDate:filters.toDate}):undefined");
+    expect(read('src/ui/screens/ProjectTotalsScreen.tsx')).toContain('loadFuelFills={range=>repository.listFuelFills(project.id,range)}');
+  });
+});

@@ -119,7 +119,7 @@ describe('project column',()=>{
     const records=[{key:'supplier_load:1',snapshot,seriesId:null,status:'Active' as const,cancellationReason:null,correctionCount:0,links:[],inclusion:{state:'not_included' as const}}];
     const input={...base,title:'Loads History',includePrices:false,records,data:{usageHiddenReason:null,usage:[],deliveries:[]}};
     const shown=buildTotalsHtml(input),hidden=buildTotalsHtml({...input,showProject:false});
-    const table=(html:string)=>html.slice(html.indexOf('<table class="history"'));
+    const table=(html:string)=>html.slice(html.indexOf('class="grid history"'));
     expect(table(shown)).toContain('<th>Project</th>');
     expect(table(shown)).toContain('Hidden Project Name');
     expect(table(hidden)).not.toContain('<th>Project</th>');

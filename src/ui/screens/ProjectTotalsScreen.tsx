@@ -51,7 +51,7 @@ export function ProjectTotalsScreen({project,repository,totals,documents,series,
   return <AppPage keyboard>
     <PageHeader eyebrow="PROJECT TOTALS" title={project.name} onBack={()=>stepUp(level,onBack,setLevel,true)}/>
     {top?<Text style={styles.lead}>Delivered and used are separate records and are never added together. Every total stays in its own unit; nothing is converted.</Text>:null}
-    <TotalsExplorer scope={{kind:'project',projectId:project.id,projectName:project.name}} totals={totals} documents={documents} series={series} profiles={profiles} level={level} onLevel={setLevel}
+    <TotalsExplorer scope={{kind:'project',projectId:project.id,projectName:project.name}} totals={totals} documents={documents} series={series} profiles={profiles} loadFuelFills={range=>repository.listFuelFills(project.id,range)} level={level} onLevel={setLevel}
       onOpenRecord={onOpenRecord} onOpenReport={onOpenReport} onCreateDocument={onCreateDocument} onFilters={onFilters}/>
 
     {error&&showSite?<Feedback kind="error">{error}</Feedback>:null}

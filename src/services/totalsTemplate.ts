@@ -1,13 +1,17 @@
-import {buildMaterialTree,treeTotals,unitDifferences,type CompanyTotalsData,type RecordedValue,type UnitMeasures} from '../domain/companyTotals';
-import {formatTotalQuantity} from '../domain/projectTotals';
-import {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
 import type {CompanyTotalsRecord} from '../data/repositories/CompanyTotalsRepository';
+import {buildMaterialTree,treeTotals,unitDifferences,type CompanyTotalsData,type MaterialNode,type RecordedValue,type UnitMeasures} from '../domain/companyTotals';
+import {fuelTypeLabels} from '../domain/fuel';
+import {formatTotalQuantity,summarizeFuelFills,type ProjectFuelFill} from '../domain/projectTotals';
+import {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
 
 /**
- * DEC-487 (1). Company Totals and Project Totals as an A4 PDF, for the filters on screen: each material
- * with Delivered and Used per unit, then by project and supplier, then recorded use. Without prices
- * (the default, as for Daily Reports) no amount appears anywhere; with prices only recorded prices are
- * added and unpriced records are counted. Units are never added together.
+ * DEC-487 (1), DEC-488, DEC-489. Company Totals, Project Totals and Loads History as an A4 PDF.
+ *
+ * Layout: a contents list, then every material in its own numbered block -- a navy title bar carrying
+ * its name and headline totals, tinted Delivered and Used figures per unit, suppliers grouped under
+ * their project, striped rows -- then optional Fuel and Loads History blocks. Without prices no amount
+ * appears; with prices only recorded prices are added and unpriced records are counted. Units, and
+ * diesel and gasoline, are never added together.
  */
 export type TotalsPdf={companyName:string;logo:string|null;title:string;scope:'company'|'project';filters:string[];generatedAt:string;includePrices:boolean;data:CompanyTotalsData;
   /** Loads History: every load behind the totals, listed oldest first. Not a billing document. */
@@ -15,18 +19,95 @@ export type TotalsPdf={companyName:string;logo:string|null;title:string;scope:'c
   /** "Issued to: …" under the title on the top right: the supplier, or the one customer of company loads. */
   issuedTo?:string|null;
   /** Loads History only: false leaves the Project column out (default shown). */
-  showProject?:boolean};
+  showProject?:boolean;
+  /** Project Totals only: the project's equipment fills; omitted means fuel is left out. */
+  fuel?:ProjectFuelFill[]};
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]??character));
 const t=(value:unknown)=>`<span dir="auto">${e(value)}</span>`;
 const missing='<span class="missing">Not recorded</span>';
 const qty=(measure:{quantity:number}|null,unitSymbol:string)=>measure?e(formatTotalQuantity(measure.quantity,unitSymbol)):missing;
+const plural=(count:number,word:string)=>`${count} ${word}${count===1?'':'s'}`;
 const value=(recorded:RecordedValue)=>recorded.totalCents==null?'<span class="missing">No prices recorded</span>'
-  :`${e(formatCents(recorded.totalCents))}${recorded.unpricedCount?`<div class="muted">${recorded.unpricedCount} record${recorded.unpricedCount===1?'':'s'} unpriced</div>`:''}`;
-const records=(count:number)=>`${count} record${count===1?'':'s'}`;
+  :`${e(formatCents(recorded.totalCents))}${recorded.unpricedCount?`<div class="muted">${plural(recorded.unpricedCount,'record')} unpriced</div>`:''}`;
+const two=(number:number)=>String(number).padStart(2,'0');
+const localDay=(raw:string)=>{const date=new Date(raw);return Number.isNaN(date.getTime())?raw.slice(0,10):`${date.getFullYear()}-${two(date.getMonth()+1)}-${two(date.getDate())}`;};
+const localTime=(raw:string)=>{const date=new Date(raw);return Number.isNaN(date.getTime())?'':`${two(date.getHours())}:${two(date.getMinutes())}`;};
 
-function unitRows(units:UnitMeasures[],showUsed:boolean){
-  return units.map(unit=>`<tr><td>${e(unit.unitSymbol)}</td><td class="num">${qty(unit.delivered,unit.unitSymbol)}</td>${showUsed?`<td class="num">${qty(unit.used,unit.unitSymbol)}</td>`:''}</tr>`).join('');
+/** "Delivered 12 m³ · 16 t" and "Used 9 m³" -- each unit on its own, never one combined figure. */
+function headline(units:UnitMeasures[],showUsed:boolean):string{
+  const delivered=units.filter(unit=>unit.delivered).map(unit=>formatTotalQuantity(unit.delivered!.quantity,unit.unitSymbol));
+  const used=showUsed?units.filter(unit=>unit.used).map(unit=>formatTotalQuantity(unit.used!.quantity,unit.unitSymbol)):[];
+  return [delivered.length?`<span class="pill delivered">Delivered ${e(delivered.join(' · '))}</span>`:'',used.length?`<span class="pill used">Used ${e(used.join(' · '))}</span>`:''].join('');
+}
+
+function materialBlock(material:MaterialNode,index:number,showUsed:boolean,prices:boolean):string{
+  const figures=material.units.map(unit=>`<div class="figure">
+      <div class="figure-unit">${e(unit.unitSymbol)}</div>
+      <div class="figure-cell delivered"><span class="figure-label">Delivered</span><b>${qty(unit.delivered,unit.unitSymbol)}</b></div>
+      ${showUsed?`<div class="figure-cell used"><span class="figure-label">Used</span><b>${qty(unit.used,unit.unitSymbol)}</b></div>`:''}
+    </div>`).join('');
+  const columns=prices?5:4;
+  const deliveredRows=material.projects.filter(project=>project.suppliers.length).map(project=>`<tr class="group-row"><td colspan="${columns}">${t(project.projectName)}</td></tr>`+
+    project.suppliers.flatMap(supplier=>supplier.units.map((unit,position)=>`<tr><td class="indent">${position===0?t(supplier.supplierName):''}</td><td>${e(unit.unitSymbol)}</td>
+      <td class="num">${e(formatTotalQuantity(unit.quantity,unit.unitSymbol))}</td><td class="num">${plural(unit.recordCount,'record')}</td>${prices?`<td class="num">${position===0?value(supplier.value):''}</td>`:''}</tr>`)).join('')).join('');
+  const useRows=showUsed?material.projects.flatMap(project=>{
+    const lines=project.units.filter(unit=>unit.used||unit.transported);
+    const differences=new Map(unitDifferences(project.units).map(line=>[line.unitKey,line.difference]));
+    return lines.map((unit,position)=>`<tr><td>${position===0?t(project.projectName):''}</td><td>${e(unit.unitSymbol)}</td>
+      <td class="num">${qty(unit.used,unit.unitSymbol)}</td><td class="num">${unit.transported?e(formatTotalQuantity(unit.transported.quantity,unit.unitSymbol)):''}</td>
+      <td class="num">${differences.has(unit.unitKey)?e(formatTotalQuantity(differences.get(unit.unitKey)!,unit.unitSymbol)):''}</td></tr>`);
+  }).join(''):'';
+  return `<section class="block">
+    <div class="block-bar"><span class="block-index">${index}</span><span class="block-name">${t(material.itemName)}</span><span class="block-figures">${headline(material.units,showUsed)}</span></div>
+    <div class="block-body">
+      <div class="figures">${figures}
+        <div class="figure side"><span class="figure-label">Records</span><b>${material.inclusion.total}</b>${prices?`<span class="figure-label spaced">Recorded value</span><b>${value(material.value)}</b>`:''}</div>
+      </div>
+      ${deliveredRows?`<h4 class="sub">Delivered — by project and supplier</h4>
+      <table class="grid"><thead><tr><th>Project · supplier or source</th><th>Unit</th><th class="num">Delivered</th><th class="num">Records</th>${prices?'<th class="num">Recorded value</th>':''}</tr></thead><tbody>${deliveredRows}</tbody></table>`:''}
+      ${useRows?`<h4 class="sub">Recorded on site — Daily Reports</h4>
+      <table class="grid"><thead><tr><th>Project</th><th>Unit</th><th class="num">Used</th><th class="num">Transported</th><th class="num">Delivered minus recorded use</th></tr></thead><tbody>${useRows}</tbody></table>`:''}
+    </div>
+  </section>`;
+}
+
+function fuelBlock(fills:ProjectFuelFill[],index:number,prices:boolean):string{
+  const summary=summarizeFuelFills(fills);
+  if(!fills.length)return `<section class="block" data-kind="fuel"><div class="block-bar"><span class="block-index">${index}</span><span class="block-name">Fuel used on this project</span></div>
+    <div class="block-body"><p class="empty">No fuel fills recorded for this project in this period.</p></div></section>`;
+  const bar=summary.types.map(type=>`<span class="pill">${e(fuelTypeLabels[type.fuelType])} ${e(formatTotalQuantity(type.litres,'L'))}</span>`).join('');
+  const equipmentRows=summary.types.map(type=>`<tr class="group-row"><td colspan="3">${e(fuelTypeLabels[type.fuelType])} · ${e(formatTotalQuantity(type.litres,'L'))} · ${plural(type.recordCount,'fill')}</td></tr>`+
+    type.equipment.map(item=>`<tr><td class="indent">${t(item.equipmentName)}</td><td class="num">${e(formatTotalQuantity(item.litres,'L'))}</td><td class="num">${plural(item.recordCount,'fill')}</td></tr>`).join('')).join('');
+  const fillRows=fills.map(fill=>`<tr><td class="nowrap">${e(formatDay(localDay(fill.confirmedAt)))}<div class="muted">${e(localTime(fill.confirmedAt))}</div></td><td>${t(fill.equipmentName)}</td>
+    <td>${e(fuelTypeLabels[fill.fuelType])}</td><td class="num">${e(formatTotalQuantity(fill.litres,'L'))}</td>
+    ${prices?`<td class="num">${fill.pricePerLitreCents==null?'<span class="missing">No price recorded</span>':`${e(formatCents(fill.pricePerLitreCents))} / L`}</td><td class="num">${fill.costCents==null?'':e(formatCents(fill.costCents))}</td>`:''}</tr>`).join('');
+  return `<section class="block" data-kind="fuel">
+    <div class="block-bar"><span class="block-index">${index}</span><span class="block-name">Fuel used on this project</span><span class="block-figures">${bar}</span></div>
+    <div class="block-body">
+      <p class="lead">Equipment fills recorded to this project. Each fuel type is totalled on its own; diesel and gasoline are never added together.${prices?` Fuel cost of priced fills: <b>${summary.cost.totalCents==null?'No prices recorded':e(formatCents(summary.cost.totalCents))}</b>${summary.cost.unpricedCount?` (${plural(summary.cost.unpricedCount,'fill')} unpriced)`:''}.`:''}</p>
+      <h4 class="sub">By fuel type and equipment</h4>
+      <table class="grid"><thead><tr><th>Fuel type · equipment</th><th class="num">Litres</th><th class="num">Fills</th></tr></thead><tbody>${equipmentRows}</tbody></table>
+      <h4 class="sub">Every fill</h4>
+      <table class="grid"><thead><tr><th>Date and time</th><th>Equipment</th><th>Fuel</th><th class="num">Litres</th>${prices?'<th class="num">Price</th><th class="num">Cost</th>':''}</tr></thead><tbody>${fillRows}</tbody></table>
+    </div>
+  </section>`;
+}
+
+function historyBlock(records:CompanyTotalsRecord[],index:number,prices:boolean,showProject:boolean):string{
+  const sorted=[...records].sort((a,b)=>a.snapshot.recordedAt.localeCompare(b.snapshot.recordedAt)||a.snapshot.reference.localeCompare(b.snapshot.reference,undefined,{numeric:true}));
+  const rows=sorted.map(record=>{const s=record.snapshot;return `<tr><td class="nowrap">${e(formatDay(localDay(s.recordedAt)))}<div class="muted">${e(localTime(s.recordedAt))}</div></td>
+    <td><b>${e(recordTitle(s))}</b><div class="muted">${e(recordReferences(s))}</div></td>${showProject?`<td>${t(s.projectName??'No project')}</td>`:''}
+    <td>${t(s.recordType==='company_load'?`Company load · ${s.partyName}`:s.partyName)}</td><td>${t(s.itemName)}</td>
+    <td class="num">${e(formatTotalQuantity(s.quantity,s.unitSymbol))}</td>${prices?`<td class="num wrap">${s.unitPriceCents==null?'<span class="missing">No price recorded</span>':e(recordMoneyLine(s))}</td>`:''}</tr>`;}).join('');
+  return `<section class="block" data-kind="history">
+    <div class="block-bar"><span class="block-index">${index}</span><span class="block-name">Loads history · ${plural(sorted.length,'load')}</span></div>
+    <div class="block-body">
+      <table class="grid history"><colgroup><col style="width:13%"/><col style="width:22%"/>${showProject?'<col style="width:19%"/>':''}<col style="width:18%"/><col style="width:${(prices?12:27)+(showProject?0:19)}%"/><col style="width:11%"/>${prices?'<col style="width:16%"/>':''}</colgroup>
+      <thead><tr><th>Date and time</th><th>Number and reference</th>${showProject?'<th>Project</th>':''}<th>Supplier or customer</th><th>Item</th><th class="num">Quantity</th>${prices?'<th class="num">Price as recorded</th>':''}</tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>
+  </section>`;
 }
 
 export function buildTotalsHtml(input:TotalsPdf):string{
@@ -34,82 +115,92 @@ export function buildTotalsHtml(input:TotalsPdf):string{
   const whole=treeTotals(tree);
   const showUsed=!input.data.usageHiddenReason;
   const prices=input.includePrices;
-  const sections=tree.map(material=>{
-    const deliveredRows=material.projects.flatMap(project=>project.suppliers.flatMap(supplier=>supplier.units.map((unit,index)=>`<tr>
-      <td>${index===0?t(project.projectName):''}</td><td>${index===0?t(supplier.supplierName):''}</td><td>${e(unit.unitSymbol)}</td>
-      <td class="num">${e(formatTotalQuantity(unit.quantity,unit.unitSymbol))}</td><td class="num">${records(unit.recordCount)}</td>${prices?`<td class="num">${index===0?value(supplier.value):''}</td>`:''}</tr>`))).join('');
-    const useRows=showUsed?material.projects.flatMap(project=>{
-      const lines=project.units.filter(unit=>unit.used||unit.transported);
-      const differences=new Map(unitDifferences(project.units).map(line=>[line.unitKey,line.difference]));
-      return lines.map((unit,index)=>`<tr><td>${index===0?t(project.projectName):''}</td><td>${e(unit.unitSymbol)}</td>
-        <td class="num">${qty(unit.used,unit.unitSymbol)}</td><td class="num">${unit.transported?e(formatTotalQuantity(unit.transported.quantity,unit.unitSymbol)):''}</td>
-        <td class="num">${differences.has(unit.unitKey)?e(formatTotalQuantity(differences.get(unit.unitKey)!,unit.unitSymbol)):''}</td></tr>`);
-    }).join(''):'';
-    return `<section class="material">
-      <h2>${t(material.itemName)}</h2>
-      <div class="summary keep"><table class="units"><thead><tr><th>Unit</th><th class="num">Delivered</th>${showUsed?'<th class="num">Used</th>':''}</tr></thead><tbody>${unitRows(material.units,showUsed)}</tbody></table>
-        <div class="summary-side"><div><span class="label">Records</span><b>${material.inclusion.total}</b></div>${prices?`<div><span class="label">Recorded value</span><b>${value(material.value)}</b></div>`:''}</div></div>
-      ${deliveredRows?`<table class="detail"><thead><tr class="caption"><th colspan="${prices?6:5}">${t(material.itemName)} · Delivered, by project and supplier</th></tr>
-        <tr><th>Project</th><th>Supplier or source</th><th>Unit</th><th class="num">Delivered</th><th class="num">Records</th>${prices?'<th class="num">Recorded value</th>':''}</tr></thead><tbody>${deliveredRows}</tbody></table>`:''}
-      ${useRows?`<table class="detail"><thead><tr class="caption"><th colspan="5">${t(material.itemName)} · Recorded on site (Daily Reports)</th></tr>
-        <tr><th>Project</th><th>Unit</th><th class="num">Used</th><th class="num">Transported</th><th class="num">Delivered minus recorded use</th></tr></thead><tbody>${useRows}</tbody></table>`:''}
-    </section>`;
-  }).join('');
   const showProject=input.showProject!==false;
-  const history=input.records?[...input.records].sort((a,b)=>a.snapshot.recordedAt.localeCompare(b.snapshot.recordedAt)||a.snapshot.reference.localeCompare(b.snapshot.reference,undefined,{numeric:true})):null;
-  const time=(value:string)=>{const date=new Date(value);return Number.isNaN(date.getTime())?'':`${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;};
-  const day=(value:string)=>{const date=new Date(value);return Number.isNaN(date.getTime())?value.slice(0,10):`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
-  const historyHtml=history?`<h2 class="history-title">Loads history · ${history.length} load${history.length===1?'':'s'}</h2>
-    <table class="history"><colgroup><col style="width:13%"/><col style="width:22%"/>${showProject?'<col style="width:19%"/>':''}<col style="width:18%"/><col style="width:${(prices?12:28)+(showProject?0:19)}%"/><col style="width:10%"/>${prices?'<col style="width:16%"/>':''}</colgroup>
-    <thead><tr><th>Date and time</th><th>Number and reference</th>${showProject?'<th>Project</th>':''}<th>Supplier or customer</th><th>Item</th><th class="num">Quantity</th>${prices?'<th class="num">Price as recorded</th>':''}</tr></thead>
-    <tbody>${history.map(record=>{const s=record.snapshot;return `<tr><td class="nowrap">${e(formatDay(day(s.recordedAt)))}<div class="muted">${e(time(s.recordedAt))}</div></td>
-      <td><b>${e(recordTitle(s))}</b><div class="muted">${e(recordReferences(s))}</div></td>${showProject?`<td>${t(s.projectName??'No project')}</td>`:''}
-      <td>${t(s.recordType==='company_load'?`Company load · ${s.partyName}`:s.partyName)}</td><td>${t(s.itemName)}</td>
-      <td class="num">${e(formatTotalQuantity(s.quantity,s.unitSymbol))}</td>${prices?`<td class="num wrap">${s.unitPriceCents==null?'<span class="missing">No price recorded</span>':e(recordMoneyLine(s))}</td>`:''}</tr>`;}).join('')}</tbody></table>`:'';
+  const history=input.records??null;
+  const fuelIndex=tree.length+1;
+  const historyIndex=tree.length+(input.fuel?1:0)+1;
+  const contents=[...tree.map((material,index)=>`<li><span class="contents-index">${index+1}</span><span class="contents-name">${t(material.itemName)}</span><span class="contents-figures">${headline(material.units,showUsed)}</span></li>`),
+    input.fuel?`<li><span class="contents-index">${fuelIndex}</span><span class="contents-name">Fuel used on this project</span><span class="contents-figures">${plural(input.fuel.length,'fill')}</span></li>`:'',
+    history?`<li><span class="contents-index">${historyIndex}</span><span class="contents-name">Loads history</span><span class="contents-figures">${plural(history.length,'load')}</span></li>`:''].join('');
+  const tiles=[`<div class="tile"><span class="figure-label">Materials</span><b>${whole.materialCount}</b></div>`,`<div class="tile"><span class="figure-label">Records delivered</span><b>${whole.inclusion.total}</b></div>`,
+    prices?`<div class="tile"><span class="figure-label">Recorded value</span><b>${whole.value.totalCents==null?'<span class="missing">No prices recorded</span>':e(formatCents(whole.value.totalCents))}</b>${whole.value.unpricedCount?`<div class="muted">${plural(whole.value.unpricedCount,'record')} unpriced</div>`:''}</div>`:''].join('');
+
   return `<!doctype html><html><head><meta charset="utf-8"><title>${e(input.title)}</title><style>
-    @page{size:A4;margin:13mm 12mm 15mm}
+    @page{size:A4;margin:12mm 11mm 14mm}
     @media screen{body{max-width:210mm;margin:0 auto;padding:12mm}}
     *{box-sizing:border-box}
     body{font-family:Arial,'Noto Naskh Arabic','Geeza Pro',sans-serif;color:#17212B;font-size:9pt;line-height:1.35}
     .head{display:flex;justify-content:space-between;align-items:flex-start;gap:6mm;border-bottom:2px solid #C84B31;padding-bottom:4mm;margin-bottom:3mm}
     .logo{max-width:40mm;max-height:18mm;object-fit:contain;display:block;margin-bottom:1.5mm}
     h1{font-size:18pt;color:#173F67;margin:0;text-align:right}
-    .filters{text-align:right;color:#5A6570;font-size:8.5pt;margin-top:1mm}
-    .mode{display:inline-block;margin-top:1.5mm;border:1px solid #173F67;color:#173F67;border-radius:3mm;padding:.6mm 2.5mm;font-weight:700;font-size:8pt}
-    .overview{color:#4F5B66;margin:0 0 3mm}
-    h2{font-size:12.5pt;color:#173F67;margin:6mm 0 2mm;break-after:avoid}
-    .summary{display:flex;gap:6mm;align-items:flex-start;background:#F5F2EC;border:1px solid #E3DBCD;border-radius:2.5mm;padding:2.5mm 4mm}
-    .summary .units{width:auto;min-width:70mm;margin:0}
-    .summary-side{display:flex;gap:6mm}
-    .label{display:block;color:#5A6570;font-size:7.5pt;font-weight:700;text-transform:uppercase}
-    .summary b{font-size:11pt;font-variant-numeric:tabular-nums}
-    table{width:100%;border-collapse:collapse;margin-top:2.5mm}
-    thead{display:table-header-group}
-    tr,.keep{break-inside:avoid}
-    th{text-align:left;color:#173F67;font-size:7.5pt;border-bottom:1.5px solid #173F67;padding:1.3mm}
-    td{padding:1.3mm;border-bottom:.3mm solid #E3DBCD;vertical-align:top;overflow-wrap:anywhere}
-    .caption th{color:#17212B;font-size:8.5pt;background:#F5F2EC;border-bottom:none}
-    .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-    .muted{color:#5A6570;font-size:7.5pt}.missing{color:#5A6570;font-style:italic}
-    .notice{color:#6E4B1F;background:#FFF3D8;border-radius:2mm;padding:2mm 3mm;margin:2mm 0}
-    .note{color:#5A6570;font-size:8pt;margin-top:6mm}
     .head-right{text-align:right}
-    .when{color:#5A6570;font-size:9pt;margin-top:1mm}
     .subtitle{color:#17212B;font-size:12pt;font-weight:700;margin-top:1mm}
-    .meta{display:flex;flex-wrap:wrap;align-items:center;gap:2mm 4mm;color:#4F5B66;margin:0 0 3mm}
-    .history-title{margin-top:8mm}
+    .when{color:#5A6570;font-size:9pt;margin-top:1mm}
+    .meta{color:#4F5B66;margin:0 0 3mm}
+    .notice{color:#6E4B1F;background:#FFF3D8;border-radius:2mm;padding:2mm 3mm;margin:0 0 3mm}
+    .tiles{display:flex;gap:3mm;margin:0 0 4mm}
+    .tile{flex:1;border:1px solid #E3DBCD;border-radius:2.5mm;padding:2.5mm 3.5mm;background:#FFFFFF}
+    .tile b{display:block;font-size:13pt;margin-top:.5mm;font-variant-numeric:tabular-nums}
+    .contents{border:1px solid #E3DBCD;border-radius:2.5mm;background:#F5F2EC;padding:3mm 4mm;margin:0 0 6mm;break-inside:avoid}
+    .contents h3{margin:0 0 2mm;font-size:10pt;color:#173F67}
+    .contents ol{list-style:none;margin:0;padding:0}
+    .contents li{display:flex;align-items:center;gap:3mm;padding:1.4mm 0;border-top:.3mm solid #E3DBCD}
+    .contents li:first-child{border-top:none}
+    .contents-index{flex:0 0 6mm;height:6mm;border-radius:1.5mm;background:#173F67;color:#FFFFFF;font-weight:700;font-size:8pt;display:flex;align-items:center;justify-content:center}
+    .contents-name{flex:1;font-weight:700}
+    .contents-figures{text-align:right}
+    .block{border:1px solid #CFC5B3;border-radius:3mm;margin:0 0 7mm;overflow:hidden;background:#FFFFFF}
+    .block-bar{display:flex;align-items:center;gap:3mm;background:#173F67;color:#FFF8ED;padding:2.6mm 4mm;break-after:avoid;break-inside:avoid}
+    .block-index{flex:0 0 7mm;height:7mm;border-radius:1.6mm;background:#C84B31;color:#FFFFFF;font-weight:700;display:flex;align-items:center;justify-content:center}
+    .block-name{flex:1;font-size:12.5pt;font-weight:700}
+    .block-figures{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:1.5mm}
+    .block-body{padding:3mm 4mm 4mm}
+    .pill{display:inline-block;border-radius:5mm;padding:.8mm 2.6mm;font-size:8.5pt;font-weight:700;white-space:nowrap}
+    .block-bar .pill{background:rgba(255,255,255,.16);color:#FFF8ED}
+    .contents .pill{margin-left:1mm}
+    .contents .pill.delivered{background:#EEF3F8;color:#173F67}
+    .contents .pill.used{background:#F6F0E6;color:#6E4B1F}
+    .figures{display:flex;flex-wrap:wrap;align-items:flex-start;gap:2.5mm;break-inside:avoid;break-after:avoid}
+    .figure{display:flex;align-items:center;gap:2mm;border:1px solid #E3DBCD;border-radius:2.5mm;padding:2mm}
+    .figure.side{flex-direction:column;justify-content:center;min-width:30mm}
+    .figure-unit{align-self:center;min-width:9mm;text-align:center;font-weight:700;color:#173F67;font-size:10pt}
+    .figure-cell{border-radius:2mm;padding:1.6mm 3mm;min-width:26mm}
+    .figure-cell.delivered{background:#EEF3F8}
+    .figure-cell.used{background:#F6F0E6}
+    .figure-cell b,.figure.side b{display:block;font-size:11.5pt;font-variant-numeric:tabular-nums}
+    .figure-label{display:block;color:#5A6570;font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+    .figure-cell.delivered .figure-label{color:#173F67}
+    .figure-cell.used .figure-label{color:#6E4B1F}
+    .spaced{margin-top:1.5mm}
+    .sub{font-size:9.5pt;color:#173F67;margin:4.5mm 0 1.5mm;break-after:avoid}
+    .lead{margin:0 0 2mm;color:#4F5B66}
+    table{width:100%;border-collapse:collapse}
+    thead{display:table-header-group}
+    tr{break-inside:avoid}
+    th{text-align:left;color:#173F67;font-size:7.5pt;border-bottom:1.5px solid #173F67;padding:1.4mm 1.6mm}
+    td{padding:1.4mm 1.6mm;border-bottom:.3mm solid #EAE3D7;vertical-align:top;overflow-wrap:anywhere}
+    tbody tr:nth-child(even) td{background:#FAF8F4}
+    tr.group-row td{background:#F0EBE2;font-weight:700;color:#17212B;border-bottom:.3mm solid #D9CFBE;padding-top:1.8mm}
+    td.indent{padding-left:5mm}
     .history{table-layout:fixed}
+    .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
     .nowrap{white-space:nowrap}
     .wrap{white-space:normal}
+    .muted{color:#5A6570;font-size:7.5pt;font-weight:400}
+    .missing{color:#5A6570;font-style:italic;font-weight:400}
+    .empty{margin:0;color:#5A6570;font-style:italic}
+    .note{color:#5A6570;font-size:8pt;margin-top:4mm}
   </style></head><body>
     <div class="head"><div>${input.logo?`<img class="logo" src="${input.logo}" alt=""/>`:''}<b>${t(input.companyName)}</b></div>
       <div class="head-right"><h1>${t(input.title)}</h1>${input.issuedTo?`<div class="subtitle">Issued to: ${t(input.issuedTo)}</div>`:''}<div class="when">${e(formatRecordedAt(input.generatedAt))}</div></div></div>
     <div class="meta">${input.filters.map(t).join(' · ')}</div>
     ${history?'<p class="notice">A record of the loads delivered — not an invoice or bill. It does not change any document status.</p>':''}
-    <p class="overview">${whole.materialCount} material${whole.materialCount===1?'':'s'} · ${records(whole.inclusion.total)} delivered${prices&&whole.value.totalCents!=null?` · recorded value ${e(formatCents(whole.value.totalCents))}${whole.value.unpricedCount?` (${records(whole.value.unpricedCount)} unpriced)`:''}`:''}</p>
     ${input.data.usageHiddenReason&&!history?`<p class="notice">${e(input.data.usageHiddenReason)}</p>`:''}
-    ${sections||'<p>Nothing recorded for these filters.</p>'}
-    ${historyHtml}
+    <div class="tiles">${tiles}</div>
+    ${contents?`<nav class="contents"><h3>Contents</h3><ol>${contents}</ol></nav>`:''}
+    ${tree.map((material,index)=>materialBlock(material,index+1,showUsed,prices)).join('')||'<p class="empty">Nothing recorded for these filters.</p>'}
+    ${input.fuel?fuelBlock(input.fuel,fuelIndex,prices):''}
+    ${history?historyBlock(history,historyIndex,prices,showProject):''}
     <p class="note">Delivered counts Active Supplier Loads and company loads; Used and Transported come from Daily Reports. Each unit is totalled on its own and different units are never added together. Use is not recorded per supplier. "Delivered minus recorded use" is not an inventory balance.${prices?' Amounts add only records with a recorded price.':''}</p>
   </body></html>`;
 }

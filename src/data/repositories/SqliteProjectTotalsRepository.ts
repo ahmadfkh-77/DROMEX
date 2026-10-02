@@ -1,7 +1,7 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
 import type {FuelType} from '../../domain/fuel';
-import type {ConstructionTotal,DeliveryTotal,FuelTotal,ProjectTotalsData,UsageMovement,UsageTotal} from '../../domain/projectTotals';
+import type {ConstructionTotal,DeliveryTotal,FuelTotal,ProjectFuelFill,ProjectTotalsData,UsageMovement,UsageTotal} from '../../domain/projectTotals';
 import {wallMaterialLabels} from '../../domain/walls';
 import type {ContributingRecord,ContributingRecordQuery,ProjectTotalsRepository,TotalsDateRange} from './ProjectTotalsRepository';
 
@@ -135,6 +135,14 @@ export class SqliteProjectTotalsRepository implements ProjectTotalsRepository{
       GROUP BY material_type, quantity_unit`,projectId,...legacyParams);
     for(const row of legacy){const key=text(row.material_type) as keyof typeof wallMaterialLabels;push([row],'foundation_legacy',key,wallMaterialLabels[key]??key);}
     return results;
+  }
+
+  async listFuelFills(projectId:string,range:TotalsDateRange):Promise<ProjectFuelFill[]>{
+    const [dates,params]=within("date(confirmed_at,'localtime')",range);
+    const rows=await this.db.getAllAsync<Row>(`SELECT id, confirmed_at, COALESCE(equipment_name,'Unknown equipment') equipment_name, fuel_type, litres, price_per_litre_usd_cents, consumption_cost_usd_cents
+      FROM fuel_movements WHERE project_id = ? AND movement_type = 'fill' AND status = 'Active' AND ${dates} ORDER BY confirmed_at, id`,projectId,...params);
+    return rows.map(row=>({id:text(row.id),confirmedAt:text(row.confirmed_at),equipmentName:text(row.equipment_name),fuelType:text(row.fuel_type) as FuelType,litres:number(row.litres),
+      pricePerLitreCents:row.price_per_litre_usd_cents==null?null:Number(row.price_per_litre_usd_cents),costCents:row.consumption_cost_usd_cents==null?null:Number(row.consumption_cost_usd_cents)}));
   }
 
   async listContributingRecords(projectId:string,query:ContributingRecordQuery,limit=100):Promise<ContributingRecord[]>{
