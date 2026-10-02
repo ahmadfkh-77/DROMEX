@@ -4,6 +4,7 @@ import {Pressable,StyleSheet,Text,View} from 'react-native';
 import type {BusinessDocumentRepository} from '../../data/repositories/BusinessDocumentRepository';
 import type {CompanyTotalsRepository,UsageRecord} from '../../data/repositories/CompanyTotalsRepository';
 import type {LoadNumberSeriesRepository} from '../../data/repositories/LoadNumberSeriesRepository';
+import type {ProfileRepository} from '../../data/repositories/ProfileRepository';
 import type {RecordSnapshot} from '../../domain/businessDocuments';
 import {AppPage,PageHeader} from '../components/AppPrimitives';
 import {TotalsExplorer,type ExplorerLevel} from '../components/totals/TotalsExplorer';
@@ -22,10 +23,10 @@ export function stepUp(level:ExplorerLevel,leave:()=>void,setLevel:(next:Explore
  * DEC-487 (1). Home → Totals: company-wide Material → Project → Supplier → original records, with the
  * document status of every record read from the shared document links.
  */
-export function CompanyTotalsScreen({totals,documents,series,level:savedLevel,onLevel,onBack,onOpenRecord,onOpenReport,onCreateDocument,onOpenCompanyLoadTotals,onOpenDocuments}:{
+export function CompanyTotalsScreen({totals,documents,series,profiles,level:savedLevel,onLevel,onBack,onOpenRecord,onOpenReport,onCreateDocument,onOpenCompanyLoadTotals,onOpenDocuments}:{
   /** Kept by the app shell so returning from a record or document lands on the same level. */
   level?:ExplorerLevel;onLevel?:(level:ExplorerLevel)=>void;
-  totals:CompanyTotalsRepository;documents:BusinessDocumentRepository;series:LoadNumberSeriesRepository;onBack:()=>void;
+  totals:CompanyTotalsRepository;documents:BusinessDocumentRepository;series:LoadNumberSeriesRepository;profiles?:ProfileRepository;onBack:()=>void;
   onOpenRecord:(record:RecordSnapshot)=>void;onOpenReport:(usage:UsageRecord)=>void;onCreateDocument:(start:DocumentStart)=>void;
   onOpenCompanyLoadTotals:()=>void;onOpenDocuments:()=>void;
 }){
@@ -35,7 +36,7 @@ export function CompanyTotalsScreen({totals,documents,series,level:savedLevel,on
   return <AppPage keyboard>
     <PageHeader eyebrow="COMPANY TOTALS" title="Totals" onBack={()=>stepUp(level,onBack,setLevel)}/>
     {top?<Text style={styles.lead}>Every project, every material. Delivered and used stay separate, and each unit stays on its own line.</Text>:null}
-    <TotalsExplorer scope={{kind:'company'}} totals={totals} documents={documents} series={series} level={level} onLevel={setLevel}
+    <TotalsExplorer scope={{kind:'company'}} totals={totals} documents={documents} series={series} profiles={profiles} level={level} onLevel={setLevel}
       onOpenRecord={onOpenRecord} onOpenReport={onOpenReport} onCreateDocument={onCreateDocument}/>
     {top?<View style={styles.links}>
       <LinkRow title="Company Load Totals" body="Company loads by number series, item and project, with a PDF." onPress={onOpenCompanyLoadTotals}/>

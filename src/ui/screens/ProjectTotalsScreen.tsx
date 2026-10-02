@@ -5,6 +5,7 @@ import type {BusinessDocumentRepository} from '../../data/repositories/BusinessD
 import type {CompanyTotalsRepository,UsageRecord} from '../../data/repositories/CompanyTotalsRepository';
 import type {LoadNumberSeriesRepository} from '../../data/repositories/LoadNumberSeriesRepository';
 import type {ProjectTotalsRepository} from '../../data/repositories/ProjectTotalsRepository';
+import type {ProfileRepository} from '../../data/repositories/ProfileRepository';
 import type {RecordSnapshot} from '../../domain/businessDocuments';
 import type {CompanyTotalsFilters} from '../../domain/companyTotals';
 import {fuelTypeLabels} from '../../domain/fuel';
@@ -24,9 +25,9 @@ const records=(count:number)=>`${count} record${count===1?'':'s'}`;
  * wall/foundation materials keep their own sections (DEC-481): each fuel type and each construction
  * source is counted on its own and never added to Daily Report use.
  */
-export function ProjectTotalsScreen({project,repository,totals,documents,series,level:savedLevel,onLevel,onBack,onOpenRecord,onOpenReport,onCreateDocument}:{
+export function ProjectTotalsScreen({project,repository,totals,documents,series,profiles,level:savedLevel,onLevel,onBack,onOpenRecord,onOpenReport,onCreateDocument}:{
   level?:ExplorerLevel;onLevel?:(level:ExplorerLevel)=>void;
-  project:Project;repository:ProjectTotalsRepository;totals:CompanyTotalsRepository;documents:BusinessDocumentRepository;series:LoadNumberSeriesRepository;onBack:()=>void;
+  project:Project;repository:ProjectTotalsRepository;totals:CompanyTotalsRepository;documents:BusinessDocumentRepository;series:LoadNumberSeriesRepository;profiles?:ProfileRepository;onBack:()=>void;
   onOpenRecord:(record:RecordSnapshot)=>void;onOpenReport:(usage:UsageRecord)=>void;onCreateDocument:(start:DocumentStart)=>void;
 }){
   const[ownLevel,setOwnLevel]=useState<ExplorerLevel>({});
@@ -50,7 +51,7 @@ export function ProjectTotalsScreen({project,repository,totals,documents,series,
   return <AppPage keyboard>
     <PageHeader eyebrow="PROJECT TOTALS" title={project.name} onBack={()=>stepUp(level,onBack,setLevel,true)}/>
     {top?<Text style={styles.lead}>Delivered and used are separate records and are never added together. Every total stays in its own unit; nothing is converted.</Text>:null}
-    <TotalsExplorer scope={{kind:'project',projectId:project.id,projectName:project.name}} totals={totals} documents={documents} series={series} level={level} onLevel={setLevel}
+    <TotalsExplorer scope={{kind:'project',projectId:project.id,projectName:project.name}} totals={totals} documents={documents} series={series} profiles={profiles} level={level} onLevel={setLevel}
       onOpenRecord={onOpenRecord} onOpenReport={onOpenReport} onCreateDocument={onCreateDocument} onFilters={onFilters}/>
 
     {error&&showSite?<Feedback kind="error">{error}</Feedback>:null}

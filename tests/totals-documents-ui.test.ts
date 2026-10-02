@@ -143,3 +143,36 @@ describe('field-use quality floor',()=>{
     for(const source of newScreens){expect(source).not.toMatch(/console\.(log|warn|error)/);expect(source).not.toContain('debugger');}
   });
 });
+
+describe('Totals PDF export',()=>{
+  it('offers Export PDF on Company and Project Totals, asking Without prices or With prices',()=>{
+    expect(explorer).toContain("label={exporting?'Preparing PDF…':'Export PDF'}");
+    expect(explorer).toContain(`<SegmentedChoice label="Prices" options={[{id:'without',label:'Without prices'},{id:'with',label:'With prices'}]}`);
+    expect(explorer).toContain('label="Project column"');
+    expect(explorer).toContain('primaryLabel="Export PDF"');
+    expect(explorer).toContain('totals.getCompanyTotals(nodeFilters)');
+    expect(company).toContain('profiles={profiles}');
+    expect(read('src/ui/screens/ProjectTotalsScreen.tsx')).toContain('profiles={profiles}');
+    expect(app).toContain('<CompanyTotalsScreen profiles={profileRepository}');
+    expect(app).toContain('profiles={profileRepository} totals={companyTotalsRepository}');
+  });
+});
+
+describe('Owner corrections after device testing',()=>{
+  it('exports a Loads History with every record from the records level',()=>{
+    expect(explorer).toContain("atRecords?totals.listRecords(nodeFilters,5000):Promise.resolve(undefined)");
+    expect(explorer).toContain("atRecords?'Loads History'");
+    expect(explorer).toContain('issuedTo:issuedTo(');
+    expect(explorer).toContain('It is not an invoice or bill.');
+  });
+  it('shows each Totals item as its own card with space between',()=>{
+    expect(parts).toContain('ledgerSeparate:{gap:10}');
+    expect((explorer.match(/<Ledger separate/g)??[]).length).toBe(5);
+    expect((explorer.match(/ card first=\{index===0\}/g)??[]).length).toBe(5);
+  });
+  it('returns to Totals when Back is pressed on a record opened from it, and never leaves Load History faded',()=>{
+    expect(history).toContain('if(openedDirectly.current&&selected.id===initialLoadId)onBack();');
+    expect(history).toContain("const listVisible=!selected&&source==='all';");
+    expect(read('src/ui/screens/QuarryPurchasesScreen.tsx')).toContain('if(openedDirectly.current&&selected.id===initialPurchaseId){onBack();return;}');
+  });
+});

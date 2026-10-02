@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {BusinessDocumentRepository} from '../../data/repositories/BusinessDocumentRepository';
 import {loadNumberLabel} from '../../domain/loadNumberSeries';
 import {RecordDocumentsPanel} from '../components/RecordDocumentsPanel';
@@ -27,10 +27,15 @@ export function LoadHistoryScreen({ repository,supplierRepository,onOpenSupplier
   const [loads, setLoads] = useState<ConfirmedLoad[]>([]); const [selected, setSelected] = useState<ConfirmedLoad | null>(null);
   const[supplierLoads,setSupplierLoads]=useState<QuarryPurchase[]>([]);const[source,setSource]=useState<'all'|'company'|'supplier'>('all');
   const entrance=useState(()=>new Animated.Value(0))[0];
-  useEffect(()=>{Animated.timing(entrance,{toValue:1,duration:reducedMotion?0:280,useNativeDriver:true}).start();},[entrance,reducedMotion]);
+  /** Opened straight to one load (from Totals, search or a document): Back returns there, not to this list. */
+  const openedDirectly=useRef(false);
+  // The fade starts only while the history list itself is on screen. Started while a single load was
+  // shown instead, a native-driven fade never reached the list, which then stayed part-transparent.
+  const listVisible=!selected&&source==='all';
+  useEffect(()=>{if(!listVisible)return;entrance.setValue(reducedMotion?1:0);Animated.timing(entrance,{toValue:1,duration:reducedMotion?0:280,useNativeDriver:true}).start();},[entrance,reducedMotion,listVisible]);
   const refresh = useCallback(async () => {const[company,suppliers]=await Promise.all([repository.listLoads(),supplierRepository.listPurchases()]);setLoads(company);setSupplierLoads(suppliers);}, [repository,supplierRepository]);
-  useEffect(() => { void refresh(); }, [refresh]);useEffect(()=>{if(initialLoadId&&loads.length){const match=loads.find(load=>load.id===initialLoadId);if(match)setSelected(match);}},[initialLoadId,loads]);
-  if (selected) return <SelectedLoad record={selected} repository={repository} documents={documents} onOpenDocument={onOpenDocument} onBack={() => setSelected(null)} onUpdate={(updated) => { setSelected(updated); setLoads((current) => current.map((load) => load.id === updated.id ? updated : load)); }} onCorrectLoad={onCorrectLoad?()=>onCorrectLoad(selected):undefined}/>;
+  useEffect(() => { void refresh(); }, [refresh]);useEffect(()=>{if(initialLoadId&&loads.length&&!openedDirectly.current){const match=loads.find(load=>load.id===initialLoadId);if(match){openedDirectly.current=true;setSelected(match);}}},[initialLoadId,loads]);
+  if (selected) return <SelectedLoad record={selected} repository={repository} documents={documents} onOpenDocument={onOpenDocument} onBack={() => {if(openedDirectly.current&&selected.id===initialLoadId)onBack();else setSelected(null);}} onUpdate={(updated) => { setSelected(updated); setLoads((current) => current.map((load) => load.id === updated.id ? updated : load)); }} onCorrectLoad={onCorrectLoad?()=>onCorrectLoad(selected):undefined}/>;
   if(source==='company')return <LoadHistoryBrowser loads={loads} onSelect={setSelected} onBack={()=>setSource('all')} initialFromDate={initialFromDate} initialToDate={initialToDate} initialProjectName={initialProjectName}/>;
   if(source==='supplier')return <SupplierLoadHistory loads={supplierLoads} onSelect={onOpenSupplierLoad} onBack={()=>setSource('all')}/>;
   const cancelledLoadCount=loads.filter(load=>load.status==='Cancelled').length;

@@ -87,3 +87,8 @@ export function documentFileName(doc:Pick<BusinessDocument,'documentNumber'|'dra
 export function companyLoadTotalsFileName(input:{projectName:string|null;fromDate:string;toDate:string}):string{
   return `${['Company Load Totals',safeFileNamePart(input.projectName,45),periodFileLabel(input.fromDate,input.toDate)??'All dates'].filter(Boolean).join(' - ')}.pdf`;
 }
+
+/** "Company Totals - Aug 2026 - No prices.pdf"; "Project Totals - Mountain Road - All dates - With prices.pdf". */
+export function totalsFileName(input:{title:string;scopeName:string|null;fromDate:string;toDate:string;includePrices:boolean}):string{
+  return `${[safeFileNamePart(input.title,40),safeFileNamePart(input.scopeName,45),periodFileLabel(input.fromDate,input.toDate)??'All dates',input.includePrices?'With prices':'No prices'].filter(Boolean).join(' - ')}.pdf`;
+}

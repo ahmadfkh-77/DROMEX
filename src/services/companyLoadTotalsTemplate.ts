@@ -71,9 +71,11 @@ export function buildCompanyLoadTotalsHtml(input:CompanyLoadTotalsPdf):string{
     .history{font-size:8pt}
     .loads .muted{overflow-wrap:anywhere}
     .note{color:#5A6570;font-size:8pt;margin-top:6mm}
+    .meta{color:#4F5B66;margin:0 0 2mm}
   </style></head><body>
     <div class="head"><div>${input.logo?`<img class="logo" src="${input.logo}" alt=""/>`:''}<b>${t(input.companyName)}</b></div>
-      <div><h1>Company Load Totals</h1><div class="filters">${input.filters.map(e).join(' · ')}<br/>Generated ${e(formatRecordedAt(input.generatedAt))}</div></div></div>
+      <div><h1>Company Load Totals</h1><div class="filters">${e(formatRecordedAt(input.generatedAt))}</div></div></div>
+    <p class="meta">${input.filters.map(e).join(' · ')}</p>
     ${sections||'<p>No company loads match these filters.</p>'}
     <p class="note">Each unit is totalled on its own; different units are never added together. Cancelled loads keep their number and are listed, but are never counted. Loads confirmed before number series existed are shown as legacy loads with no generated number.</p>
   </body></html>`;

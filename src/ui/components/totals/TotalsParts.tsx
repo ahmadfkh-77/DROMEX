@@ -42,21 +42,24 @@ export function SummaryBand({trail,title,units,view,usageHidden,inclusion,value,
   </View>;
 }
 
-/** One grouped surface holding ruled rows; nothing inside it is a separate card. */
-export function Ledger({title,note,children}:{title:string;note?:string;children:ReactNode}){
+/**
+ * A titled list. By default one grouped surface holding ruled rows; `separate` gives every row its own
+ * card with space between (rows then pass `card`), as Totals uses so items never run together.
+ */
+export function Ledger({title,note,separate=false,children}:{title:string;note?:string;separate?:boolean;children:ReactNode}){
   return <View style={styles.ledgerBlock}>
     <Text style={styles.ledgerTitle} accessibilityRole="header">{title}</Text>
     {note?<Text style={styles.ledgerNote}>{note}</Text>:null}
-    <View style={styles.ledger}>{children}</View>
+    <View style={separate?styles.ledgerSeparate:styles.ledger}>{children}</View>
   </View>;
 }
 
 /** A tappable ledger row: name, aligned per-unit figures, and the status/value line. */
-export function LedgerRow({name,tag,units,view,usageHidden=false,inclusion,value,first,onPress,hint}:{name:string;tag?:string;units:UnitMeasures[];view:TotalsView;usageHidden?:boolean;inclusion?:InclusionCounts|null;value?:RecordedValue|null;first:boolean;onPress:()=>void;hint:string}){
+export function LedgerRow({name,tag,units,view,usageHidden=false,inclusion,value,first,card=false,onPress,hint}:{name:string;tag?:string;units:UnitMeasures[];view:TotalsView;usageHidden?:boolean;inclusion?:InclusionCounts|null;value?:RecordedValue|null;first:boolean;card?:boolean;onPress:()=>void;hint:string}){
   const rows=unitFigures(units,view,usageHidden);
   const showDelivered=view!=='used',showUsed=view!=='delivered'&&!usageHidden;
   const spoken=`${name}${tag?`, ${tag}`:''}. ${rows.map(row=>[showDelivered?`Delivered ${row.delivered}`:null,showUsed?`Used ${row.used}`:null].filter(Boolean).join(', ')).join('; ')}${inclusion?`. ${summarizeInclusionCounts(inclusion)}`:''}`;
-  return <Pressable onPress={onPress} style={({pressed})=>[styles.row,!first&&styles.rowRule,pressed&&styles.pressed]} android_ripple={{color:'#EFE9DF'}} accessibilityRole="button" accessibilityLabel={spoken} accessibilityHint={hint}>
+  return <Pressable onPress={onPress} style={({pressed})=>[styles.row,card?styles.card:!first&&styles.rowRule,pressed&&styles.pressed]} android_ripple={{color:'#EFE9DF'}} accessibilityRole="button" accessibilityLabel={spoken} accessibilityHint={hint}>
     <View style={styles.rowHead}>
       <View style={styles.flex}>
         <Text style={styles.rowName}>{name}</Text>
@@ -76,8 +79,8 @@ export function LedgerRow({name,tag,units,view,usageHidden=false,inclusion,value
 }
 
 /** A row for a recorded-use or transported figure, which opens its Daily Report records. */
-export function MeasureRow({label,quantity,unitSymbol,recordCount,first,onPress}:{label:string;quantity:number;unitSymbol:string;recordCount:number;first:boolean;onPress:()=>void}){
-  return <Pressable onPress={onPress} style={({pressed})=>[styles.measure,!first&&styles.rowRule,pressed&&styles.pressed]} accessibilityRole="button" accessibilityLabel={`${label}: ${formatTotalQuantity(quantity,unitSymbol)}, ${recordCount} records. View Daily Reports.`}>
+export function MeasureRow({label,quantity,unitSymbol,recordCount,first,card=false,onPress}:{label:string;quantity:number;unitSymbol:string;recordCount:number;first:boolean;card?:boolean;onPress:()=>void}){
+  return <Pressable onPress={onPress} style={({pressed})=>[styles.measure,card?styles.card:!first&&styles.rowRule,pressed&&styles.pressed]} accessibilityRole="button" accessibilityLabel={`${label}: ${formatTotalQuantity(quantity,unitSymbol)}, ${recordCount} records. View Daily Reports.`}>
     <View style={styles.flex}><Text style={styles.measureLabel}>{label}</Text><Text style={styles.rowMeta}>{recordCount} record{recordCount===1?'':'s'} · Daily Reports</Text></View>
     <Text style={styles.measureValue}>{formatTotalQuantity(quantity,unitSymbol)}</Text>
     <Text style={styles.chevron} importantForAccessibility="no">›</Text>
@@ -91,11 +94,11 @@ export function InclusionPill({state}:{state:InclusionState}){
 }
 
 /** One original record: load number or Supplier Load number first, then when, where, who, money, status. */
-export function RecordRow({record,first,selectable=false,selected=false,onToggle,onOpen}:{record:CompanyTotalsRecord;first:boolean;selectable?:boolean;selected?:boolean;onToggle?:()=>void;onOpen:()=>void}){
+export function RecordRow({record,first,card=false,selectable=false,selected=false,onToggle,onOpen}:{record:CompanyTotalsRecord;first:boolean;card?:boolean;selectable?:boolean;selected?:boolean;onToggle?:()=>void;onOpen:()=>void}){
   const snap=record.snapshot;
   const legacy=snap.recordType==='company_load'&&!snap.loadNumber;
   const where=[snap.projectName??'No project',snap.recordType==='company_load'?`Customer ${snap.partyName}`:snap.partyName].join(' · ');
-  return <View style={[styles.record,!first&&styles.rowRule]}>
+  return <View style={[styles.record,card?styles.card:!first&&styles.rowRule]}>
     {selectable?<Pressable onPress={onToggle} style={styles.checkTarget} accessibilityRole="checkbox" accessibilityState={{checked:selected}} accessibilityLabel={`Select ${recordTitle(snap)}`}>
       <View style={[styles.check,selected&&styles.checkOn]}>{selected?<Text style={styles.checkMark}>✓</Text>:null}</View>
     </Pressable>:null}
@@ -153,6 +156,8 @@ export const styles=StyleSheet.create({
   ledgerTitle:{color:colors.ink,fontSize:17,fontWeight:'800'},
   ledgerNote:{color:'#4F5B66',fontSize:13,lineHeight:19},
   ledger:{backgroundColor:colors.surface,borderRadius:16,borderWidth:1,borderColor:'#E3DBCD',overflow:'hidden'},
+  ledgerSeparate:{gap:10},
+  card:{backgroundColor:colors.surface,borderRadius:14,borderWidth:1,borderColor:'#D9CFBE',overflow:'hidden',shadowColor:'#17212B',shadowOpacity:.05,shadowRadius:4,shadowOffset:{width:0,height:2},elevation:1},
   row:{paddingHorizontal:16,paddingVertical:12,gap:8},
   rowRule:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.line},
   rowHead:{flexDirection:'row',alignItems:'center',gap:10},

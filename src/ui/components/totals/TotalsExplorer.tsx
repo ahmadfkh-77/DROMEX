@@ -4,9 +4,11 @@ import {ActivityIndicator,LayoutAnimation,Pressable,StyleSheet,Text,View} from '
 import type {BusinessDocumentRepository} from '../../../data/repositories/BusinessDocumentRepository';
 import type {CompanyTotalsRecord,CompanyTotalsRepository,UsageRecord} from '../../../data/repositories/CompanyTotalsRepository';
 import type {LoadNumberSeriesRepository} from '../../../data/repositories/LoadNumberSeriesRepository';
+import type {ProfileRepository} from '../../../data/repositories/ProfileRepository';
+import {exportAndShareTotals} from '../../../services/documentExport';
 import {inclusionFilterLabels,type InclusionFilter,type RecordSnapshot} from '../../../domain/businessDocuments';
 import {
-  buildMaterialTree,countCompanyFilters,treeTotals,unitDifferences,emptyCompanyTotalsFilters,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,NO_PROJECT_KEY,
+  buildMaterialTree,COMPANY_SUPPLIER_KEY,countCompanyFilters,treeTotals,unitDifferences,emptyCompanyTotalsFilters,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,NO_PROJECT_KEY,
   type CompanyTotalsData,type CompanyTotalsFilters,type MaterialNode,type ProjectNode,type SupplierNode,type TotalsView,type UnitMeasures,
 } from '../../../domain/companyTotals';
 import {describeTotalsRange,formatTotalQuantity,validateTotalsFilters} from '../../../domain/projectTotals';
@@ -16,7 +18,7 @@ import {formatDay} from '../../totalsPresentation';
 import {AppButton,EmptyState,Feedback} from '../AppPrimitives';
 import {DatePickerField} from '../DatePickerField';
 import {useReducedMotion} from '../ExpandableMenu';
-import {FocusedSheet} from '../FocusedSheet';
+import {FocusedSheet,SheetActions} from '../FocusedSheet';
 import {SearchableSelect} from '../SearchableSelect';
 import {SegmentedChoice} from '../SegmentedChoice';
 import {DocumentStartSheet,type StartQuery} from './DocumentStartSheet';
@@ -39,8 +41,10 @@ const unique=(values:Choice[])=>[...new Map(values.map(value=>[value.id,value]))
  * one summary band and one ruled list; every figure comes from buildMaterialTree. The parent owns the
  * level so its Back button can step up one level at a time.
  */
-export function TotalsExplorer({scope,totals,documents,series,level,onLevel,onOpenRecord,onOpenReport,onCreateDocument,onFilters,refreshToken=0}:{
+export function TotalsExplorer({scope,totals,documents,series,profiles,level,onLevel,onOpenRecord,onOpenReport,onCreateDocument,onFilters,refreshToken=0}:{
   scope:ExplorerScope;totals:CompanyTotalsRepository;documents:BusinessDocumentRepository;series:LoadNumberSeriesRepository;
+  /** Company name and logo for the Totals PDF; without it the Export PDF action is not offered. */
+  profiles?:ProfileRepository;
   level:ExplorerLevel;onLevel:(level:ExplorerLevel)=>void;onOpenRecord:(record:RecordSnapshot)=>void;onOpenReport:(usage:UsageRecord)=>void;onCreateDocument:(start:DocumentStart)=>void;
   /** Reports the filters, so a parent can show other sections for the same dates and view. */
   onFilters?:(filters:CompanyTotalsFilters)=>void;refreshToken?:number;
@@ -60,6 +64,11 @@ export function TotalsExplorer({scope,totals,documents,series,level,onLevel,onOp
   const[selected,setSelected]=useState<Set<string>>(()=>new Set());
   const[usage,setUsage]=useState<{title:string;filters:CompanyTotalsFilters;movement:'used'|'transported'}|null>(null);
   const[start,setStart]=useState<StartQuery|null>(null);
+  const[exporting,setExporting]=useState(false);
+  const[exportOpen,setExportOpen]=useState(false);
+  const[exportPrices,setExportPrices]=useState<'without'|'with'>('without');
+  const[exportProject,setExportProject]=useState<'show'|'hide'>('show');
+  const[exportMessage,setExportMessage]=useState<{kind:'success'|'error';text:string}|null>(null);
 
   const issues=validateTotalsFilters({fromDate:filters.fromDate,toDate:filters.toDate,itemKey:'',supplierKey:'',unitKey:'',view:'all'});
   const set=(patch:Partial<CompanyTotalsFilters>)=>setFilters(current=>({...current,...patch}));
@@ -140,15 +149,43 @@ export function TotalsExplorer({scope,totals,documents,series,level,onLevel,onOp
   if(status==='error')return <>{filterBlock}<Feedback kind="error">{error??'Totals could not be calculated.'}</Feedback><AppButton label="Try again" tone="secondary" onPress={()=>setAttempt(value=>value+1)}/></>;
   if(status==='loading'||!data)return <>{filterBlock}<View style={styles.center}><ActivityIndicator color={colors.brand}/><Text style={styles.helper}>Calculating totals…</Text></View></>;
 
-  const createButton=<QuietButton label="Create document" onPress={()=>openStart()} hint="Choose records, who the document is for, and its type"/>;
+  /** DEC-487. The PDF covers exactly what is on screen: the filters and the level drilled into. */
+  const exportPdf=async(includePrices:boolean,showProject:boolean)=>{
+    if(!profiles)return;
+    setExporting(true);setExportMessage(null);
+    try{
+      // On the records level the PDF is a Loads History: every load behind these totals, listed.
+      const [current,company,history]=await Promise.all([totals.getCompanyTotals(nodeFilters),profiles.getCompanySettings(),atRecords?totals.listRecords(nodeFilters,5000):Promise.resolve(undefined)]);
+      const label=(list:Choice[],id:string)=>list.find(value=>value.id===id)?.label??id;
+      const labels=[rangeLabel,...trail.slice(1),
+        ...(filters.itemKey&&!level.material?[`Item: ${label(choices.items,filters.itemKey)}`]:[]),
+        ...(filters.projectKey&&scope.kind==='company'&&!level.project?[`Project: ${label(choices.projects,filters.projectKey)}`]:[]),
+        ...(filters.supplierKey&&!level.supplier?[`Supplier: ${label(choices.suppliers,filters.supplierKey)}`]:[]),
+        ...(filters.unitKey?[`Unit: ${label(choices.units,filters.unitKey)}`]:[]),
+        ...(filters.seriesId?[`Series: ${label(seriesChoices,filters.seriesId)}`]:[]),
+        ...(filters.view!=='all'?[filters.view==='delivered'?'Delivered only':'Used only']:[]),
+        ...(filters.inclusion!=='all'?[`Document status: ${inclusionFilterLabels[filters.inclusion]}`]:[])];
+      const title=atRecords?'Loads History':scope.kind==='project'?'Project Totals':'Company Totals';
+      const parts=[level.material?.name,scope.kind==='project'?scope.projectName:level.project?.name,level.supplier?.key?level.supplier.name:undefined];
+      await exportAndShareTotals({companyName:company.companyName,logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,data:current,records:history,issuedTo:issuedTo(level.supplier,history),
+        fileName:{scopeName:parts.filter(Boolean).join(' ')||null,fromDate:filters.fromDate,toDate:filters.toDate}});
+      setExportMessage({kind:'success',text:`${title} PDF ready to share, ${includePrices?'with recorded prices':'without prices'}.`});
+    }catch(cause){setExportMessage({kind:'error',text:cause instanceof Error?cause.message:'The PDF could not be created.'});}
+    finally{setExporting(false);}
+  };
+  const askExport=()=>{setExportPrices('without');setExportProject('show');setExportOpen(true);};
+  const createButton=<>
+    <QuietButton label="Create document" onPress={()=>openStart()} hint="Choose records, who the document is for, and its type"/>
+    {profiles?<QuietButton label={exporting?'Preparing PDF…':'Export PDF'} onPress={askExport} disabled={exporting} hint="Without prices or with recorded prices"/>:null}
+  </>;
   const usageNotice=data.usageHiddenReason?<Text style={styles.notice}>{data.usageHiddenReason}</Text>:null;
   const usageLedger=(units:UnitMeasures[],base:CompanyTotalsFilters)=>{
     const lines=units.flatMap(unit=>[unit.used?{movement:'used' as const,unit,measure:unit.used}:null,unit.transported?{movement:'transported' as const,unit,measure:unit.transported}:null]).filter((value):value is NonNullable<typeof value>=>value!=null);
     if(!lines.length||filters.view==='delivered'||usageHidden)return null;
-    return <Ledger title="Recorded on site" note="From Daily Reports. Use is not recorded per supplier, so it is never split by supplier.">
-      {lines.map((line,index)=><MeasureRow key={`${line.movement}-${line.unit.unitKey}`} first={index===0} label={`${line.movement==='used'?'Used':'Transported'} · ${line.unit.unitSymbol}`} quantity={line.measure.quantity} unitSymbol={line.unit.unitSymbol} recordCount={line.measure.recordCount}
+    return <Ledger separate title="Recorded on site" note="From Daily Reports. Use is not recorded per supplier, so it is never split by supplier.">
+      {lines.map((line,index)=><MeasureRow key={`${line.movement}-${line.unit.unitKey}`} card first={index===0} label={`${line.movement==='used'?'Used':'Transported'} · ${line.unit.unitSymbol}`} quantity={line.measure.quantity} unitSymbol={line.unit.unitSymbol} recordCount={line.measure.recordCount}
         onPress={()=>setUsage({title:`${level.material?.name??''} ${line.movement} (${line.unit.unitSymbol})`,filters:{...base,unitKey:line.unit.unitKey},movement:line.movement})}/>)}
-      {filters.view==='all'?unitDifferences(units).map(line=><View key={`difference-${line.unitKey}`} style={[styles.difference,parts.rowRule]} accessible accessibilityLabel={`Delivered minus recorded use: ${formatTotalQuantity(line.difference,line.unitSymbol)}. Not an inventory balance.`}>
+      {filters.view==='all'?unitDifferences(units).map(line=><View key={`difference-${line.unitKey}`} style={[styles.difference,parts.card]} accessible accessibilityLabel={`Delivered minus recorded use: ${formatTotalQuantity(line.difference,line.unitSymbol)}. Not an inventory balance.`}>
         <View style={parts.flex}><Text style={styles.differenceLabel}>Delivered minus recorded use · {line.unitSymbol}</Text><Text style={styles.helper}>Not an inventory balance: only what was recorded as delivered and used.</Text></View>
         <Text style={styles.usageQty}>{formatTotalQuantity(line.difference,line.unitSymbol)}</Text>
       </View>):null}
@@ -166,8 +203,8 @@ export function TotalsExplorer({scope,totals,documents,series,level,onLevel,onOp
       </SummaryBand>
       {filters.view==='used'?<Text style={styles.notice}>Showing delivered records. Use records are listed under Recorded on site.</Text>:null}
       {!records?<View style={styles.center}><ActivityIndicator color={colors.brand}/></View>
-        :count?<Ledger title="Original records" note="Each record opens its own screen. Document status is read from issued and draft documents, never stored on the record.">
-          {records.map((record,index)=><RecordRow key={record.key} record={record} first={index===0} selectable={selecting} selected={selected.has(record.key)}
+        :count?<Ledger separate title="Original records" note="Each record opens its own screen. Document status is read from issued and draft documents, never stored on the record.">
+          {records.map((record,index)=><RecordRow key={record.key} record={record} card first={index===0} selectable={selecting} selected={selected.has(record.key)}
             onToggle={()=>setSelected(current=>{const next=new Set(current);if(next.has(record.key))next.delete(record.key);else next.add(record.key);return next;})} onOpen={()=>onOpenRecord(record.snapshot)}/>)}
         </Ledger>:<EmptyState title="No records match" body="Widen the dates or clear a filter."/>}
       {count>=500?<Text style={styles.helper}>Showing the first 500 records. Narrow the dates to see the rest.</Text>:null}
@@ -178,8 +215,8 @@ export function TotalsExplorer({scope,totals,documents,series,level,onLevel,onOp
     body=<>
       <SummaryBand trail={trail.slice(0,-1)} title={scope.kind==='project'?material.itemName:level.project!.name} units={node?.units??[]} view={filters.view} usageHidden={usageHidden} inclusion={node?.inclusion??null} value={node?.value??null}>{createButton}</SummaryBand>
       {usageNotice}
-      {node?.suppliers.length&&filters.view!=='used'?<Ledger title="Delivered by" note="Suppliers first, then the company’s own loads, which are not a supplier.">
-        {node.suppliers.map((value,index)=><LedgerRow key={value.supplierKey} first={index===0} name={value.supplierName} tag={value.source==='company_delivery'?'Own loads, not a supplier':undefined}
+      {node?.suppliers.length&&filters.view!=='used'?<Ledger separate title="Delivered by" note="Suppliers first, then the company’s own loads, which are not a supplier.">
+        {node.suppliers.map((value,index)=><LedgerRow key={value.supplierKey} card first={index===0} name={value.supplierName} tag={value.source==='company_delivery'?'Own loads, not a supplier':undefined}
           units={value.units.map(unit=>({unitKey:unit.unitKey,unitSymbol:unit.unitSymbol,delivered:{quantity:unit.quantity,recordCount:unit.recordCount},used:null,transported:null}))}
           view="delivered" inclusion={value.inclusion} value={value.value} hint="Opens this source’s original records" onPress={()=>go({...level,supplier:{key:value.supplierKey,name:value.supplierName}})}/>)}
       </Ledger>:null}
@@ -191,8 +228,8 @@ export function TotalsExplorer({scope,totals,documents,series,level,onLevel,onOp
     body=<>
       <SummaryBand trail={trail.slice(0,-1)} title={material.itemName} units={material.units} view={filters.view} usageHidden={usageHidden} inclusion={material.inclusion} value={material.value}>{createButton}</SummaryBand>
       {usageNotice}
-      <Ledger title="By project" note="Only projects with records for this material appear.">
-        {material.projects.map((value,index)=><LedgerRow key={value.projectKey} first={index===0} name={value.projectName} units={value.units} view={filters.view} usageHidden={usageHidden} inclusion={value.inclusion} value={value.value}
+      <Ledger separate title="By project" note="Only projects with records for this material appear.">
+        {material.projects.map((value,index)=><LedgerRow key={value.projectKey} card first={index===0} name={value.projectName} units={value.units} view={filters.view} usageHidden={usageHidden} inclusion={value.inclusion} value={value.value}
           hint="Opens this project’s suppliers and records" onPress={()=>go({material:level.material,project:{key:value.projectKey,name:value.projectName}})}/>)}
       </Ledger>
       {filters.view!=='used'?<AppButton label="Show every delivered record" tone="secondary" onPress={()=>go({...level,supplier:ALL_RECORDS})}/>:null}
@@ -202,8 +239,8 @@ export function TotalsExplorer({scope,totals,documents,series,level,onLevel,onOp
     body=<>
       <SummaryBand trail={[]} title={scopeName} lead={`${whole.materialCount} material${whole.materialCount===1?'':'s'} · ${rangeLabel}`} view={filters.view} usageHidden={usageHidden} inclusion={whole.inclusion} value={whole.value}>{createButton}</SummaryBand>
       {usageNotice}
-      {tree.length?<Ledger title="Materials" note="Each unit stays on its own line. Delivered and used are never added together.">
-        {tree.map((value,index)=><LedgerRow key={value.itemKey} first={index===0} name={value.itemName} units={value.units} view={filters.view} usageHidden={usageHidden} inclusion={value.inclusion} value={value.value}
+      {tree.length?<Ledger separate title="Materials" note="Each unit stays on its own line. Delivered and used are never added together.">
+        {tree.map((value,index)=><LedgerRow key={value.itemKey} card first={index===0} name={value.itemName} units={value.units} view={filters.view} usageHidden={usageHidden} inclusion={value.inclusion} value={value.value}
           hint={scope.kind==='project'?'Opens this material’s suppliers and records':'Opens the projects with this material'} onPress={()=>go({material:{key:value.itemKey,name:value.itemName}})}/>)}
       </Ledger>:<EmptyState title="Nothing recorded for these filters" body={`No deliveries or recorded use ${filters.fromDate||filters.toDate?`between ${formatDay(filters.fromDate||null)} and ${formatDay(filters.toDate||null)}`:'yet'}. Widen the dates or clear a filter.`}/>}
     </>;
@@ -211,10 +248,28 @@ export function TotalsExplorer({scope,totals,documents,series,level,onLevel,onOp
 
   return <>
     {filterBlock}
+    {exportMessage?<Feedback kind={exportMessage.kind}>{exportMessage.text}</Feedback>:null}
     {body}
     <UsageSheet query={usage} totals={totals} onClose={()=>setUsage(null)} onOpen={report=>{setUsage(null);onOpenReport(report);}}/>
+    <FocusedSheet visible={exportOpen} eyebrow="EXPORT PDF" title={atRecords?'Loads History':scope.kind==='project'?'Project Totals':'Company Totals'} onClose={()=>setExportOpen(false)}
+      footer={<SheetActions primaryLabel="Export PDF" onCancel={()=>setExportOpen(false)} onPrimary={()=>{setExportOpen(false);void exportPdf(exportPrices==='with',exportProject==='show');}}/>}>
+      <Text style={styles.helper}>{atRecords?'Every load listed here, with its totals. It is not an invoice or bill.':'Covers the filters and the level you are looking at.'}</Text>
+      <SegmentedChoice label="Prices" options={[{id:'without',label:'Without prices'},{id:'with',label:'With prices'}]} selectedId={exportPrices} onSelect={setExportPrices}/>
+      {atRecords?<SegmentedChoice label="Project column" options={[{id:'show',label:'Show project'},{id:'hide',label:'Hide project'}]} selectedId={exportProject} onSelect={setExportProject}/>:null}
+    </FocusedSheet>
     <DocumentStartSheet visible={!!start} documents={documents} query={start} onClose={()=>setStart(null)} onStart={value=>{setStart(null);setSelecting(false);setSelected(new Set());onCreateDocument(value);}}/>
   </>;
+}
+
+/**
+ * "Issued to" on a Loads History: the supplier for Supplier Loads; for the company's own loads, the
+ * customer when every load belongs to one customer. Nothing when mixed or not on a records level.
+ */
+function issuedTo(supplier:Node|undefined,history:CompanyTotalsRecord[]|undefined):string|null{
+  if(!supplier?.key||!history)return null;
+  if(supplier.key!==COMPANY_SUPPLIER_KEY)return supplier.name;
+  const customers=[...new Set(history.map(record=>record.snapshot.partyName))];
+  return customers.length===1?customers[0]!:null;
 }
 
 /** The Daily Reports behind one Used or Transported figure. */
