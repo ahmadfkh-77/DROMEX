@@ -108,6 +108,17 @@ export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper
     if(record.signaturePaths.length){
       doc.line('').line(divider(columns)).line('').align(1).raster(signatureRaster(record.signaturePaths,paper)).wrapped(`${crewRole} signature: ${record.driverName}`).align(0);
     }else labelled(doc,`${crewRole} signature`,'Unsigned');
+    // DEC-490. The supplier's (Owner's) signature, as this load keeps it.
+    const supplier=record.supplierSignature;
+    if(supplier){
+      const role=[supplier.jobTitle,supplier.department].filter(Boolean).join(' - ');
+      doc.line('').line(divider(columns)).line('').align(1);
+      if(supplier.display==='name_with_signature'&&supplier.signature.length)doc.raster(signatureRaster(supplier.signature,paper));
+      else doc.wrapped('Signed by name');
+      doc.wrapped(`Supplier signature: ${supplier.name}`);
+      if(role)doc.wrapped(role);
+      doc.align(0);
+    }
   }
   if(record.companyReceiptFooter)doc.line('').line(divider(columns)).line('').align(1).wrapped(record.companyReceiptFooter).align(0);
   return doc.finish();

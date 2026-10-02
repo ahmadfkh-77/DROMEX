@@ -4,6 +4,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { truckCrewRoleLabel, type TruckCrewRole } from '../../domain/people';
 import { formatUsd } from '../../domain/loads';
+import type { SignerSnapshot } from '../../domain/documentSigners';
 import { colors } from '../theme';
 
 export type DocumentViewData = {
@@ -19,6 +20,8 @@ export type DocumentViewData = {
   unitPriceUsd: number | null; subtotalUsd: number | null; vatRatePercent: number | null;
   vatAmountUsd: number | null; finalTotalUsd: number | null;
   signaturePaths: string[];
+  /** DEC-490. The supplier's (Owner's) signature, under the driver's on the Delivery Authorization. */
+  supplierSignature?: SignerSnapshot | null;
 };
 
 export function LoadDocuments({ data, isDraft }: { data: DocumentViewData; isDraft: boolean }) {
@@ -62,6 +65,7 @@ export function LoadDocuments({ data, isDraft }: { data: DocumentViewData; isDra
             <Line label="Truck plate" value={missing(data.truckPlate)} />
             {data.quantityMethod==='weighbridge'?<>{data.requestedQuantityKg != null ? <Line label="Requested quantity" value={`${data.requestedQuantityKg} kg`} /> : null}<Line label="Empty weight" value={data.emptyWeightKg == null ? '—' : `${data.emptyWeightKg} kg`} /><Line label="Full weight" value={data.fullWeightKg == null ? '—' : `${data.fullWeightKg} kg`} /><Line label="Net weight" value={data.netWeightKg == null ? '—' : `${data.netWeightKg} kg`} strong /><Line label="Converted quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} /></>:<Line label="Quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} strong />}
             {data.signaturePaths.length ? <View style={styles.signature}><Svg width="100%" height={80} viewBox="0 0 320 140">{data.signaturePaths.map((path,index)=><Path key={`${index}-${path.length}`} d={path} fill="none" stroke="#111" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"/>)}</Svg><Text style={styles.signatureLabel}>{truckCrewRoleLabel(data.driverRole)} signature: {data.driverName}</Text></View> : <Line label={`${truckCrewRoleLabel(data.driverRole)} signature`} value="Unsigned" />}
+            {data.supplierSignature ? <View style={styles.signature}>{data.supplierSignature.display==='name_with_signature'&&data.supplierSignature.signature.length?<Svg width="100%" height={80} viewBox="0 0 320 140" preserveAspectRatio="xMidYMid meet">{data.supplierSignature.signature.map((path,index)=><Path key={`s${index}-${path.length}`} d={path} fill="none" stroke="#111" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"/>)}</Svg>:<Text style={styles.byName}>Signed by name</Text>}<Text style={styles.signatureLabel}>Supplier signature: {data.supplierSignature.name}</Text>{[data.supplierSignature.jobTitle,data.supplierSignature.department].filter(Boolean).length?<Text style={styles.signatureLabel}>{[data.supplierSignature.jobTitle,data.supplierSignature.department].filter(Boolean).join(' · ')}</Text>:null}</View> : null}
           </>
         )}
         {data.companyReceiptFooter ? <><View style={styles.rule} /><Text style={styles.footer}>{data.companyReceiptFooter}</Text></> : null}
@@ -76,5 +80,5 @@ function Line({ label, value, strong = false }: { label: string; value: string; 
 const styles = StyleSheet.create({
   wrapper: { gap: 12 }, controls: { flexDirection: 'row', gap: 8 }, toggle: { flex: 1, borderWidth: 1, borderColor: colors.line, borderRadius: 9, padding: 9, alignItems: 'center', backgroundColor: colors.surface }, toggleSelected: { borderColor: colors.brand, backgroundColor: '#FBE9E4' }, toggleText: { color: colors.muted, fontSize: 12, fontWeight: '800' }, toggleTextSelected: { color: colors.brandDark },
   paper: { width: '78%', alignSelf: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: colors.line, padding: 16, gap: 7 }, paperWide: { width: '100%', paddingHorizontal: 24 }, draft: { color: colors.warning, textAlign: 'center', fontWeight: '900', letterSpacing: 1 }, company: { color: '#111', textAlign: 'center', fontSize: 20, fontWeight: '900' }, contact: { color: '#333', textAlign: 'center', fontSize: 11 }, rule: { height: 1, backgroundColor: '#222', marginVertical: 5 }, documentTitle: { color: '#111', textAlign: 'center', fontSize: 14, fontWeight: '900', marginBottom: 4 }, line: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 }, lineText: { width: '43%', color: '#222', fontSize: 11, fontWeight: '700' }, value: { flex: 1, color: '#111', fontSize: 11 }, strong: { fontWeight: '900' }, footer: { color: '#333', textAlign: 'center', fontSize: 10 }, previewNote: { color: colors.muted, textAlign: 'center', fontSize: 12 },
-  signature: { borderTopWidth: 1, borderTopColor: '#AAA', marginTop: 5 }, signatureLabel: { color: '#222', fontSize: 10, textAlign: 'center' },
+  signature: { borderTopWidth: 1, borderTopColor: '#AAA', marginTop: 5 }, signatureLabel: { color: '#222', fontSize: 10, textAlign: 'center' }, byName: { color: '#222', fontSize: 11, fontStyle: 'italic', textAlign: 'center', paddingVertical: 10 },
 });

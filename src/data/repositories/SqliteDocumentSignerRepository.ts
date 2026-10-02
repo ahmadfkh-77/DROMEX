@@ -1,6 +1,6 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
-import {signerNameKey,validateSignerDraft,type DocumentSigner,type DocumentSignerDraft,type SignerEvent} from '../../domain/documentSigners';
+import {signerNameKey,signerSnapshot,validateSignerDraft,type DocumentSigner,type DocumentSignerDraft,type SignerDisplay,type SignerEvent,type SignerSnapshot} from '../../domain/documentSigners';
 import {normalizeSupervisorText,parseStoredSignature,validateSignatureStrokes} from '../../domain/supervisors';
 import type {DocumentSignerRepository} from './DocumentSignerRepository';
 
@@ -13,6 +13,30 @@ export function signerFromRow(row:SignerRow):DocumentSigner{
 }
 const makeId=()=>`signer_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;
 const optional=(value:string)=>normalizeSupervisorText(value)||null;
+
+/**
+ * DEC-490. The copy of a signer a Delivery Authorization keeps. Throws when the signer is missing or
+ * disabled, or when a drawn signature is asked for and none is saved.
+ */
+export async function deliverySignatureFor(db:SQLiteDatabase,selection:{signerId:string;display:SignerDisplay}):Promise<SignerSnapshot>{
+  const row=await db.getFirstAsync<SignerRow>('SELECT * FROM document_signers WHERE id=?',selection.signerId);
+  if(!row)throw new Error('The selected signer was not found.');
+  if(row.is_active!==1)throw new Error('The selected signer is disabled. Choose another signer.');
+  return signerSnapshot(signerFromRow(row),selection.display);
+}
+
+/**
+ * DEC-490. The default signer copied onto new loads, or null when none is chosen or it can no longer
+ * sign (disabled or missing). A drawn signature that was later cleared falls back to Name only.
+ */
+export async function defaultDeliverySignature(db:SQLiteDatabase):Promise<SignerSnapshot|null>{
+  const setting=await db.getFirstAsync<{delivery_signer_id:string|null;delivery_signer_display:SignerDisplay|null}>("SELECT delivery_signer_id,delivery_signer_display FROM business_document_settings WHERE id='documents'");
+  if(!setting?.delivery_signer_id)return null;
+  const row=await db.getFirstAsync<SignerRow>('SELECT * FROM document_signers WHERE id=?',setting.delivery_signer_id);
+  if(!row||row.is_active!==1)return null;
+  const signer=signerFromRow(row);
+  return signerSnapshot(signer,setting.delivery_signer_display==='name_with_signature'&&signer.signature.length?'name_with_signature':'name_only');
+}
 
 /** Records one signer event; also used when a document is issued with this signer. */
 export async function recordSignerEvent(db:SQLiteDatabase,signerId:string,event:SignerEvent['event'],at:string,documentId:string|null=null,details:string|null=null):Promise<void>{
@@ -82,6 +106,21 @@ export class SqliteDocumentSignerRepository implements DocumentSignerRepository{
       await this.db.runAsync('UPDATE document_signers SET is_active=?,updated_at=? WHERE id=?',isActive?1:0,now,id);
       await recordSignerEvent(this.db,id,isActive?'enabled':'disabled',now);
       await this.enqueue(id,{id,isActive,updatedAt:now});
+    });
+  }
+
+  async getDeliverySigner():Promise<{signerId:string;display:SignerDisplay}|null>{
+    const row=await this.db.getFirstAsync<{delivery_signer_id:string|null;delivery_signer_display:SignerDisplay|null}>("SELECT delivery_signer_id,delivery_signer_display FROM business_document_settings WHERE id='documents'");
+    return row?.delivery_signer_id?{signerId:row.delivery_signer_id,display:row.delivery_signer_display??'name_only'}:null;
+  }
+
+  /** DEC-490. Chooses the signer copied onto every new Delivery Authorization; null turns it off. */
+  async setDeliverySigner(selection:{signerId:string;display:SignerDisplay}|null):Promise<void>{
+    if(selection)await deliverySignatureFor(this.db,selection);
+    const now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync("UPDATE business_document_settings SET delivery_signer_id=?,delivery_signer_display=?,updated_at=? WHERE id='documents'",selection?.signerId??null,selection?.display??null,now);
+      await this.db.runAsync("INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES ('businessDocumentSettings','documents','upsert',?,?)",JSON.stringify({action:'delivery_signer',signerId:selection?.signerId??null,display:selection?.display??null,updatedAt:now}),now);
     });
   }
 

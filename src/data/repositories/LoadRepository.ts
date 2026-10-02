@@ -54,6 +54,8 @@ export interface LoadRepository {
   confirmLoad(draft: LoadDraft): Promise<ConfirmedLoad>;
   listLoads(): Promise<ConfirmedLoad[]>;
   saveLoadSignature(loadId: string, signaturePaths: string[]): Promise<ConfirmedLoad>;
+  /** DEC-490. Adds, replaces (from a saved signer) or removes the load's supplier signature. */
+  saveLoadSupplierSignature(loadId: string, selection: { signerId: string; display: 'name_only' | 'name_with_signature' } | null): Promise<ConfirmedLoad>;
   correctLoad(loadId: string, draft: LoadCorrectionDraft): Promise<ConfirmedLoad>;
   cancelLoad(loadId: string, reason: string): Promise<ConfirmedLoad>;
 }

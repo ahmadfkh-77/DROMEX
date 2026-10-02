@@ -2227,6 +2227,7 @@ DEC-487. Migration 48. Implemented with automated tests; tested by the Owner in 
 - FR-CT-9 (DEC-488): Company and Project Totals shall export a PDF of the filters and level on screen, Without prices (default) or With prices; on a records level the PDF is a Loads History listing every load with its totals, headed "Issued to" the supplier (or the single customer), with an optional Project column. It is not a billing document and never changes document status.
 - FR-CT-10 (DEC-488): Totals lists shall show each item as its own card; Back from a record opened from Totals shall return to Totals.
 - FR-CT-11 (DEC-489): The Project Totals PDF shall optionally include fuel for the Covering dates (per fuel type, per equipment, every fill; prices and cost only with prices), and every Totals PDF shall present each material, fuel and loads history as a separate numbered block with a contents list.
+- FR-CT-12 (DEC-490): The Delivery Authorization (PDF, preview and Bluetooth slip, never the Receipt) shall print a Supplier signature under the driver's, taken from a saved active signer chosen as the default for new loads or set per load in Load History; each load shall keep its own unchangeable copy, and the strokes shall never leave the device.
 
 ### Invoices & Bills
 - FR-IB-1: A document is one of: Customer statement (Internal), Invoice (Official), Supplier statement (Internal), Bill (Official). It is addressed to one customer or one supplier and is Draft, Issued or Cancelled; it is never deleted.

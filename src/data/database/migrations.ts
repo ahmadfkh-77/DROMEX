@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 48;
+export const DATABASE_VERSION = 49;
 
 type TableColumn = { name: string };
 
@@ -1877,6 +1877,17 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_document_records_document ON business_document_records(document_id, position);
     `);
     currentVersion = 48;
+  }
+
+  if (currentVersion === 48) {
+    // DEC-490. The supplier's (Owner's) signature on the Delivery Authorization. Each load keeps its own
+    // copy of the signer, so a later change to the saved signer never alters a printed authorization.
+    // The default signer for new loads lives with the business document settings. Existing loads keep
+    // no supplier signature.
+    await addColumnIfMissing(db, 'loads', 'supplier_signature_json', 'TEXT');
+    await addColumnIfMissing(db, 'business_document_settings', 'delivery_signer_id', 'TEXT REFERENCES document_signers(id)');
+    await addColumnIfMissing(db, 'business_document_settings', 'delivery_signer_display', "TEXT CHECK (delivery_signer_display IS NULL OR delivery_signer_display IN ('name_only', 'name_with_signature'))");
+    currentVersion = 49;
   }
 
 

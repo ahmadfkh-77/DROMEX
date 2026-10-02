@@ -8,6 +8,7 @@ import {AppButton,AppField,AppPage,EmptyState,Feedback,PageHeader} from '../../c
 import {useReducedMotion} from '../../components/ExpandableMenu';
 import {FocusedSheet,SheetActions} from '../../components/FocusedSheet';
 import {SignaturePad} from '../../components/SignaturePad';
+import {SupplierSignatureChooser,type SupplierSignatureSelection} from '../../components/SupplierSignatureChooser';
 import {colors} from '../../theme';
 import {formatRecordedAt} from '../../totalsPresentation';
 
@@ -29,8 +30,9 @@ export function SignersScreen({repository,onBack}:{repository:DocumentSignerRepo
   const[sheetError,setSheetError]=useState<string|null>(null);
   const[error,setError]=useState<string|null>(null);const[message,setMessage]=useState<string|null>(null);
   const[busy,setBusy]=useState(false);const[disabledOpen,setDisabledOpen]=useState(false);
+  const[deliverySigner,setDeliverySigner]=useState<SupplierSignatureSelection|null>(null);
 
-  const refresh=useCallback(async()=>{try{setSigners(await repository.listSigners());}catch(cause){setError(cause instanceof Error?cause.message:'Signers could not be loaded.');setSigners(current=>current??[]);}},[repository]);
+  const refresh=useCallback(async()=>{try{setSigners(await repository.listSigners());setDeliverySigner(await repository.getDeliverySigner());}catch(cause){setError(cause instanceof Error?cause.message:'Signers could not be loaded.');setSigners(current=>current??[]);}},[repository]);
   useEffect(()=>{void refresh();},[refresh]);
   const run=async(action:()=>Promise<unknown>,done:string)=>{setBusy(true);setError(null);setMessage(null);try{await action();await refresh();setMessage(done);}catch(cause){setError(cause instanceof Error?cause.message:'The change could not be saved.');}finally{setBusy(false);}};
   const saveSheet=async(action:()=>Promise<unknown>,done:string,close:()=>void)=>{setBusy(true);setSheetError(null);try{await action();close();await refresh();setMessage(done);}catch(cause){setSheetError(cause instanceof Error?cause.message:'The change could not be saved.');}finally{setBusy(false);}};
@@ -50,6 +52,9 @@ export function SignersScreen({repository,onBack}:{repository:DocumentSignerRepo
       onEdit={()=>{setSheetError(null);setDetails({id:signer.id,draft:{name:signer.name,jobTitle:signer.jobTitle??'',department:signer.department??''}});}}
       onSign={()=>{setSheetError(null);setSigning({signer,strokes:[]});}} onHistory={()=>openHistory(signer)} onToggle={()=>disable(signer)} toggleLabel="Disable"/>)}</View>
       :<EmptyState title="No signers yet" body="Add the people who sign your documents. A drawn signature is optional: a signer can sign by name only."/>}
+    {/* DEC-490. The supplier signature every new Delivery Authorization carries under the driver's. */}
+    <SupplierSignatureChooser title="Delivery Authorization signature" helper="Printed as the Supplier signature under the driver's on every new Delivery Authorization. Each load keeps its own copy; the Receipt is not signed." signers={signers} value={deliverySigner} busy={busy} saveLabel="Use on new authorizations" removeLabel="Stop signing new authorizations"
+      onSave={selection=>void run(()=>repository.setDeliverySigner(selection),selection?'New Delivery Authorizations will carry this signature.':'New Delivery Authorizations will not carry a supplier signature.')}/>
     {disabled.length?<>
       <Pressable style={styles.band} onPress={()=>{if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);setDisabledOpen(value=>!value);}} accessibilityRole="button" accessibilityState={{expanded:disabledOpen}}>
         <View style={styles.flex}><Text style={styles.bandTitle}>Disabled signers</Text><Text style={styles.helper}>{disabledOpen?'Tap to hide':'Tap to view'} · {disabled.length}</Text></View><Text style={styles.bandMark}>{disabledOpen?'×':'+'}</Text>
