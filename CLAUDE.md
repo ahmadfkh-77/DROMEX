@@ -27,7 +27,7 @@ application. It records outgoing company loads, incoming supplier loads, project
 daily reports, equipment, fuel, waste, walls, pavement calculations, finances,
 documents, and backups.
 
-Current source release metadata is version `0.20.0`, Android version code `23`,
+Current source release metadata is version `0.20.0`, Android version code `24`,
 package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
 internal Android artifact is `output/DROMEX-0.19.0-build22.apk` when present
 (Projects list and project screens redesign, account payments, Apply unallocated
@@ -36,9 +36,11 @@ migration 47, DEC-482 to DEC-486), installed in place and confirmed working on
 the Owner's phone; `output/DROMEX-0.17.0-build20.apk` is retained unchanged as
 the previous accepted installer. `output/DROMEX-0.18.0-build21.apk` (migration 46)
 was a preview that was never separately accepted and is superseded by build 22.
-`output/DROMEX-0.20.0-build23.apk` (Company Totals, Invoices & Bills, authorized
-signers and Company Load Number Series; migration 48, DEC-487) is a preview
-build pending physical upgrade-install acceptance.
+`output/DROMEX-0.20.0-build24.apk` (Company Totals, Invoices & Bills, authorized
+signers and Company Load Number Series, migration 48, DEC-487; Totals and Loads
+History PDFs, DEC-488) is a preview build pending physical upgrade-install
+acceptance. `output/DROMEX-0.20.0-build23.apk` was an earlier preview of the
+same work, superseded by build 24 before installation.
 
 Release APKs are no longer committed to Git from build 14 onward (DEC-396):
 `output/*.apk` is ignored, so the signed artifact lives in `output/` on the
