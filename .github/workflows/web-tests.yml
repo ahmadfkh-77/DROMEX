@@ -1,0 +1,153 @@
+# DROMEX web workspace tests on a stable Linux clock (phase CI-1).
+#
+# Runs the web API typecheck, unit tests and Testcontainers integration tests
+# on GitHub-hosted Ubuntu. A 150-second clock-stability check runs first: the
+# session, TOTP and rate-limit tests depend on exact timestamps, so results
+# from a jumping clock are not evidence.
+#
+# This repository is public and so are these logs. Never print environment
+# variables, connection strings or anything from web/.env. No secrets, no
+# deployment, no VPS access.
+
+name: Web tests
+
+on:
+  push:
+    branches:
+      - web/phase2c-auth-foundation
+    paths:
+      - 'web/**'
+      - '.github/workflows/web-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-tests:
+    name: Web typecheck, unit and integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # DROMEX strict clock gate. A network-less container samples its wall
+      # clock (Date.now) against its monotonic clock (performance.now) every
+      # 500 ms for 150 seconds; drift is the wall time elapsed minus the
+      # monotonic time elapsed. The job fails before any test runs when:
+      #   - any sample-to-sample correction of the drift exceeds 5 ms;
+      #   - the cumulative drift at the end of the run exceeds 5 ms;
+      #   - 5 or more consecutive samples carry a correction of the same sign
+      #     (a recurring pattern or systematic slew rather than noise).
+      # Date.now() has 1 ms resolution, so on a stable clock the drift moves by
+      # less than 1 ms per sample from rounding alone. Only changes larger than
+      # 1 ms count as corrections for the pattern check; the 5 ms limits apply
+      # to every sample. On a Linux runner the container shares the host
+      # kernel clock, so no separate host-versus-container comparison is made.
+      - name: Clock-stability gate (150 s, 500 ms samples, 5 ms limits, pattern check)
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker run --rm -i --network none node:24.20.0-trixie-slim node - <<'EOF'
+          const INTERVAL_MS = 500;
+          const DURATION_MS = 150_000;
+          const CORRECTION_LIMIT_MS = 5;
+          const DRIFT_LIMIT_MS = 5;
+          const RESOLUTION_MS = 1;
+          const PATTERN_RUN_LIMIT = 5;
+          const wall0 = Date.now();
+          const mono0 = performance.now();
+          let samples = 0;
+          let drift = 0;
+          let previousDrift = 0;
+          let maxDrift = 0;
+          let maxCorrection = 0;
+          let overLimit = 0;
+          let runSign = 0;
+          let run = 0;
+          let longestRun = 0;
+          const timer = setInterval(() => {
+            const elapsedMono = performance.now() - mono0;
+            drift = (Date.now() - wall0) - elapsedMono;
+            const correction = drift - previousDrift;
+            const size = Math.abs(correction);
+            if (size > maxCorrection) maxCorrection = size;
+            if (size > CORRECTION_LIMIT_MS) overLimit += 1;
+            const sign = size > RESOLUTION_MS ? Math.sign(correction) : 0;
+            run = sign === 0 ? 0 : sign === runSign ? run + 1 : 1;
+            runSign = sign;
+            if (run > longestRun) longestRun = run;
+            if (Math.abs(drift) > Math.abs(maxDrift)) maxDrift = drift;
+            previousDrift = drift;
+            samples += 1;
+            if (elapsedMono >= DURATION_MS) {
+              clearInterval(timer);
+              const failures = [];
+              if (overLimit > 0) failures.push(`${overLimit} correction(s) over ${CORRECTION_LIMIT_MS} ms`);
+              if (Math.abs(drift) > DRIFT_LIMIT_MS) failures.push(`cumulative drift over ${DRIFT_LIMIT_MS} ms`);
+              if (longestRun >= PATTERN_RUN_LIMIT) failures.push(`recurring same-sign correction run of ${longestRun}`);
+              console.log(`Samples: ${samples}`);
+              console.log(`Cumulative drift at end: ${drift.toFixed(2)} ms (limit ${DRIFT_LIMIT_MS} ms)`);
+              console.log(`Largest drift during run: ${maxDrift.toFixed(2)} ms`);
+              console.log(`Largest single correction: ${maxCorrection.toFixed(2)} ms (limit ${CORRECTION_LIMIT_MS} ms)`);
+              console.log(`Longest same-sign run of corrections over ${RESOLUTION_MS} ms: ${longestRun} (fails at ${PATTERN_RUN_LIMIT})`);
+              console.log(`Result: ${failures.length === 0 ? 'PASS' : `FAIL (${failures.join('; ')})`}`);
+              process.exitCode = failures.length === 0 ? 0 : 1;
+            }
+          }, INTERVAL_MS);
+          EOF
+
+      - name: Set up Node.js 24.20.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.20.0'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Show versions
+        run: |
+          node -v
+          npm -v
+          docker version --format 'Docker client {{.Client.Version}}, server {{.Server.Version}}'
+
+      - name: Pre-pull postgres:18.6-trixie (3 attempts)
+        run: |
+          for attempt in 1 2 3; do
+            if docker pull postgres:18.6-trixie; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 20))
+              echo "Pull attempt $attempt failed; retrying in ${delay}s."
+              sleep "$delay"
+            fi
+          done
+          echo "Could not pull postgres:18.6-trixie after 3 attempts."
+          exit 1
+
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      # Runs from the repository root so the path matches; from web/ the same
+      # pathspec would match nothing and always pass.
+      - name: Lockfile guard
+        working-directory: ${{ github.workspace }}
+        run: git diff --exit-code -- web/package-lock.json
+
+      - name: Typecheck (API and web app)
+        run: npm run typecheck
+
+      - name: API unit tests
+        run: npm run test:unit --workspace @dromex/api
+
+      - name: API integration tests
+        run: npm run test:integration --workspace @dromex/api
