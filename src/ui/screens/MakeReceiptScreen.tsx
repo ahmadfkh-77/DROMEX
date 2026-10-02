@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { LoadNumberSeriesRepository } from '../../data/repositories/LoadNumberSeriesRepository';
+import type { LoadNumberPreview } from '../../domain/loadNumberSeries';
+import {loadNumberLabel} from '../../domain/loadNumberSeries';
 import { Alert, Animated, LayoutAnimation, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { LoadRepository } from '../../data/repositories/LoadRepository';
@@ -14,7 +17,9 @@ import { DatePickerField, todayIso } from '../components/DatePickerField';
 import { useReducedMotion } from '../components/ExpandableMenu';
 import { colors } from '../theme';
 
-export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId }: { repository: LoadRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null }) {
+export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId, seriesRepository }: { repository: LoadRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null;
+  /** DEC-487. Previews the Company Load number this load will receive. */
+  seriesRepository?: LoadNumberSeriesRepository }) {
   const [options, setOptions] = useState<LoadSetupOptions | null>(null);
   const [draft, setDraft] = useState<LoadDraft>(emptyLoadDraft);
   // DEC-477. Narrows the Driver / Operator list; the selected person always stays listed so a filter change never hides the current choice.
@@ -104,7 +109,7 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
 
   async function doConfirm() {
     if (!options) return; const nextIssues = validateLoadDraft(draft, options); setIssues(nextIssues); if (nextIssues.length) return;
-    Alert.alert('Confirm this load?', 'Confirmation assigns the permanent transaction number. The record cannot return to Draft.', [
+    Alert.alert('Confirm this load?', 'Confirmation assigns the permanent load number and transaction number. The record cannot return to Draft.', [
       { text: 'Review again', style: 'cancel' },
       { text: 'Confirm load', onPress: () => { setBusy(true); setError(null); const submittedDraft = draft; void repository.confirmLoad(draft).then((record) => { setConfirmed(record); setLastConfirmedDraft(submittedDraft); setPreview(false); setDraft(emptyLoadDraft); }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not confirm load.')).finally(() => setBusy(false)); } },
     ]);
@@ -116,7 +121,7 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   if (setupStatus === 'error') return <ErrorView message={setupError} onBack={onBack} onRetry={loadSetup} />;
   if (!options) return <LoadingView onBack={onBack} />;
   if (confirmed) return <ConfirmedView record={confirmed} busy={busy} error={error} message={message} canRepeatDelivery={Boolean(lastConfirmedDraft)} onBack={onBack} onPrint={() => void printConfirmedReceipt(confirmed)} onCreateAnotherItem={createAnotherItemForSameDelivery} onStartAnotherLoad={() => { setConfirmed(null); setMessage(null); setError(null); }} />;
-  if (preview) return <PreviewView options={options} draft={draft} calculation={calculation} issues={issues} busy={busy} onBack={() => setPreview(false)} onConfirm={() => void doConfirm()} />;
+  if (preview) return <PreviewView options={options} draft={draft} calculation={calculation} issues={issues} busy={busy} onBack={() => setPreview(false)} onConfirm={() => void doConfirm()} seriesRepository={seriesRepository} />;
 
   return (
     <View style={styles.screen}>
@@ -263,7 +268,8 @@ function ConfirmedView({ record, busy, error, message, canRepeatDelivery, onBack
       <PageHeader eyebrow="LOAD WORKFLOW" title="Load confirmed" onBack={onBack} />
       <View style={styles.confirmedHero}>
         <Text style={styles.confirmedKicker}>CONFIRMED OFFLINE</Text>
-        <Text style={styles.confirmedNumber}>{record.transactionNumber}</Text>
+        <Text style={styles.confirmedNumber}>{loadNumberLabel(record.loadNumber)}</Text>
+        <Text style={styles.confirmedHint}>Load number{record.loadNumberSeriesName?` · ${record.loadNumberSeriesName} series`:''} · Transaction {record.transactionNumber} (Receipt and Delivery Authorization)</Text>
         <Text style={styles.confirmedHint}>The permanent record is saved even if printing fails. Print the Receipt now; add the driver's signature in Load History before printing the Delivery Authorization.</Text>
       </View>
       {error ? <Feedback kind="error">{error}</Feedback> : null}
@@ -282,11 +288,23 @@ function ConfirmedView({ record, busy, error, message, canRepeatDelivery, onBack
   );
 }
 
-function PreviewView({ options, draft, calculation, issues, busy, onBack, onConfirm }: { options: LoadSetupOptions; draft: LoadDraft; calculation: ReturnType<typeof calculateLoad>; issues: string[]; busy: boolean; onBack: () => void; onConfirm: () => void }) {
+function PreviewView({ options, draft, calculation, issues, busy, onBack, onConfirm, seriesRepository }: { options: LoadSetupOptions; draft: LoadDraft; calculation: ReturnType<typeof calculateLoad>; issues: string[]; busy: boolean; onBack: () => void; onConfirm: () => void; seriesRepository?: LoadNumberSeriesRepository }) {
+  const [nextNumber, setNextNumber] = useState<LoadNumberPreview | null>(null);
+  useEffect(() => {
+    if (!seriesRepository || !draft.itemId || !draft.recordDate) { setNextNumber(null); return; }
+    let active = true;
+    seriesRepository.previewNextLoadNumber(draft.itemId, draft.recordDate).then((value) => { if (active) setNextNumber(value); }).catch(() => { if (active) setNextNumber(null); });
+    return () => { active = false; };
+  }, [seriesRepository, draft.itemId, draft.recordDate]);
   return (
     <Animated.ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <PageHeader eyebrow="FINAL REVIEW" title="Confirm this load" onBack={onBack} />
       <FinalReviewSummary options={options} draft={draft} calculation={calculation} />
+      {nextNumber ? <View style={styles.loadNumberPreview} accessible accessibilityLabel={`This load will be numbered ${nextNumber.loadNumber}, ${nextNumber.displayName} series, when confirmed.`}>
+        <Text style={styles.loadNumberLabel}>Load number on confirmation</Text>
+        <Text style={styles.loadNumberValue}>{nextNumber.loadNumber}</Text>
+        <Text style={styles.loadNumberHint}>{nextNumber.displayName} series. The number is given only when you confirm, and never changes or is reused.</Text>
+      </View> : null}
       <LoadDocuments data={draftDocument(options, draft, calculation)} isDraft />
       <IssueList issues={issues} />
       <AppButton label="Confirm This Load" busy={busy} onPress={onConfirm} />
@@ -330,7 +348,7 @@ function IssueList({ issues }: { issues: string[] }) { if (!issues.length) retur
 function draftDocument(options: LoadSetupOptions, draft: LoadDraft, calculation: ReturnType<typeof calculateLoad>): DocumentViewData { const customer = options.customers.find((v) => v.id === draft.customerId); const project = options.projects.find((v) => v.id === draft.projectId); const item = options.items.find((v) => v.id === draft.itemId); const conversion = options.conversions.find((v) => v.id === draft.conversionId); const unit = options.units.find(v => v.id === draft.directUnitId); const direct = draft.quantityMethod === 'direct'; return { quantityMethod: draft.quantityMethod, companyName: options.companySettings.companyName, companyAddress: options.companySettings.address, companyPhone: options.companySettings.phone, companyEmail: options.companySettings.email, companyTaxVatNumber: options.companySettings.taxVatNumber, companyReceiptFooter: options.companySettings.receiptFooter, transactionNumber: '', dateTime: new Date(`${draft.recordDate}T12:00:00`).toISOString(), customerName: customer?.name ?? '', projectName: project?.name ?? null, destinationAddress: project?.location ?? (draft.destinationAddress.trim() || null), itemName: item?.name ?? '', driverName: draft.driverName.trim(), driverRole: options.drivers.find((v) => v.id === draft.driverId)?.role ?? null, truckPlate: draft.truckPlate.trim(), requestedQuantityKg: !direct && draft.requestedQuantityKg ? Number(draft.requestedQuantityKg) : null, emptyWeightKg: !direct && draft.emptyWeightKg ? Number(draft.emptyWeightKg) : null, fullWeightKg: !direct && draft.fullWeightKg ? Number(draft.fullWeightKg) : null, netWeightKg: calculation.netWeightKg, convertedQuantity: calculation.billedQuantity, outputUnitSymbol: direct ? (unit?.symbol ?? null) : (conversion?.outputUnitSymbol ?? null), unitPriceUsd: draft.unitPriceUsd.trim() ? Number(draft.unitPriceUsd.replace(',', '.')) : null, subtotalUsd: calculation.subtotalUsd, vatRatePercent: draft.unitPriceUsd.trim() ? options.companySettings.vatRatePercent : null, vatAmountUsd: calculation.vatAmountUsd, finalTotalUsd: calculation.finalTotalUsd, signaturePaths: [] }; }
 export function confirmedDocument(record: ConfirmedLoad): DocumentViewData { return { quantityMethod: record.quantityMethod, companyName: record.companyName, companyAddress: record.companyAddress, companyPhone: record.companyPhone, companyEmail: record.companyEmail, companyTaxVatNumber: record.companyTaxVatNumber, companyReceiptFooter: record.companyReceiptFooter, transactionNumber: record.transactionNumber, dateTime: record.confirmedAt, customerName: record.customerName, projectName: record.projectName, destinationAddress: record.projectLocation ?? record.destinationAddress, itemName: record.itemName, driverName: record.driverName, driverRole: record.driverRole ?? null, truckPlate: record.truckPlate, requestedQuantityKg: record.requestedQuantityKg, emptyWeightKg: record.emptyWeightKg, fullWeightKg: record.fullWeightKg, netWeightKg: record.netWeightKg, convertedQuantity: record.billedQuantity, outputUnitSymbol: record.outputUnitSymbol, unitPriceUsd: record.unitPriceUsd, subtotalUsd: record.subtotalUsd, vatRatePercent: record.vatRatePercent, vatAmountUsd: record.vatAmountUsd, finalTotalUsd: record.finalTotalUsd, signaturePaths: record.signaturePaths }; }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create({ loadNumberPreview: { backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: '#C9D7E6', padding: 14, gap: 3 }, loadNumberLabel: { color: colors.navy, fontSize: 12, fontWeight: '700' }, loadNumberValue: { color: colors.ink, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] }, loadNumberHint: { color: '#4F5B66', fontSize: 13, lineHeight: 18 },
   screen: { flex: 1 }, content: { padding: 20, paddingBottom: 42, gap: 16 }, contentWithFooter: { paddingBottom: 125 }, flex: { flex: 1, minWidth: 0 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 60 }, loadingMark: { width: 46, height: 46, borderRadius: 23, textAlign: 'center', textAlignVertical: 'center', overflow: 'hidden', backgroundColor: colors.navy, color: '#FFF', fontSize: 24, fontWeight: '900' },
   helper: { color: colors.muted, fontSize: 13, lineHeight: 19 },

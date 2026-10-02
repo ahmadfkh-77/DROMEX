@@ -71,7 +71,7 @@ const ARABIC_LABELS: Record<string, string> = {
   'Sales USD': 'المبيعات بالدولار', 'Purchase USD': 'المشتريات بالدولار', 'Billed USD': 'المفوتر بالدولار',
   'Paid USD': 'المدفوع بالدولار', 'Remaining USD': 'المتبقي بالدولار', Litres: 'الليترات', Count: 'العدد',
   'Daily Report Count': 'عدد التقارير اليومية', 'Total Litres Filled': 'إجمالي الليترات المعبأة', 'Fill Count': 'عدد التعبئات',
-  'Record ID': 'معرف السجل', 'Transaction Number': 'رقم العملية', 'Confirmed At': 'وقت التأكيد', 'Customer ID': 'معرف العميل',
+  'Record ID': 'معرف السجل', 'Transaction Number': 'رقم العملية', 'Load Number': 'رقم الحمولة', 'Confirmed At': 'وقت التأكيد', 'Customer ID': 'معرف العميل',
   'Project ID': 'معرف المشروع', Destination: 'الوجهة', 'Item ID': 'معرف المادة', 'Item Code': 'رمز المادة', Driver: 'السائق',
   'Truck Plate': 'لوحة الشاحنة', 'Net Weight kg': 'الوزن الصافي كغ', 'Billed Quantity': 'الكمية المفوترة', Unit: 'الوحدة',
   'Unit Price USD': 'سعر الوحدة بالدولار', 'Subtotal USD': 'المجموع قبل الضريبة بالدولار', 'VAT Rate %': 'نسبة الضريبة %',

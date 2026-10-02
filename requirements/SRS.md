@@ -2209,3 +2209,52 @@ DEC-482, DEC-483, DEC-485 and DEC-486. Migration 47. Physically accepted on Andr
 
 ### Status
 Implemented with automated tests and physically accepted on Android build 22 (2026-09-24).
+
+## Company Totals, Invoices & Bills, Authorized Signers and Company Load Number Series
+
+DEC-487. Migration 48. Implemented with automated tests; tested by the Owner in Expo Go on 2026-10-02; APK acceptance pending.
+
+### Company and Project Totals
+- FR-CT-1: Home shall offer a Totals destination showing company-wide totals: Material → Project → Supplier → original records. Project → Totals shall show Material → Supplier → original records for one project through the same views, so a document started from either is the same document.
+- FR-CT-2: Delivered (Active Supplier Loads and Active, non-archived company loads) and Used (Daily Report material lines marked Used) shall be shown as separate, labelled measures; Transported stays its own measure. Units shall never be converted or added across; each unit has its own line.
+- FR-CT-3: A company load shall appear under "Company loads — own deliveries", never as a supplier. A company load without a project shall appear under "No project — direct customer deliveries". Use is not recorded per supplier and shall never be shown under a supplier.
+- FR-CT-4: Only projects, suppliers and materials with records shall appear. A missing measure shall read "Not recorded", never zero. "Delivered minus recorded use" appears only at project level where one unit has both, and is stated not to be an inventory balance.
+- FR-CT-5: Recorded value shall add only priced records and state how many records are unpriced.
+- FR-CT-6: Filters: inclusive date range, material/item, project, supplier, unit, Delivered / Used / All, company-load number series (including legacy loads), and document status (All / Not included / In draft / Included / Cancelled history). Use is hidden, with the reason stated, while a supplier, series or document-status filter applies.
+- FR-CT-7: Each original record shall show its item, quantity and unit, project, supplier or customer, company-load number (or the legacy wording), date and time, transaction or Supplier Load number, supplier ticket, price only where recorded, correction count, cancellation, and its document status; tapping it opens the record's own screen.
+- FR-CT-8: Company Load Totals shall group company loads by number series or by item, then by project, then the individual loads, with load counts and per-unit totals, cancelled loads listed apart and never counted, filters for dates, item, project, unit, series and status, and an A4 PDF with repeated table headings.
+
+### Invoices & Bills
+- FR-IB-1: A document is one of: Customer statement (Internal), Invoice (Official), Supplier statement (Internal), Bill (Official). It is addressed to one customer or one supplier and is Draft, Issued or Cancelled; it is never deleted.
+- FR-IB-2: A document may be started from Totals (current filtered results, the Covering date range, or records ticked one by one) or from a customer's or supplier's Invoices & Bills (a date range or records ticked one by one). A review screen shall list every candidate with its item, project, party, date and time, quantity and unit, recorded price, reference and status, allow unticking, show totals per unit, and explain missing prices before a draft is saved.
+- FR-IB-3: Records already in an Issued document of the same kind shall be listed apart, naming that document, and cannot be added. A draft never blocks a record. Records outside a date-range selection shall be refused, never silently added.
+- FR-IB-4: Issuing shall re-check every record inside one transaction, refuse cancelled or archived records and same-kind conflicts, freeze each record's snapshot, the issuer, recipient, terms, signer and company logo, and only then consume a number `{PREFIX}-{YYYY}-{NNN}` (year of issue). An Official document may use an overriding number, which must be unique.
+- FR-IB-5: Cancelling an Issued document shall require a reason, keep it in history with its number, mark its PDF CANCELLED, and free its records. Discarding a draft is cancelling it and consumes no number.
+- FR-IB-6: Every view — Home Totals, Project Totals, Company Load Totals, Invoices & Bills, Load History, Supplier Load details and the Daily Report editor — shall read inclusion status from the one link table; ordinary PDF and Excel exports shall never change it.
+- FR-IB-7: Invoices & Bills shall be searchable and filterable by status, kind, date range, project, item, number or reference, and current payment status (including overdue).
+- FR-IB-8: Payment status on a document shall be read live from Payments & Balances, labelled as current, and never printed.
+- FR-IB-9: Business Document Settings shall hold legal and trading name, address, phone, email, website, tax/VAT and company registration numbers, bank and payment instructions, payment terms, footer note, and a prefix and next number per document kind; each draft may override issuer, recipient and terms. Billing contacts shall be saved per customer and supplier. Empty fields read "Not configured" and print nothing. Documents state USD because DROMEX records every amount in US dollars. DROMEX shall make no legal, tax or accounting compliance claim.
+- FR-IB-10: The document PDF shall be A4, with the company logo and business identity on the left and the document title, number and dates on the right; parties; lines grouped by project with repeated headings; totals per unit; money totals from recorded prices only with an explanation of unpriced records; terms; the signer; and every record with its load number or legacy wording.
+
+### Authorized signers
+- FR-SG-1: Signers (printed name, job title, optional company or department, optional drawn signature, active or disabled) shall be managed from Business Document Settings and never deleted.
+- FR-SG-2: Creation, edits, signature changes, disabling, enabling and each use on a document shall be kept in the signer's history.
+- FR-SG-3: Issuing shall snapshot the signer as Name only or Name and signature; later changes to the signer shall never change an issued document. Signatures print without stretching. Drawing a signature shall not scroll the page.
+
+### Company Load Number Series
+- FR-LN-1: Every company load confirmed from this release shall receive one number `{PREFIX}-{YYYY}-{NNN}` (year of the load's record date), generated in the confirmation transaction from its item's active series, or the default `LOAD` series.
+- FR-LN-2: Series have a unique 2–5 letter prefix, a display name, annual numbering, an active state and assigned items; several items may share one series; an item belongs to one series; the default series cannot be deactivated. A prefix that loads already carry is locked.
+- FR-LN-3: A number shall never change after correction, cancellation, project or date change, restore or configuration change, and shall never be reused; every issued number is kept in an immutable history.
+- FR-LN-4: Loads confirmed before this release keep no number and read "Legacy load — no generated load number". No number is backfilled.
+- FR-LN-5: Make Company Load shall preview the number before confirmation and show it after; Load History, corrections, totals, original-record details, Daily Report PDFs and workbooks, the Completed Project report, the business analysis workbook and Company Load Totals shall show it, and Load History and corrections search it.
+
+### Data
+- DR-487-1: `load_number_series`, `load_number_counters` (per prefix and year), `load_number_issues` (immutable by trigger), `catalog_items.load_number_series_id`, and `loads.load_number` / `load_number_series_id` / `load_number_series_name` (unique, unchangeable once set by trigger).
+- DR-487-2: `business_documents`, `business_document_records` (document kind, status and issue date on each link; a partial unique index allows one Issued document per kind per record), `business_document_settings`, `business_document_counters`, `party_billing_contacts`, `document_signers`, `document_signer_events`.
+- DR-487-3: All of it is inside the encrypted backup; the issued-document logo is a media-bearing column. Sync-queue entries never carry signature strokes.
+
+### Deferred
+- Credit notes and adjustments, discounts, multi-currency, fuel deliveries on supplier bills, a separate document logo, cloud synchronisation of documents, and outstanding or unlinked quantities.
+
+### Status
+Implemented with automated tests on `feature/android-totals-documents-load-series`. Tested by the Owner in Expo Go on 2026-10-02 and confirmed working. APK upgrade-install acceptance pending.

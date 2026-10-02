@@ -24,6 +24,8 @@ import {
 import { SearchableSelect } from '../components/SearchableSelect';
 import { useReducedMotion } from '../components/ExpandableMenu';
 import { colors } from '../theme';
+import type { LoadNumberSeriesRepository } from '../../data/repositories/LoadNumberSeriesRepository';
+import { DEFAULT_SERIES_ID, type LoadNumberSeries } from '../../domain/loadNumberSeries';
 
 const usageLabels: Record<UsageArea, string> = {
   loads: 'Loads',
@@ -33,9 +35,12 @@ const usageLabels: Record<UsageArea, string> = {
 
 export function CatalogScreen({
   repository,
+  seriesRepository,
   onBack,
 }: {
   repository: CatalogRepository;
+  /** DEC-487. Offers each load item's Company Load Number Series. */
+  seriesRepository?: LoadNumberSeriesRepository;
   onBack: () => void;
 }) {
   const reducedMotion = useReducedMotion();
@@ -54,6 +59,8 @@ export function CatalogScreen({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState('');
   const [selectedUsage, setSelectedUsage] = useState<UsageArea[]>(['loads']);
+  const [seriesOptions, setSeriesOptions] = useState<LoadNumberSeries[]>([]);
+  const [selectedSeriesId, setSelectedSeriesId] = useState(DEFAULT_SERIES_ID);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [openCategories,setOpenCategories]=useState<Set<string>>(()=>new Set());
@@ -68,8 +75,9 @@ export function CatalogScreen({
     setItems(nextItems);
     setUnits(nextUnits);
     setCategoryId((current) => current || nextCategories[0]?.id || '');
+    if (seriesRepository) setSeriesOptions((await seriesRepository.listSeries()).filter((value) => value.isActive));
     setLoaded(true);
-  }, [repository]);
+  }, [repository, seriesRepository]);
 
   useEffect(() => {
     void refresh();
@@ -111,6 +119,7 @@ export function CatalogScreen({
       defaultUnitId,
       defaultReceiptPriceUsd: defaultPrice.trim() ? Number(defaultPrice.replace(',', '.')) : null,
       usageAreas: selectedUsage,
+      loadNumberSeriesId: seriesRepository && selectedUsage.includes('loads') ? selectedSeriesId : undefined,
     };
     const otherItems = items.filter((item) => item.id !== editingItemId);
     const issues = validateItemDraft(draft, otherItems);
@@ -139,6 +148,7 @@ export function CatalogScreen({
     defaultUnitId: string;
     defaultReceiptPriceUsd: number | null;
     usageAreas: UsageArea[];
+    loadNumberSeriesId?: string | null;
   }) {
     setBusy(true);
     setError(null);
@@ -156,7 +166,7 @@ export function CatalogScreen({
 
   function resetItemForm() {
     setEditingItemId(null); setItemName(''); setInternalCode(''); setDescription('');
-    setDefaultUnitId(''); setDefaultPrice(''); setSelectedUsage(['loads']);
+    setDefaultUnitId(''); setDefaultPrice(''); setSelectedUsage(['loads']); setSelectedSeriesId(DEFAULT_SERIES_ID);
   }
 
   function editItem(item: CatalogItem) {
@@ -164,7 +174,7 @@ export function CatalogScreen({
     setInternalCode(item.internalCode ?? ''); setDescription(item.description ?? '');
     setDefaultUnitId(item.defaultUnitId ?? '');
     setDefaultPrice(item.defaultReceiptPriceUsd == null ? '' : String(item.defaultReceiptPriceUsd));
-    setSelectedUsage(item.usageAreas); setError(null);
+    setSelectedUsage(item.usageAreas); setSelectedSeriesId(item.loadNumberSeriesId ?? DEFAULT_SERIES_ID); setError(null);
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 190, animated: true }));
   }
 
@@ -253,6 +263,17 @@ export function CatalogScreen({
             />
           ))}
         </View>
+        {seriesRepository && selectedUsage.includes('loads') ? (
+          <>
+            <Text style={styles.label}>Load number series</Text>
+            <View style={styles.chips}>
+              {seriesOptions.map((series) => (
+                <Chip key={series.id} label={`${series.prefix} · ${series.displayName}`} selected={selectedSeriesId === series.id} onPress={() => setSelectedSeriesId(series.id)} />
+              ))}
+            </View>
+            <Text style={styles.helper}>Future loads of this item are numbered in this series, e.g. {seriesOptions.find((series) => series.id === selectedSeriesId)?.nextNumber ?? 'LOAD-2026-001'}. Loads already numbered keep their number.</Text>
+          </>
+        ) : null}
         <TouchableOpacity style={styles.primaryButton} onPress={() => void addItem()} disabled={busy} accessibilityRole="button" accessibilityLabel={editingItemId ? 'Save item changes' : 'Create item'} accessibilityState={{ disabled: busy, busy }}>
           <Text style={styles.primaryButtonLabel}>{busy ? 'Saving…' : editingItemId ? 'Save item changes' : 'Create item'}</Text>
         </TouchableOpacity>

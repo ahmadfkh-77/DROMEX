@@ -22,6 +22,7 @@ type ItemRow = {
   loads_enabled: number;
   quarry_enabled: number;
   daily_reports_enabled: number;
+  load_number_series_id?: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -59,6 +60,7 @@ function rowToItem(row: ItemRow): CatalogItem {
         ? null
         : row.default_receipt_price_usd_cents / 100,
     usageAreas: itemUsageAreas,
+    loadNumberSeriesId: row.load_number_series_id ?? null,
     isActive: row.is_active === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -126,6 +128,7 @@ export class SqliteCatalogRepository implements CatalogRepository {
       defaultUnitId: draft.defaultUnitId?.trim() || null,
       defaultReceiptPriceUsd: draft.defaultReceiptPriceUsd ?? null,
       usageAreas: [...new Set(draft.usageAreas)],
+      loadNumberSeriesId: (await this.resolveSeries(draft.loadNumberSeriesId)) ?? null,
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -136,8 +139,8 @@ export class SqliteCatalogRepository implements CatalogRepository {
         `INSERT INTO catalog_items (
           id, category_id, name, internal_code, description, default_unit_id,
           default_receipt_price_usd_cents, loads_enabled, quarry_enabled,
-          daily_reports_enabled, is_active, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+          daily_reports_enabled, is_active, created_at, updated_at, load_number_series_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
         item.id,
         item.categoryId,
         item.name,
@@ -152,6 +155,7 @@ export class SqliteCatalogRepository implements CatalogRepository {
         item.usageAreas.includes('dailyReports') ? 1 : 0,
         now,
         now,
+        item.loadNumberSeriesId ?? null,
       );
       await this.enqueue('catalogItem', item.id, item);
     });
@@ -166,6 +170,7 @@ export class SqliteCatalogRepository implements CatalogRepository {
     if (!existing) throw new Error('Active item was not found.');
     const issues=validateItemDraft(draft,(await this.listItems()).filter(value=>value.id!==itemId));if(issues.length)throw new Error(issues.map(value=>value.message).join('\n'));
     const now = new Date().toISOString();
+    const series = await this.resolveSeries(draft.loadNumberSeriesId);
     const item: CatalogItem = {
       id: itemId,
       categoryId: draft.categoryId,
@@ -175,6 +180,7 @@ export class SqliteCatalogRepository implements CatalogRepository {
       defaultUnitId: draft.defaultUnitId?.trim() || null,
       defaultReceiptPriceUsd: draft.defaultReceiptPriceUsd ?? null,
       usageAreas: [...new Set(draft.usageAreas)],
+      loadNumberSeriesId: series === undefined ? existing.load_number_series_id ?? null : series,
       isActive: true,
       createdAt: existing.created_at,
       updatedAt: now,
@@ -186,9 +192,19 @@ export class SqliteCatalogRepository implements CatalogRepository {
         item.description, item.defaultUnitId, item.defaultReceiptPriceUsd == null ? null : Math.round(item.defaultReceiptPriceUsd * 100),
         item.usageAreas.includes('loads') ? 1 : 0, item.usageAreas.includes('quarry') ? 1 : 0,
         item.usageAreas.includes('dailyReports') ? 1 : 0, now, itemId);
+      if (series !== undefined) await this.db.runAsync('UPDATE catalog_items SET load_number_series_id=? WHERE id=?', series, itemId);
       await this.enqueue('catalogItem', itemId, item);
     });
     return item;
+  }
+
+  /** DEC-487. undefined: leave unchanged; null or the default series: no assignment; otherwise an active series. */
+  private async resolveSeries(seriesId: string | null | undefined): Promise<string | null | undefined> {
+    if (seriesId === undefined) return undefined;
+    if (seriesId === null) return null;
+    const series = await this.db.getFirstAsync<{ id: string; is_default: number; is_active: number }>('SELECT id, is_default, is_active FROM load_number_series WHERE id = ?', seriesId);
+    if (!series || series.is_active !== 1) throw new Error('Choose an active load number series.');
+    return series.is_default === 1 ? null : series.id;
   }
 
   private async enqueue(entityType: string, entityId: string, payload: unknown): Promise<void> {

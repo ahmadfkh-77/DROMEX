@@ -39,8 +39,8 @@ const version=(db:SqliteTestDatabase)=>(db.raw.prepare('PRAGMA user_version').ge
 describe('migration 47',()=>{
   it('brings a fresh database to version 47 with the new columns and table',async()=>{
     const db=await migratedDatabaseWithProject(databases);
-    expect(DATABASE_VERSION).toBe(47);
-    expect(version(db)).toBe(47);
+    expect(DATABASE_VERSION).toBeGreaterThanOrEqual(47);
+    expect(version(db)).toBe(DATABASE_VERSION);
     expect(columns(db,'opening_balances')).toEqual(expect.arrayContaining(['status','cancellation_reason','cancelled_at','status_before_cancellation']));
     expect(columns(db,'account_payments')).toEqual(expect.arrayContaining(['id','party_type','customer_id','supplier_id','party_name','amount_usd_cents','payment_date','method','reference','notes','application_mode','status','cancellation_reason','cancelled_at','created_at']));
     expect(columns(db,'payment_entries')).toContain('account_payment_id');
@@ -65,7 +65,7 @@ describe('migration 47',()=>{
       PRAGMA user_version = 46;
     `);
     await migrateDatabase(db as never);
-    expect(version(db)).toBe(47);
+    expect(version(db)).toBe(DATABASE_VERSION);
     expect(db.raw.prepare('SELECT status,payment_status,cancellation_reason,original_amount_usd_cents FROM opening_balances WHERE id=?').get('ob')).toEqual({status:'Active',payment_status:'Partially Paid',cancellation_reason:null,original_amount_usd_cents:90000});
     expect(db.raw.prepare('SELECT account_payment_id,amount_usd_cents,status FROM payment_entries WHERE id=?').get('pe')).toEqual({account_payment_id:null,amount_usd_cents:10000,status:'Active'});
   });

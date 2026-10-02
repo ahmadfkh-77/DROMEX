@@ -270,6 +270,10 @@ export type ConfirmedLoad = Omit<LoadCalculation, 'netWeightKg' | 'convertedQuan
   cancellationReason: string | null;
   cancelledAt: string | null;
   correctionHistory: LoadCorrectionEntry[];
+  /** DEC-487. The generated Company Load number, e.g. ASP-2026-004; null on a legacy load confirmed before series existed. */
+  loadNumber?: string | null;
+  /** The series display name snapshotted when the number was generated. */
+  loadNumberSeriesName?: string | null;
 };
 
 /** Mirrors correctLoad's own field validation so an invalid draft is blocked in the editor instead of surfacing as a raw repository error at Confirm. */

@@ -32,6 +32,7 @@ import {
 } from '../../domain/people';
 import { resolveConsultingAgencySelectorOptions, type ConsultingAgencyOption } from '../../domain/profiles';
 import { SqliteProfileRepository } from './SqliteProfileRepository';
+import { issueLoadNumber } from './SqliteLoadNumberSeriesRepository';
 
 type UnitRow = { id: string; name: string; symbol: string; is_active: number };
 type ConversionRow = {
@@ -81,6 +82,7 @@ type LoadRow = {
   status: 'Active' | 'Cancelled'; cancellation_reason: string | null; cancelled_at: string | null;
   correction_history_json: string | null;
   driver_profile_id: string | null; driver_role: TruckCrewRole | null;
+  load_number?: string | null; load_number_series_name?: string | null;
 };
 
 function makeId(prefix: string): string {
@@ -153,6 +155,7 @@ function loadFromRow(row: LoadRow): ConfirmedLoad {
     companyReceiptFooter: row.company_receipt_footer, companyLogoUri: row.company_logo_uri,
     status: row.status ?? 'Active', cancellationReason: row.cancellation_reason, cancelledAt: row.cancelled_at,
     correctionHistory: safeCorrectionHistory(row.correction_history_json),
+    loadNumber: row.load_number ?? null, loadNumberSeriesName: row.load_number_series_name ?? null,
   };
 }
 
@@ -491,11 +494,13 @@ export class SqliteLoadRepository implements LoadRepository {
         paymentStatus, clean(draft.notes), options.companySettings.companyName, options.companySettings.address,
         options.companySettings.phone, options.companySettings.email, options.companySettings.taxVatNumber, options.companySettings.receiptFooter, options.companySettings.logoUri,
         draft.quantityMethod, isDirect ? calculation.billedQuantity : null, isDirect ? directUnit!.id : null, isDirect ? directUnit!.name : null, isDirect ? directUnit!.symbol : null,enteredAt,crew.role);
+      // DEC-487. The Company Load number is generated in this same transaction, so the load and its number are saved together or not at all.
+      const issued = await issueLoadNumber(this.db, { loadId: id, itemId: item.id, recordDate: draft.recordDate, issuedAt: enteredAt });
       await this.db.runAsync('UPDATE device_state SET next_load_sequence = next_load_sequence + 1 WHERE id = ?', 'local');
       await this.db.runAsync('DELETE FROM load_drafts WHERE id = ?', 'current');
       await this.db.runAsync("DELETE FROM sync_outbox WHERE entity_type='loadDraft' AND entity_id='current'");
       await this.db.runAsync("INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES ('loadDraft','current','delete','{}',?)",confirmedAt);
-      await this.enqueue('load', id, { id, transactionNumber, confirmedAt,enteredAt });
+      await this.enqueue('load', id, { id, transactionNumber, confirmedAt,enteredAt, loadNumber: issued.loadNumber });
     });
     const row = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', id);
     if (!row) throw new Error('Confirmed load was not found.'); return loadFromRow(row);
