@@ -184,6 +184,12 @@ async correctDelivery(movementId:string,draft:FuelDeliveryCorrectionDraft):Promi
 }
 
 
+// DEC-492. The company printed on the Diesel Batch Report, read from Company Settings like the receipts.
+async getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>{
+  const row=await this.db.getFirstAsync<{company_name:string|null;logo_uri:string|null;address:string|null;phone:string|null;email:string|null}>("SELECT company_name,logo_uri,address,phone,email FROM company_settings WHERE id='company'");
+  const contact=[row?.address,row?.phone,row?.email].map(value=>value?.trim()).filter(Boolean).join(' · ');
+  return {name:row?.company_name?.trim()||'DROMEX',logoUri:row?.logo_uri?.trim()||null,contactLine:contact||null};
+}
 // DEC-492. Diesel batches. Tracking starts once, creates the Opening stock batch, and from then on every diesel
 // delivery is a batch. Everything else about deliveries, fills and readings keeps working as before.
 async getBatchOverview():Promise<DieselBatchOverview>{

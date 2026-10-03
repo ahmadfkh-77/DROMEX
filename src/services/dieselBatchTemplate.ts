@@ -8,7 +8,10 @@ import type {DieselBatchReport} from '../domain/dieselBatchReport';
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]??character));
 const css=(value:string)=>value.replace(/["\\]/g,'\\$&');
 
-export function buildDieselBatchReportHtml(report:DieselBatchReport,input:{companyName:string;logo:string|null}):string{
+export type DieselReportCompany={companyName:string;logo:string|null;contactLine:string|null};
+
+/** The header shows the company saved in Company Settings: its logo, name and contact details. */
+export function buildDieselBatchReportHtml(report:DieselBatchReport,input:DieselReportCompany):string{
   const prices=report.pricesIncluded;
   const running=`${input.companyName} · Diesel Batch Report · ${report.metadata[0]!.value}`;
   const head=`<tr><th class="c-date">Date</th><th>Equipment</th><th class="c-type">Type</th><th class="c-src">Source</th><th class="num c-l">Litres</th>${prices?'<th class="num c-p">Price / L</th><th class="num c-c">Cost</th>':''}</tr>`;
@@ -26,7 +29,7 @@ export function buildDieselBatchReportHtml(report:DieselBatchReport,input:{compa
 *{box-sizing:border-box}body{margin:0;font-family:"Noto Sans","Noto Sans Arabic",Arial,sans-serif;color:#111;font-size:9.5pt;line-height:1.35}
 bdi{unicode-bidi:isolate}.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.wrap{white-space:normal}
 .top{display:flex;justify-content:space-between;gap:16px;border-bottom:3px solid #173F67;padding-bottom:8px}
-.brand{font-size:17pt;font-weight:800;letter-spacing:.08em;color:#173F67}.brand small{display:block;font-size:8.5pt;font-weight:600;letter-spacing:.03em;color:#C84B31;margin-top:2px}.logo{max-height:16mm;max-width:34mm;display:block;margin-bottom:4px}
+.brand{font-size:10.5pt;font-weight:700;color:#173F67;overflow-wrap:anywhere}.contact{font-size:8pt;color:#444;margin-top:1px;overflow-wrap:anywhere}.logo{max-height:20mm;max-width:40mm;display:block;margin-bottom:3px}
 .top>div{min-width:0}.title{text-align:right;overflow-wrap:anywhere}.title h1{margin:0;font-size:14pt}.title p{margin:2px 0 0;font-size:9pt;color:#333}
 .meta{display:grid;grid-template-columns:1fr 1fr;gap:3px 18px;margin:10px 0 6px;font-size:8.8pt}.meta div{display:flex;gap:8px}.meta b{min-width:92px;color:#444;font-weight:600}
 .summary{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #999;margin:10px 0 4px}.summary div{padding:7px 8px;border-left:1px solid #999}.summary div:first-child{border-left:0}.summary .k{font-size:7.5pt;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#444}.summary .v{font-size:13pt;font-weight:800}.summary .shade{background:#E9EEF4}
@@ -41,7 +44,7 @@ tr.daytotal td{font-weight:700;background:#F5F5F5;border-bottom:1px solid #999}t
 .final{break-before:page}table.totals{width:100%;border-collapse:collapse;margin-top:8px}table.totals td,table.totals th{padding:6px 8px;border-bottom:1px solid #DDD;text-align:left;vertical-align:top;overflow-wrap:anywhere}table.totals th{font-size:7.5pt;text-transform:uppercase;letter-spacing:.04em;color:#333;background:#F2F3F5}table.totals .strong td{border-top:2px solid #111;font-weight:800}
 .adj{border:1px solid #A07A1E;background:#FFF8E6;padding:7px 9px;margin-top:10px;font-size:8.8pt}.adj b{display:block}.empty{border:1px dashed #999;padding:14px;margin-top:14px;text-align:center}
 </style></head><body>
-<header class="top"><div>${input.logo?`<img class="logo" src="${input.logo}"/>`:''}<div class="brand">${e(input.companyName)}<small>Construction &amp; Plant Management</small></div></div><div class="title"><h1>Diesel Batch Report</h1><p>${e(report.scopeLabel)}</p></div></header>
+<header class="top"><div>${input.logo?`<img class="logo" src="${input.logo}"/>`:''}<div class="brand">${e(input.companyName)}</div>${input.contactLine?`<div class="contact"><bdi dir="auto">${e(input.contactLine)}</bdi></div>`:''}</div><div class="title"><h1>Diesel Batch Report</h1><p>${e(report.scopeLabel)}</p></div></header>
 <div class="meta">${report.metadata.map(item=>`<div><b>${e(item.label)}</b><span><bdi dir="auto">${e(item.value)}</bdi></span></div>`).join('')}</div>
 <div class="summary"><div><div class="k">Delivered</div><div class="v">${e(litres(report.summary.deliveredLitres))}</div></div><div><div class="k">Filled</div><div class="v">${e(litres(report.summary.filledLitres))}</div></div><div><div class="k">Adjustments</div><div class="v">${e(litres(report.summary.adjustmentLitres))}</div></div><div class="shade"><div class="k">Remaining</div><div class="v">${e(litres(report.summary.remainingLitres))}</div></div></div>
 ${report.summary.filteredNote?`<p class="note">${e(report.summary.filteredNote)}</p>`:''}

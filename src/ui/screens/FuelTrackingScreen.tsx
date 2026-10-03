@@ -104,7 +104,7 @@ export function FuelTrackingScreen({repository,onBack,initialProjectId,lockedPro
   const exportReport=async(filter:DieselExportFilter,includePrices:boolean)=>{
     const projects=lockedProjectId&&!setup.projects.some(project=>project.id===lockedProjectId)?[...setup.projects,{id:lockedProjectId,name:projectName}]:setup.projects;
     const report=buildDieselBatchReport({movements:overview.movements,overview:batchOverview,names:{projects,companySites:setup.companySites,stations:setup.fuelStations},filter:{...filter,includePrices},exportedAt:new Date().toISOString()});
-    await exportAndShareDieselBatchReport(report);
+    await exportAndShareDieselBatchReport(report,await repository.getCompanyIdentity());
   };
   // DEC-492, Screen C. A batch opens as its own page.
   const openBatch=selectedBatchId?batchOverview.batches.find(value=>value.id===selectedBatchId):undefined;

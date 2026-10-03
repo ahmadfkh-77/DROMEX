@@ -479,3 +479,17 @@ describe('previewing a fill before it is saved',()=>{
     expect(await repository.previewTankFill({litres:'10',batchId:'',recordDate:'2026-10-03'})).toBeNull();
   });
 });
+
+describe('the company shown on the Diesel Batch Report',()=>{
+  it('comes from Company Settings: name, logo and contact details',async()=>{
+    const {db,repository}=await setup();
+    db.raw.exec(`INSERT INTO company_settings (id,company_name,logo_uri,address,phone,email,updated_at) VALUES ('company','Fakih Asphalt','file:///logo.png','Main Road, Hasbaya','+961 70 123 456','info@fakih.example','${SEED_TIME}')`);
+    expect(await repository.getCompanyIdentity()).toEqual({name:'Fakih Asphalt',logoUri:'file:///logo.png',contactLine:'Main Road, Hasbaya · +961 70 123 456 · info@fakih.example'});
+  });
+  it('leaves out contact details that are not set, and falls back to DROMEX only when no company is saved',async()=>{
+    const {db,repository}=await setup();
+    expect(await repository.getCompanyIdentity()).toEqual({name:'DROMEX',logoUri:null,contactLine:null});
+    db.raw.exec(`INSERT INTO company_settings (id,company_name,phone,updated_at) VALUES ('company','Fakih Asphalt','+961 70 123 456','${SEED_TIME}')`);
+    expect(await repository.getCompanyIdentity()).toEqual({name:'Fakih Asphalt',logoUri:null,contactLine:'+961 70 123 456'});
+  });
+});

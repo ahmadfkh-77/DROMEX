@@ -16,7 +16,8 @@ const report=(extra:Partial<DieselBatchReport>={}):DieselBatchReport=>({
   adjustments:[{label:'Dip adjustment · Sat 3 Oct 2026 · DSL-2026-00004',detail:'Calculated remaining 560 L · Dip reading 540 L · Adjustment −20 L'}],
   pricesIncluded:false,empty:false,fileName:'Diesel-Batch-Report-DSL-2026-00004.pdf',...extra,
 });
-const html=(extra:Partial<DieselBatchReport>={})=>buildDieselBatchReportHtml(report(extra),{companyName:'DROMEX',logo:null});
+const COMPANY={companyName:'Fakih Asphalt & Contracting',logo:null,contactLine:'Main Road, Hasbaya · +961 70 123 456 · info@fakih.example'};
+const html=(extra:Partial<DieselBatchReport>={},company:Parameters<typeof buildDieselBatchReportHtml>[1]=COMPANY)=>buildDieselBatchReportHtml(report(extra),company);
 
 describe('Diesel Batch Report PDF',()=>{
   it('is A4 with the running title and Page X of Y in the margins of every page',()=>{
@@ -24,11 +25,11 @@ describe('Diesel Batch Report PDF',()=>{
     expect(page).toContain('size:A4');
     expect(page).toContain('counter(page)');
     expect(page).toContain('counter(pages)');
-    expect(page).toContain('DROMEX · Diesel Batch Report · DSL-2026-00004');
+    expect(page).toContain('Fakih Asphalt & Contracting · Diesel Batch Report · DSL-2026-00004');
   });
-  it('opens with DROMEX, the title, the batch and invoice, every filter written out, and the four figures',()=>{
+  it('opens with the company, the title, the batch and invoice, every filter written out, and the four figures',()=>{
     const page=html().slice(html().indexOf('<body>'));
-    const order=['Construction &amp; Plant Management','Diesel Batch Report','DSL-2026-00004 · Invoice 55821','Project filter','Date range','Prices','Delivered','Filled','Adjustments','Remaining'].map(text=>page.indexOf(text));
+    const order=['Fakih Asphalt &amp; Contracting','Main Road, Hasbaya · +961 70 123 456 · info@fakih.example','Diesel Batch Report','DSL-2026-00004 · Invoice 55821','Project filter','Date range','Prices','Delivered','Filled','Adjustments','Remaining'].map(text=>page.indexOf(text));
     expect(order.every(index=>index>=0)).toBe(true);
     expect([...order].sort((a,b)=>a-b)).toEqual(order);
     expect(page).toContain('−20 L');
@@ -82,5 +83,27 @@ describe('Diesel Batch Report PDF',()=>{
   });
   it('says so plainly when nothing matches',()=>{
     expect(html({empty:true,sections:[]})).toContain('No fills match these filters.');
+  });
+
+  it('uses the company name, logo and contact details from Company Settings, never a fixed DROMEX header',()=>{
+    const page=html();
+    expect(page).not.toContain('Construction &amp; Plant Management');
+    expect(page).not.toContain('Construction & Plant Management');
+    expect(page).toContain('<div class="brand">Fakih Asphalt &amp; Contracting</div>');
+    expect(html({},{...COMPANY,logo:'data:image/png;base64,AAAA'})).toContain('<img class="logo" src="data:image/png;base64,AAAA"/>');
+    expect(page).not.toContain('<img class="logo"');
+    expect(html({},{...COMPANY,contactLine:null})).not.toContain('class="contact"');
+  });
+});
+
+describe('Diesel Batch Report header layout (Owner, 2026-10-04)',()=>{
+  it('puts the logo at the top left with the company name under it in a smaller font',()=>{
+    const page=buildDieselBatchReportHtml(report(),{companyName:'Fakih Asphalt',logo:'data:image/png;base64,AAAA',contactLine:'Hasbaya'});
+    const header=page.slice(page.indexOf('<header class="top">'),page.indexOf('</header>'));
+    expect(header.indexOf('<img class="logo"')).toBeLessThan(header.indexOf('<div class="brand">'));
+    expect(header.indexOf('<div class="brand">')).toBeLessThan(header.indexOf('<div class="contact">'));
+    expect(header.indexOf('<img class="logo"')).toBeLessThan(header.indexOf('Diesel Batch Report'));
+    expect(page).toContain('.brand{font-size:10.5pt');
+    expect(page).toContain('.logo{max-height:20mm;max-width:40mm;display:block');
   });
 });

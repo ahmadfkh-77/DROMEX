@@ -154,3 +154,11 @@ describe('History and Usage tabs in the day-card design (amended 2026-10-03)',()
     expect(usage).toContain('Export ${chosen.type===');
   });
 });
+
+describe('Diesel Batch Report header',()=>{
+  it('prints the company from Company Settings with its logo',()=>{
+    expect(source('src/ui/screens/FuelTrackingScreen.tsx')).toContain('exportAndShareDieselBatchReport(report,await repository.getCompanyIdentity())');
+    expect(source('src/services/documentExport.ts')).toContain('const logo=await imageUriToDataUrl(company.logoUri)');
+    expect(source('src/services/dieselBatchTemplate.ts')).not.toContain('Plant Management');
+  });
+});
