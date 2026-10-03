@@ -1075,8 +1075,16 @@ rather than any change to production code, which was already correct.
 **Known limits, not yet addressed:**
 
 - The ASVS 6.5.5 and NIST SP 800-63B §3.1.2.2 deviations above.
-- Better Auth's server-only `viewBackupCodes` enforces no session check; it
-  is not mounted on any route and no DROMEX code calls it yet.
+- Better Auth's server-only `viewBackupCodes` enforces no session check, and
+  it is not mounted on any route. *(Updated 2026-10-04: three DROMEX callers
+  now exist — web recovery (`auth/recovery-http.ts`, through the server's
+  recovery backend), invitation setup (`invitations/invitation-acceptance.ts`
+  through `enrolment-identity.ts`), and terminal recovery
+  (`provisioning/terminal-recovery.ts` through
+  `terminal-recovery-identity.ts`). Each passes a server-derived user ID —
+  the verified session's user, the invited user after their TOTP-verified
+  session matches, or the Owner resolved after the terminal password check —
+  never one taken from a request. No test yet enforces that rule.)*
 - `dromex_rate_limit` rows are still never pruned.
 - Timing equivalence of failures is not measured, and cookie attributes are
   verified through Fastify injection rather than a real browser.

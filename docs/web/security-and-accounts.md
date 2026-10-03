@@ -7,8 +7,12 @@ requires an active DROMEX principal and completed MFA (DEC-434). Terminal
 Owner activation — identity, TOTP enrolment, recovery codes, and the Owner
 principal — exists as a local, interactive, non-HTTP service, tested only
 against disposable databases; it is **not approved for real use** until
-checkpoints 3F-B, 3F-C, and 3F-D are accepted and OQ-161 is resolved
-(DEC-435), its command refuses every run, and **no Owner exists**. An Owner
+checkpoints 3F-B, 3F-C, and 3F-D are accepted (DEC-435) and every item of
+the DEC-443 gate is met with production evidence, including a configured
+provider, SPF/DKIM/DMARC, a monitored `Reply-To` mailbox, a real delivery,
+a physically rehearsed password reset, and separate explicit Owner approval
+(OQ-161's design closure does not unblock it). Its command refuses every
+run, and **no Owner exists**. An Owner
 who has lost the authenticator can sign in with the password and one unused
 recovery code into a short-lived recovery state that reaches no business
 route and permits only replacing the authenticator, and every recovery step
