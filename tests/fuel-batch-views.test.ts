@@ -100,8 +100,8 @@ describe('a batch page lists the fills that drew from it',()=>{
   });
 
   it('totals the batch by project, company site and unassigned',()=>{
-    expect(batchDestinationTotals(buildFillRows(moves,over,{batchId:'b4'}))).toEqual([{type:'project',name:'Hasbaya Road',litres:360}]);
-    expect(batchDestinationTotals(buildFillRows(moves,over,{batchId:'b5'}))).toEqual([{type:'project',name:'Hasbaya Road',litres:60},{type:'company_site',name:'Main Yard',litres:50}]);
+    expect(batchDestinationTotals(buildFillRows(moves,over,{batchId:'b4'}))).toEqual([{type:'project',destinationId:'p1',name:'Hasbaya Road',litres:360}]);
+    expect(batchDestinationTotals(buildFillRows(moves,over,{batchId:'b5'}))).toEqual([{type:'project',destinationId:'p1',name:'Hasbaya Road',litres:60},{type:'company_site',destinationId:null,name:'Main Yard',litres:50}]);
   });
 });
 

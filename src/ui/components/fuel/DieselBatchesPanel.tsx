@@ -14,7 +14,7 @@ import {SegmentedChoice} from '../SegmentedChoice';
 import {BatchStatusBadge,FuelDayCard,GroupHeader,SectionTitle} from './FuelBatchParts';
 import {DieselPdfExportPanel} from './DieselPdfExportPanel';
 
-export type DieselExportFilter={batchId?:string;projectId?:string;companySiteId?:string;stationId?:string;fromDate?:string;toDate?:string};
+export type DieselExportFilter={batchId?:string;projectId?:string;companySiteId?:string;stationId?:string;unassigned?:boolean;fromDate?:string;toDate?:string};
 
 /**
  * DEC-492, Screen A of the approved design: the tank, the open batches oldest first, then closed batches,

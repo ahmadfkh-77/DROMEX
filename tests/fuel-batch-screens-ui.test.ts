@@ -117,3 +117,40 @@ describe('Screen F · exporting the Diesel Batch Report',()=>{
     expect(source('src/services/documentExport.ts')).toContain('No fills match these filters, so there is nothing to export.');
   });
 });
+
+describe('History and Usage tabs in the day-card design (amended 2026-10-03)',()=>{
+  const screen=source('src/ui/screens/FuelTrackingScreen.tsx');
+  const history=source('src/ui/components/fuel/FuelHistoryView.tsx');
+  const usage=source('src/ui/components/fuel/FuelUsageView.tsx');
+  const parts=source('src/ui/components/fuel/FuelBatchParts.tsx');
+  it('replaces the flat History list with a summary and one card per day holding deliveries, dip readings and fills',()=>{
+    expect(screen).toContain('<FuelHistoryView');
+    expect(screen).not.toContain('Movement history ·');
+    inOrder(history,['title="Fuel history"','label="Delivered in"','label="Filled out"','label="Dip adjustments"','label="Diesel in tank"','title="Records by day"']);
+    expect(history).toContain("title:'DELIVERIES IN'");
+    expect(history).toContain("title:'DIP READINGS'");
+    expect(history).toContain('onSelectRow={open}');
+  });
+  it('shows the History filters as removable chips with Clear all',()=>{
+    expect(screen).toContain('historyChips.map');
+    expect(screen).toContain('Remove filter ${label}');
+  });
+  it('strikes cancelled records through with their reason and lets every row open its record',()=>{
+    expect(parts).toContain("textDecorationLine:'line-through'");
+    expect(parts).toContain('Cancelled · {reason??');
+    expect(parts).toContain('accessibilityHint="Opens this record"');
+  });
+  it('replaces the old Usage blocks with the project-view layout for every destination',()=>{
+    expect(screen).toContain('<FuelUsageView');
+    inOrder(usage,["'Fuel used by destination'",'Total fuel used','From tank · batches','From tank · before batches','Outside stations','Fuel cost','title="By destination"','title="By source"','title="Filter fuel usage"','title="Fills by day"','<DieselPdfExportPanel']);
+    expect(usage).toContain('byDestination:true');
+  });
+  it('lets a project, site or Unassigned be tapped to show only its fills and export its own PDF',()=>{
+    expect(usage).toContain('onPress={()=>setChosen(total)}');
+    expect(usage).toContain("chosen.type==='project'?{projectId:");
+    expect(usage).toContain("{companySiteId:");
+    expect(usage).toContain('{unassigned:true}');
+    expect(usage).toContain('Show all destinations');
+    expect(usage).toContain('Export ${chosen.type===');
+  });
+});

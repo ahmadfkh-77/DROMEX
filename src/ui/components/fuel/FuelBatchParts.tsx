@@ -37,19 +37,50 @@ const typeLabel={project:'PROJECT',company_site:'COMPANY SITE',unassigned:'UNASS
 const totalLabel={project:'Project total',company_site:'Site total',unassigned:'Unassigned total',all:''} as const;
 
 /** Screen D. One card per day: every fill of that day inside, grouped by destination unless the screen is already one destination. */
-export function FuelDayCard({card,footer}:{card:DayCard;footer?:ReactNode}){
+/**
+ * A record row inside a day card. Tapping opens the record when the screen allows it; a cancelled record
+ * is struck through and tagged with its reason, and never counts in a total.
+ */
+function RecordRow({first,title,tag,time,detail,splitLine,litresText,cancelled,onPress,accessibilityLabel}:{first:boolean;title:string;tag:ReactNode;time:string;detail:string|null;splitLine?:string|null;litresText:string;cancelled:boolean;onPress?:()=>void;accessibilityLabel:string}){
+  const body=<>
+    <View style={styles.flex}>
+      <Text style={[styles.equipment,cancelled&&styles.struck]}>{title}</Text>
+      <View style={styles.meta}>{tag}<Text style={styles.metaText}>{time}</Text>{detail?<Text style={styles.metaText}>{detail}</Text>:null}</View>
+      {splitLine?<Text style={styles.split}>{splitLine}</Text>:null}
+    </View>
+    <Text style={[styles.litres,cancelled&&styles.struck]}>{litresText}</Text>
+  </>;
+  return onPress
+    ?<TouchableOpacity style={[styles.row,!first&&styles.rowDivider]} onPress={onPress} activeOpacity={.7} accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityHint="Opens this record">{body}</TouchableOpacity>
+    :<View style={[styles.row,!first&&styles.rowDivider]} accessibilityLabel={accessibilityLabel}>{body}</View>;
+}
+
+export function CancelledTag({reason}:{reason:string|null}){
+  return <Text style={[styles.tag,styles.tagCancelled]}>Cancelled · {reason??'No reason recorded'}</Text>;
+}
+
+export type DayCardExtraGroup={title:string;rows:{id:string;title:string;tag:{kind:'delivery'|'dip'|'cancelled';text:string};time:string;detail:string|null;litresText:string;cancelled:boolean}[]};
+
+/**
+ * Screen D. One card per day: every fill of that day inside, grouped by destination unless the screen is
+ * already one destination. History adds the day's deliveries and dip readings above the fills and heads
+ * the card with the litres in and out.
+ */
+export function FuelDayCard({card,footer,onSelectRow,extraGroups=[],headerRight}:{card:DayCard;footer?:ReactNode;onSelectRow?:(id:string)=>void;extraGroups?:DayCardExtraGroup[];headerRight?:ReactNode}){
+  const press=(id:string)=>onSelectRow?()=>onSelectRow(id):undefined;
   return <View style={styles.day} accessibilityLabel={`${card.label}, day total ${formatLitres(card.total)}`}>
-    <View style={styles.dayHead}><Text style={styles.dayDate}>{card.label}</Text><Text style={styles.dayTotal}>Day total <Text style={styles.dayTotalValue}>{formatLitres(card.total)}</Text></Text></View>
-    {card.groups.map((group,index)=><View key={group.key} style={[styles.groupBody,index>0&&styles.groupDivider]}>
+    <View style={styles.dayHead}><Text style={styles.dayDate}>{card.label}</Text>{headerRight??<Text style={styles.dayTotal}>Day total <Text style={styles.dayTotalValue}>{formatLitres(card.total)}</Text></Text>}</View>
+    {extraGroups.filter(group=>group.rows.length).map((group,index)=><View key={group.title} style={[styles.groupBody,index>0&&styles.groupDivider]}>
+      <Text style={[styles.typeLabel,styles.typeLabelNavy]}>{group.title}</Text>
+      {group.rows.map((row,rowIndex)=><RecordRow key={row.id} first={rowIndex===0} title={row.title} time={row.time} detail={row.detail} litresText={row.litresText} cancelled={row.cancelled} onPress={press(row.id)}
+        tag={<Text style={[styles.tag,row.tag.kind==='delivery'&&styles.tagDelivery,row.tag.kind==='dip'&&styles.tagDip,row.tag.kind==='cancelled'&&styles.tagCancelled]}>{row.tag.text}</Text>}
+        accessibilityLabel={`${row.title}, ${row.tag.text}, ${row.litresText}`}/>)}
+    </View>)}
+    {card.groups.map((group,index)=><View key={group.key} style={[styles.groupBody,(index>0||extraGroups.some(extra=>extra.rows.length))&&styles.groupDivider]}>
       {group.type!=='all'?<><Text style={styles.typeLabel}>{typeLabel[group.type]}</Text>{group.type!=='unassigned'?<Text style={styles.destination}>{group.name}</Text>:null}</>:null}
-      {group.rows.map((row,rowIndex)=><View key={row.id} style={[styles.row,rowIndex>0&&styles.rowDivider]}>
-        <View style={styles.flex}>
-          <Text style={styles.equipment}>{row.equipmentLabel}</Text>
-          <View style={styles.meta}><SourceTag source={row.source}/><Text style={styles.metaText}>{row.time}</Text>{row.detail?<Text style={styles.metaText}>{row.detail}</Text>:null}</View>
-          {row.splitLine?<Text style={styles.split}>{row.splitLine}</Text>:null}
-        </View>
-        <Text style={styles.litres}>{formatLitres(row.litres)}</Text>
-      </View>)}
+      {group.rows.map((row,rowIndex)=><RecordRow key={row.id} first={rowIndex===0} title={row.equipmentLabel} time={row.time} detail={row.detail} splitLine={row.cancelled?null:row.splitLine} litresText={formatLitres(row.litres)} cancelled={row.cancelled} onPress={press(row.id)}
+        tag={row.cancelled?<CancelledTag reason={row.cancellationReason}/>:<SourceTag source={row.source}/>}
+        accessibilityLabel={`${row.equipmentLabel}, ${row.cancelled?'cancelled':row.source.text}, ${formatLitres(row.litres)}`}/>)}
       {group.type!=='all'?<View style={styles.subtotal}><Text style={styles.subtotalText}>{totalLabel[group.type]}</Text><Text style={styles.subtotalText}>{formatLitres(group.total)}</Text></View>:null}
     </View>)}
     {footer}
@@ -62,6 +93,11 @@ const styles=StyleSheet.create({
   tagTank:{color:colors.navy,borderColor:colors.navy},
   tagStation:{color:colors.ink,borderColor:colors.line,backgroundColor:colors.creamSoft},
   tagBefore:{color:'#555555',borderColor:'#D4D4D4',backgroundColor:'#F1F1F1'},
+  tagDelivery:{color:colors.navy,borderColor:colors.navy,backgroundColor:'#EAF1F6'},
+  tagDip:{color:colors.warning,borderColor:'#F1CF83',backgroundColor:'#FFF4DC'},
+  tagCancelled:{color:colors.danger,borderColor:colors.danger},
+  struck:{textDecorationLine:'line-through',color:colors.muted},
+  typeLabelNavy:{color:colors.navy},
   badge:{fontSize:12,fontWeight:'900',paddingHorizontal:10,paddingVertical:3,borderRadius:999,overflow:'hidden',borderWidth:1.5},
   badgeInUse:{color:'#FFFFFF',backgroundColor:colors.navy,borderColor:colors.navy},
   badgeWaiting:{color:colors.navy,borderColor:colors.navy},

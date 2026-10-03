@@ -8,7 +8,7 @@ import {costSummaryLabel,formatLitres,formatMoney} from './fuelFillForm';
  * date range: computed here so it can be tested, then printed by the template. Gasoline is not part of
  * a diesel report; records from before batches and outside station fills keep their own source label.
  */
-export type DieselReportFilter={batchId?:string;projectId?:string;companySiteId?:string;stationId?:string;fromDate?:string;toDate?:string;includePrices:boolean};
+export type DieselReportFilter={batchId?:string;projectId?:string;companySiteId?:string;stationId?:string;/** Only fills with no destination. */unassigned?:boolean;fromDate?:string;toDate?:string;includePrices:boolean};
 type Named={id:string;name:string};
 export type DieselReportInput={movements:FuelMovement[];overview:DieselBatchOverview;names:{projects:Named[];companySites:Named[];stations:Named[]};filter:DieselReportFilter;exportedAt:string};
 
@@ -41,8 +41,9 @@ export function buildDieselBatchReport({movements,overview,names,filter,exported
     (!filter.projectId||(row.destinationType==='project'&&row.destinationId===filter.projectId))&&
     (!filter.companySiteId||(row.destinationType==='company_site'&&row.destinationId===filter.companySiteId))&&
     (!filter.stationId||row.stationId===filter.stationId)&&
+    (!filter.unassigned||row.destinationType==='unassigned')&&
     (!filter.fromDate||row.day>=filter.fromDate)&&(!filter.toDate||row.day<=filter.toDate));
-  const destinationFilter=Boolean(filter.projectId||filter.companySiteId||filter.stationId);
+  const destinationFilter=Boolean(filter.projectId||filter.companySiteId||filter.stationId||filter.unassigned);
 
   // The batches the report is about: the one batch, or those that supplied the fills shown and, with only
   // a date filter, those that arrived inside the dates.
@@ -91,7 +92,7 @@ export function buildDieselBatchReport({movements,overview,names,filter,exported
     scopeLabel,
     metadata:[
       {label:'Batch',value:scoped?scoped.batchNumber:'All batches'},{label:'Exported',value:exported},
-      {label:'Project filter',value:nameOf(names.projects,filter.projectId)??'All projects'},{label:'Site filter',value:nameOf(names.companySites,filter.companySiteId)??'All sites'},
+      {label:'Project filter',value:filter.unassigned?'Unassigned only':nameOf(names.projects,filter.projectId)??'All projects'},{label:'Site filter',value:filter.unassigned?'Unassigned only':nameOf(names.companySites,filter.companySiteId)??'All sites'},
       {label:'Station filter',value:nameOf(names.stations,filter.stationId)??'All stations'},{label:'Date range',value:dateRange},{label:'Prices',value:filter.includePrices?'Included':'Excluded'},
     ],
     summary:{

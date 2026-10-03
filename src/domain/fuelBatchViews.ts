@@ -47,6 +47,9 @@ export type DayFillRow={
   /** Every batch this fill drew from, in order. */
   batchIds:string[];
   stationId:string|null;
+  /** Only History shows cancelled fills: struck through, with their reason, never counted in a total. */
+  cancelled:boolean;
+  cancellationReason:string|null;
 };
 
 const time=(iso:string)=>{const value=new Date(iso);return `${String(value.getHours()).padStart(2,'0')}:${String(value.getMinutes()).padStart(2,'0')}`;};
@@ -56,10 +59,10 @@ const odometer=(value:string)=>/^\d+$/.test(value.trim())?value.trim().replace(/
  * One row per Active equipment fill. With `batchId`, only the fills that drew from that batch, each with
  * the litres it took from that batch (the split line still shows the whole fill).
  */
-export function buildFillRows(movements:FuelMovement[],overview:DieselBatchOverview,options:{batchId?:string}={}):DayFillRow[]{
+export function buildFillRows(movements:FuelMovement[],overview:DieselBatchOverview,options:{batchId?:string;includeCancelled?:boolean}={}):DayFillRow[]{
   const rows:DayFillRow[]=[];
   for(const movement of movements){
-    if(movement.type!=='fill'||movement.status!=='Active')continue;
+    if(movement.type!=='fill'||(movement.status!=='Active'&&!options.includeCancelled))continue;
     const batchInfo=overview.fills[movement.id];
     let litres=movement.litres;
     if(options.batchId){
@@ -75,6 +78,7 @@ export function buildFillRows(movements:FuelMovement[],overview:DieselBatchOverv
       equipmentLabel:`${movement.equipmentName??'Unknown equipment'} · ${movement.equipmentType==='truck'?'Truck':'Machine'}`,equipmentName:movement.equipmentName??'Unknown equipment',equipmentType:movement.equipmentType==='truck'?'Truck':'Machine',
       destinationType,destinationId:destinationType==='project'?movement.projectId:destinationType==='company_site'?movement.companySiteId??null:null,destinationName,
       source:fillSourceTag(movement,batchInfo),detail,splitLine:splitLine(batchInfo),batchIds:[...new Set(batchInfo?.portions.map(portion=>portion.batchId)??[])],stationId:movement.fuelSource==='station'?movement.fuelStationId??null:null,
+      cancelled:movement.status==='Cancelled',cancellationReason:movement.status==='Cancelled'?movement.cancellationReason:null,
     });
   }
   return rows;
@@ -90,27 +94,28 @@ export function groupFillsByDay(rows:DayFillRow[],options:{byDestination:boolean
   for(const row of rows)days.set(row.day,[...(days.get(row.day)??[]),row]);
   return [...days.entries()].sort(([a],[b])=>b.localeCompare(a)).map(([day,dayRows])=>{
     const sorted=[...dayRows].sort((a,b)=>a.confirmedAt.localeCompare(b.confirmedAt));
-    const total=round(sorted.reduce((sum,row)=>sum+row.litres,0));
+    const total=round(sorted.reduce((sum,row)=>sum+(row.cancelled?0:row.litres),0));
     if(!options.byDestination)return {day,label:fuelDayLabel(day),total,groups:[{type:'all',key:'all',name:'',total,rows:sorted}]};
     const groups=new Map<string,DayGroup>();
     for(const row of sorted){
       const key=row.destinationType==='unassigned'?'unassigned':`${row.destinationType}:${row.destinationId??row.destinationName}`;
       const group=groups.get(key)??{type:row.destinationType,key,name:row.destinationName,total:0,rows:[]};
-      group.rows.push(row);group.total=round(group.total+row.litres);groups.set(key,group);
+      group.rows.push(row);if(!row.cancelled)group.total=round(group.total+row.litres);groups.set(key,group);
     }
     const ordered=[...groups.values()].sort((a,b)=>ORDER[a.type as FuelDestinationType]-ORDER[b.type as FuelDestinationType]||a.name.localeCompare(b.name));
     return {day,label:fuelDayLabel(day),total,groups:ordered};
   });
 }
 
-export type DestinationTotal={type:FuelDestinationType;name:string;litres:number};
+export type DestinationTotal={type:FuelDestinationType;destinationId:string|null;name:string;litres:number};
 
 /** Screen C, "Totals by destination": projects, company sites, then unassigned, alphabetically. */
 export function batchDestinationTotals(rows:DayFillRow[]):DestinationTotal[]{
   const totals=new Map<string,DestinationTotal>();
   for(const row of rows){
     const key=`${row.destinationType}:${row.destinationId??row.destinationName}`;
-    const total=totals.get(key)??{type:row.destinationType,name:row.destinationName,litres:0};
+    if(row.cancelled)continue;
+    const total=totals.get(key)??{type:row.destinationType,destinationId:row.destinationId,name:row.destinationName,litres:0};
     total.litres=round(total.litres+row.litres);totals.set(key,total);
   }
   return [...totals.values()].sort((a,b)=>ORDER[a.type]-ORDER[b.type]||a.name.localeCompare(b.name));
@@ -159,7 +164,12 @@ export type ProjectFuelSummary={
 
 /** Screen E. A project's fuel by source, with priced cost and the unpriced litres counted openly. */
 export function projectFuelSummary(projectId:string,movements:FuelMovement[],overview:DieselBatchOverview):ProjectFuelSummary{
-  const fills=movements.filter(movement=>movement.type==='fill'&&movement.status==='Active'&&movement.projectId===projectId);
+  return summarise(movements.filter(movement=>movement.type==='fill'&&movement.status==='Active'&&movement.projectId===projectId),overview);
+}
+
+const destinationKey=(fill:FuelMovement)=>{const type=fill.destinationType??(fill.projectId?'project':'unassigned');return type==='project'?`p:${fill.projectId}`:type==='company_site'?`s:${fill.companySiteId}`:'u';};
+
+function summarise(fills:FuelMovement[],overview:DieselBatchOverview):ProjectFuelSummary&{destinationCount:number}{
   let tank=0,before=0,station=0,gasoline=0,cost=0,priced=0,unpriced=0;
   const byBatch=new Map<string,number>(),byStation=new Map<string,number>(),equipment=new Set<string>(),days=new Set<string>();
   for(const fill of fills){
@@ -185,5 +195,75 @@ export function projectFuelSummary(projectId:string,movements:FuelMovement[],ove
   return {
     totalLitres:round(tank+before+station+gasoline),tankBatchLitres:round(tank),beforeBatchesLitres:round(before),stationLitres:round(station),gasolineLitres:round(gasoline),
     costUsd:priced>0?Math.round(cost*100)/100:null,unpricedLitres:round(unpriced),fillCount:fills.length,equipmentCount:equipment.size,dayCount:days.size,bySource,
+    destinationCount:new Set(fills.map(destinationKey)).size,
+  };
+}
+
+export type UsageFilter={destinationType?:FuelDestinationType;destinationId?:string|null;fromDate?:string;toDate?:string;query?:string};
+
+/** The Usage tab's fills: Active equipment fills matching a destination, the dates and a search. */
+export function filterUsageFills(movements:FuelMovement[],filter:UsageFilter):FuelMovement[]{
+  const query=filter.query?.trim().toLocaleLowerCase('en-US')??'';
+  return movements.filter(fill=>{
+    if(fill.type!=='fill'||fill.status!=='Active')return false;
+    const type=fill.destinationType??(fill.projectId?'project':'unassigned');
+    if(filter.destinationType&&type!==filter.destinationType)return false;
+    if(filter.destinationId&&(type==='project'?fill.projectId:fill.companySiteId)!==filter.destinationId)return false;
+    const day=localDateKey(fill.confirmedAt);
+    if(filter.fromDate&&day<filter.fromDate)return false;
+    if(filter.toDate&&day>filter.toDate)return false;
+    if(query&&!`${fill.projectName??''} ${fill.companySiteName??''} ${type==='unassigned'?'unassigned':''} ${fill.equipmentName??''} ${fill.fuelStationName??''} ${fill.notes??''}`.toLocaleLowerCase('en-US').includes(query))return false;
+    return true;
+  });
+}
+
+/** The Usage tab's summary card for the fills a filter keeps. */
+export function fuelUsageSummary(movements:FuelMovement[],overview:DieselBatchOverview,filter:UsageFilter):ProjectFuelSummary&{destinationCount:number}{
+  return summarise(filterUsageFills(movements,filter),overview);
+}
+
+export type HistoryRow={id:string;kind:'delivery'|'dip';confirmedAt:string;time:string;title:string;tag:{kind:'delivery'|'dip'|'cancelled';text:string};detail:string|null;litresText:string;cancelled:boolean};
+export type HistoryDayCard={day:string;label:string;inLitres:number;outLitres:number;deliveries:HistoryRow[];dips:HistoryRow[];fills:DayGroup[]};
+
+/**
+ * The History tab: one card per day holding that day's deliveries, dip readings and fills (grouped by
+ * destination like every other day card). Cancelled records stay visible but never count.
+ */
+export function buildHistoryDays(movements:FuelMovement[],overview:DieselBatchOverview):HistoryDayCard[]{
+  const days=new Map<string,HistoryDayCard>();
+  const card=(day:string)=>{const existing=days.get(day);if(existing)return existing;const created:HistoryDayCard={day,label:fuelDayLabel(day),inLitres:0,outLitres:0,deliveries:[],dips:[],fills:[]};days.set(day,created);return created;};
+  const cancelledTag=(movement:FuelMovement)=>({kind:'cancelled' as const,text:`Cancelled · ${movement.cancellationReason??'No reason recorded'}`});
+  for(const movement of [...movements].sort((a,b)=>a.confirmedAt.localeCompare(b.confirmedAt))){
+    const day=localDateKey(movement.confirmedAt),cancelled=movement.status==='Cancelled';
+    if(movement.type==='delivery'){
+      const batch=overview.batches.find(value=>value.deliveryMovementId===movement.id);
+      const entry=card(day);
+      entry.deliveries.push({id:movement.id,kind:'delivery',confirmedAt:movement.confirmedAt,time:time(movement.confirmedAt),title:movement.supplierName??'Supplier not recorded',
+        tag:cancelled?cancelledTag(movement):{kind:'delivery',text:batch?`Delivery · ${batch.batchNumber}`:overview.started?'Delivery · Before batches':'Delivery'},
+        detail:movement.ticketNumber?`Invoice ${movement.ticketNumber}`:'Invoice not recorded',litresText:`+${formatLitres(movement.litres)}`,cancelled});
+      if(!cancelled)entry.inLitres=round(entry.inLitres+movement.litres);
+    }else if(movement.type==='gauge'){
+      const spread=overview.adjustments.filter(adjustment=>adjustment.gaugeId===movement.id);
+      const text=spread.length?`Calculated ${formatLitres(spread[0]!.calculatedLitres)} · ${spread.map(adjustment=>`${adjustment.litres>0?'+':''}${formatLitres(adjustment.litres)} on ${adjustment.batchNumber}`).join(' · ')}`
+        :movement.previousBalanceLitres!=null?`Calculated ${formatLitres(movement.previousBalanceLitres)} · ${(movement.differenceLitres??0)>0?'+':''}${formatLitres(movement.differenceLitres??0)}`:'First reading';
+      card(day).dips.push({id:movement.id,kind:'dip',confirmedAt:movement.confirmedAt,time:time(movement.confirmedAt),title:`Dip reading ${formatLitres(movement.litres)}`,
+        tag:cancelled?cancelledTag(movement):{kind:'dip',text},detail:movement.reason,litresText:`= ${formatLitres(movement.litres)}`,cancelled});
+    }
+  }
+  for(const fillDay of groupFillsByDay(buildFillRows(movements,overview,{includeCancelled:true}),{byDestination:true})){
+    const entry=card(fillDay.day);entry.fills=fillDay.groups;entry.outLitres=fillDay.total;
+  }
+  return [...days.values()].sort((a,b)=>b.day.localeCompare(a.day));
+}
+
+/** The History summary card for the records shown. */
+export function historySummary(movements:FuelMovement[],tankLitres:number){
+  const active=movements.filter(movement=>movement.status==='Active');
+  const sum=(list:FuelMovement[],value:(movement:FuelMovement)=>number)=>round(list.reduce((total,movement)=>total+value(movement),0));
+  return {
+    deliveredLitres:sum(active.filter(movement=>movement.type==='delivery'),movement=>movement.litres),
+    filledLitres:sum(active.filter(movement=>movement.type==='fill'),movement=>movement.litres),
+    adjustmentLitres:sum(active.filter(movement=>movement.type==='gauge'),movement=>movement.differenceLitres??0),
+    tankLitres,records:movements.length,days:new Set(movements.map(movement=>localDateKey(movement.confirmedAt))).size,
   };
 }

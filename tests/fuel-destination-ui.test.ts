@@ -10,7 +10,9 @@ const source=(path:string)=>readFileSync(join(__dirname,'..',path),'utf8');
 describe('Fuel Destination UI contract',()=>{
   const screen=source('src/ui/screens/FuelTrackingScreen.tsx');
   const choice=source('src/ui/components/ChoiceField.tsx');
-  const usage=source('src/ui/components/FuelUsageByDestination.tsx');
+  // The Usage tab moved to the approved day-card design (DEC-492, amended 2026-10-03).
+  const usage=source('src/ui/components/fuel/FuelUsageView.tsx');
+  const parts=source('src/ui/components/fuel/FuelBatchParts.tsx');
   const sites=source('src/ui/components/CompanySitesManager.tsx');
   const destination=source('src/ui/components/FuelDestinationFields.tsx');
 
@@ -26,7 +28,7 @@ describe('Fuel Destination UI contract',()=>{
 
   it('retires the inaccurate Fuel cost by project wording',()=>{
     expect(screen).not.toMatch(/Fuel cost by project/i);
-    expect(usage).toContain('Fuel Usage by Destination');
+    expect(usage).toContain('Fuel used by destination');
   });
 
   it('makes the destination choice an accessible, 48dp, reduced-motion-safe radio group',()=>{
@@ -38,13 +40,13 @@ describe('Fuel Destination UI contract',()=>{
     expect(choice).toContain('useReducedMotion');
   });
 
-  it('shows unpriced usage as Cost unavailable and keeps expansion reduced-motion safe',()=>{
-    expect(usage).toContain('fuelUsageCostLabel');
-    expect(usage).toContain('fillCostLabel');
+  it('shows unpriced usage as Unpriced, never $0.00, with 48 pt targets and reduced-motion-safe groups',()=>{
+    expect(usage).toContain("'Unpriced'");
+    expect(usage).toContain('Unpriced</Text>');
     expect(usage).not.toContain('$0.00');
-    expect(usage).toContain('useReducedMotion');
-    expect(usage).toMatch(/accessibilityState=\{\{\s*expanded/);
-    expect(usage).toMatch(/minHeight:\s*48/);
+    expect(usage).toMatch(/destRow:\{minHeight:48/);
+    expect(parts).toContain('useReducedMotion');
+    expect(parts).toMatch(/accessibilityState=\{\{expanded:open\}\}/);
   });
 
   it('gives every site action an accessible label and a 48dp target',()=>{
