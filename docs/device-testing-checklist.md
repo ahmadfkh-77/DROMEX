@@ -130,7 +130,19 @@ Everything below passed. Kept as the regression set for later builds.
 
 ---
 
-## Build 27 — 0.20.0 (pending; not yet installed)
+## Build 28 — 0.20.0 (pending; not yet installed)
+
+Build 28 is build 27 with the company from Company Settings on the Diesel
+Batch Report. Install over build 27, 26 or 25 and run the Build 27 and Build 26
+steps below, then:
+
+1. Settings → Company: check the company name, logo, address, phone and email.
+2. Export a Diesel Batch Report. Its header shows your logo, company name and
+   contact details (not "DROMEX · Construction & Plant Management"), and the
+   running title at the top of each page starts with your company name.
+3. A long or Arabic company name wraps inside the header without overlapping.
+
+## Build 27 — 0.20.0 (built; superseded by build 28)
 
 Build 27 is build 26 plus the History and Usage tabs in the day-card design.
 Install **over build 26** (or build 25) and run the Build 26 steps below, then:

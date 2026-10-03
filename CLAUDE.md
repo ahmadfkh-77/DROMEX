@@ -27,7 +27,7 @@ application. It records outgoing company loads, incoming supplier loads, project
 daily reports, equipment, fuel, waste, walls, pavement calculations, finances,
 documents, and backups.
 
-Current source release metadata is version `0.20.0`, Android version code `27`,
+Current source release metadata is version `0.20.0`, Android version code `28`,
 package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
 internal Android artifact is `output/DROMEX-0.19.0-build22.apk` when present
 (Projects list and project screens redesign, account payments, Apply unallocated
@@ -45,9 +45,11 @@ build pending physical upgrade-install acceptance. Builds 23 and 24
 the same work, superseded by build 25. Build 26 (`output/DROMEX-0.20.0-build26.apk`: receipt Load No. and centred
 contact details, DEC-491; diesel batches and outside station fills, migration
 50, DEC-492) was a preview the Owner tested; build 27 adds the History and
-Usage tabs in the day-card design and per-destination PDFs (DEC-492 amendment),
+Usage tabs in the day-card design and per-destination PDFs (DEC-492 amendment;
+`output/DROMEX-0.20.0-build27.apk`). Build 28 adds the Company Settings name,
+logo and contact details to the Diesel Batch Report header (second amendment),
 is prepared in source on `feature/android-receipts-diesel-batches`, and its APK
-has not been built. Builds 25 and 26 stay as previews until build 27 is built,
+has not been built. Builds 25 to 27 stay as previews until build 28 is built,
 installed and accepted.
 
 Release APKs are no longer committed to Git from build 14 onward (DEC-396):
