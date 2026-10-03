@@ -9,7 +9,7 @@
  * version without updating this file cannot pass the suite.
  */
 export const APP_VERSION='0.20.0';
-export const ANDROID_VERSION_CODE=25;
+export const ANDROID_VERSION_CODE=26;
 
-/** "v0.20.0 · build 25" -- the one place that formatting is decided. */
+/** "v0.20.0 · build 26" -- the one place that formatting is decided. */
 export const appVersionLabel=()=>`v${APP_VERSION} · build ${ANDROID_VERSION_CODE}`;

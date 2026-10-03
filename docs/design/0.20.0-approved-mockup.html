@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DROMEX 0.20.0 Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --orange:#C84B31; --navy:#173F67; --ink:#14263A; --cream:#FFF8ED; --cream2:#F5F2EC;
+    --white:#FFFFFF; --line:#E4DED3; --muted:#6B7280; --grey:#8A8F98;
+    --amber:#9A6200; --amber-bg:#FFF4DC; --amber-line:#F1CF83;
+    --red:#B42318; --red-bg:#FDECEA; --red-line:#F3B4AE;
+    --green:#1E7B45;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:#E9E4DA; color:var(--ink);
+    font-family:"Noto Sans","Noto Sans Arabic",system-ui,sans-serif;
+    font-size:14px; line-height:1.4;
+  }
+  .num{font-variant-numeric:tabular-nums; white-space:nowrap; text-align:right}
+  bdi{unicode-bidi:isolate}
+
+  /* ---------- page chrome ---------- */
+  .top{max-width:1320px;margin:0 auto;padding:24px 16px 8px}
+  .top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}
+  .top p{margin:0;color:var(--muted);max-width:760px}
+  .tabs{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+  .tabs button{
+    min-height:44px;padding:0 18px;border-radius:999px;border:1px solid var(--navy);
+    background:var(--white);color:var(--navy);font:600 14px inherit;font-family:inherit;cursor:pointer
+  }
+  .tabs button[aria-pressed="true"]{background:var(--navy);color:var(--white)}
+  .stage{max-width:1320px;margin:0 auto;padding:16px;display:flex;gap:32px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+  [data-g][hidden]{display:none !important}
+  .paper{width:300px;max-width:100%;background:#fff;color:#111;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.6;padding:18px 16px 26px;box-shadow:0 10px 26px rgba(20,38,58,.16)}
+  .pc{text-align:center;overflow-wrap:anywhere}.pt{font-size:17px;font-weight:700;letter-spacing:.04em}.pt2{font-weight:700;font-size:14px}
+  .pr{display:flex;justify-content:space-between;gap:10px}.pr span:last-child{text-align:right;overflow-wrap:anywhere}
+  .pb{font-weight:700;font-size:14px}.phr{border-top:1px dashed #555;margin:8px 0}
+  .pctx{background:var(--navy);color:#FFF8ED;border-radius:16px;padding:14px 17px}
+  .pctx-k{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9D6E6}
+  .pctx-name{font-size:17px;font-weight:700;margin-top:4px;text-align:right;overflow-wrap:anywhere}
+  .pctx-sub{font-size:12px;color:#C9D6E6;margin-top:6px}
+  .ptot-big{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding-bottom:8px}
+  .ptot-big span{font-weight:600}
+  .ptot-big b{font-size:26px;font-weight:700;color:var(--navy)}
+  .ptot{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+  .ptot.cost{border-top:1.5px solid var(--ink);margin-top:2px;align-items:flex-start}
+  .ptot.cost small{display:block;color:var(--muted);font-size:12px;font-weight:500}
+  .pmeta{font-size:12px;color:var(--muted);margin-top:6px}
+  .tag-before{background:#F1F1F1;border:1px solid #D4D4D4;color:#555}
+  .split{font-size:12px;color:var(--ink);margin-top:4px;padding-left:8px;border-left:2px solid var(--navy)}
+  .phone-wrap{max-width:100%;min-width:0}
+  .caption{overflow-wrap:anywhere}
+  .fcard{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:16px 17px;display:flex;flex-direction:column}
+  .step{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);margin-bottom:10px}
+  .sn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--navy);color:#fff;font-size:12px;letter-spacing:0}
+  .flabel{font-size:13px;font-weight:600;margin:10px 0 5px}
+  .step + .flabel{margin-top:0}
+  .opt{font-weight:500;color:var(--muted);font-size:12px}
+  .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--cream2);border-radius:12px;padding:4px;gap:4px}
+  .seg.three{grid-template-columns:1fr 1fr 1fr}
+  .seg span{display:flex;align-items:center;justify-content:center;min-height:40px;border-radius:9px;font-weight:600;font-size:13px;color:var(--muted);text-align:center;padding:0 4px}
+  .seg span.on{background:var(--navy);color:#fff}
+  .select,.input{min-height:46px;border:1px solid #D6D0C4;border-radius:11px;background:#FFFDF9;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;overflow-wrap:anywhere}
+  .select b{font-weight:700}
+  .sel-sub{font-size:12px;color:var(--muted);margin-top:1px}
+  .chev{color:var(--navy);font-size:14px}
+  .input.ph{color:var(--muted)}
+  .num-in{font-weight:700;font-size:17px;font-variant-numeric:tabular-nums}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .link{font-size:13px;font-weight:700;color:var(--navy);margin-top:8px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .two .flabel{margin-top:0}
+  .preview{background:#EEF2F7;border:1px solid #C7D3E2;border-radius:16px;padding:14px 16px}
+  .preview.neutral{background:var(--cream2);border-color:var(--line)}
+  .pv-h{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);margin-bottom:6px}
+  .pv-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:7px 0;border-top:1px solid rgba(23,63,103,.12);font-size:13px}
+  .pv-row:first-of-type{border-top:0}
+  .pv-row small{color:var(--muted);font-size:12px}
+  .pv-row b{text-align:right}
+  .pv-row.total{font-weight:700;border-top:1.5px solid var(--navy)}
+  .tank{background:var(--navy);color:#FFF8ED;border-radius:16px;padding:16px 17px}
+  .tank-k{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9D6E6}
+  .tank-v{font-size:34px;font-weight:700;margin:2px 0 8px;font-variant-numeric:tabular-nums}
+  .tank-rows div{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid rgba(255,255,255,.18);font-size:13px}
+  .tank-foot{font-size:12px;color:#C9D6E6;margin-top:8px}
+  .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .filter-head,.group-head{display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 16px;border-radius:14px;font-weight:700;font-size:14px}
+  .filter-head{background:var(--orange);color:#fff}
+  .group-head{background:var(--navy);color:#fff;gap:10px}
+  .group-head small{display:block;font-weight:500;font-size:12px;color:#C9D6E6}
+  .group-head span:first-child{padding:8px 0}
+  .batch{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+  .batch-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .batch-no{font-size:17px;font-weight:700}
+  .batch-no.sm{font-size:15px}
+  .batch-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .batch-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+  .batch-figs div{display:flex;flex-direction:column;gap:2px}
+  .batch-figs span{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .batch-figs b{font-size:16px;text-align:left}
+  .batch-figs div:last-child b{color:var(--navy)}
+  .bar{height:6px;background:var(--cream2);border-radius:99px;margin-top:10px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--navy);border-radius:99px}
+  .batch-note{font-size:12px;color:var(--muted);margin-top:8px}
+  .amber-text{color:var(--amber) !important}
+  .closed-list{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:4px 16px;margin-top:-8px}
+  .closed-row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+  .closed-row:first-child{border-top:0}
+  .cr-main{min-width:0}
+  .cr-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+  .cr-fig{font-size:13px;font-weight:600;color:var(--muted)}
+  .tag-station{background:var(--cream2);border:1px solid var(--line);color:var(--ink)}
+  .station-note{padding:10px 17px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--cream)}
+  .group-head.open + .day{margin-top:-8px}
+  .caption{font:600 12px inherit;font-family:inherit;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+
+  /* ---------- phone ---------- */
+  .phone{
+    width:390px;max-width:100%;height:820px;background:var(--cream);border-radius:36px;
+    border:10px solid #1B1B1B;overflow:hidden;display:flex;flex-direction:column;
+    box-shadow:0 20px 50px rgba(20,38,58,.18)
+  }
+  .phone-scroll{overflow-y:auto;flex:1}
+  .ph-head{padding:18px 20px 12px}
+  .back{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:999px;background:var(--white);border:1px solid var(--line);font-weight:600;color:var(--navy);font-size:13px}
+  .eyebrow{margin:14px 0 2px;color:var(--orange);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .title{margin:0;font-size:26px;font-weight:700;color:var(--ink)}
+  .sub{margin:4px 0 0;color:var(--muted);font-size:13px}
+
+  .badge{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+  .b-inuse{background:var(--navy);color:var(--white)}
+  .b-wait{border:1.5px solid var(--navy);color:var(--navy)}
+  .b-closed{border:1.5px solid var(--grey);color:var(--grey)}
+
+  .summary{
+    position:sticky;top:0;z-index:2;background:var(--cream);padding:6px 20px 12px;
+    border-bottom:1px solid var(--line)
+  }
+  .sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .metric{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+  .metric .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .metric .v{font-size:20px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .metric.adj{background:var(--amber-bg);border-color:var(--amber-line)}
+  .metric.adj .v{color:var(--amber)}
+  .metric.rem{background:var(--navy);border-color:var(--navy)}
+  .metric.rem .k{color:#C9D6E6}.metric.rem .v{color:var(--white)}
+
+  .body{padding:14px 20px 42px;display:flex;flex-direction:column;gap:16px}
+  .card{background:var(--white);border-radius:16px;padding:16px 17px;border:1px solid var(--line)}
+  .card h3{margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px}
+  .kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600;text-align:right}
+
+  .dest-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+  .dest-row:first-of-type{border-top:0}
+  .dest-row .name{min-width:0;overflow-wrap:anywhere}
+  .dest-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin:12px 0 2px}
+  .dest-label:first-of-type{margin-top:0}
+
+  .section-title{margin:6px 0 -4px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--navy)}
+  .section-title span{color:var(--muted);font-weight:600;letter-spacing:0;text-transform:none}
+
+  .day{background:var(--white);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .day-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:12px 17px;background:var(--cream2);border-bottom:1px solid var(--line)}
+  .day-head .date{font-weight:700;font-size:15px}
+  .day-head .tot{font-size:13px;color:var(--muted)}
+  .day-head .tot b{color:var(--ink);font-size:15px}
+  .grp{padding:10px 17px 12px;border-top:1px solid var(--line)}
+  .grp:first-of-type{border-top:0}
+  .grp-type{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .grp-name{font-weight:700;margin:2px 0 6px;overflow-wrap:anywhere}
+  .fill{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px dashed var(--line)}
+  .fill:first-of-type{border-top:0}
+  .fill .who{min-width:0}
+  .fill .eq{font-weight:600;overflow-wrap:anywhere}
+  .fill .meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .fill .l{font-weight:700;font-size:15px}
+  .tag{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border-radius:6px;font-size:11px;font-weight:700}
+  .tag-tank{border:1px solid var(--navy);color:var(--navy)}
+  .grp-sub{display:flex;justify-content:space-between;padding-top:8px;margin-top:4px;border-top:1px solid var(--line);font-size:13px;font-weight:700}
+
+  .panel-amber{background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:14px;padding:12px 14px;font-size:13px}
+  .panel-amber .h{font-weight:700;color:var(--amber);margin-bottom:4px}
+  .panel-amber .row{display:flex;justify-content:space-between;gap:10px}
+
+  .btn{display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:14px;font-weight:700;font-size:15px}
+  .btn-primary{background:var(--orange);color:var(--white)}
+  .btn-secondary{background:var(--white);border:1.5px solid var(--navy);color:var(--navy)}
+  .btn-danger{background:var(--white);border:1.5px solid var(--red);color:var(--red)}
+  .danger-zone{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .danger-zone p{font-size:12px;color:var(--muted);margin:6px 0 0;text-align:center}
+
+  /* ---------- PDF (A4) ---------- */
+  .pdf-wrap{display:flex;flex-direction:column;gap:24px;align-items:center}
+  .a4{
+    width:794px;max-width:100%;min-height:1123px;background:#fff;color:#111;
+    padding:56px 56px 48px;box-shadow:0 10px 30px rgba(0,0,0,.15);position:relative;
+    display:flex;flex-direction:column;font-size:12px
+  }
+  .pdf-head{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid var(--navy);padding-bottom:12px}
+  .brand{font-weight:800;font-size:22px;letter-spacing:.08em;color:var(--navy)}
+  .brand small{display:block;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--orange);margin-top:2px}
+  .pdf-title{font-size:18px;font-weight:700;margin:0;text-align:right}
+  .pdf-title span{display:block;font-size:12px;font-weight:600;color:#444;margin-top:2px}
+  .pdf-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin:14px 0 4px;font-size:11.5px}
+  .pdf-meta div{display:flex;gap:8px}
+  .pdf-meta b{min-width:110px;color:#444;font-weight:600}
+  .pdf-note{font-size:11px;color:#555;margin:6px 0 0}
+
+  .pdf-sum{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #BFC5CC;margin:16px 0 6px}
+  .pdf-sum div{padding:9px 10px;border-left:1px solid #BFC5CC}
+  .pdf-sum div:first-child{border-left:0}
+  .pdf-sum .k{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#555}
+  .pdf-sum .v{font-size:17px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .pdf-sum .em{background:#EEF2F7}
+
+  .pdf-h2{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:var(--navy);padding:6px 10px;margin:18px 0 0}
+  .pdf-h3{font-size:12.5px;font-weight:700;padding:8px 10px 6px;border-bottom:1.5px solid var(--navy);overflow-wrap:anywhere;margin-top:6px}
+  .pdf-h3 .type{font-size:10px;font-weight:700;color:#555;letter-spacing:.06em;text-transform:uppercase;margin-right:6px}
+  table.pdf{width:100%;border-collapse:collapse;table-layout:fixed}
+  table.pdf thead th{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#444;text-align:left;padding:6px 8px;border-bottom:1px solid #999;background:#F4F5F7}
+  table.pdf td{padding:6px 8px;border-bottom:1px solid #E1E3E6;vertical-align:top;overflow-wrap:anywhere}
+  table.pdf .c-date{width:118px}.c-type{width:70px}.c-src{width:150px}.c-l{width:80px}
+  table.pdf th.c-l{text-align:right}
+  tr.daysub td{font-weight:700;background:#FAFAFA;border-bottom:1px solid #BFC5CC}
+  tr.grpsub td{font-weight:800;border-top:1.5px solid #333;border-bottom:0;padding-top:8px}
+  .pdf-foot{margin-top:auto;padding-top:16px;display:flex;justify-content:space-between;font-size:10px;color:#666;border-top:1px solid #DDD}
+  .repeat-note{font-size:10px;color:#666;font-style:italic;margin:2px 0 0}
+  .totals-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12.5px}
+  .totals-table td{padding:9px 10px;border-bottom:1px solid #E1E3E6}
+  .totals-table td:last-child{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .totals-table tr.strong td{border-top:2px solid #111;font-size:14px;font-weight:800}
+  .pdf-adj{border:1px solid #C9A248;background:#FFF8E6;padding:10px 12px;margin-top:14px;font-size:11.5px}
+  .pdf-adj b{display:block;margin-bottom:3px}
+
+  @media (max-width:860px){ .a4{padding:28px 20px} .pdf-sum{grid-template-columns:1fr 1fr} .pdf-sum div:nth-child(3){border-left:0} .pdf-meta{grid-template-columns:1fr} }
+  @media print{
+    body{background:#fff}
+    .top,.phone-wrap,.caption{display:none !important}
+    .stage .pdf-wrap[hidden]{display:block !important}
+    .stage{padding:0;display:block}
+    .stage .pdf-wrap{display:block !important}
+    .a4{box-shadow:none;width:auto;min-height:auto;padding:0;page-break-after:always}
+    @page{size:A4;margin:14mm}
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>DROMEX 0.20.0: approved design</h1>
+  <p>The printed receipt with its Load No., the Fuel screen with its batch list, the Record Fill form, the project fuel view, the batch page as it would appear on the phone, and the matching PDF export. The data is invented. It includes a long Arabic project name and a long site name to show how names wrap. Use Print (Ctrl+P) on the PDF view to see the real A4 pages.</p>
+  <div class="tabs" role="group" aria-label="View">
+    <button data-v="both" aria-pressed="true">All</button>
+    <button data-v="receipt" aria-pressed="false">Receipt</button>
+    <button data-v="fuel" aria-pressed="false">Fuel screen</button>
+    <button data-v="form" aria-pressed="false">Record fill</button>
+    <button data-v="phone" aria-pressed="false">Batch page</button>
+    <button data-v="project" aria-pressed="false">Project fuel</button>
+    <button data-v="pdf" aria-pressed="false">PDF export (A4)</button>
+  </div>
+</div>
+
+<div class="stage" id="stage" data-view="both">
+
+
+
+  <!-- ===================== PRINTED RECEIPT ===================== -->
+  <div class="phone-wrap" data-g="receipt">
+    <p class="caption">Printed receipt · 58 mm · Option C</p>
+    <div class="paper">
+      <div class="pc pt">DROMEX ASPHALT</div>
+      <div class="pc">Main Road, Hasbaya,</div>
+      <div class="pc">South Lebanon</div>
+      <div class="pc">+961 70 123 456</div>
+      <div class="pc">info@dromex-asphalt.com</div>
+      <div class="pc">Tax/VAT: 123456-601</div>
+      <div class="phr"></div>
+      <div class="pc pt2">RECEIPT</div><br>
+      <div class="pr pb"><span>Load No.</span><span>ASP-00058</span></div>
+      <div class="pr"><span>Transaction</span><span>20261003-A-00042</span></div>
+      <div class="pr"><span>Date</span><span>03/10/2026 09:14</span></div>
+      <div class="pr"><span>Customer</span><span>Hasbaya Municipality</span></div>
+      <div class="pr"><span>Item</span><span>Asphalt</span></div>
+      <div class="phr"></div>
+      <div class="pr"><span>Quantity</span><span>18.400 t</span></div>
+      <div class="pr"><span>Unit price</span><span>Unpriced</span></div>
+    </div>
+  </div>
+  <div class="phone-wrap" data-g="receipt">
+    <p class="caption">Delivery authorization · 58 mm</p>
+    <div class="paper">
+      <div class="pc pt">DROMEX ASPHALT</div>
+      <div class="pc">Main Road, Hasbaya,</div>
+      <div class="pc">South Lebanon</div>
+      <div class="pc">+961 70 123 456</div>
+      <div class="pc">info@dromex-asphalt.com</div>
+      <div class="pc">Tax/VAT: 123456-601</div>
+      <div class="phr"></div>
+      <div class="pc pt2">DELIVERY AUTHORIZATION</div><br>
+      <div class="pr pb"><span>Load No.</span><span>ASP-00058</span></div>
+      <div class="pr"><span>Transaction</span><span>20261003-A-00042</span></div>
+      <div class="pr"><span>Date</span><span>03/10/2026 09:14</span></div>
+      <div class="pr"><span>Customer</span><span>Hasbaya Municipality</span></div>
+      <div class="pr"><span>Item</span><span>Asphalt</span></div>
+      <div class="phr"></div>
+      <div class="pr"><span>Driver</span><span>Ali Haidar</span></div>
+      <div class="pr"><span>Truck plate</span><span>72-118</span></div>
+      <div class="pr pb"><span>Quantity</span><span>18.400 t</span></div>
+    </div>
+  </div>
+
+  <!-- ===================== PHONE: FUEL SCREEN ===================== -->
+  <div class="phone-wrap" data-g="fuel">
+    <p class="caption">Fuel screen · 390 pt phone</p>
+    <div class="phone">
+      <div class="phone-scroll">
+        <div class="ph-head">
+          <span class="back">‹ Back</span>
+          <p class="eyebrow">Fuel</p>
+          <h2 class="title">Fuel Tracking</h2>
+        </div>
+
+        <div class="body" style="padding-top:4px">
+          <div class="tank">
+            <div class="tank-k">Diesel in tank</div>
+            <div class="tank-v">1,340 L</div>
+            <div class="tank-rows">
+              <div><span>DSL-2026-00004 · In use</span><span class="num">340 L</span></div>
+              <div><span>DSL-2026-00005 · Waiting</span><span class="num">1,000 L</span></div>
+            </div>
+            <div class="tank-foot">2 open batches · Last dip Fri 3 Oct 2026</div>
+          </div>
+
+          <div class="btn-row">
+            <div class="btn btn-primary">Record Fill</div>
+            <div class="btn btn-secondary">Record Delivery</div>
+          </div>
+
+          <div class="filter-head"><span>Filter fuel records</span><span>+</span></div>
+
+          <p class="section-title">Open batches <span>· 2 · oldest first</span></p>
+
+          <div class="batch">
+            <div class="batch-top">
+              <div><div class="batch-no">DSL-2026-00004</div><div class="batch-sub">Invoice 55821 · Arrived Wed 1 Oct 2026</div></div>
+              <span class="badge b-inuse">Open · In use</span>
+            </div>
+            <div class="batch-figs">
+              <div><span>Delivered</span><b class="num">1,000 L</b></div>
+              <div><span>Filled</span><b class="num">640 L</b></div>
+              <div><span>Remaining</span><b class="num">340 L</b></div>
+            </div>
+            <div class="bar" aria-hidden="true"><i style="width:66%"></i></div>
+            <div class="batch-note amber-text">Includes −20 L dip adjustment</div>
+          </div>
+
+          <div class="batch">
+            <div class="batch-top">
+              <div><div class="batch-no">DSL-2026-00005</div><div class="batch-sub">Invoice not recorded · Arrived Fri 3 Oct 2026</div></div>
+              <span class="badge b-wait">Open · Waiting</span>
+            </div>
+            <div class="batch-figs">
+              <div><span>Delivered</span><b class="num">1,000 L</b></div>
+              <div><span>Filled</span><b class="num">0 L</b></div>
+              <div><span>Remaining</span><b class="num">1,000 L</b></div>
+            </div>
+            <div class="bar" aria-hidden="true"><i style="width:0%"></i></div>
+            <div class="batch-note">Starts after DSL-2026-00004 is used up</div>
+          </div>
+
+          <div class="group-head open"><span>Closed batches <small>3 · 3,000 L delivered</small></span><span>−</span></div>
+          <div class="closed-list">
+            <div class="closed-row">
+              <div class="cr-main"><div class="batch-no sm">DSL-2026-00003</div><div class="batch-sub">Invoice 55102 · 24 Sep – 30 Sep 2026</div></div>
+              <div class="cr-side"><span class="badge b-closed">Closed</span><div class="cr-fig num">1,200 L</div></div>
+            </div>
+            <div class="closed-row">
+              <div class="cr-main"><div class="batch-no sm">DSL-2026-00002</div><div class="batch-sub">Invoice 54870 · 15 Sep – 23 Sep 2026</div></div>
+              <div class="cr-side"><span class="badge b-closed">Closed</span><div class="cr-fig num">1,000 L</div></div>
+            </div>
+            <div class="closed-row">
+              <div class="cr-main"><div class="batch-no sm">DSL-2026-00001 · Opening stock</div><div class="batch-sub amber-text">Calculated (no dip reading) · 10 Sep – 15 Sep 2026</div></div>
+              <div class="cr-side"><span class="badge b-closed">Closed</span><div class="cr-fig num">800 L</div></div>
+            </div>
+          </div>
+
+          <div class="group-head open"><span>Outside station fills <small>2 · 95 L</small></span><span>−</span></div>
+          <div class="day">
+            <div class="day-head"><span class="date">Thu 2 Oct 2026</span><span class="tot">Day total <b class="num">95 L</b></span></div>
+            <div class="grp">
+              <div class="grp-type">Project</div>
+              <div class="grp-name">Marjayoun Water Tank Foundations</div>
+              <div class="fill"><div class="who"><div class="eq">Truck 72-118 · Truck</div><div class="meta"><span class="tag tag-station">Outside station · Hasbaya Highway Station</span><span>Receipt 7731</span></div></div><div class="l num">60 L</div></div>
+              <div class="grp-sub"><span>Project total</span><span class="num">60 L</span></div>
+            </div>
+            <div class="grp">
+              <div class="grp-type">Unassigned</div>
+              <div class="fill"><div class="who"><div class="eq">Pickup 41-902 · Truck</div><div class="meta"><span class="tag tag-station">Outside station · <bdi dir="rtl">محطة النبطية الجديدة</bdi></span></div></div><div class="l num">35 L</div></div>
+              <div class="grp-sub"><span>Unassigned total</span><span class="num">35 L</span></div>
+            </div>
+            <div class="station-note">Outside station fills do not change the tank.</div>
+          </div>
+
+          <div class="group-head"><span>Before batches history <small>records before 10 Sep 2026</small></span><span>+</span></div>
+          <div class="group-head"><span>Gasoline <small>unchanged</small></span><span>+</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===================== PHONE: RECORD FILL (TANK, SPLIT) ===================== -->
+  <div class="phone-wrap" data-g="form">
+    <p class="caption">Record Fill · from tank (split example)</p>
+    <div class="phone">
+      <div class="phone-scroll">
+        <div class="ph-head">
+          <span class="back">‹ Back</span>
+          <p class="eyebrow">Fuel</p>
+          <h2 class="title">Record Fill</h2>
+          <p class="sub">Diesel from the tank is taken from the oldest batch first.</p>
+        </div>
+        <div class="body" style="padding-top:4px">
+
+          <div class="fcard">
+            <div class="step"><span class="sn">1</span>Fuel source</div>
+            <div class="seg"><span class="on">From tank</span><span>Outside station</span></div>
+          </div>
+
+          <div class="fcard">
+            <div class="step"><span class="sn">2</span>Batch</div>
+            <label class="flabel">Batch *</label>
+            <div class="select"><div><b>DSL-2026-00004</b> · Invoice 55821<div class="sel-sub">Oldest open batch · 340 L remaining</div></div><span class="chev">▾</span></div>
+            <div class="hint">Pre-selected automatically. You can change it to another open batch.</div>
+          </div>
+
+          <div class="fcard">
+            <div class="step"><span class="sn">3</span>Equipment</div>
+            <label class="flabel">Equipment type *</label>
+            <div class="seg"><span class="on">Machine</span><span>Truck</span></div>
+            <label class="flabel">Equipment *</label>
+            <div class="select"><div><b>Excavator CAT 320</b><div class="sel-sub">Saved machine profile</div></div><span class="chev">▾</span></div>
+          </div>
+
+          <div class="fcard">
+            <div class="step"><span class="sn">4</span>Destination</div>
+            <label class="flabel">Fuel destination *</label>
+            <div class="seg three"><span class="on">Project</span><span>Company Site</span><span>Unassigned</span></div>
+            <label class="flabel">Project *</label>
+            <div class="select"><div dir="rtl" style="text-align:right;flex:1"><bdi>مشروع إعادة تأهيل طريق حاصبيا – مرجعيون، المرحلة الثانية</bdi></div><span class="chev">▾</span></div>
+          </div>
+
+          <div class="fcard">
+            <div class="step"><span class="sn">5</span>Quantity and date</div>
+            <div class="two">
+              <div><label class="flabel">Litres *</label><div class="input num-in">400</div></div>
+              <div><label class="flabel">Date *</label><div class="input">Sat 4 Oct 2026</div></div>
+            </div>
+            <label class="flabel">Odometer <span class="opt">optional</span></label>
+            <div class="input ph">Not recorded</div>
+            <label class="flabel">Note <span class="opt">optional</span></label>
+            <div class="input ph">Add a note</div>
+          </div>
+
+          <div class="preview">
+            <div class="pv-h">Before you save</div>
+            <div class="pv-row"><span>From <b>DSL-2026-00004</b><br><small>uses the last 340 L · batch closes</small></span><b class="num">340 L</b></div>
+            <div class="pv-row"><span>From <b>DSL-2026-00005</b><br><small>becomes the batch in use</small></span><b class="num">60 L</b></div>
+            <div class="pv-row total"><span>Total fill · shown as one fill, split</span><b class="num">400 L</b></div>
+            <div class="pv-row"><span>Tank after this fill</span><b class="num">1,340 L → 940 L</b></div>
+            <div class="pv-row"><span>Cost</span><b class="num">$374.00 + 60 L Unpriced</b></div>
+          </div>
+
+          <div class="btn btn-primary">Save Fill</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PHONE: RECORD FILL (OUTSIDE STATION) ===================== -->
+  <div class="phone-wrap" data-g="form">
+    <p class="caption">Record Fill · outside station</p>
+    <div class="phone">
+      <div class="phone-scroll">
+        <div class="ph-head">
+          <span class="back">‹ Back</span>
+          <p class="eyebrow">Fuel</p>
+          <h2 class="title">Record Fill</h2>
+          <p class="sub">Fuel bought at a station. It is kept for history and does not change the tank.</p>
+        </div>
+        <div class="body" style="padding-top:4px">
+
+          <div class="fcard">
+            <div class="step"><span class="sn">1</span>Fuel source</div>
+            <div class="seg"><span>From tank</span><span class="on">Outside station</span></div>
+          </div>
+
+          <div class="fcard">
+            <div class="step"><span class="sn">2</span>Station</div>
+            <label class="flabel">Station *</label>
+            <div class="select"><div><b>Hasbaya Highway Station</b><div class="sel-sub">Saved station</div></div><span class="chev">▾</span></div>
+            <div class="link">+ Add new station</div>
+            <label class="flabel">Fuel type *</label>
+            <div class="seg"><span class="on">Diesel</span><span>Gasoline</span></div>
+            <label class="flabel">Receipt number <span class="opt">optional</span></label>
+            <div class="input">7731</div>
+            <label class="flabel">Price <span class="opt">optional · cost history only</span></label>
+            <div class="input ph">Unpriced</div>
+          </div>
+
+          <div class="fcard">
+            <div class="step"><span class="sn">3</span>Equipment</div>
+            <label class="flabel">Equipment type *</label>
+            <div class="seg"><span>Machine</span><span class="on">Truck</span></div>
+            <label class="flabel">Equipment *</label>
+            <div class="select"><div><b>Truck 72-118</b><div class="sel-sub">Saved truck profile</div></div><span class="chev">▾</span></div>
+          </div>
+
+          <div class="fcard">
+            <div class="step"><span class="sn">4</span>Destination</div>
+            <label class="flabel">Fuel destination *</label>
+            <div class="seg three"><span class="on">Project</span><span>Company Site</span><span>Unassigned</span></div>
+            <label class="flabel">Project *</label>
+            <div class="select"><div><b>Marjayoun Water Tank Foundations</b></div><span class="chev">▾</span></div>
+          </div>
+
+          <div class="fcard">
+            <div class="step"><span class="sn">5</span>Quantity and date</div>
+            <div class="two">
+              <div><label class="flabel">Litres *</label><div class="input num-in">60</div></div>
+              <div><label class="flabel">Date *</label><div class="input">Thu 2 Oct 2026</div></div>
+            </div>
+            <label class="flabel">Odometer <span class="opt">optional</span></label>
+            <div class="input">184,050</div>
+          </div>
+
+          <div class="preview neutral">
+            <div class="pv-h">Before you save</div>
+            <div class="pv-row"><span>Outside station · Hasbaya Highway Station</span><b class="num">60 L</b></div>
+            <div class="pv-row"><span>Tank</span><b>No change (1,340 L)</b></div>
+            <div class="pv-row"><span>Counts in</span><b>Truck 72-118 · project fuel · Daily Report</b></div>
+          </div>
+
+          <div class="btn btn-primary">Save Fill</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===================== PHONE: PROJECT FUEL VIEW ===================== -->
+  <div class="phone-wrap" data-g="project">
+    <p class="caption">Project · Equipment Fuel · 390 pt phone</p>
+    <div class="phone">
+      <div class="phone-scroll">
+        <div class="ph-head">
+          <span class="back">‹ Project</span>
+          <p class="eyebrow">Project · Equipment fuel</p>
+          <h2 class="title">Equipment Fuel</h2>
+        </div>
+
+        <div class="body" style="padding-top:4px">
+          <div class="pctx">
+            <div class="pctx-k">Project</div>
+            <div class="pctx-name" dir="rtl"><bdi dir="rtl">مشروع إعادة تأهيل طريق حاصبيا – مرجعيون، المرحلة الثانية</bdi></div>
+            <div class="pctx-sub">Active · 1 Sep 2026 – 31 Dec 2026</div>
+          </div>
+
+          <div class="card">
+            <h3>Fuel for this project</h3>
+            <div class="ptot-big"><span>Total fuel</span><b class="num">1,195 L</b></div>
+            <div class="ptot"><span>From tank · batches</span><span class="num">950 L</span></div>
+            <div class="ptot"><span>From tank · before batches</span><span class="num">200 L</span></div>
+            <div class="ptot"><span>Outside stations</span><span class="num">45 L</span></div>
+            <div class="ptot cost"><span>Fuel cost</span><span class="num"><b>$1,185.40</b><small>+ 105 L Unpriced</small></span></div>
+            <div class="pmeta">7 fills · 3 equipment · 5 days</div>
+          </div>
+
+          <div class="card">
+            <h3>By source</h3>
+            <div class="dest-row"><span class="name">DSL-2026-00005 · Invoice not recorded</span><span class="num"><b>60 L</b></span></div>
+            <div class="dest-row"><span class="name">DSL-2026-00004 · Invoice 55821</span><span class="num"><b>710 L</b></span></div>
+            <div class="dest-row"><span class="name">DSL-2026-00003 · Invoice 55102</span><span class="num"><b>180 L</b></span></div>
+            <div class="dest-row"><span class="name">Before batches</span><span class="num"><b>200 L</b></span></div>
+            <div class="dest-row"><span class="name">Outside station · Hasbaya Highway Station</span><span class="num"><b>45 L</b></span></div>
+          </div>
+
+          <div class="filter-head"><span>Filter project fuel</span><span>+</span></div>
+          <div class="group-head"><span>By equipment <small>3 equipment</small></span><span>+</span></div>
+
+          <p class="section-title">Fills by day <span>· newest first · one card per day</span></p>
+
+          <div class="day">
+            <div class="day-head"><span class="date">Sat 4 Oct 2026</span><span class="tot">Day total <b class="num">445 L</b></span></div>
+            <div class="grp">
+              <div class="fill"><div class="who"><div class="eq">Excavator CAT 320 · Machine</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004 + DSL-2026-00005 · Split</span><span>08:10</span></div><div class="split">340 L from DSL-2026-00004 · 60 L from DSL-2026-00005</div></div><div class="l num">400 L</div></div>
+              <div class="fill"><div class="who"><div class="eq">Truck 72-118 · Truck</div><div class="meta"><span class="tag tag-station">Outside station · Hasbaya Highway Station</span><span>Receipt 7790</span></div></div><div class="l num">45 L</div></div>
+            </div>
+          </div>
+
+          <div class="day">
+            <div class="day-head"><span class="date">Fri 3 Oct 2026</span><span class="tot">Day total <b class="num">130 L</b></span></div>
+            <div class="grp">
+              <div class="fill"><div class="who"><div class="eq">Excavator CAT 320 · Machine</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004</span><span>07:40</span></div></div><div class="l num">130 L</div></div>
+            </div>
+          </div>
+
+          <div class="day">
+            <div class="day-head"><span class="date">Wed 1 Oct 2026</span><span class="tot">Day total <b class="num">240 L</b></span></div>
+            <div class="grp">
+              <div class="fill"><div class="who"><div class="eq">Excavator CAT 320 · Machine</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004</span><span>09:10</span></div></div><div class="l num">150 L</div></div>
+              <div class="fill"><div class="who"><div class="eq">Truck 72-118 · Truck</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004</span><span>10:45</span></div></div><div class="l num">90 L</div></div>
+            </div>
+          </div>
+
+          <div class="day">
+            <div class="day-head"><span class="date">Fri 26 Sep 2026</span><span class="tot">Day total <b class="num">180 L</b></span></div>
+            <div class="grp">
+              <div class="fill"><div class="who"><div class="eq">Wheel Loader CAT 966H · Machine</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00003</span><span>08:30</span></div></div><div class="l num">180 L</div></div>
+            </div>
+          </div>
+
+          <div class="day">
+            <div class="day-head"><span class="date">Fri 5 Sep 2026</span><span class="tot">Day total <b class="num">200 L</b></span></div>
+            <div class="grp">
+              <div class="fill"><div class="who"><div class="eq">Excavator CAT 320 · Machine</div><div class="meta"><span class="tag tag-before">Before batches</span><span>Recorded before diesel batches started</span></div></div><div class="l num">200 L</div></div>
+            </div>
+          </div>
+
+          <div class="btn btn-secondary">Export Project Fuel PDF</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PHONE: BATCH PAGE ===================== -->
+  <div class="phone-wrap" data-g="phone">
+    <p class="caption">Batch page · 390 pt phone</p>
+    <div class="phone">
+      <div class="phone-scroll">
+        <div class="ph-head">
+          <span class="back">‹ Back</span>
+          <p class="eyebrow">Diesel batch</p>
+          <div class="title-row">
+            <h2 class="title">DSL-2026-00004</h2>
+            <span class="badge b-inuse">Open · In use</span>
+          </div>
+          <p class="sub">Invoice 55821 · Arrived Wed 1 Oct 2026</p>
+        </div>
+
+        <div class="summary" aria-label="Batch summary">
+          <div class="sum-grid">
+            <div class="metric"><div class="k">Delivered</div><div class="v">1,000 L</div></div>
+            <div class="metric"><div class="k">Filled</div><div class="v">640 L</div></div>
+            <div class="metric adj"><div class="k">Adjustments</div><div class="v">−20 L</div></div>
+            <div class="metric rem"><div class="k">Remaining</div><div class="v">340 L</div></div>
+          </div>
+        </div>
+
+        <div class="body">
+          <div class="btn btn-primary">Record Fill</div>
+
+          <div class="card">
+            <h3>Batch details</h3>
+            <dl class="kv">
+              <dt>Supplier</dt><dd>Al-Nour Fuel Co.</dd>
+              <dt>Invoice number</dt><dd>55821</dd>
+              <dt>Arrival date</dt><dd>Wed 1 Oct 2026</dd>
+              <dt>Price per litre</dt><dd>$1.10</dd>
+              <dt>Fuel type</dt><dd>Diesel</dd>
+            </dl>
+          </div>
+
+          <div class="card">
+            <h3>Totals by destination</h3>
+            <p class="dest-label">Projects</p>
+            <div class="dest-row"><span class="name" dir="rtl"><bdi>مشروع إعادة تأهيل طريق حاصبيا – مرجعيون، المرحلة الثانية</bdi></span><span class="num"><b>370 L</b></span></div>
+            <div class="dest-row"><span class="name">Marjayoun Water Tank Foundations</span><span class="num"><b>110 L</b></span></div>
+            <p class="dest-label">Company sites</p>
+            <div class="dest-row"><span class="name">Main Yard</span><span class="num"><b>40 L</b></span></div>
+            <div class="dest-row"><span class="name">Quarry Gate – North Stockpile and Crusher Area</span><span class="num"><b>70 L</b></span></div>
+            <p class="dest-label">Unassigned</p>
+            <div class="dest-row"><span class="name">Unassigned</span><span class="num"><b>50 L</b></span></div>
+          </div>
+
+          <div class="panel-amber">
+            <div class="h">Dip adjustment · Fri 3 Oct 2026</div>
+            <div class="row"><span>Calculated remaining</span><span class="num">560 L</span></div>
+            <div class="row"><span>Dip reading</span><span class="num">540 L</span></div>
+            <div class="row"><b>Adjustment</b><b class="num">−20 L</b></div>
+            <div style="margin-top:4px;color:var(--muted)">Reason: morning dip before work</div>
+          </div>
+
+          <p class="section-title">Fills by day <span>· newest first · one card per day</span></p>
+
+          <!-- FRIDAY -->
+          <div class="day">
+            <div class="day-head"><span class="date">Fri 3 Oct 2026</span><span class="tot">Day total <b class="num">200 L</b></span></div>
+            <div class="grp">
+              <div class="grp-type">Project</div>
+              <div class="grp-name" dir="rtl"><bdi>مشروع إعادة تأهيل طريق حاصبيا – مرجعيون، المرحلة الثانية</bdi></div>
+              <div class="fill"><div class="who"><div class="eq">Excavator CAT 320 · Machine</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004</span><span>07:40</span></div></div><div class="l num">130 L</div></div>
+              <div class="grp-sub"><span>Project total</span><span class="num">130 L</span></div>
+            </div>
+            <div class="grp">
+              <div class="grp-type">Company site</div>
+              <div class="grp-name">Quarry Gate – North Stockpile and Crusher Area</div>
+              <div class="fill"><div class="who"><div class="eq">Truck 72-118 · Truck</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004</span><span>11:15</span><span>Odometer 184,220</span></div></div><div class="l num">70 L</div></div>
+              <div class="grp-sub"><span>Site total</span><span class="num">70 L</span></div>
+            </div>
+          </div>
+
+          <!-- THURSDAY -->
+          <div class="day">
+            <div class="day-head"><span class="date">Thu 2 Oct 2026</span><span class="tot">Day total <b class="num">160 L</b></span></div>
+            <div class="grp">
+              <div class="grp-type">Project</div>
+              <div class="grp-name">Marjayoun Water Tank Foundations</div>
+              <div class="fill"><div class="who"><div class="eq">Wheel Loader CAT 966H · Machine</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004</span><span>08:05</span></div></div><div class="l num">110 L</div></div>
+              <div class="grp-sub"><span>Project total</span><span class="num">110 L</span></div>
+            </div>
+            <div class="grp">
+              <div class="grp-type">Unassigned</div>
+              <div class="fill"><div class="who"><div class="eq">Roller BOMAG BW 213 · Machine</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004</span><span>15:30</span></div></div><div class="l num">50 L</div></div>
+              <div class="grp-sub"><span>Unassigned total</span><span class="num">50 L</span></div>
+            </div>
+          </div>
+
+          <!-- WEDNESDAY -->
+          <div class="day">
+            <div class="day-head"><span class="date">Wed 1 Oct 2026</span><span class="tot">Day total <b class="num">280 L</b></span></div>
+            <div class="grp">
+              <div class="grp-type">Project</div>
+              <div class="grp-name" dir="rtl"><bdi>مشروع إعادة تأهيل طريق حاصبيا – مرجعيون، المرحلة الثانية</bdi></div>
+              <div class="fill"><div class="who"><div class="eq">Excavator CAT 320 · Machine</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004</span><span>09:10</span></div></div><div class="l num">150 L</div></div>
+              <div class="fill"><div class="who"><div class="eq">Truck 72-118 · Truck</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004</span><span>10:45</span></div></div><div class="l num">90 L</div></div>
+              <div class="grp-sub"><span>Project total</span><span class="num">240 L</span></div>
+            </div>
+            <div class="grp">
+              <div class="grp-type">Company site</div>
+              <div class="grp-name">Main Yard</div>
+              <div class="fill"><div class="who"><div class="eq">Generator Perkins 60 kVA · Machine</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00004</span><span>16:20</span></div></div><div class="l num">40 L</div></div>
+              <div class="grp-sub"><span>Site total</span><span class="num">40 L</span></div>
+            </div>
+          </div>
+
+          <div class="btn btn-secondary">Export PDF</div>
+
+          <div class="danger-zone">
+            <div class="btn btn-danger">Cancel Batch</div>
+            <p>Requires a reason. The batch number DSL-2026-00004 is never reused.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PDF EXPORT ===================== -->
+  <div class="pdf-wrap" data-g="pdf">
+    <p class="caption">PDF export · A4 · No Prices (default)</p>
+
+    <!-- PAGE 1 -->
+    <section class="a4">
+      <div class="pdf-head">
+        <div class="brand">DROMEX<small>Construction &amp; Plant Management</small></div>
+        <h2 class="pdf-title">Diesel Batch Report<span>DSL-2026-00004 · Invoice 55821</span></h2>
+      </div>
+      <div class="pdf-meta">
+        <div><b>Batch</b><span>DSL-2026-00004</span></div>
+        <div><b>Exported</b><span>Fri 3 Oct 2026, 18:42</span></div>
+        <div><b>Project filter</b><span>All projects</span></div>
+        <div><b>Site filter</b><span>All sites</span></div>
+        <div><b>Date range</b><span>Wed 1 Oct 2026 – Fri 3 Oct 2026</span></div>
+        <div><b>Prices</b><span>Excluded</span></div>
+      </div>
+
+      <div class="pdf-sum">
+        <div><div class="k">Delivered</div><div class="v">1,000 L</div></div>
+        <div><div class="k">Filled</div><div class="v">640 L</div></div>
+        <div><div class="k">Adjustments</div><div class="v">−20 L</div></div>
+        <div class="em"><div class="k">Remaining</div><div class="v">340 L</div></div>
+      </div>
+
+      <div class="pdf-h2">Projects</div>
+
+      <div class="pdf-h3"><span class="type">Project</span><bdi dir="rtl">مشروع إعادة تأهيل طريق حاصبيا – مرجعيون، المرحلة الثانية</bdi></div>
+      <table class="pdf">
+        <thead><tr><th class="c-date">Date</th><th>Equipment</th><th class="c-type">Type</th><th class="c-src">Source</th><th class="c-l">Litres</th></tr></thead>
+        <tbody>
+          <tr><td>Fri 3 Oct 2026</td><td>Excavator CAT 320</td><td>Machine</td><td>Tank · DSL-2026-00004</td><td class="num">130 L</td></tr>
+          <tr class="daysub"><td colspan="4">Day total · Fri 3 Oct 2026</td><td class="num">130 L</td></tr>
+          <tr><td>Wed 1 Oct 2026</td><td>Excavator CAT 320</td><td>Machine</td><td>Tank · DSL-2026-00004</td><td class="num">150 L</td></tr>
+          <tr><td>Wed 1 Oct 2026</td><td>Truck 72-118</td><td>Truck</td><td>Tank · DSL-2026-00004</td><td class="num">90 L</td></tr>
+          <tr class="daysub"><td colspan="4">Day total · Wed 1 Oct 2026</td><td class="num">240 L</td></tr>
+          <tr class="grpsub"><td colspan="4">Project total</td><td class="num">370 L</td></tr>
+        </tbody>
+      </table>
+
+      <div class="pdf-h3"><span class="type">Project</span>Marjayoun Water Tank Foundations</div>
+      <table class="pdf">
+        <thead><tr><th class="c-date">Date</th><th>Equipment</th><th class="c-type">Type</th><th class="c-src">Source</th><th class="c-l">Litres</th></tr></thead>
+        <tbody>
+          <tr><td>Thu 2 Oct 2026</td><td>Wheel Loader CAT 966H</td><td>Machine</td><td>Tank · DSL-2026-00004</td><td class="num">110 L</td></tr>
+          <tr class="daysub"><td colspan="4">Day total · Thu 2 Oct 2026</td><td class="num">110 L</td></tr>
+          <tr class="grpsub"><td colspan="4">Project total</td><td class="num">110 L</td></tr>
+        </tbody>
+      </table>
+
+      <div class="pdf-foot"><span>DROMEX · Diesel Batch Report · DSL-2026-00004</span><span>Page 1 of 3</span></div>
+    </section>
+
+    <!-- PAGE 2 -->
+    <section class="a4">
+      <div class="pdf-head">
+        <div class="brand">DROMEX<small>Construction &amp; Plant Management</small></div>
+        <h2 class="pdf-title">Diesel Batch Report<span>DSL-2026-00004 · Invoice 55821 (continued)</span></h2>
+      </div>
+
+      <div class="pdf-h2">Company sites</div>
+
+      <div class="pdf-h3"><span class="type">Site</span>Main Yard</div>
+      <table class="pdf">
+        <thead><tr><th class="c-date">Date</th><th>Equipment</th><th class="c-type">Type</th><th class="c-src">Source</th><th class="c-l">Litres</th></tr></thead>
+        <tbody>
+          <tr><td>Wed 1 Oct 2026</td><td>Generator Perkins 60 kVA</td><td>Machine</td><td>Tank · DSL-2026-00004</td><td class="num">40 L</td></tr>
+          <tr class="daysub"><td colspan="4">Day total · Wed 1 Oct 2026</td><td class="num">40 L</td></tr>
+          <tr class="grpsub"><td colspan="4">Site total</td><td class="num">40 L</td></tr>
+        </tbody>
+      </table>
+
+      <div class="pdf-h3"><span class="type">Site</span>Quarry Gate – North Stockpile and Crusher Area</div>
+      <table class="pdf">
+        <thead><tr><th class="c-date">Date</th><th>Equipment</th><th class="c-type">Type</th><th class="c-src">Source</th><th class="c-l">Litres</th></tr></thead>
+        <tbody>
+          <tr><td>Fri 3 Oct 2026</td><td>Truck 72-118</td><td>Truck</td><td>Tank · DSL-2026-00004</td><td class="num">70 L</td></tr>
+          <tr class="daysub"><td colspan="4">Day total · Fri 3 Oct 2026</td><td class="num">70 L</td></tr>
+          <tr class="grpsub"><td colspan="4">Site total</td><td class="num">70 L</td></tr>
+        </tbody>
+      </table>
+
+      <div class="pdf-h2">Unassigned</div>
+      <table class="pdf" style="margin-top:6px">
+        <thead><tr><th class="c-date">Date</th><th>Equipment</th><th class="c-type">Type</th><th class="c-src">Source</th><th class="c-l">Litres</th></tr></thead>
+        <tbody>
+          <tr><td>Thu 2 Oct 2026</td><td>Roller BOMAG BW 213</td><td>Machine</td><td>Tank · DSL-2026-00004</td><td class="num">50 L</td></tr>
+          <tr class="daysub"><td colspan="4">Day total · Thu 2 Oct 2026</td><td class="num">50 L</td></tr>
+          <tr class="grpsub"><td colspan="4">Unassigned total</td><td class="num">50 L</td></tr>
+        </tbody>
+      </table>
+      <p class="repeat-note">Table headings repeat at the top of every page when a section continues.</p>
+
+      <div class="pdf-foot"><span>DROMEX · Diesel Batch Report · DSL-2026-00004</span><span>Page 2 of 3</span></div>
+    </section>
+
+    <!-- PAGE 3 -->
+    <section class="a4">
+      <div class="pdf-head">
+        <div class="brand">DROMEX<small>Construction &amp; Plant Management</small></div>
+        <h2 class="pdf-title">Diesel Batch Report<span>DSL-2026-00004 · Batch totals</span></h2>
+      </div>
+
+      <div class="pdf-h2">Batch totals</div>
+      <table class="totals-table">
+        <tr><td>Delivered (Invoice 55821, Al-Nour Fuel Co., Wed 1 Oct 2026)</td><td>1,000 L</td></tr>
+        <tr><td>Total filled</td><td>640 L</td></tr>
+        <tr><td>Dip adjustments</td><td>−20 L</td></tr>
+        <tr class="strong"><td>Remaining in this batch</td><td>340 L</td></tr>
+        <tr><td>Status</td><td>Open · In use</td></tr>
+        <tr><td>Overfill Alert</td><td>None</td></tr>
+      </table>
+
+      <div class="pdf-h2">Totals by destination</div>
+      <table class="totals-table">
+        <tr><td><bdi dir="rtl">مشروع إعادة تأهيل طريق حاصبيا – مرجعيون، المرحلة الثانية</bdi> (Project)</td><td>370 L</td></tr>
+        <tr><td>Marjayoun Water Tank Foundations (Project)</td><td>110 L</td></tr>
+        <tr><td>Main Yard (Site)</td><td>40 L</td></tr>
+        <tr><td>Quarry Gate – North Stockpile and Crusher Area (Site)</td><td>70 L</td></tr>
+        <tr><td>Unassigned</td><td>50 L</td></tr>
+        <tr class="strong"><td>Total filled</td><td>640 L</td></tr>
+      </table>
+
+      <div class="pdf-adj">
+        <b>Dip adjustment · Fri 3 Oct 2026</b>
+        Calculated remaining 560 L · Dip reading 540 L · Adjustment −20 L · Reason: morning dip before work
+      </div>
+
+      <div class="pdf-foot"><span>DROMEX · Diesel Batch Report · DSL-2026-00004</span><span>Page 3 of 3</span></div>
+    </section>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.tabs button').forEach(function(b){
+    b.addEventListener('click',function(){
+      var v=b.dataset.v;
+      document.querySelectorAll('[data-g]').forEach(function(w){w.hidden=!(v==='both'||w.dataset.g===v)});
+      document.querySelectorAll('.tabs button').forEach(function(x){x.setAttribute('aria-pressed',String(x===b))});
+    });
+  });
+</script>
+</body>
+</html>

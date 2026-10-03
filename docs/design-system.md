@@ -65,3 +65,7 @@ Color must communicate role consistently; it is not decorative.
 ## Implementation rule
 
 New screens must use `AppPage`, `PageHeader`, `AppCard`, `AppButton`, `AppField`, `MetricCard`, `Feedback`, and `EmptyState` from `src/ui/components/AppPrimitives.tsx`. Existing screens should migrate to these primitives when they are next materially edited; do not perform cosmetic-only rewrites that risk stable workflows.
+
+## Approved 0.20.0 design reference
+
+The printed receipt with its centred header and Load No., and the diesel batch screens (Fuel screen, Record Fill, batch page, day cards, project fuel view, PDF) are specified by the Owner-approved mockup [`docs/design/0.20.0-approved-mockup.html`](design/0.20.0-approved-mockup.html) (DEC-491, DEC-492). Build them exactly as shown; every fill list uses one card per day, newest first (DEC-492).
