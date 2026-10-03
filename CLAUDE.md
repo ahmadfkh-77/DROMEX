@@ -29,28 +29,20 @@ documents, and backups.
 
 Current source release metadata is version `0.20.0`, Android version code `28`,
 package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
-internal Android artifact is `output/DROMEX-0.19.0-build22.apk` when present
-(Projects list and project screens redesign, account payments, Apply unallocated
-payment, Open Balance cancellation and the Payments & Balances statement;
-migration 47, DEC-482 to DEC-486), installed in place and confirmed working on
-the Owner's phone; `output/DROMEX-0.17.0-build20.apk` is retained unchanged as
-the previous accepted installer. `output/DROMEX-0.18.0-build21.apk` (migration 46)
-was a preview that was never separately accepted and is superseded by build 22.
-`output/DROMEX-0.20.0-build25.apk` (Company Totals, Invoices & Bills, authorized
-signers and Company Load Number Series, migration 48, DEC-487; Totals and Loads
-History PDFs, DEC-488; Project Totals fuel and block-layout PDFs, DEC-489; the
-Delivery Authorization Supplier signature, migration 49, DEC-490) is a preview
-build pending physical upgrade-install acceptance. Builds 23 and 24
-(`output/DROMEX-0.20.0-build23.apk`, `-build24.apk`) were earlier previews of
-the same work, superseded by build 25. Build 26 (`output/DROMEX-0.20.0-build26.apk`: receipt Load No. and centred
-contact details, DEC-491; diesel batches and outside station fills, migration
-50, DEC-492) was a preview the Owner tested; build 27 adds the History and
-Usage tabs in the day-card design and per-destination PDFs (DEC-492 amendment;
-`output/DROMEX-0.20.0-build27.apk`). Build 28 adds the Company Settings name,
-logo and contact details to the Diesel Batch Report header (second amendment),
-is prepared in source on `feature/android-receipts-diesel-batches`, and its APK
-has not been built. Builds 25 to 27 stay as previews until build 28 is built,
-installed and accepted.
+internal Android artifact is `output/DROMEX-0.20.0-build28.apk` when present,
+installed in place and accepted by the Owner on 2026-10-04. Build 28 carries the
+0.20.0 work: Company Totals, Invoices & Bills, authorized signers and Company
+Load Number Series (migration 48, DEC-487), Totals and Loads History PDFs
+(DEC-488), Project Totals fuel and block-layout PDFs (DEC-489), the Delivery
+Authorization Supplier signature (migration 49, DEC-490), the receipt Load No.
+and centred contact details (DEC-491), and diesel batches, outside station
+fills, the History and Usage day cards, per-destination PDFs and the Company
+Settings header on the Diesel Batch Report (migration 50, DEC-492 and its two
+amendments). It is built from `feature/android-receipts-diesel-batches`, which
+is not yet merged into `main`. `output/DROMEX-0.19.0-build22.apk` (migration 47,
+DEC-482 to DEC-486) is retained unchanged as the previous accepted installer.
+Builds 23 to 27 were previews of the same work, superseded by build 28; build 21
+was a preview superseded by build 22.
 
 Release APKs are no longer committed to Git from build 14 onward (DEC-396):
 `output/*.apk` is ignored, so the signed artifact lives in `output/` on the

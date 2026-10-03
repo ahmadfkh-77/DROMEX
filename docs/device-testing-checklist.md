@@ -130,7 +130,7 @@ Everything below passed. Kept as the regression set for later builds.
 
 ---
 
-## Build 28 — 0.20.0 (pending; not yet installed)
+## Build 28 — 0.20.0 (accepted by the Owner 2026-10-04)
 
 Build 28 is build 27 with the company from Company Settings on the Diesel
 Batch Report. Install over build 27, 26 or 25 and run the Build 27 and Build 26
