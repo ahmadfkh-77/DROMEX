@@ -2815,8 +2815,8 @@ command must convert it the same way, or the command will not load.**
 ### Implemented Owner account and session management (Phase 2C checkpoint 4E, local development only)
 
 Status: **implemented and verified against disposable PostgreSQL 18.6
-databases and a stubbed browser API only (DEC-490, proposed and pending Owner
-review). Not production-verified.** No real Owner, Admin, session, invitation,
+databases and a stubbed browser API only (DEC-490, confirmed). Not
+production-verified.** No real Owner, Admin, session, invitation,
 or email exists. This implements DEC-408's Owner-only account management and
 the disabling part of DEC-427. It does not start the permission model: there
 is no role, template, permission block, project scope, or effective-access

@@ -1224,8 +1224,8 @@ database role. **Not production-verified.**
 ## Phase 2C Owner account and session management (checkpoint 4E): local verification
 
 Status: **implemented and locally verified on exact Node 24.20.0 in
-disposable containers (2026-09-29 and 2026-09-30; DEC-490, pending Owner
-review). Not production-verified.** No real Owner, Admin, session,
+disposable containers (2026-09-29 and 2026-09-30; DEC-490, confirmed). Not
+production-verified.** No real Owner, Admin, session,
 invitation, or email exists. Every identity was synthetic, every address used
 a reserved test domain, and email went only to the capture transport.
 
@@ -1475,8 +1475,8 @@ evidence. Today, none of them are.
 - [ ] Owner account and session management (DEC-408, DEC-427, DEC-490):
       Owner-only list and detail, disable and re-enable with a reason, and
       one and all-session revocation — **implemented and verified locally on
-      Node 24.20.0 (checkpoint 4E); not production-verified, and DEC-490 is
-      pending Owner review**
+      Node 24.20.0 (checkpoint 4E); not production-verified; DEC-490 is
+      confirmed**
 - [ ] Email delivery production configured and physically verified by the
       Owner: Resend account created; current plan and terms confirmed,
       including whether the Free plan permits DROMEX's business use; the

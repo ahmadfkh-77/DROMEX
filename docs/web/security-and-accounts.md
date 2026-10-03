@@ -28,7 +28,7 @@ DEC-487, DEC-488); the running server reads email configuration
 configured. Owner account and session management (list and inspect Admin
 accounts and invitations, disable and re-enable an Admin with a reason, and
 revoke one or every session of an Admin) is implemented and tested on
-disposable databases only (checkpoint 4E, DEC-490, pending Owner review). No
+disposable databases only (checkpoint 4E, DEC-490, confirmed). No
 Owner readiness enforcement, permission model, or deployment exists.
 
 The full authentication and authorization architecture — candidate research,
@@ -69,7 +69,7 @@ uses for the company record.
 
 ## Owner account and session management: implemented locally
 
-Checkpoint 4E (DEC-490, proposed and pending Owner review) implements the
+Checkpoint 4E (DEC-490, confirmed) implements the
 Owner-only part of DEC-408 and the disabling part of DEC-427, against
 disposable databases and a stubbed browser API only. The full description is
 in
