@@ -1331,6 +1331,33 @@ against a stubbed API, and there is no web sign-in screen; behaviour under a
 least-privilege runtime database role is not verified. **Not
 production-verified.**
 
+## CI verification on GitHub Actions (phase CI-1, DEC-491)
+
+Status: **implemented.** Time-sensitive Docker verification runs in
+`.github/workflows/web-tests.yml` on a GitHub-hosted `ubuntu-24.04` runner,
+because the development laptop failed the mandatory clock gate (DEC-491).
+
+| Step | What it does |
+| --- | --- |
+| Clock gate | A network-less `node:24.20.0-trixie-slim` container samples `Date.now()` against `performance.now()` every 500 ms for 150 s. It fails on any correction over 5 ms, cumulative drift over 5 ms, or 5 consecutive same-sign corrections over 1 ms (`Date.now()` resolution). Nothing else runs if it fails |
+| Toolchain | Node 24.20.0 exactly through `actions/setup-node` v7.0.0, pinned by commit SHA (as is `actions/checkout` v7.0.1) |
+| Dependencies | `npm ci` in `web/`, then a guard that fails if `web/package-lock.json` changed |
+| Checks | `npm run typecheck` (API and web app), API `test:unit`, API `test:integration` (Testcontainers, `postgres:18.6-trixie` pre-pulled with three attempts) |
+
+The workflow has read-only repository permissions, no secrets, no deployment,
+and no VPS access. The repository is public, so its logs are public: nothing
+it runs may print environment values or connection strings.
+
+**A CI result is evidence only if the clock gate in the same run passed.** A
+gate failure is reported and re-run, never fixed by loosening limits or test
+timing. Local Docker results remain non-evidence while the local gate fails.
+
+First run: [37059250726](https://github.com/ahmadfkh-77/DROMEX/actions/runs/37059250726)
+on `341d9e7`, all steps passed in 5 min 10 s (gate 157 s, integration tests
+98 s); exact gate figures and test counts are in the run log.
+
+Not covered by CI: Playwright browser tests, OQ-165 security tooling, coverage.
+
 ## Planned tests: email, Admin invitations, and password reset
 
 Status: **planned design, now covered by checkpoints 4A to 4C (DEC-439

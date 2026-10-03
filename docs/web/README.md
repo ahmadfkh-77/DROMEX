@@ -18,7 +18,7 @@ describes a rule, it cites the decision that established it.
 | [synchronization-strategy.md](synchronization-strategy.md) | Android synchronisation protocol and conflict rules | **Planned** (not implemented) |
 | [docker-vps-strategy.md](docker-vps-strategy.md) | Local Docker topology, port exposure rules, production deployment plan | **Partly implemented** (local development only) |
 | [backup-and-recovery.md](backup-and-recovery.md) | Backup design, recovery objectives, restore verification | **Planned** (no backups exist) |
-| [testing-and-production-readiness.md](testing-and-production-readiness.md) | Test strategy, the isolated database test lifecycle, the production-readiness gate | **Partly implemented** (Phase 1 tests only) |
+| [testing-and-production-readiness.md](testing-and-production-readiness.md) | Test strategy, the isolated database test lifecycle, the production-readiness gate | **Partly implemented** (Phase 1 tests only; CI verification on GitHub Actions (phase CI-1, DEC-491)) |
 
 ## Current state, stated plainly
 
@@ -114,6 +114,7 @@ The Android application is unchanged and remains offline-first on local SQLite
 | DEC-488 | An offline, pinned common-password blocklist (NCSC top 100,000 via SecLists) refuses common passwords on every path that creates or changes a password; no runtime network check (implemented locally in checkpoint 4C) |
 | DEC-489 | The running API reads email configuration in exactly two modes: disabled by default, or Resend only when the key-file path, sender, Reply-To, and a trusted HTTPS link origin are all valid; partial, ambient-key, or `capture` configuration stops startup; delivery built once at startup and shared by invitations, reset, and password-changed; startup never contacts the provider (implemented locally in checkpoint 4D; no provider configured) |
 | DEC-490 | Owner account and session management: Owner-only list, detail, disable and re-enable with a mandatory bounded reason, one and all-session revocation; a forward-only `sessions_revoked_at` rule ends sessions atomically with the change and keeps re-enabling from reviving any; Better Auth rows deleted afterwards through its internal adapter in one never-routed module; guard-level auditing of refused non-Owners; no deletion (proposed with checkpoint 4E; pending Owner review) |
+| DEC-491 | GitHub Actions on a GitHub-hosted `ubuntu-24.04` runner is the accepted environment for time-sensitive web test evidence; evidence counts only from `web-tests.yml` runs whose strict clock gate passed; read-only permissions, no secrets, no deployment, no VPS access (phase CI-1; confirmed) |
 
 Full detail for DEC-418 through DEC-437, and for DEC-439 through DEC-444 and
 DEC-487 to DEC-490 (§14A), is in
