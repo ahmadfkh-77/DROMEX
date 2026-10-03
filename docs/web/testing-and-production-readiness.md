@@ -1358,6 +1358,44 @@ on `341d9e7`, all steps passed in 5 min 10 s (gate 157 s, integration tests
 
 Not covered by CI: Playwright browser tests, OQ-165 security tooling, coverage.
 
+**Verification branches (phase CI-1b).** The workflow also runs on pushes to
+`verify/**` branches. A change is committed and proven on a verification
+branch first, and the feature branch is then fast-forwarded to that same,
+already-verified commit, so nothing needing Docker evidence reaches the
+feature branch unverified.
+
+## Dependency security update DS-1 (2026-10-04)
+
+Status: **implemented and CI-verified.** Patches every advisory `npm audit`
+reported for the web workspace; no feature, schema, or migration change.
+
+| Package | Change | Use | Advisories fixed |
+| --- | --- | --- | --- |
+| `fastify` | 5.12.3 → 5.12.5 (exact pin in `apps/api/package.json`) | Runtime | GHSA-4mh8-r7rc-xpvc (HTTP/2 trailer denial of service; the API serves HTTP/1 only, so it was not reachable) |
+| `fast-uri` | 4.1.4 → 4.1.5, and 3.1.7 → 3.1.8 under `ajv` | Runtime | GHSA-hrr3-gc8f-f4qj, GHSA-jvvf-x445-j334 |
+| `brace-expansion` | 2.1.4 → 2.1.7 | Tests only | GHSA-q2hr-2g5m-vwhr and two related advisories |
+| `@grpc/grpc-js` | 1.14.4 → 1.14.5 | Tests only | GHSA-m9gg-hp2v-232j, GHSA-f596-whhp-79r4 |
+
+Each new version has exactly the same dependencies and engine requirements as
+the one it replaces (`npm view`), so only the version, `resolved`, and
+`integrity` lines of the five lockfile entries changed. A regenerated lockfile
+was rejected because npm also dropped the `dev` flag from development-only
+platform binaries, which would have put them into a production install that
+omits development dependencies.
+
+| Check | Result |
+| --- | --- |
+| `npm audit`, committed lockfile before DS-1 | 4 vulnerabilities (2 high, 2 moderate) |
+| `npm ci` (Node 24.20.0, npm 11.19.0) | Exit 0; integrity verified; lockfile byte-identical afterwards |
+| `npm ls --all` | No invalid, missing, or extraneous package |
+| `npm audit`, all and runtime only | 0 and 0 |
+| Typecheck, API unit tests, `vite build` (host, no Docker) | Pass; unit 601 passed, 17 skipped |
+| CI on `verify/ds-1` ([37158350731](https://github.com/ahmadfkh-77/DROMEX/actions/runs/37158350731), `9f933a8`) | Every step passed, including the clock gate and the integration tests; exact test counts are in the run log |
+| CI on `web/phase2c-auth-foundation` after the fast-forward ([37159819094](https://github.com/ahmadfkh-77/DROMEX/actions/runs/37159819094), `9f933a8`) | Every step passed again, including the clock gate and the integration tests |
+
+Sources, accessed 2026-10-04: the GitHub Advisory Database entries above
+(`https://api.github.com/advisories/<id>`) and the npm registry (`npm view`).
+
 ## Planned tests: email, Admin invitations, and password reset
 
 Status: **planned design, now covered by checkpoints 4A to 4C (DEC-439
