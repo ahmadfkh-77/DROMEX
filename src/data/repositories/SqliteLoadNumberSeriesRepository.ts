@@ -1,13 +1,13 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {
-  DEFAULT_SERIES_ID,formatLoadNumber,normalizeSeriesPrefix,recordYear,validateSeriesDraft,
+  DEFAULT_SERIES_ID,formatSeriesNumber,normalizeSeriesPrefix,recordYear,validateSeriesDraft,
   type LoadNumberPreview,type LoadNumberSeries,type LoadNumberSeriesDraft,
 } from '../../domain/loadNumberSeries';
 import type {LoadNumberSeriesRepository} from './LoadNumberSeriesRepository';
 
 type SeriesRow={id:string;prefix:string;prefix_key:string;display_name:string;is_default:number;is_active:number;created_at:string;updated_at:string};
-type SeriesSummaryRow=SeriesRow&{issued_count:number;next_number:number|null;item_ids:string|null};
+type SeriesSummaryRow=SeriesRow&{issued_count:number;item_ids:string|null};
 export type IssuedLoadNumber={loadNumber:string;seriesId:string;seriesName:string};
 
 const makeId=()=>`series_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;
@@ -24,8 +24,23 @@ async function resolveSeries(db:SQLiteDatabase,itemId:string):Promise<SeriesRow>
   return fallback;
 }
 
+/** DEC-491. The lifetime counter lives in the counters table under this year value; per-year rows are builds 23 to 25. */
+const LIFETIME_COUNTER_YEAR=0;
+
 /**
- * DEC-487 (6). Gives one company load its permanent number. Call it inside the transaction that saves
+ * DEC-491. The count the next load of this series receives. A series that has no lifetime counter yet
+ * continues after every number it already issued in the PREFIX-YEAR-NNN format, so the count is never
+ * restarted and no number is reused.
+ */
+async function nextLifetimeSequence(db:SQLiteDatabase,series:Pick<SeriesRow,'prefix' | 'prefix_key'>):Promise<number>{
+  const counter=await db.getFirstAsync<{next_number:number}>('SELECT next_number FROM load_number_counters WHERE prefix_key = ? AND year = ?',series.prefix_key,LIFETIME_COUNTER_YEAR);
+  if(counter)return Number(counter.next_number);
+  const issued=await db.getFirstAsync<{issued:number}>('SELECT COUNT(*) issued FROM load_number_issues WHERE prefix = ?',series.prefix);
+  return Number(issued?.issued??0)+1;
+}
+
+/**
+ * DEC-487 (6), DEC-491. Gives one company load its permanent number. Call it inside the transaction that saves
  * the load, so a failure saves neither. The counter advances in one atomic statement, so two
  * confirmations can never read the same value; the unique index on loads.load_number and the history's
  * own uniqueness are the backstops. The number is written only onto a load that has none.
@@ -33,10 +48,12 @@ async function resolveSeries(db:SQLiteDatabase,itemId:string):Promise<SeriesRow>
 export async function issueLoadNumber(db:SQLiteDatabase,input:{loadId:string;itemId:string;recordDate:string;issuedAt:string}):Promise<IssuedLoadNumber>{
   const series=await resolveSeries(db,input.itemId);
   const year=recordYear(input.recordDate);
-  const counter=await db.getFirstAsync<{sequence:number}>(`INSERT INTO load_number_counters (prefix_key, year, next_number) VALUES (?, ?, 2)
-    ON CONFLICT(prefix_key, year) DO UPDATE SET next_number = next_number + 1 RETURNING next_number - 1 AS sequence`,series.prefix_key,year);
+  // Seed once from what the series already issued, then advance in one atomic statement.
+  await db.runAsync('INSERT OR IGNORE INTO load_number_counters (prefix_key, year, next_number) SELECT ?, ?, COUNT(*) + 1 FROM load_number_issues WHERE prefix = ?',series.prefix_key,LIFETIME_COUNTER_YEAR,series.prefix);
+  const counter=await db.getFirstAsync<{sequence:number}>(`UPDATE load_number_counters SET next_number = next_number + 1
+    WHERE prefix_key = ? AND year = ? RETURNING next_number - 1 AS sequence`,series.prefix_key,LIFETIME_COUNTER_YEAR);
   if(!counter)throw new Error('The load number could not be generated.');
-  const loadNumber=formatLoadNumber(series.prefix,year,Number(counter.sequence));
+  const loadNumber=formatSeriesNumber(series.prefix,Number(counter.sequence));
   const updated=await db.runAsync('UPDATE loads SET load_number = ?, load_number_series_id = ?, load_number_series_name = ? WHERE id = ? AND load_number IS NULL',loadNumber,series.id,series.display_name,input.loadId);
   if(updated.changes!==1)throw new Error('This load already has a load number.');
   await db.runAsync('INSERT INTO load_number_issues (load_number, load_id, series_id, prefix, year, sequence, item_id, issued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -50,15 +67,14 @@ export class SqliteLoadNumberSeriesRepository implements LoadNumberSeriesReposit
   async listSeries(year=thisYear()):Promise<LoadNumberSeries[]>{
     const rows=await this.db.getAllAsync<SeriesSummaryRow>(`SELECT s.*,
         (SELECT COUNT(*) FROM load_number_issues i WHERE i.prefix = s.prefix) issued_count,
-        (SELECT c.next_number FROM load_number_counters c WHERE c.prefix_key = s.prefix_key AND c.year = ?) next_number,
         (SELECT group_concat(ci.id, char(31)) FROM (SELECT id FROM catalog_items WHERE load_number_series_id = s.id ORDER BY name COLLATE NOCASE, id) ci) item_ids
-      FROM load_number_series s ORDER BY s.is_default DESC, s.prefix`,year);
-    return rows.map(row=>({
+      FROM load_number_series s ORDER BY s.is_default DESC, s.prefix`);
+    return Promise.all(rows.map(async row=>({
       id:row.id,prefix:row.prefix,displayName:row.display_name,isDefault:row.is_default===1,isActive:row.is_active===1,
       issuedCount:Number(row.issued_count),prefixLocked:Number(row.issued_count)>0,
       itemIds:row.is_default===1||!row.item_ids?[]:row.item_ids.split('\u001f'),
-      nextNumber:formatLoadNumber(row.prefix,year,Number(row.next_number??1)),createdAt:row.created_at,updatedAt:row.updated_at,
-    }));
+      nextNumber:formatSeriesNumber(row.prefix,await nextLifetimeSequence(this.db,row)),createdAt:row.created_at,updatedAt:row.updated_at,
+    })));
   }
 
   async createSeries(draft:LoadNumberSeriesDraft):Promise<LoadNumberSeries>{
@@ -115,9 +131,8 @@ export class SqliteLoadNumberSeriesRepository implements LoadNumberSeriesReposit
 
   async previewNextLoadNumber(itemId:string,recordDate:string):Promise<LoadNumberPreview>{
     const series=await resolveSeries(this.db,itemId);
-    const year=recordYear(recordDate);
-    const counter=await this.db.getFirstAsync<{next_number:number}>('SELECT next_number FROM load_number_counters WHERE prefix_key = ? AND year = ?',series.prefix_key,year);
-    return {seriesId:series.id,prefix:series.prefix,displayName:series.display_name,loadNumber:formatLoadNumber(series.prefix,year,Number(counter?.next_number??1))};
+    recordYear(recordDate);
+    return {seriesId:series.id,prefix:series.prefix,displayName:series.display_name,loadNumber:formatSeriesNumber(series.prefix,await nextLifetimeSequence(this.db,series))};
   }
 
   private async setItems(seriesId:string,itemIds:readonly string[],now:string):Promise<void>{

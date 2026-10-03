@@ -61,3 +61,29 @@ describe('Quick Text PDF documents',()=>{
     expect(html).toContain('First line\nSecond &lt;line&gt;');
   });
 });
+
+describe('Load No. on the PDF receipt and authorization (DEC-491)',()=>{
+  const numbered={...load,loadNumber:'ASP-00058',loadNumberSeriesName:'Asphalt'} as unknown as ConfirmedLoad;
+  it('prints Load No. above the transaction number on both documents',()=>{
+    for(const kind of ['receipt','authorization'] as const){
+      const html=buildLoadDocumentHtml(numbered,kind,'58');
+      expect(html).toContain('Load No.');
+      expect(html).toContain('ASP-00058');
+      expect(html.indexOf('Load No.')).toBeLessThan(html.indexOf('Transaction'));
+      expect(html).toContain('20260811-ABCD-00001');
+    }
+  });
+  it('keeps a number issued by an earlier build exactly as issued',()=>{
+    expect(buildLoadDocumentHtml({...numbered,loadNumber:'ASP-2026-001'} as ConfirmedLoad,'receipt','80')).toContain('ASP-2026-001');
+  });
+  it('prints no Load No. row for a load that never had a number',()=>{
+    expect(buildLoadDocumentHtml(load,'receipt','58')).not.toContain('Load No.');
+    expect(buildLoadDocumentHtml({...load,loadNumber:null} as ConfirmedLoad,'authorization','58')).not.toContain('Load No.');
+  });
+  it('centres the company title and every contact line',()=>{
+    const html=buildLoadDocumentHtml({...numbered,companyAddress:'Main Road, Hasbaya',companyPhone:'+961 70 123 456',companyEmail:'info@dromex.example',companyTaxVatNumber:'123456-601'} as ConfirmedLoad,'receipt','58');
+    expect(html).toMatch(/h1{text-align:center/);
+    expect(html).toMatch(/[^h]p{text-align:center/);
+    for(const text of ['Main Road, Hasbaya','+961 70 123 456','info@dromex.example','Tax/VAT: 123456-601'])expect(html).toContain(`<p>${text}</p>`);
+  });
+});

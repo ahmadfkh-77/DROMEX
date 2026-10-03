@@ -47,7 +47,7 @@ export function LoadNumberSeriesScreen({repository,catalog,onBack}:{repository:L
 
   return <AppPage keyboard>
     <PageHeader eyebrow="SETUP" title="Load number series" onBack={onBack}/>
-    <Text style={styles.lead}>Every company load gets a number like LOAD-2026-001 when it is confirmed. Give an item its own series, or let several items share one counter. Numbering restarts each year.</Text>
+    <Text style={styles.lead}>Every company load gets a number like ASP-00058 when it is confirmed. Give an item its own series, or let several items share one counter. The count never restarts. Numbers issued earlier, like ASP-2026-001, keep their original form.</Text>
     {error?<Feedback kind="error">{error}</Feedback>:null}{message?<Feedback kind="success">{message}</Feedback>:null}
     <AppButton label="Add series" disabled={busy} onPress={()=>{setSheetError(null);setItemSearch('');setEditing({id:null,draft:{prefix:'',displayName:'',itemIds:[]},prefixLocked:false,isDefault:false});}}/>
     <View style={styles.list}>
@@ -74,7 +74,7 @@ export function LoadNumberSeriesScreen({repository,catalog,onBack}:{repository:L
         {editing.prefixLocked?<View style={styles.locked}><Text style={styles.lockedLabel}>Prefix</Text><Text style={styles.prefixText}>{editing.draft.prefix}</Text><Text style={styles.helper}>Locked: loads already carry this prefix.</Text></View>
           :<AppField label="Prefix * (2 to 5 letters)" value={editing.draft.prefix} onChangeText={prefix=>setEditing({...editing,draft:{...editing.draft,prefix:prefix.toUpperCase().replace(/[^A-Z]/g,'')}})} autoCapitalize="characters" maxLength={5}/>}
         <AppField label="Display name *" value={editing.draft.displayName} onChangeText={displayName=>setEditing({...editing,draft:{...editing.draft,displayName}})} maxLength={60} placeholder="Asphalt, Aggregates…"/>
-        <Text style={styles.preview}>Numbers will look like {normalizeSeriesPrefix(editing.draft.prefix)||'ABC'}-{new Date().getFullYear()}-001</Text>
+        <Text style={styles.preview}>Numbers will look like {normalizeSeriesPrefix(editing.draft.prefix)||'ABC'}-00001</Text>
         {editing.isDefault?<Text style={styles.helper}>The default series is used by every item that has no series of its own. It cannot be deactivated.</Text>:<>
           <Text style={styles.sheetTitle}>Items using this series</Text>
           <Text style={styles.helper}>An item belongs to one series. Choosing an item that is in another series moves it here.</Text>

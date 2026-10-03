@@ -112,6 +112,9 @@ describe('Company Load Number Series',()=>{
   it('locks a used prefix, previews the format, and moves items between series',()=>{
     expect(series).toContain('Locked: loads already carry this prefix.');
     expect(series).toContain('Numbers will look like');
+    expect(series).toContain('-00001');
+    expect(series).toContain('The count never restarts.');
+    expect(series).not.toContain('Numbering restarts each year');
     expect(series).toContain('now in {other.prefix}');
     expect(series).toContain('The default series is used by every item that has no series of its own.');
   });

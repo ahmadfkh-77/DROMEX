@@ -38,6 +38,19 @@ export function wrapText(value:string,width:number):string[]{
   return result;
 }
 
+/**
+ * DEC-491. Centres one line by padding it with spaces, so the result does not depend on the printer
+ * honouring (or keeping) the ESC a centre command. A line already as wide as the paper is unchanged.
+ */
+export function centerLine(value:string,columns:number):string{
+  return value.length>=columns?value:' '.repeat(Math.floor((columns-value.length)/2))+value;
+}
+
+/** Wraps a value to the paper width and centres every wrapped line. */
+export function centeredLines(value:string,columns:number):string[]{
+  return wrapText(value,columns).map(line=>centerLine(line,columns));
+}
+
 export function labelValueLines(label:string,value:unknown,paper:PaperWidth):string[]{
   const columns=paper==='58'?32:48,labelWidth=paper==='58'?14:20,gap=1,valueWidth=columns-labelWidth-gap;
   const labels=wrapText(`${label}:`,labelWidth),values=wrapText(String(value??'—'),valueWidth),count=Math.max(labels.length,values.length);
@@ -54,13 +67,15 @@ function labelled(doc:EscPosDocument,label:string,value:unknown,strong=false){
   if(strong)doc.bold(false);
 }
 
+// DEC-491. Every header line is centred in software (left-aligned on the printer, padded with spaces).
+// The company name prints at double width, so it is wrapped and centred against half the paper width.
 function companyHeader(doc:EscPosDocument,name:string,address:string|null,phone:string|null,email:string|null,tax:string|null){
-  doc.align(1).bold(true).size(1).wrapped(name).size(0).bold(false);
-  if(address)doc.wrapped(address);
-  if(phone)doc.wrapped(phone);
-  if(email)doc.wrapped(email);
-  if(tax)doc.wrapped(`Tax/VAT: ${tax}`);
-  doc.line('').align(0).line(divider(doc.paper==='58'?32:48));
+  const columns=doc.paper==='58'?32:48;
+  doc.align(0).bold(true).size(1);
+  for(const line of centeredLines(name,Math.floor(columns/2)))doc.line(line);
+  doc.size(0).bold(false);
+  for(const value of [address,phone,email,tax?`Tax/VAT: ${tax}`:null])if(value)for(const line of centeredLines(value,columns))doc.line(line);
+  doc.line('').line(divider(columns));
 }
 
 export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper:PaperWidth):Buffer{
@@ -72,7 +87,11 @@ export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper
     doc.wrapped(`Cancelled ${record.cancelledAt?new Date(record.cancelledAt).toLocaleString():'—'}`);
     doc.line('').line(divider(columns)).align(0);
   }
-  doc.align(1).bold(true).wrapped(kind==='receipt'?'RECEIPT':'DELIVERY AUTHORIZATION').bold(false).line('').align(0);
+  doc.align(0).bold(true);
+  for(const line of centeredLines(kind==='receipt'?'RECEIPT':'DELIVERY AUTHORIZATION',columns))doc.line(line);
+  doc.bold(false).line('');
+  // DEC-491. The load number sits first and bold; a load that never had one (before build 23) prints no line.
+  if(record.loadNumber)labelled(doc,'Load No.',record.loadNumber,true);
   labelled(doc,'Transaction',record.transactionNumber);
   labelled(doc,'Date',new Date(record.confirmedAt).toLocaleString());
   labelled(doc,'Customer',record.customerName);

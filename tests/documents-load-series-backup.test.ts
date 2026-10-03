@@ -70,8 +70,8 @@ describe('backup and restore of documents and load number series',()=>{
     expect(await after.getSettings()).toMatchObject({legalName:'DROMEX SAL',bankDetails:'IBAN LB00',nextNumbers:{customer_invoice:2,supplier_statement:2}});
     expect(await after.getBillingContact('customer','customer')).toMatchObject({saved:true,billingName:'Road Co SAL',taxRegistrationNumber:'TX-9'});
     expect((await afterSigners.listEvents(signer.id)).map(value=>value.event)).toEqual(['created','signature_changed','used']);
-    expect((await afterLoads.listLoads()).map(load=>[load.loadNumber,load.status]).sort()).toEqual([['ASP-2026-001','Active'],['LOAD-2026-001','Cancelled']]);
-    expect((await afterSeries.listSeries(2026)).map(value=>[value.prefix,value.nextNumber,value.issuedCount,value.prefixLocked])).toEqual([['LOAD','LOAD-2026-002',1,true],['ASP','ASP-2026-002',1,true]]);
+    expect((await afterLoads.listLoads()).map(load=>[load.loadNumber,load.status]).sort()).toEqual([['ASP-00001','Active'],['LOAD-00001','Cancelled']]);
+    expect((await afterSeries.listSeries(2026)).map(value=>[value.prefix,value.nextNumber,value.issuedCount,value.prefixLocked])).toEqual([['LOAD','LOAD-00002',1,true],['ASP','ASP-00002',1,true]]);
   });
 
   it('keeps numbering after a restore: no number or document number is ever reused, and the guards still hold',async()=>{
@@ -83,7 +83,7 @@ describe('backup and restore of documents and load number series',()=>{
     const restored=copyOf(db);
     const afterLoads=new SqliteLoadRepository(restored as never),afterDocs=new SqliteBusinessDocumentRepository(restored as never);
     const next=await confirm(afterLoads,'sand');
-    expect(next.loadNumber).toBe('LOAD-2026-002');
+    expect(next.loadNumber).toBe('LOAD-00002');
     expect((await afterDocs.issueDocument((await afterDocs.createDraft({kind:'customer_invoice',partyId:'customer',recordKeys:[recordKey('company_load',next.id)],selectionMethod:'manual'})).id,{issueDate:'2026-09-03'})).documentNumber).toBe('INV-2026-002');
     expect(()=>restored.raw.prepare("UPDATE loads SET load_number='LOAD-2026-999' WHERE id=?").run(first.id)).toThrow(/load number cannot change/);
     await expect(afterDocs.createDraft({kind:'customer_invoice',partyId:'customer',recordKeys:[recordKey('company_load',first.id)],selectionMethod:'manual'})).rejects.toThrow('already included in INV-2026-001');
