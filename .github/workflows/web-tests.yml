@@ -15,6 +15,9 @@ on:
   push:
     branches:
       - web/phase2c-auth-foundation
+      # Verification branches: a change is proven here on a stable clock
+      # before the feature branch is moved to the same commit (DEC-491).
+      - 'verify/**'
     paths:
       - 'web/**'
       - '.github/workflows/web-tests.yml'
