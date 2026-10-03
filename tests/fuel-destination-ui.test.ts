@@ -16,7 +16,9 @@ describe('Fuel Destination UI contract',()=>{
 
   it('replaces the fill-form Project field with Fuel destination and conditional selectors',()=>{
     expect(screen).not.toContain('label="Project (optional)"');
-    expect(screen.match(/<FuelDestinationFields/g)?.length).toBe(2);
+    // The fill form moved into FuelFillForm (DEC-492); the screen keeps the correction form.
+    expect(screen.match(/<FuelDestinationFields/g)?.length).toBe(1);
+    expect(source('src/ui/components/fuel/FuelFillForm.tsx').match(/<FuelDestinationFields/g)?.length).toBe(1);
     expect(destination).toContain('label="Fuel destination *"');
     expect(destination).toContain('label="Select project *"');
     expect(destination).toContain('label="Select company site *"');

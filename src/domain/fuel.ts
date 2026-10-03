@@ -7,6 +7,12 @@ export const fuelTypeLabels:Record<FuelType,string>={diesel:'Diesel',gasoline:'G
 export type FuelDestinationType='project'|'company_site'|'unassigned';
 export const fuelDestinationLabels:Record<FuelDestinationType,string>={project:'Project',company_site:'Company Site',unassigned:'Unassigned'};
 export const fuelDestinationOptions:{id:FuelDestinationType;label:string}[]=(['project','company_site','unassigned'] as const).map(id=>({id,label:fuelDestinationLabels[id]}));
+// DEC-492. Where an equipment fill's fuel came from. A missing value on a stored fill means the tank, as
+// every fill before outside station fills existed. A station fill never touches the tank or a batch.
+export type FuelSource='tank'|'station';
+export const fuelSourceLabels:Record<FuelSource,string>={tank:'From tank',station:'Outside station'};
+export type FuelStation={id:string;name:string;location:string|null;notes:string|null;isActive:boolean;createdAt:string;updatedAt:string};
+export type FuelStationDraft={name:string;location:string;notes:string};
 export type CompanySite={id:string;name:string;isActive:boolean;createdAt:string;updatedAt:string};
 // DEC-393. Reasoned correction audit, mirroring the company-load and supplier-load model.
 export type FuelCorrectionChange={field:string;originalValue:string|null;newValue:string|null};
@@ -15,21 +21,22 @@ export type FuelMovementStatus='Active'|'Cancelled';
 export type FuelEquipmentType='machine'|'truck';
 export type FuelOption={id:string;name:string;detail?:string;startDate?:string;endDate?:string|null};
 export type FuelPriceRecord={id:string;fuelType:FuelType;pricePerLitreUsd:number;effectiveAt:string;changedBy:string;reason:string|null;createdAt:string};
-export type FuelSetup={suppliers:FuelOption[];machines:FuelOption[];trucks:FuelOption[];equipment:FuelOption[];projects:FuelOption[];companySites:CompanySite[];vatRatePercent:number;currentFuelPrice:FuelPriceRecord|null;fuelPriceHistory:FuelPriceRecord[];fuelPrices:Record<FuelType,{current:FuelPriceRecord|null;history:FuelPriceRecord[]}>};
-export type FuelMovement={id:string;type:FuelMovementType;fuelType:FuelType;correctionHistory:FuelCorrectionEntry[];confirmedAt:string;litres:number;previousBalanceLitres:number|null;differenceLitres:number|null;supplierId:string|null;supplierName:string|null;equipmentType?:FuelEquipmentType;equipmentId:string|null;equipmentName:string|null;projectId:string|null;projectName:string|null;destinationType?:FuelDestinationType|null;companySiteId?:string|null;companySiteName?:string|null;companySiteIsActive?:boolean|null;ticketNumber:string|null;odometerReading:string|null;reason:string|null;notes:string|null;fuelPriceHistoryId:string|null;pricePerLitreUsd:number|null;priceOverrideReason:string|null;consumptionCostUsd:number|null;subtotalUsd:number|null;vatRatePercent:number|null;vatAmountUsd:number|null;finalTotalUsd:number|null;paymentStatus:string;status:FuelMovementStatus;cancellationReason:string|null;cancelledAt:string|null;balanceAfterLitres:number};
+export type FuelBatchTracking={started:boolean;startedAt:string|null};
+export type FuelSetup={fuelStations:FuelStation[];batchTracking:FuelBatchTracking;suppliers:FuelOption[];machines:FuelOption[];trucks:FuelOption[];equipment:FuelOption[];projects:FuelOption[];companySites:CompanySite[];vatRatePercent:number;currentFuelPrice:FuelPriceRecord|null;fuelPriceHistory:FuelPriceRecord[];fuelPrices:Record<FuelType,{current:FuelPriceRecord|null;history:FuelPriceRecord[]}>};
+export type FuelMovement={fuelSource?:FuelSource|null;fuelStationId?:string|null;fuelStationName?:string|null;batchId?:string|null;id:string;type:FuelMovementType;fuelType:FuelType;correctionHistory:FuelCorrectionEntry[];confirmedAt:string;litres:number;previousBalanceLitres:number|null;differenceLitres:number|null;supplierId:string|null;supplierName:string|null;equipmentType?:FuelEquipmentType;equipmentId:string|null;equipmentName:string|null;projectId:string|null;projectName:string|null;destinationType?:FuelDestinationType|null;companySiteId?:string|null;companySiteName?:string|null;companySiteIsActive?:boolean|null;ticketNumber:string|null;odometerReading:string|null;reason:string|null;notes:string|null;fuelPriceHistoryId:string|null;pricePerLitreUsd:number|null;priceOverrideReason:string|null;consumptionCostUsd:number|null;subtotalUsd:number|null;vatRatePercent:number|null;vatAmountUsd:number|null;finalTotalUsd:number|null;paymentStatus:string;status:FuelMovementStatus;cancellationReason:string|null;cancelledAt:string|null;balanceAfterLitres:number};
 export type FuelOverview={currentBalanceLitres:number;hasKnownBalance:boolean;latestGauge:FuelMovement|null;movements:FuelMovement[]};
 export type ProjectEquipmentFuelUsage={equipmentId:string|null;equipmentName:string;totalLitres:number;totalCostUsd:number;unpricedLitres:number;fillCount:number;fills:FuelMovement[]};
 export type FuelMovementFilters={projectId?:string;equipmentId?:string;type?:FuelMovementType|'all';status?:FuelMovementStatus|'all';fromDate?:string;toDate?:string};
 export type FuelDeliveryDraft={recordDate:string;litres:string;supplierId:string;ticketNumber:string;pricePerLitreUsd:string;updateCurrentPrice:boolean;notes:string};
 // destinationType and companySiteId are optional so a draft saved before DEC-438 still resolves:
 // its destination is derived from projectId.
-export type FuelFillDraft={recordDate:string;fuelType:FuelType;litres:string;equipmentType:FuelEquipmentType;equipmentId:string;destinationType?:FuelDestinationType;projectId:string;companySiteId?:string;odometerReading:string;pricePerLitreUsd:string;priceOverrideReason:string;notes:string};
+export type FuelFillDraft={fuelSource?:FuelSource;stationId?:string;receiptNumber?:string;batchId?:string;recordDate:string;fuelType:FuelType;litres:string;equipmentType:FuelEquipmentType;equipmentId:string;destinationType?:FuelDestinationType;projectId:string;companySiteId?:string;odometerReading:string;pricePerLitreUsd:string;priceOverrideReason:string;notes:string};
 export type FuelGaugeDraft={recordDate:string;actualLitres:string;reason:string;notes:string};
 export type FuelPriceDraft={fuelType:FuelType;pricePerLitreUsd:string;reason:string};
 export type FuelFillCorrectionDraft=FuelFillDraft&{correctionReason:string};
 export type FuelDeliveryCorrectionDraft=Omit<FuelDeliveryDraft,'updateCurrentPrice'>&{correctionReason:string};
 export const emptyFuelDelivery:FuelDeliveryDraft={recordDate:localDateKey(new Date()),litres:'',supplierId:'',ticketNumber:'',pricePerLitreUsd:'',updateCurrentPrice:true,notes:''};
-export const emptyFuelFill:FuelFillDraft={recordDate:localDateKey(new Date()),fuelType:'diesel',litres:'',equipmentType:'machine',equipmentId:'',destinationType:'unassigned',projectId:'',companySiteId:'',odometerReading:'',pricePerLitreUsd:'',priceOverrideReason:'',notes:''};
+export const emptyFuelFill:FuelFillDraft={fuelSource:'tank',stationId:'',receiptNumber:'',batchId:'',recordDate:localDateKey(new Date()),fuelType:'diesel',litres:'',equipmentType:'machine',equipmentId:'',destinationType:'unassigned',projectId:'',companySiteId:'',odometerReading:'',pricePerLitreUsd:'',priceOverrideReason:'',notes:''};
 export const emptyFuelGauge:FuelGaugeDraft={recordDate:localDateKey(new Date()),actualLitres:'',reason:'',notes:''};
 export const emptyFuelPrice:FuelPriceDraft={fuelType:'diesel',pricePerLitreUsd:'',reason:''};
 
@@ -43,8 +50,9 @@ export function calculateFuelFillCost(litres:number,priceText:string):{pricePerL
 
 // The tank holds diesel only (DEC-392), so the running balance is computed from diesel movements
 // alone. A gasoline fill is a purchase-and-consume event with no stock effect: it passes through
-// carrying the diesel balance unchanged, and never contributes previous/difference litres.
-export function applyFuelLedger(movements:Omit<FuelMovement,'balanceAfterLitres'>[]):FuelMovement[]{let balance=0;return [...movements].sort((a,b)=>a.confirmedAt.localeCompare(b.confirmedAt)).map(movement=>{let previousBalanceLitres=movement.previousBalanceLitres;let differenceLitres=movement.differenceLitres;if(movement.status==='Active'&&movement.fuelType==='diesel'){if(movement.type==='gauge'){previousBalanceLitres=balance;differenceLitres=movement.litres-balance;balance=movement.litres;}else if(movement.type==='delivery')balance+=movement.litres;else balance-=movement.litres;}return{...movement,previousBalanceLitres,differenceLitres,balanceAfterLitres:balance};});}
+// carrying the diesel balance unchanged, and never contributes previous/difference litres. An outside
+// station fill (DEC-492) is the same: the fuel never entered the tank.
+export function applyFuelLedger(movements:Omit<FuelMovement,'balanceAfterLitres'>[]):FuelMovement[]{let balance=0;return [...movements].sort((a,b)=>a.confirmedAt.localeCompare(b.confirmedAt)).map(movement=>{let previousBalanceLitres=movement.previousBalanceLitres;let differenceLitres=movement.differenceLitres;if(movement.status==='Active'&&movement.fuelType==='diesel'&&movement.fuelSource!=='station'){if(movement.type==='gauge'){previousBalanceLitres=balance;differenceLitres=movement.litres-balance;balance=movement.litres;}else if(movement.type==='delivery')balance+=movement.litres;else balance-=movement.litres;}return{...movement,previousBalanceLitres,differenceLitres,balanceAfterLitres:balance};});}
 
 export function groupProjectFuelByEquipment(movements:FuelMovement[],projectId:string):ProjectEquipmentFuelUsage[]{
   const groups=new Map<string,ProjectEquipmentFuelUsage>();

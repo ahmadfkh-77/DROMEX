@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 49;
+export const DATABASE_VERSION = 50;
 
 type TableColumn = { name: string };
 
@@ -1888,6 +1888,93 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'business_document_settings', 'delivery_signer_id', 'TEXT REFERENCES document_signers(id)');
     await addColumnIfMissing(db, 'business_document_settings', 'delivery_signer_display', "TEXT CHECK (delivery_signer_display IS NULL OR delivery_signer_display IN ('name_only', 'name_with_signature'))");
     currentVersion = 49;
+  }
+
+  if (currentVersion === 49) {
+    // DEC-492. Diesel batches and outside station fills. One batch per diesel delivery after tracking is
+    // started (plus one optional Opening stock batch), numbered DSL-YYYY-NNNNN from a counter that only
+    // advances. The FIFO allocation of fills to batches is derived and cached in fuel_batch_allocations,
+    // rebuilt from the active records; fuel_allocation_events keeps an append-only note of every change to
+    // an earlier fill's allocation. Nothing existing is rewritten: the new fuel_movements columns start
+    // empty (NULL source = a tank fill, as today) and no batch exists until the Owner starts tracking.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS fuel_stations (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL,
+        location TEXT,
+        notes TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_fuel_stations_active_name ON fuel_stations(name_key) WHERE is_active = 1;
+      CREATE TABLE IF NOT EXISTS fuel_batch_settings (
+        id TEXT PRIMARY KEY NOT NULL CHECK (id = 'batches'),
+        started_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS fuel_batch_counters (
+        year INTEGER PRIMARY KEY NOT NULL,
+        next_number INTEGER NOT NULL CHECK (next_number > 0)
+      );
+      CREATE TABLE IF NOT EXISTS fuel_batches (
+        id TEXT PRIMARY KEY NOT NULL,
+        batch_number TEXT NOT NULL UNIQUE,
+        year INTEGER NOT NULL,
+        sequence INTEGER NOT NULL CHECK (sequence > 0),
+        kind TEXT NOT NULL CHECK (kind IN ('delivery', 'opening')),
+        delivery_movement_id TEXT UNIQUE REFERENCES fuel_movements(id),
+        opening_basis TEXT CHECK (opening_basis IS NULL OR opening_basis IN ('dip', 'calculated')),
+        opening_gauge_movement_id TEXT REFERENCES fuel_movements(id),
+        arrived_at TEXT NOT NULL,
+        delivered_litres REAL NOT NULL CHECK (delivered_litres > 0),
+        price_per_litre_usd_cents INTEGER CHECK (price_per_litre_usd_cents IS NULL OR price_per_litre_usd_cents >= 0),
+        invoice_number TEXT,
+        supplier_id TEXT REFERENCES suppliers(id),
+        supplier_name TEXT,
+        status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled')),
+        cancellation_reason TEXT,
+        cancelled_at TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE (year, sequence),
+        CHECK ((kind = 'delivery' AND delivery_movement_id IS NOT NULL AND opening_basis IS NULL)
+          OR (kind = 'opening' AND delivery_movement_id IS NULL AND opening_basis IS NOT NULL))
+      );
+      CREATE INDEX IF NOT EXISTS idx_fuel_batches_arrival ON fuel_batches(arrived_at, batch_number);
+      CREATE TABLE IF NOT EXISTS fuel_batch_allocations (
+        movement_id TEXT NOT NULL REFERENCES fuel_movements(id),
+        batch_id TEXT REFERENCES fuel_batches(id),
+        kind TEXT NOT NULL CHECK (kind IN ('fill', 'cover', 'shortfall', 'adjustment')),
+        litres REAL NOT NULL,
+        position INTEGER NOT NULL,
+        calculated_litres REAL,
+        dip_litres REAL,
+        PRIMARY KEY (movement_id, position)
+      );
+      CREATE INDEX IF NOT EXISTS idx_fuel_batch_allocations_batch ON fuel_batch_allocations(batch_id);
+      CREATE TABLE IF NOT EXISTS fuel_allocation_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        movement_id TEXT NOT NULL,
+        caused_by_movement_id TEXT,
+        before_json TEXT NOT NULL,
+        after_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TRIGGER IF NOT EXISTS trg_fuel_allocation_events_no_update BEFORE UPDATE ON fuel_allocation_events
+        BEGIN SELECT RAISE(ABORT, 'Fuel allocation history cannot change.'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_fuel_allocation_events_no_delete BEFORE DELETE ON fuel_allocation_events
+        BEGIN SELECT RAISE(ABORT, 'Fuel allocation history cannot be deleted.'); END;
+    `);
+    await addColumnIfMissing(db, 'fuel_movements', 'fuel_source', "TEXT CHECK (fuel_source IS NULL OR fuel_source IN ('tank', 'station'))");
+    await addColumnIfMissing(db, 'fuel_movements', 'fuel_station_id', 'TEXT REFERENCES fuel_stations(id)');
+    await addColumnIfMissing(db, 'fuel_movements', 'fuel_station_name', 'TEXT');
+    await addColumnIfMissing(db, 'fuel_movements', 'batch_id', 'TEXT REFERENCES fuel_batches(id)');
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS idx_fuel_movements_station ON fuel_movements(fuel_station_id, confirmed_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_fuel_movements_batch ON fuel_movements(batch_id);
+    `);
+    currentVersion = 50;
   }
 
 
