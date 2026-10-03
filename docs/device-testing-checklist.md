@@ -130,7 +130,30 @@ Everything below passed. Kept as the regression set for later builds.
 
 ---
 
-## Build 26 — 0.20.0 (pending; not yet installed)
+## Build 27 — 0.20.0 (pending; not yet installed)
+
+Build 27 is build 26 plus the History and Usage tabs in the day-card design.
+Install **over build 26** (or build 25) and run the Build 26 steps below, then:
+
+1. Fuel Management → **History**: a summary card (Delivered in, Filled out, Dip
+   adjustments, Diesel in tank), then **one card per day**, newest first, with
+   DELIVERIES IN, DIP READINGS and the fills grouped by project, company site
+   and unassigned. The card header shows In and Out litres.
+2. A cancelled fill or delivery shows struck through with a red "Cancelled ·
+   reason" tag and is not counted in any total.
+3. Tap a delivery, a dip reading and a fill: each opens its record as before.
+4. History filters (project, equipment, type, status, dates) show as removable
+   chips with Clear all, and the day cards follow them.
+5. Fuel Management → **Usage**: Fuel used by destination (batches, before
+   batches, outside stations, cost), By destination, By source, then one card
+   per day grouped by destination.
+6. Tap a project in By destination: only its fills show, the summary changes
+   to that project, and **Export <project> PDF** exports just that project. Do
+   the same for a company site and for Unassigned, then Show all destinations.
+7. Usage filters (Projects / Sites / Unassigned, search, dates) narrow the
+   cards and the export.
+
+## Build 26 — 0.20.0 (tested by the Owner; superseded by build 27)
 
 Install **over build 25** (the preview in use). If a phone still runs build 22,
 also install over build 22 once. Do Section 0 first.

@@ -27,7 +27,7 @@ application. It records outgoing company loads, incoming supplier loads, project
 daily reports, equipment, fuel, waste, walls, pavement calculations, finances,
 documents, and backups.
 
-Current source release metadata is version `0.20.0`, Android version code `26`,
+Current source release metadata is version `0.20.0`, Android version code `27`,
 package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
 internal Android artifact is `output/DROMEX-0.19.0-build22.apk` when present
 (Projects list and project screens redesign, account payments, Apply unallocated
@@ -42,11 +42,13 @@ History PDFs, DEC-488; Project Totals fuel and block-layout PDFs, DEC-489; the
 Delivery Authorization Supplier signature, migration 49, DEC-490) is a preview
 build pending physical upgrade-install acceptance. Builds 23 and 24
 (`output/DROMEX-0.20.0-build23.apk`, `-build24.apk`) were earlier previews of
-the same work, superseded by build 25. Build 26 (receipt Load No. and centred
+the same work, superseded by build 25. Build 26 (`output/DROMEX-0.20.0-build26.apk`: receipt Load No. and centred
 contact details, DEC-491; diesel batches and outside station fills, migration
-50, DEC-492) is prepared in source on `feature/android-receipts-diesel-batches`
-but its APK has not been built; build 25 stays the latest preview APK until
-build 26 is built, installed over build 25 and accepted.
+50, DEC-492) was a preview the Owner tested; build 27 adds the History and
+Usage tabs in the day-card design and per-destination PDFs (DEC-492 amendment),
+is prepared in source on `feature/android-receipts-diesel-batches`, and its APK
+has not been built. Builds 25 and 26 stay as previews until build 27 is built,
+installed and accepted.
 
 Release APKs are no longer committed to Git from build 14 onward (DEC-396):
 `output/*.apk` is ignored, so the signed artifact lives in `output/` on the

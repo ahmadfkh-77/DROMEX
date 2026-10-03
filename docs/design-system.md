@@ -69,3 +69,5 @@ New screens must use `AppPage`, `PageHeader`, `AppCard`, `AppButton`, `AppField`
 ## Approved 0.20.0 design reference
 
 The printed receipt with its centred header and Load No., and the diesel batch screens (Fuel screen, Record Fill, batch page, day cards, project fuel view, PDF) are specified by the Owner-approved mockup [`docs/design/0.20.0-approved-mockup.html`](design/0.20.0-approved-mockup.html) (DEC-491, DEC-492). Build them exactly as shown; every fill list uses one card per day, newest first (DEC-492).
+
+The Fuel Management History and Usage tabs follow [`docs/design/0.20.0-fuel-history-usage-mockup.html`](design/0.20.0-fuel-history-usage-mockup.html), approved on 2026-10-03: the same day cards, tags and summary cards.
