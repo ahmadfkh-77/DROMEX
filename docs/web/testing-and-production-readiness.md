@@ -1443,6 +1443,52 @@ decisions. Merging this branch into main will need the two shared files,
 `requirements/decisions.md` and `requirements/SRS.md`, reconciled; that is a
 separate, planned checkpoint and has not been started.
 
+## Integration-step teardown race (F1, 2026-10-04)
+
+Status: **mechanism established; test-helper change made; the fix is not yet
+shown to remove every failure.** Test and CI changes only; no production code
+is involved in this finding.
+
+**Symptom.** About 4 of 13 integration runs on identical integration code
+(counted from the run records, so approximate) ended with exit code 1 although
+no test failed. The CI step that explains an integration failure (diagnostics
+step in `web-tests.yml`) captured one: 437 of 437 tests passed, then
+"Vitest caught 1 unhandled error", an uncaught PostgreSQL error 57P01
+("terminating connection due to administrator command"), attributed to
+`tests/integration/terminal-owner-recovery.test.ts`.
+
+**Mechanism.** In pg-pool 3.14.0, `end()` removes each client from the pool's
+list and closes it asynchronously, and the callback fires once the list is
+empty, without waiting for the sockets. `await pool.end()` can therefore
+return while connections are still closing. The test harness then runs
+`DROP DATABASE ... WITH (FORCE)`, which terminates those sessions; the server's
+57P01 reaches the pool's idle-client handler, which re-emits it on the pool.
+No test pool has an `error` listener, so it becomes an uncaught exception and
+Vitest exits 1. `tests/unit/pool-end-teardown-race.test.ts` pins both halves of
+this against the real pg-pool code with a fake client (no database). The exact
+client that was terminated is not named in the output; the mechanism and the
+file are, the specific connection is inferred.
+
+**Change.** `tests/helpers/db.ts` now waits, for at most 5 seconds and polling
+`pg_stat_activity` every 25 ms, until no other session is connected to the test
+database before the forced drop. `WITH (FORCE)` stays as the fallback for a
+session a test keeps on purpose. No timeout, retry, assertion, or error handler
+was added or relaxed.
+
+**What this does and does not show.** The unit test shows the cause. It cannot
+show that the helper removes the race, because that needs a real database and
+can be judged only from CI. Rerunning one commit a few times cannot prove it
+either: at a failure rate near a third, three green runs in a row would still
+happen about one time in three with nothing fixed. The evidence that counts is
+the number of unhandled errors the diagnostics step reports across all
+following runs, which will be stated with the number of runs behind it.
+
+**Local-only stalls (F10).** On the Windows development machine, unit tests that
+build a server sometimes stall for 9 to 24 seconds while the whole suite runs
+alongside them (3 of 28 stress runs). A scratch probe showed no network cause:
+the first server build was slow with no socket connection attempts at all. It
+has not occurred in CI, which remains the reference; no timeout was raised.
+
 ## Planned tests: email, Admin invitations, and password reset
 
 Status: **planned design, now covered by checkpoints 4A to 4C (DEC-439
