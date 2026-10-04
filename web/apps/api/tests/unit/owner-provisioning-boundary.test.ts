@@ -1,9 +1,8 @@
-import { readdir, readFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve } from 'node:path';
+import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Pool } from 'pg';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { createAuthOptions, type AuthEnvironment } from '../../src/auth/config.ts';
 import { buildServer } from '../../src/server.ts';
@@ -12,8 +11,12 @@ import {
   settle,
   syntheticAuthSettings,
 } from '../helpers/auth-settings.ts';
+import { createSourceTree } from '../helpers/source-tree.ts';
 
 const SRC = fileURLToPath(new URL('../../src/', import.meta.url));
+
+// Every source file is read once and shared by all the scans below.
+const tree = createSourceTree(SRC);
 const PROVISIONING = join(SRC, 'provisioning');
 /** The only module DEC-437 permits to write a Better Auth-owned row. */
 const DEC_437_MODULE = join(PROVISIONING, 'owner-mfa-reset.ts');
@@ -28,29 +31,6 @@ function betterAuthWritesIn(text: string): string[] {
   );
 }
 
-async function sourceFiles(directory: string): Promise<string[]> {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const nested = await Promise.all(
-    entries.map((entry) => {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) return sourceFiles(path);
-      return Promise.resolve(entry.name.endsWith('.ts') ? [path] : []);
-    }),
-  );
-  return nested.flat();
-}
-
-/** Resolved relative import targets of one source file. */
-async function importsOf(file: string): Promise<string[]> {
-  const text = await readFile(file, 'utf8');
-  const specifiers = [...text.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map(
-    (match) => match[1]!,
-  );
-  return specifiers
-    .filter((specifier) => specifier.startsWith('.'))
-    .map((specifier) => resolve(dirname(file), specifier));
-}
-
 /** Every source file reachable from an entry through relative imports. */
 async function reachableFrom(entry: string): Promise<Set<string>> {
   const seen = new Set<string>();
@@ -59,7 +39,7 @@ async function reachableFrom(entry: string): Promise<Set<string>> {
     const file = queue.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
-    queue.push(...(await importsOf(file)));
+    queue.push(...(await tree.importsOf(file)));
   }
   return seen;
 }
@@ -67,8 +47,13 @@ async function reachableFrom(entry: string): Promise<Set<string>> {
 const inertPools: Pool[] = [];
 
 describe('Owner provisioning isolation from the running server', () => {
+  beforeAll(async () => {
+    await tree.files();
+  });
+
   afterEach(async () => {
-    await settle();
+    // Only a test that created a pool or built a server needs the settle pause.
+    if (inertPools.length > 0) await settle();
     while (inertPools.length > 0) await inertPools.pop()?.end().catch(() => undefined);
   });
 
@@ -83,22 +68,22 @@ describe('Owner provisioning isolation from the running server', () => {
   });
 
   it('never reads the process environment or a .env file in any provisioning module', async () => {
-    const files = await sourceFiles(PROVISIONING);
+    const files = await tree.files(PROVISIONING);
     expect(files.length).toBeGreaterThanOrEqual(5);
 
     for (const file of files) {
-      const text = await readFile(file, 'utf8');
+      const text = await tree.text(file);
       expect(text, file).not.toMatch(/process\.env|--env-file|dotenv|['"]\.env['"]/);
     }
   });
 
   it('leaves every Better Auth-owned table to Better Auth except the two DEC-437 statements, in their one allowlisted module', async () => {
-    const files = await sourceFiles(SRC);
+    const files = await tree.files();
     expect(files).toContain(DEC_437_MODULE);
     expect(files.some((file) => file.endsWith('owner-recovery.ts'))).toBe(true);
 
     for (const file of files) {
-      const writes = betterAuthWritesIn(await readFile(file, 'utf8'));
+      const writes = betterAuthWritesIn(await tree.text(file));
       // Exactly W1 and W2, once each, and nothing else anywhere.
       expect(writes, file).toEqual(file === DEC_437_MODULE ? ['update user', 'delete from twoFactor'] : []);
     }
@@ -109,18 +94,18 @@ describe('Owner provisioning isolation from the running server', () => {
     // Better Auth's adapter could carry a NULL counter that never locks.
     const rewrite = /\b(insert\s+into|update|truncate|alter\s+table|drop\s+table|copy)\s+"?twoFactor"?/i;
     const removal = /\bdelete\s+from\s+"?twoFactor"?/gi;
-    const files = await sourceFiles(SRC);
+    const files = await tree.files();
     expect(files.length).toBeGreaterThan(10);
 
     for (const file of files) {
-      const text = await readFile(file, 'utf8');
+      const text = await tree.text(file);
       expect(text, file).not.toMatch(rewrite);
       expect([...text.matchAll(removal)], file).toHaveLength(file === DEC_437_MODULE ? 1 : 0);
     }
   });
 
   it('keeps the DEC-437 statements parameterised and scoped to one Owner', async () => {
-    const text = await readFile(DEC_437_MODULE, 'utf8');
+    const text = await tree.text(DEC_437_MODULE);
 
     expect(text).toMatch(
       /UPDATE "user" SET "twoFactorEnabled" = FALSE, "updatedAt" = CURRENT_TIMESTAMP WHERE id = \$1 AND "twoFactorEnabled" = TRUE/,
