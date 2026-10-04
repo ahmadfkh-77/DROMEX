@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 
 import { hashPassword, verifyPassword } from './hashing.ts';
 import { createPrincipalRepository, passwordResetInProgress } from './principal.ts';
-import { createRateLimitStorage } from './rate-limit-storage.ts';
+import { RATE_LIMIT_PRUNE_INTERVAL_MS, createRateLimitStorage } from './rate-limit-storage.ts';
 import { generateRecoveryCodes } from './recovery-codes.ts';
 
 /**
@@ -375,7 +375,7 @@ export function createAuthOptions(input: AuthConfigInput): BetterAuthOptions {
       // At runtime `customStorage` takes precedence and this is unused.
       storage: 'database',
       // DROMEX-owned PostgreSQL storage, keyed by client address and path.
-      customStorage: createRateLimitStorage(input.database),
+      customStorage: createRateLimitStorage(input.database, Date.now, { pruneIntervalMs: RATE_LIMIT_PRUNE_INTERVAL_MS }),
       window: 60,
       max: 100,
       customRules: {
