@@ -653,6 +653,18 @@ Total / Paid / Remaining boxes and the status word; **Mark paid in full** (orang
 ### Project Financial Review note
 Customer Revenue and Supplier Payables each carry a bordered note stating that Paid counts only payments applied to the project's records, and that unallocated payments belong to no project.
 
+## Implemented on Totals, Invoices & Bills, Signers and Load Number Series (DEC-500, 2026-10-02)
+
+Home → Totals, Project → Totals, Company Load Totals, Invoices & Bills, Business document settings, Authorized signers and Load number series share one set of presentation parts in `src/ui/components/totals/TotalsParts.tsx`. Physical acceptance pending.
+
+- **Summary Band.** Each drill level (company, material, project, supplier, records) opens with one Structural Navy band: a breadcrumb trail in `#C9D7E6`, the level's name in `#FFF8ED` at 22px/800, a unit table (Unit | Delivered | Used, right-aligned tabular figures, "Not recorded" in italic), the inclusion summary and recorded value, and quiet outlined actions (Create document, Select records). It replaces DEC-484's one-card-per-item stack at these levels: one band, then one list.
+- **Ledger and Ledger Row.** Under the band, one white bordered surface holds hairline-ruled rows. A row is the name (16px/700), an optional orange-deep tag ("Own loads, not a supplier"), DEC-484's tinted Delivered (`#EEF3F8`) and Used (`#F6F0E6`) cells per unit with their labels in words, then the inclusion and value lines. No card nesting.
+- **Inclusion Pill.** A record's document status always pairs words with a 6px dot: Not included yet (outline, muted), In draft (navy tint), Included (success tint), Previously included in cancelled (dashed outline). Colour is never the only signal.
+- **Record Row.** Load number first (or the italic legacy wording), quantity at 16px/800 on the right, then item and date/time, project and party, references, price as recorded ("No price recorded" in italic, never $0.00), and the pill. Selectable rows add a 26px checkbox inside a 52px target.
+- **Home Totals destination.** A full-width Structural Navy row beneath Needs Attention, with a `#F2A184` chevron — a navigation destination, deliberately quieter than Make Receipt.
+- **Document PDF.** A4; company logo and business identity on the left, a Ledger Cream title panel (title in Structural Navy 22pt, number and dates right-aligned) on the right, a 2px Signal Orange rule beneath; repeated table headings; status banners in warning or danger colour with words.
+- **Company Load Totals PDF.** Fixed column widths so quantities and dates never wrap mid-value; cancelled loads under their own red heading, never counted.
+
 ## Current-vs-Target Gap List
 
 1. **Typography weight.** Current: `fontWeight: '900'` used pervasively in `src/ui/theme.ts`'s global tokens and on every screen except Home, Project Command Center, Supplier Loads, and Daily Reports. Target: graded hierarchy above. **Partially implemented** — Home's and Project Command Center's navigation sections use a 3-step subset (`900`/`700`/`500`); Supplier Loads' supplied-material records and Daily Reports' section/record content use the full 4-step scale including `600` (see "Implemented on Supplier Loads" and "Implemented on Daily Reports"). Every other screen is still the pre-existing pervasive-900 state, and the global `theme.ts` tokens themselves are unchanged.

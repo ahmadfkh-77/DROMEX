@@ -15,6 +15,9 @@ export type BusinessReportData={
   fuelMovements:WorkbookRow[];
   equipmentTotals:WorkbookRow[];
   projectFuelTotals?:WorkbookRow[];
+  /** DEC-505. One row per diesel batch, and one per saved fuel station. Absent before batches existed. */
+  dieselBatches?:WorkbookRow[];
+  fuelStations?:WorkbookRow[];
   projects:WorkbookRow[];
   dailyReports:WorkbookRow[];
   materials:WorkbookRow[];
@@ -53,5 +56,8 @@ export function filterBusinessReportData(data:BusinessReportData,filters:Busines
     {'Filter':'Item','Value':filters.item||'All items'},
     {'Filter':'Payment status','Value':filters.paymentStatus||'All payment statuses'},
   ];
-  return{...data,loads,quarryPurchases,fuelMovements,equipmentTotals,projectFuelTotals,projects,dailyReports,materials,payments,openingBalances,customers,suppliers,activeFilters};
+  // DEC-505. Batches follow the date filter by the day they arrived.
+  const arrivedIn=(row:WorkbookRow)=>{const day=String(row['Arrived At']??'').slice(0,10);return(!filters.fromDate||!day||day>=filters.fromDate)&&(!filters.toDate||!day||day<=filters.toDate);};
+  const dieselBatches=data.dieselBatches?.filter(arrivedIn);
+  return{...data,dieselBatches,loads,quarryPurchases,fuelMovements,equipmentTotals,projectFuelTotals,projects,dailyReports,materials,payments,openingBalances,customers,suppliers,activeFilters};
 }

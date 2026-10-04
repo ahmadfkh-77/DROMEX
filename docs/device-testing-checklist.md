@@ -130,6 +130,109 @@ Everything below passed. Kept as the regression set for later builds.
 
 ---
 
+## Build 28 — 0.20.0 (accepted by the Owner 2026-10-04)
+
+Build 28 is build 27 with the company from Company Settings on the Diesel
+Batch Report. Install over build 27, 26 or 25 and run the Build 27 and Build 26
+steps below, then:
+
+1. Settings → Company: check the company name, logo, address, phone and email.
+2. Export a Diesel Batch Report. Its header shows your logo, company name and
+   contact details (not "DROMEX · Construction & Plant Management"), and the
+   running title at the top of each page starts with your company name.
+3. A long or Arabic company name wraps inside the header without overlapping.
+
+## Build 27 — 0.20.0 (built; superseded by build 28)
+
+Build 27 is build 26 plus the History and Usage tabs in the day-card design.
+Install **over build 26** (or build 25) and run the Build 26 steps below, then:
+
+1. Fuel Management → **History**: a summary card (Delivered in, Filled out, Dip
+   adjustments, Diesel in tank), then **one card per day**, newest first, with
+   DELIVERIES IN, DIP READINGS and the fills grouped by project, company site
+   and unassigned. The card header shows In and Out litres.
+2. A cancelled fill or delivery shows struck through with a red "Cancelled ·
+   reason" tag and is not counted in any total.
+3. Tap a delivery, a dip reading and a fill: each opens its record as before.
+4. History filters (project, equipment, type, status, dates) show as removable
+   chips with Clear all, and the day cards follow them.
+5. Fuel Management → **Usage**: Fuel used by destination (batches, before
+   batches, outside stations, cost), By destination, By source, then one card
+   per day grouped by destination.
+6. Tap a project in By destination: only its fills show, the summary changes
+   to that project, and **Export <project> PDF** exports just that project. Do
+   the same for a company site and for Unassigned, then Show all destinations.
+7. Usage filters (Projects / Sites / Unassigned, search, dates) narrow the
+   cards and the export.
+
+## Build 26 — 0.20.0 (tested by the Owner; superseded by build 27)
+
+Install **over build 25** (the preview in use). If a phone still runs build 22,
+also install over build 22 once. Do Section 0 first.
+
+**Upgrade and numbering**
+
+1. Load History: every load keeps its number exactly as before (for example
+   `ASP-2026-001`); loads from before build 23 still show the legacy wording.
+2. Confirm a new asphalt load. Its Load No. continues the count in the new form
+   (after two `ASP-2026-…` loads it is `ASP-00003`), never restarting at 1.
+3. Load number series screen: the help text and the preview show `ASP-00001`
+   style numbers and say the count never restarts.
+
+**Printed receipt (real printer, 58 mm and 80 mm if both exist)**
+
+4. Company title, address, phone, email and Tax/VAT are centred under the title,
+   including a long address that wraps onto two lines.
+5. Receipt and Delivery Authorization both print **Load No.** in bold directly
+   above **Transaction**. A reprinted old load without a number prints no Load
+   No. line and otherwise looks as it did before.
+6. The PDF receipt shows the same Load No. row.
+
+**Diesel batches**
+
+7. Fuel opens on the dashboard as before. The new Batches tab shows **Start
+   diesel batches** with the calculated tank balance.
+8. Start with a dip reading. The Opening stock batch (`DSL-2026-00001`) holds the
+   dip litres; the Fuel screen now opens on Batches; Home shows the litres in
+   the tank and the batch in use under Fuel Tracking.
+9. Record a diesel delivery with an invoice number. A new batch appears,
+   waiting, with "Invoice …" and "Starts after … is used up".
+10. Record Fill, From tank: the oldest batch is pre-selected; enter more litres
+    than it has left. "Before you save" shows the split, the batch that closes,
+    the tank before and after, and the cost (Unpriced litres written out).
+    Save, then check both batches and the tank figure.
+11. Record a fill larger than all the diesel. It saves, and a red Overfill
+    Alert appears in words on the tank card, the batch page and Home.
+12. Record a dip reading that differs from the batches. The batch page shows an
+    amber adjustment with the calculated and dip figures.
+13. Outside station: add a station inline, record a fill from it. The tank and
+    every batch are unchanged; the fill appears under Outside station fills and
+    in the project's fuel.
+14. Open a batch: the four figures stay at the top while scrolling; Cancel Batch
+    needs a reason and asks first; the number is never reused afterwards.
+15. Project → Equipment Fuel: totals split into batches, before batches and
+    outside stations; one card per day, newest first, each row tagged.
+
+**Exports**
+
+16. Export the PDF from a batch, from the filter view (project, site, station,
+    dates) and from a project, Without and With prices. Check A4, headings
+    repeating on page 2, the running title and "Page X of Y" in the margins
+    (may be missing on older Android System WebView versions), Arabic names
+    whole, and text searchable in a PDF viewer.
+17. Fuel and analysis workbooks: Fuel Type, Source, Station, Batch Number and
+    Batch Portions columns; Diesel Batches and Fuel Stations sheets.
+
+**Standing checks for these screens**
+
+18. Items 5 to 9 of Section 1 (airplane mode, remove animations, font size
+    Largest, TalkBack, sunlight) on Record Fill, the Batches tab, a batch page
+    and the project fuel view, with a long Arabic project and site name.
+19. Back up, restore the backup, and confirm batches, stations and numbering
+    are unchanged and a new delivery takes the next DSL number.
+
+---
+
 ## Carried forward, still unverified
 
 Builds 13, 14, 15 and 16 were released without device verification. If a

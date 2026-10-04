@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
+import {loadNumberLabel} from '../../domain/loadNumberSeries';
 import {Alert,LayoutAnimation,ScrollView,StyleSheet,Text,TextInput,TouchableOpacity,View} from 'react-native';
 import type {LoadRepository} from '../../data/repositories/LoadRepository';
 import type {ConfirmedLoad,DriverProfile,LoadCorrectionDraft} from '../../domain/loads';
@@ -55,7 +56,7 @@ export function LoadCorrectionsScreen({repository,onBack,initialLoadId}:{reposit
   useEffect(()=>{if(initialLoadId&&loads.length&&!selected){const match=loads.find(load=>load.id===initialLoadId);if(match)choose(match);}},[initialLoadId,loads]); // eslint-disable-line react-hooks/exhaustive-deps
   const projectOptions=useMemo(()=>unique(loads.map(load=>load.projectName??'No project')).map(value=>({id:value,label:value})),[loads]);
   const customerOptions=useMemo(()=>unique(loads.map(load=>load.customerName)).map(value=>({id:value,label:value})),[loads]);
-  const filtered=useMemo(()=>{const query=search.trim().toLocaleLowerCase('en-US');return loads.filter(load=>{const date=localDate(load.confirmedAt);if(projectFilter&&(load.projectName??'No project')!==projectFilter)return false;if(customerFilter&&load.customerName!==customerFilter)return false;if(fromDate&&date<fromDate)return false;if(toDate&&date>toDate)return false;if(query&&!`${load.transactionNumber} ${load.customerName} ${load.projectName??''} ${load.itemName} ${load.driverName} ${load.truckPlate}`.toLocaleLowerCase('en-US').includes(query))return false;return true;});},[customerFilter,fromDate,loads,projectFilter,search,toDate]);
+  const filtered=useMemo(()=>{const query=search.trim().toLocaleLowerCase('en-US');return loads.filter(load=>{const date=localDate(load.confirmedAt);if(projectFilter&&(load.projectName??'No project')!==projectFilter)return false;if(customerFilter&&load.customerName!==customerFilter)return false;if(fromDate&&date<fromDate)return false;if(toDate&&date>toDate)return false;if(query&&!`${load.loadNumber??''} ${load.transactionNumber} ${load.customerName} ${load.projectName??''} ${load.itemName} ${load.driverName} ${load.truckPlate}`.toLocaleLowerCase('en-US').includes(query))return false;return true;});},[customerFilter,fromDate,loads,projectFilter,search,toDate]);
   const groups=useMemo(()=>{const map=new Map<string,ConfirmedLoad[]>();for(const load of filtered){const key=groupMode==='project'?(load.projectName??'No project'):load.customerName;map.set(key,[...(map.get(key)??[]),load]);}return [...map].sort(([a],[b])=>a.localeCompare(b));},[filtered,groupMode]);
   const preview=useMemo(()=>selected&&draft?computeCorrectionPreview(selected,draft,crew):[],[selected,draft,crew]);
   const validationError=useMemo(()=>selected&&draft?correctionValidationError(selected,draft):null,[selected,draft]);
@@ -101,8 +102,8 @@ export function LoadCorrectionsScreen({repository,onBack,initialLoadId}:{reposit
       </CollapsibleFilterCard>
       {groups.length?<View style={styles.groups}>{groups.map(([group,records])=><View key={group} style={styles.group}>
         <View style={styles.groupHeader}><Text style={styles.groupTitle}>{group}</Text><Text style={styles.groupCount}>{records.length}</Text></View>
-        {records.map(load=><TouchableOpacity key={load.id} style={styles.loadRow} onPress={()=>choose(load)} accessibilityRole="button" accessibilityLabel={`${load.transactionNumber}${load.status==='Cancelled'?', cancelled':''}`}>
-          <View style={styles.row}><Text style={styles.loadNumber}>{load.transactionNumber}</Text><View style={styles.rowRight}>{load.status==='Cancelled'?<View style={styles.cancelledChip}><Text style={styles.cancelledChipText}>CANCELLED</Text></View>:null}<Text style={styles.date}>{localDate(load.confirmedAt)}</Text></View></View>
+        {records.map(load=><TouchableOpacity key={load.id} style={styles.loadRow} onPress={()=>choose(load)} accessibilityRole="button" accessibilityLabel={`${loadNumberLabel(load.loadNumber)}, transaction ${load.transactionNumber}${load.status==='Cancelled'?', cancelled':''}`}>
+          <View style={styles.row}><Text style={styles.loadNumber}>{loadNumberLabel(load.loadNumber)}</Text><View style={styles.rowRight}>{load.status==='Cancelled'?<View style={styles.cancelledChip}><Text style={styles.cancelledChipText}>CANCELLED</Text></View>:null}<Text style={styles.date}>{localDate(load.confirmedAt)}</Text></View></View>
           <Text style={styles.loadMain}>{load.itemName} · {load.billedQuantity.toFixed(3)} {load.outputUnitSymbol}</Text>
           <Text style={styles.helper}>{groupMode==='project'?load.customerName:(load.projectName??'No project')} · {load.driverName} · {load.truckPlate}</Text>
         </TouchableOpacity>)}
@@ -116,7 +117,7 @@ export function LoadCorrectionsScreen({repository,onBack,initialLoadId}:{reposit
 
     {(stage==='edit'||stage==='review')&&selected&&draft?<>
       <AppCard>
-        <View style={styles.identityRow}><View style={styles.flex}><Text style={styles.cardTitle}>{selected.transactionNumber}</Text><Text style={styles.helper}>Confirmed {new Date(selected.confirmedAt).toLocaleString()}</Text></View><TouchableOpacity onPress={chooseAnother} accessibilityRole="button"><Text style={styles.clear}>Choose another load</Text></TouchableOpacity></View>
+        <View style={styles.identityRow}><View style={styles.flex}><Text style={styles.cardTitle}>{loadNumberLabel(selected.loadNumber)}</Text><Text style={styles.helper}>Transaction {selected.transactionNumber}. A correction never changes the load number.</Text><Text style={styles.helper}>Confirmed {new Date(selected.confirmedAt).toLocaleString()}</Text></View><TouchableOpacity onPress={chooseAnother} accessibilityRole="button"><Text style={styles.clear}>Choose another load</Text></TouchableOpacity></View>
         <Text style={styles.helper}>{selected.customerName} · {selected.projectName??selected.destinationAddress??'No project'} · {selected.itemName}</Text>
         <Text style={styles.notice}>Transaction number, original confirmation time, customer, project, item, quantity method/unit, and existing payments always stay unchanged.</Text>
         {selected.correctionHistory.length?<TouchableOpacity onPress={()=>{animateLayout();setHistoryOpen(v=>!v);}} accessibilityRole="button" accessibilityState={{expanded:historyOpen}}><Text style={styles.historyToggle}>{historyOpen?'Hide':'Show'} correction history ({selected.correctionHistory.length})</Text></TouchableOpacity>:null}

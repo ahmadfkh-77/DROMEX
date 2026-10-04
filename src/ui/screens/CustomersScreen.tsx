@@ -46,10 +46,13 @@ export function CustomersScreen({
   repository,
   financialRepository,
   onBack,
+  onOpenDocuments,
 }: {
   repository: ProfileRepository;
   financialRepository: FinancialRepository;
   onBack: () => void;
+  /** DEC-500. Opens Invoices & Bills for one customer. */
+  onOpenDocuments?: (customer: { id: string; name: string }) => void;
 }) {
   const reducedMotion = useReducedMotion();
   const [loaded, setLoaded] = useState(false);
@@ -237,6 +240,18 @@ export function CustomersScreen({
             <Text style={styles.financeButtonLabel}>Open payments & balances</Text>
             <Text style={styles.financeButtonHint}>Organized by project, direct purchases, and opening balances →</Text>
           </TouchableOpacity>
+          {onOpenDocuments ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.financeButton}
+              onPress={() => onOpenDocuments({ id: selected.id, name: selected.name })}
+              accessibilityRole="button"
+              accessibilityLabel={`Open invoices and bills for ${selected.name}`}
+            >
+              <Text style={styles.financeButtonLabel}>Invoices & Bills</Text>
+              <Text style={styles.financeButtonHint}>Invoices issued and customer statements →</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </ScrollView>
     );

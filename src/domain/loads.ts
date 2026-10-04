@@ -1,4 +1,5 @@
 import type { CompanySettings, Customer } from './profiles';
+import type { SignerSnapshot } from './documentSigners';
 import type { TruckCrewRole } from './people';
 
 export type MeasurementUnit = {
@@ -79,6 +80,8 @@ export type LoadSetupOptions = {
   trucks: TruckProfile[];
   machines: MachineProfile[];
   companySettings: CompanySettings;
+  /** DEC-503. The default signer a new load will carry on its Delivery Authorization, for preview. */
+  deliverySignature?: SignerSnapshot | null;
 };
 
 export type UnitDraft = { name: string; symbol: string };
@@ -270,6 +273,12 @@ export type ConfirmedLoad = Omit<LoadCalculation, 'netWeightKg' | 'convertedQuan
   cancellationReason: string | null;
   cancelledAt: string | null;
   correctionHistory: LoadCorrectionEntry[];
+  /** DEC-500. The generated Company Load number, e.g. ASP-2026-004; null on a legacy load confirmed before series existed. */
+  loadNumber?: string | null;
+  /** The series display name snapshotted when the number was generated. */
+  loadNumberSeriesName?: string | null;
+  /** DEC-503. The supplier's (Owner's) signature on the Delivery Authorization, as this load keeps it. */
+  supplierSignature?: SignerSnapshot | null;
 };
 
 /** Mirrors correctLoad's own field validation so an invalid draft is blocked in the editor instead of surfacing as a raw repository error at Confirm. */
