@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { signInWithPassword, verifyCode } from './api.ts';
 import { codeOutcome, normalizeCode, passwordOutcome, type FailureKey } from './machine.ts';
-import { SIGNIN_STRINGS as T } from './strings.ts';
+import { RECOVERY_STRINGS as R, SIGNIN_STRINGS as T } from './strings.ts';
 
 /**
  * Sign-in (SI-1a): a password step, then the authenticator-code step. The
@@ -209,6 +209,11 @@ export function SignInPage() {
           <button type="button" className="secondary" onClick={startOver} disabled={busy}>
             {T.startOver}
           </button>
+          <p>
+            <a className="link" href="/lost-authenticator">
+              {R.lostLink}
+            </a>
+          </p>
         </form>
       )}
 

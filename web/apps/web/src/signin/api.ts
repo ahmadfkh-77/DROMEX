@@ -32,3 +32,10 @@ export const verifyCode = (code: string) => request('POST', '/api/auth/two-facto
 export const getSession = () => request('GET', '/api/session');
 
 export const signOut = () => request('POST', '/api/auth/sign-out', {});
+
+export const verifyRecoveryCode = (code: string) => request('POST', '/api/auth/recovery/verify-code', { code });
+
+export const startReplacement = (password: string) =>
+  request('POST', '/api/auth/recovery/authenticator/start', { password });
+
+export const verifyReplacement = (code: string) => request('POST', '/api/auth/recovery/authenticator/verify', { code });

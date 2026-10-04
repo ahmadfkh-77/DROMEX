@@ -5,6 +5,8 @@ import { InvitationPage } from './invitation/InvitationPage.tsx';
 import { ForgotPasswordPage } from './password-reset/ForgotPasswordPage.tsx';
 import { ResetPasswordPage } from './password-reset/ResetPasswordPage.tsx';
 import { AccountPage as SessionAccountPage } from './signin/AccountPage.tsx';
+import { LostAuthenticatorPage } from './recovery/LostAuthenticatorPage.tsx';
+import { OwnerRecoveryPage } from './recovery/OwnerRecoveryPage.tsx';
 import { SignInPage } from './signin/SignInPage.tsx';
 
 const STYLES = `
@@ -126,6 +128,8 @@ const PAGES: Record<string, ComponentType> = {
   '/invitation': InvitationPage,
   '/forgot-password': ForgotPasswordPage,
   '/reset-password': ResetPasswordPage,
+  '/lost-authenticator': LostAuthenticatorPage,
+  '/recover-authenticator': OwnerRecoveryPage,
 };
 
 /** Owner account management (checkpoint 4E): the list and one account per path. */

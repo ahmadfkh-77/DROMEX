@@ -115,7 +115,7 @@ test.describe('password step', () => {
     expect(await noHorizontalOverflow(page)).toBe(true);
   });
 
-  test('has no recovery link or recovery wording (that screen is a later phase)', async ({ page }) => {
+  test('has no recovery link or recovery wording on the password step (the link is on the code step)', async ({ page }) => {
     await stubApi(page, {});
     await page.goto('/sign-in');
     await expect(page.getByText(/recovery|lost your|backup code/i)).toHaveCount(0);

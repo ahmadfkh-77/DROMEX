@@ -2423,7 +2423,7 @@ and are not kept.
   a factor and then lost the authenticator before completing setup cannot
   resume: resumption requires a current TOTP code, the pending identity
   cannot be deleted, and password reset never removes MFA (DEC-441 (8)). No
-  recovery path is designed; this is an open question for the Owner.
+  recovery mechanism is built. Policy (DEC-494, 2026-10-04): the Owner resets the Admin's enrolment; there is no self-service recovery. The mechanism is not implemented (it needs a migration and a new audited enrolment path, for Owner approval).
 - The invitee's display name is collected at password creation because
   Better Auth requires one; it is refused if empty, over 100 characters, or
   containing `@` or control characters, so an address never becomes an audit
@@ -2979,7 +2979,7 @@ approved.
 - **The Owner's own sessions** are not listed or managed here; Owner session
   management and recovery remain the terminal and recovery flows (DEC-436,
   DEC-437).
-- **A lost authenticator before activation** still has no recovery (OQ-168).
+- **A lost authenticator before activation** still has no working recovery: policy is decided (DEC-494, the Owner resets the enrolment) but the mechanism is not implemented (OQ-168).
   A disabled Admin who lost their authenticator has none either: re-enabling
   restores sign-in with the existing factor only, and resetting an Admin's
   factor is not designed.
