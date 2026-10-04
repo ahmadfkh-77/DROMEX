@@ -1489,6 +1489,34 @@ alongside them (3 of 28 stress runs). A scratch probe showed no network cause:
 the first server build was slow with no socket connection attempts at all. It
 has not occurred in CI, which remains the reference; no timeout was raised.
 
+## Database pool error listener (F9, 2026-10-04)
+
+Status: **implemented; unit-tested locally, real-database test runs in CI.**
+The production pool built by `src/db.ts` had no `error` listener. The
+node-postgres documentation says an idle pooled client can still emit errors
+because it is connected to a live backend, that the client is then terminated
+and removed from the pool, and that a pool `error` event with no listener is
+an uncaught error that can crash the Node process
+(`https://node-postgres.com/apis/pool`, accessed 2026-10-04). A database
+restart, a failover, or an administrator killing an idle connection would
+therefore have ended the API process.
+
+`createPool` now attaches a listener. It reports only a short code (matched
+against a strict pattern, otherwise `unknown`), never the error object, its
+message, the connection string, a host, or query text; the server passes its
+own logger, and without one a single fixed line goes to standard error. Pool
+size, timeouts, SSL, authentication, and queries are unchanged, and the
+readiness check still fails while the database is down.
+
+| Test | Proves |
+| --- | --- |
+| `tests/unit/db-pool-errors.test.ts` (4, no Docker; failed first, 4 of 4 red) | A listener exists; an error neither throws nor leaks secrets and writes one line; the reporter gets only a code; the failed idle client is discarded and the next checkout is a new, working client |
+| `tests/integration/db-pool-errors.test.ts` (CI only) | Real PostgreSQL: terminating an idle backend reports `57P01` once, the process survives, and the next request works |
+
+Limits: the server's wiring to its logger is a one-line change and is not
+covered by its own test; a database that stays down is reported by `/ready`,
+not by this listener.
+
 ## Planned tests: email, Admin invitations, and password reset
 
 Status: **planned design, now covered by checkpoints 4A to 4C (DEC-439

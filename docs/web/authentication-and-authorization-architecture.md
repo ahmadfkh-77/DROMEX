@@ -355,9 +355,12 @@ repository, and the npm registry), 2026-09-11
   an existing valid session, so it is not reachable by a fully locked-out
   user.
 - **Sessions**: database-backed; `session_token` is an opaque signed cookie
-  identifier. Default `expiresIn` 7 days, `updateAge` 1 day.
+  identifier. Library defaults (not DROMEX policy): `expiresIn` 7 days,
+  `updateAge` 1 day, a sliding window. **DROMEX sets `expiresIn` 12 hours and
+  `updateAge` 1 hour (DEC-493), as in `src/auth/config.ts`.**
   `revokeSession({token})`, `revokeOtherSessions()`, `revokeSessions()`.
-  `freshAge` (default 1 day) gates sensitive endpoints.
+  `freshAge` (library default 1 day, counted from session creation) gates
+  sensitive endpoints; DROMEX does not configure it (DEC-493).
   **`session.cookieCache`, if enabled, means a revoked session can remain
   active on other devices until the cache's `maxAge` expires** — the
   documentation states this plainly.
