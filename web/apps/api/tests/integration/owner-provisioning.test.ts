@@ -550,16 +550,10 @@ describe('Owner activation against PostgreSQL 18.6', () => {
     // SEC-1c. The lock is a session-level advisory lock on one checked-out
     // connection. Terminating that connection while the operator is at a
     // prompt must release the lock on the server, commit nothing, and leave a
-    // run that can be resumed. The unit counterpart
-    // (tests/unit/owner-provisioning-lock-loss.test.ts) records a known gap:
-    // the command attaches no error listener to that connection, so Node
-    // raises the loss as an uncaught exception. This test stands in for that
-    // missing listener so everything after the loss can still be asserted.
+    // run that can be resumed. The command itself handles the lost
+    // connection's error event (follow-up F2): nothing here stands in for a
+    // listener, so an unhandled error would crash this run and fail the suite.
     it('fails closed when the lock connection is lost mid-run: the server frees the lock, nothing is committed, and a rerun resumes (SEC-1c)', async () => {
-      dromexPool.on('connect', (client) => {
-        client.on('error', () => undefined);
-      });
-
       const first = scriptedTerminal();
       const presentEnrollment = first.terminal.presentEnrollment.bind(first.terminal);
       first.terminal.presentEnrollment = async (material) => {
