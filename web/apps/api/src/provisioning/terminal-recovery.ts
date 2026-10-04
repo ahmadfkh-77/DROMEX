@@ -145,6 +145,16 @@ export async function recoverOwnerFromTerminal(deps: TerminalRecoveryDependencie
     throw new TerminalRecoveryError('failed');
   }
 
+  // `pg-pool` removes its own error listener from a client the moment it is
+  // checked out. A connection that dies while the operator is at a prompt would
+  // otherwise raise an unhandled `error` event and end the command with a raw
+  // stack trace. The error is dropped on purpose, like every other cause here
+  // (driver errors can carry row data): the next query on the dead connection
+  // fails and the run ends in the generic failure below, with the lock freed by
+  // the server and the run resumable.
+  const ignoreConnectionError = (): void => undefined;
+  client.on('error', ignoreConnectionError);
+
   let locked = false;
   let discardConnection = false;
   try {
@@ -166,6 +176,7 @@ export async function recoverOwnerFromTerminal(deps: TerminalRecoveryDependencie
       });
     }
     // A connection whose unlock failed is destroyed, which releases the lock.
+    client.removeListener('error', ignoreConnectionError);
     client.release(discardConnection);
   }
 }

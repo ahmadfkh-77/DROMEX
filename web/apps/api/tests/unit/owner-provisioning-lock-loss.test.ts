@@ -30,6 +30,8 @@ interface World {
   ended: number;
   userCreated: boolean;
   lost: boolean;
+  /** False when another run already holds the advisory lock. */
+  lockFree: boolean;
   /** What `emit('error')` threw, if anything: with real pg, an uncaught exception. */
   unhandled: unknown;
   revoked: number;
@@ -61,7 +63,7 @@ class FakeClient extends EventEmitter {
     this.world.statements.push(sql);
     if (this.world.lost) throw new Error('Client has encountered a connection error and is not queryable');
 
-    if (/pg_try_advisory_lock/.test(sql)) return { rows: [{ locked: true }], rowCount: 1 };
+    if (/pg_try_advisory_lock/.test(sql)) return { rows: [{ locked: this.world.lockFree }], rowCount: 1 };
     if (/^SELECT 1 FROM dromex_principal/.test(sql)) return { rows: [], rowCount: 0 };
     if (/^SELECT state, email, user_id FROM dromex_owner_bootstrap/.test(sql)) return { rows: [], rowCount: 0 };
     if (/^SELECT id FROM "user" WHERE email/.test(sql)) {
@@ -73,7 +75,7 @@ class FakeClient extends EventEmitter {
 }
 
 function createWorld(): World {
-  return { statements: [], clients: [], ended: 0, userCreated: false, lost: false, unhandled: null, revoked: 0 };
+  return { statements: [], clients: [], ended: 0, userCreated: false, lost: false, lockFree: true, unhandled: null, revoked: 0 };
 }
 
 function createPool(world: World): Pool {
@@ -177,19 +179,34 @@ describe('Owner provisioning when the lock connection is lost mid-run (SEC-1c)',
     expect(poolSizeAfter).toBe(0);
   });
 
-  // KNOWN GAP (SEC-1c, reported, runtime code deliberately not changed here).
-  // `pg-pool` removes its own `error` listener from a client the moment it is
-  // checked out, and `provisionOwner` attaches none. A connection that dies
-  // while the operator is at a prompt therefore emits `error` with no
-  // listener, which Node raises as an uncaught exception that ends the
-  // command with a raw stack trace instead of the generic `failed` message.
-  // Nothing unsafe follows (no Owner is created, the server releases the lock,
-  // and the run is resumable), so this is an availability and honesty gap,
-  // not a bypass. `it.fails` keeps this test green while the gap exists and
-  // turns red when it is fixed, so the fix must also update this test.
-  it.fails('attaches an error listener to its checked-out connection, so a lost connection cannot crash the command', async () => {
+  // Fixed by SEC-1c follow-up F2. `pg-pool` removes its own `error` listener
+  // from a client the moment it is checked out, so before the fix a connection
+  // that died while the operator was at a prompt emitted `error` with no
+  // listener, which Node raises as an uncaught exception that ended the command
+  // with a raw stack trace instead of the generic `failed` message.
+  it('attaches an error listener to its checked-out connection, so a lost connection cannot crash the command', async () => {
     const { world } = await runLosingConnection();
 
     expect(world.unhandled, 'a connection error emitted on the checked-out client was left unhandled').toBeNull();
+  });
+
+  it('leaves no listener of its own on a connection it returns to the pool', async () => {
+    const world = createWorld();
+    world.lockFree = false; // another run holds the lock: this one refuses and returns its connection
+    const pool = createPool(world);
+
+    const outcome = await provisionOwner(
+      { pool, identity: identityFor(world), terminal: terminalLosingConnection(world) },
+      { name: 'Synthetic Owner', email: 'owner@synthetic.invalid', password: PASSPHRASE, passwordConfirmation: PASSPHRASE },
+    ).then(
+      () => new Error('expected provisioning to be refused'),
+      (error: unknown) => error,
+    );
+
+    expect((outcome as OwnerProvisioningError).code).toBe('in_progress');
+    // Only pg-pool's own idle listener remains on the pooled client.
+    expect(world.clients).toHaveLength(1);
+    expect(world.clients[0]!.listenerCount('error')).toBe(1);
+    await pool.end();
   });
 });
