@@ -219,3 +219,56 @@ jobs:
             appendFileSync(summaryPath, out.join('\n') + '\n');
           }
           EOF
+
+      # Web app tests (phase 4b-1). Both run against the stubbed API only: the
+      # browser tests replace every /api call at the network layer, so they show
+      # how the sign-in screen behaves in a real browser, not how it behaves
+      # with the real API (that is a later phase). The browser is the Google
+      # Chrome already installed on the runner image; nothing is downloaded.
+      # A run that finds no tests fails the step.
+      - name: Show browser versions
+        run: |
+          node -v
+          google-chrome --version
+
+      - name: Web unit tests
+        id: webunit
+        run: |
+          set -o pipefail
+          npm run test:unit --workspace @dromex/web 2>&1 | tee "$RUNNER_TEMP/web-unit.log"
+          node -e "const t=require('fs').readFileSync(process.env.RUNNER_TEMP+'/web-unit.log','utf8').replace(/\u001b\[[0-9;]*[A-Za-z]/g,'');const m=t.match(/^(?:ℹ|#) tests (\d+)/m);if(!m||Number(m[1])<1){console.error('::error::The web unit run found no tests.');process.exit(1)}"
+
+      - name: Web browser tests (Playwright, installed Google Chrome, stubbed API)
+        id: webbrowser
+        env:
+          DROMEX_PLAYWRIGHT_CHANNEL: chrome
+        run: |
+          set -o pipefail
+          npm run test:e2e --workspace @dromex/web -- e2e/signin.spec.ts 2>&1 | tee "$RUNNER_TEMP/web-browser.log"
+          node -e "const t=require('fs').readFileSync(process.env.RUNNER_TEMP+'/web-browser.log','utf8').replace(/\u001b\[[0-9;]*[A-Za-z]/g,'');const m=t.match(/^\s*(\d+) passed/m);if(!m||Number(m[1])<1){console.error('::error::The browser run found no passing tests.');process.exit(1)}"
+
+      # Diagnostic only: prints the web unit and browser test counts as public
+      # annotations and in the job summary. It never changes the job result.
+      - name: Explain the web unit and browser runs (counts)
+        if: always() && (steps.webunit.outcome != 'skipped' || steps.webbrowser.outcome != 'skipped')
+        continue-on-error: true
+        env:
+          UNIT_LOG: ${{ runner.temp }}/web-unit.log
+          BROWSER_LOG: ${{ runner.temp }}/web-browser.log
+          UNIT_OUTCOME: ${{ steps.webunit.outcome }}
+          BROWSER_OUTCOME: ${{ steps.webbrowser.outcome }}
+        run: |
+          node --input-type=module - <<'NODE'
+          import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+          const read = (path) => (path && existsSync(path) ? readFileSync(path, 'utf8') : '').replace(/\u001b\[[0-9;]*[A-Za-z]/g, '');
+          const count = (text, pattern) => text.match(pattern)?.[1] ?? 'not found';
+          const unit = read(process.env.UNIT_LOG);
+          const browser = read(process.env.BROWSER_LOG);
+          const rows = [
+            ['Web unit tests', process.env.UNIT_OUTCOME, `tests ${count(unit, /^(?:ℹ|#) tests (\d+)/m)}, pass ${count(unit, /^(?:ℹ|#) pass (\d+)/m)}, fail ${count(unit, /^(?:ℹ|#) fail (\d+)/m)}`],
+            ['Web browser tests (stubbed API)', process.env.BROWSER_OUTCOME, `passed ${count(browser, /^\s*(\d+) passed/m)}, failed ${count(browser, /^\s*(\d+) failed/m)}, flaky ${count(browser, /^\s*(\d+) flaky/m)}`],
+          ];
+          for (const [name, outcome, counts] of rows) console.log(`::notice title=${name} (${outcome})::${counts}`);
+          const summary = process.env.GITHUB_STEP_SUMMARY ?? '';
+          if (summary !== '') appendFileSync(summary, ['## Web app tests', '', ...rows.map(([n, o, c]) => `- ${n}: **${o}** (${c})`), ''].join('\n') + '\n');
+          NODE
