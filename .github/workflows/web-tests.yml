@@ -244,7 +244,7 @@ jobs:
           DROMEX_PLAYWRIGHT_CHANNEL: chrome
         run: |
           set -o pipefail
-          npm run test:e2e --workspace @dromex/web -- e2e/signin.spec.ts 2>&1 | tee "$RUNNER_TEMP/web-browser.log"
+          npm run test:e2e --workspace @dromex/web -- e2e/signin.spec.ts e2e/recovery.spec.ts 2>&1 | tee "$RUNNER_TEMP/web-browser.log"
           node -e "const t=require('fs').readFileSync(process.env.RUNNER_TEMP+'/web-browser.log','utf8').replace(/\u001b\[[0-9;]*[A-Za-z]/g,'');const m=t.match(/^\s*(\d+) passed/m);if(!m||Number(m[1])<1){console.error('::error::The browser run found no passing tests.');process.exit(1)}"
 
       # Real end-to-end sign-in tests (phase 4b-2, decision D5): the real API, a
