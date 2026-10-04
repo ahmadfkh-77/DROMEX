@@ -10,7 +10,7 @@ const source=(path:string)=>readFileSync(join(__dirname,'..',path),'utf8');
 describe('Fuel Destination UI contract',()=>{
   const screen=source('src/ui/screens/FuelTrackingScreen.tsx');
   const choice=source('src/ui/components/ChoiceField.tsx');
-  // The Usage tab moved to the approved day-card design (DEC-492, amended 2026-10-03).
+  // The Usage tab moved to the approved day-card design (DEC-505, amended 2026-10-03).
   const usage=source('src/ui/components/fuel/FuelUsageView.tsx');
   const parts=source('src/ui/components/fuel/FuelBatchParts.tsx');
   const sites=source('src/ui/components/CompanySitesManager.tsx');
@@ -18,7 +18,7 @@ describe('Fuel Destination UI contract',()=>{
 
   it('replaces the fill-form Project field with Fuel destination and conditional selectors',()=>{
     expect(screen).not.toContain('label="Project (optional)"');
-    // The fill form moved into FuelFillForm (DEC-492); the screen keeps the correction form.
+    // The fill form moved into FuelFillForm (DEC-505); the screen keeps the correction form.
     expect(screen.match(/<FuelDestinationFields/g)?.length).toBe(1);
     expect(source('src/ui/components/fuel/FuelFillForm.tsx').match(/<FuelDestinationFields/g)?.length).toBe(1);
     expect(destination).toContain('label="Fuel destination *"');

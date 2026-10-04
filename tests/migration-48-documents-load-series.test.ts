@@ -5,7 +5,7 @@ import {SEED_TIME,SqliteTestDatabase,migratedDatabaseWithProject} from './suppor
 import {recordsDatabase} from './support/recordFixtures';
 
 /**
- * Migration 48 (DEC-487). Company Load Number Series, the item-to-series assignment, a load's generated
+ * Migration 48 (DEC-500). Company Load Number Series, the item-to-series assignment, a load's generated
  * number and its immutable issue history; business documents, their shared record links, document
  * settings, billing contacts, and reusable signers. Every existing load stays a legacy load with no
  * number, and nothing existing is rewritten.

@@ -3,7 +3,7 @@ import {describe,expect,it} from 'vitest';
 import type {RecordSnapshot} from '../src/domain/businessDocuments';
 import {formatCents,formatRecordedAt,inclusionTone,recordMoneyLine,recordReferences,recordTitle,recordedValueLine,unitFigures} from '../src/ui/totalsPresentation';
 
-/** DEC-487. Wording every totals and document screen shares; screens add nothing up themselves. */
+/** DEC-500. Wording every totals and document screen shares; screens add nothing up themselves. */
 const snap=(overrides:Partial<RecordSnapshot>):RecordSnapshot=>({recordType:'company_load',recordId:'l1',reference:'20260810-AB12-00007',loadNumber:'ASP-2026-004',loadNumberSeriesName:'Asphalt',itemKey:'id:a',itemName:'Asphalt',unitKey:'unit_ton',unitSymbol:'t',quantity:12.5,projectId:'p',projectName:'Mountain Road',partyId:'c',partyName:'Road Co',recordedAt:'2026-08-10T06:05:00.000Z',enteredAt:null,unitPriceCents:null,priceBasis:'per_unit',subtotalCents:null,vatRateBasisPoints:null,vatCents:null,totalCents:null,supplierReference:null,...overrides});
 
 describe('record wording',()=>{

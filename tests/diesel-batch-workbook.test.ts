@@ -7,7 +7,7 @@ import {sheetsForBusinessReport} from '../src/services/businessWorkbook';
 import {SEED_TIME,SqliteTestDatabase,migratedDatabaseWithProject} from './support/sqliteTestDatabase';
 
 /**
- * DEC-492. The existing fuel workbook gains batch, source and station columns plus Diesel Batches and Fuel
+ * DEC-505. The existing fuel workbook gains batch, source and station columns plus Diesel Batches and Fuel
  * Stations sheets with stable identifiers. No separate workbook system is created.
  */
 const open:SqliteTestDatabase[]=[];

@@ -4,7 +4,7 @@ import type {FuelMovement} from '../src/domain/fuel';
 import type {BatchDetail,DieselBatchOverview,FillBatchInfo} from '../src/domain/fuelBatches';
 import {batchDestinationTotals,buildFillRows,filterBatchList,fuelDayLabel,fuelHomeBadge,fillSourceTag,groupFillsByDay,projectFuelSummary,splitLine,tankCardRows} from '../src/domain/fuelBatchViews';
 
-/** DEC-492, Screens A, C, D and E. Day cards, source tags, batch totals and the project fuel view. */
+/** DEC-505, Screens A, C, D and E. Day cards, source tags, batch totals and the project fuel view. */
 const STARTED='2026-10-01T06:00:00.000Z';
 let seq=0;
 const fill=(extra:Partial<FuelMovement>):FuelMovement=>({

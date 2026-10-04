@@ -2,7 +2,7 @@ import {existsSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {describe,expect,it} from 'vitest';
 
-// Static contract checks for the Project Totals screen (DEC-481, redesigned by DEC-487), following the
+// Static contract checks for the Project Totals screen (DEC-481, redesigned by DEC-500), following the
 // established pattern: no React Native renderer is available, so these pin structure, wording and the
 // rule that the screen performs no arithmetic of its own. Calculations are covered by the domain and
 // repository suites.
@@ -20,7 +20,7 @@ describe('Project Totals navigation',()=>{
 });
 
 describe('Project Totals screen',()=>{
-  // DEC-487: the project's materials use the shared Totals explorer (one summary band per level and one
+  // DEC-500: the project's materials use the shared Totals explorer (one summary band per level and one
   // ruled list, not a card per item); the fuel and wall/foundation sections stay as DEC-481 defined them.
   const screen=read('src/ui/screens/ProjectTotalsScreen.tsx');
   const explorer=read('src/ui/components/totals/TotalsExplorer.tsx');

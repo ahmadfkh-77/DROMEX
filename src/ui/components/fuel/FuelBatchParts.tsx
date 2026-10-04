@@ -9,7 +9,7 @@ import {colors,radius} from '../../theme';
 import {useReducedMotion} from '../ExpandableMenu';
 
 /**
- * DEC-492. The small parts every diesel batch screen shares: the source tag, the status badge, the navy
+ * DEC-505. The small parts every diesel batch screen shares: the source tag, the status badge, the navy
  * group header, and the day card (Screen D). Text always carries the meaning; colour only repeats it.
  */
 export function SourceTag({source}:{source:FillSource}){

@@ -2212,7 +2212,7 @@ Implemented with automated tests and physically accepted on Android build 22 (20
 
 ## Company Totals, Invoices & Bills, Authorized Signers and Company Load Number Series
 
-DEC-487. Migration 48. Implemented with automated tests; tested by the Owner in Expo Go on 2026-10-02; APK acceptance pending.
+DEC-500. Migration 48. Implemented with automated tests; tested by the Owner in Expo Go on 2026-10-02; APK acceptance pending.
 
 ### Company and Project Totals
 - FR-CT-1: Home shall offer a Totals destination showing company-wide totals: Material → Project → Supplier → original records. Project → Totals shall show Material → Supplier → original records for one project through the same views, so a document started from either is the same document.
@@ -2224,10 +2224,10 @@ DEC-487. Migration 48. Implemented with automated tests; tested by the Owner in 
 - FR-CT-7: Each original record shall show its item, quantity and unit, project, supplier or customer, company-load number (or the legacy wording), date and time, transaction or Supplier Load number, supplier ticket, price only where recorded, correction count, cancellation, and its document status; tapping it opens the record's own screen.
 - FR-CT-8: Company Load Totals shall group company loads by number series or by item, then by project, then the individual loads, with load counts and per-unit totals, cancelled loads listed apart and never counted, filters for dates, item, project, unit, series and status, and an A4 PDF with repeated table headings.
 
-- FR-CT-9 (DEC-488): Company and Project Totals shall export a PDF of the filters and level on screen, Without prices (default) or With prices; on a records level the PDF is a Loads History listing every load with its totals, headed "Issued to" the supplier (or the single customer), with an optional Project column. It is not a billing document and never changes document status.
-- FR-CT-10 (DEC-488): Totals lists shall show each item as its own card; Back from a record opened from Totals shall return to Totals.
-- FR-CT-11 (DEC-489): The Project Totals PDF shall optionally include fuel for the Covering dates (per fuel type, per equipment, every fill; prices and cost only with prices), and every Totals PDF shall present each material, fuel and loads history as a separate numbered block with a contents list.
-- FR-CT-12 (DEC-490): The Delivery Authorization (PDF, preview and Bluetooth slip, never the Receipt) shall print a Supplier signature under the driver's, taken from a saved active signer chosen as the default for new loads or set per load in Load History; each load shall keep its own unchangeable copy, and the strokes shall never leave the device.
+- FR-CT-9 (DEC-501): Company and Project Totals shall export a PDF of the filters and level on screen, Without prices (default) or With prices; on a records level the PDF is a Loads History listing every load with its totals, headed "Issued to" the supplier (or the single customer), with an optional Project column. It is not a billing document and never changes document status.
+- FR-CT-10 (DEC-501): Totals lists shall show each item as its own card; Back from a record opened from Totals shall return to Totals.
+- FR-CT-11 (DEC-502): The Project Totals PDF shall optionally include fuel for the Covering dates (per fuel type, per equipment, every fill; prices and cost only with prices), and every Totals PDF shall present each material, fuel and loads history as a separate numbered block with a contents list.
+- FR-CT-12 (DEC-503): The Delivery Authorization (PDF, preview and Bluetooth slip, never the Receipt) shall print a Supplier signature under the driver's, taken from a saved active signer chosen as the default for new loads or set per load in Load History; each load shall keep its own unchangeable copy, and the strokes shall never leave the device.
 
 ### Invoices & Bills
 - FR-IB-1: A document is one of: Customer statement (Internal), Invoice (Official), Supplier statement (Internal), Bill (Official). It is addressed to one customer or one supplier and is Draft, Issued or Cancelled; it is never deleted.
@@ -2247,12 +2247,12 @@ DEC-487. Migration 48. Implemented with automated tests; tested by the Owner in 
 - FR-SG-3: Issuing shall snapshot the signer as Name only or Name and signature; later changes to the signer shall never change an issued document. Signatures print without stretching. Drawing a signature shall not scroll the page.
 
 ### Company Load Number Series
-- FR-LN-1: Every company load confirmed from build 26 shall receive one number `{PREFIX}-{NNNNN}` (five digits, no year, one lifetime count per series that never restarts and widens past 99999; DEC-491), generated in the confirmation transaction from its item's active series, or the default `LOAD` series. Numbers issued by builds 23 to 25 (`{PREFIX}-{YYYY}-{NNN}`) are unchanged, and a series' count continues after the number of loads it already issued.
+- FR-LN-1: Every company load confirmed from build 26 shall receive one number `{PREFIX}-{NNNNN}` (five digits, no year, one lifetime count per series that never restarts and widens past 99999; DEC-504), generated in the confirmation transaction from its item's active series, or the default `LOAD` series. Numbers issued by builds 23 to 25 (`{PREFIX}-{YYYY}-{NNN}`) are unchanged, and a series' count continues after the number of loads it already issued.
 - FR-LN-2: Series have a unique 2–5 letter prefix, a display name, a lifetime count, an active state and assigned items; several items may share one series; an item belongs to one series; the default series cannot be deactivated. A prefix that loads already carry is locked.
 - FR-LN-3: A number shall never change after correction, cancellation, project or date change, restore or configuration change, and shall never be reused; every issued number is kept in an immutable history.
 - FR-LN-4: Loads confirmed before this release keep no number and read "Legacy load — no generated load number". No number is backfilled.
 - FR-LN-5: Make Company Load shall preview the number before confirmation and show it after; Load History, corrections, totals, original-record details, Daily Report PDFs and workbooks, the Completed Project report, the business analysis workbook and Company Load Totals shall show it, and Load History and corrections search it.
-- FR-LN-6: The Bluetooth and PDF Receipt and Delivery Authorization shall print "Load No." in bold directly above "Transaction" (nothing is printed for a load without a number), and every Bluetooth document shall centre the company title, address, phone, email and Tax/VAT lines under the title by padding each line to the paper width (DEC-491).
+- FR-LN-6: The Bluetooth and PDF Receipt and Delivery Authorization shall print "Load No." in bold directly above "Transaction" (nothing is printed for a load without a number), and every Bluetooth document shall centre the company title, address, phone, email and Tax/VAT lines under the title by padding each line to the paper width (DEC-504).
 
 ### Data
 - DR-487-1: `load_number_series`, `load_number_counters` (per prefix and year), `load_number_issues` (immutable by trigger), `catalog_items.load_number_series_id`, and `loads.load_number` / `load_number_series_id` / `load_number_series_name` (unique, unchangeable once set by trigger).
@@ -2265,7 +2265,7 @@ DEC-487. Migration 48. Implemented with automated tests; tested by the Owner in 
 ### Status
 Implemented with automated tests on `feature/android-totals-documents-load-series`. Tested by the Owner in Expo Go on 2026-10-02 and confirmed working. APK upgrade-install acceptance pending.
 
-## Diesel Batches and Outside Station Fills (DEC-492)
+## Diesel Batches and Outside Station Fills (DEC-505)
 - FR-DB-1: Until the Owner starts diesel batch tracking, deliveries, fills, readings and balances behave exactly as before. Starting tracking creates one Opening stock batch from a new dip reading or the calculated tank balance (labelled calculated); it is not started again.
 - FR-DB-2: From then on every diesel delivery is a batch numbered `DSL-YYYY-NNNNN` (arrival-date year, five-digit count, never reused, kept on cancellation), carrying the supplier invoice number (the delivery's ticket field), supplier and price. Deliveries and fills dated before tracking started are "Before batches" and are never assigned.
 - FR-DB-3: Fills are allocated first in, first out to batches, derived from the active records in date order: the oldest open batch first or the batch the user chose, splitting across batches, closing a batch at zero. The tank balance is the sum of the batches' remaining litres. Allocation is recalculated after any delivery, fill, reading, correction or cancellation, and a change to an earlier fill's batches is recorded and shown.

@@ -2,7 +2,7 @@ import {existsSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {describe,expect,it} from 'vitest';
 
-// DEC-487 static UI contracts. No React Native renderer is available, so these pin entry points,
+// DEC-500 static UI contracts. No React Native renderer is available, so these pin entry points,
 // wording, accessible labels and the rules each screen must keep. Behaviour is covered by the domain,
 // repository, PDF and backup suites.
 const read=(path:string)=>existsSync(join(__dirname,'..',path))?readFileSync(join(__dirname,'..',path),'utf8'):'';

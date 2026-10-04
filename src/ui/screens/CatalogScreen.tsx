@@ -39,7 +39,7 @@ export function CatalogScreen({
   onBack,
 }: {
   repository: CatalogRepository;
-  /** DEC-487. Offers each load item's Company Load Number Series. */
+  /** DEC-500. Offers each load item's Company Load Number Series. */
   seriesRepository?: LoadNumberSeriesRepository;
   onBack: () => void;
 }) {

@@ -7,7 +7,7 @@ import {emptyLoadDraft} from '../src/domain/loads';
 import {SEED_TIME,type SqliteTestDatabase} from './support/sqliteTestDatabase';
 import {recordsDatabase} from './support/recordFixtures';
 
-/** DEC-487 (6)-(7). Configurable Company Load Number Series. */
+/** DEC-500 (6)-(7). Configurable Company Load Number Series. */
 const databases:SqliteTestDatabase[]=[];
 afterEach(()=>{for(const database of databases.splice(0))database.close();});
 

@@ -120,7 +120,7 @@ export function DromexApp(){
   const[pavementProjectId,setPavementProjectId]=useState<string|null>(null);
   const[wallProjectId,setWallProjectId]=useState<string|null>(null);
   const[fuelProjectId,setFuelProjectId]=useState<string|null>(null);
-  // DEC-492. The compact diesel figure on Home, refreshed whenever Home is shown.
+  // DEC-505. The compact diesel figure on Home, refreshed whenever Home is shown.
   const[fuelBadge,setFuelBadge]=useState<string|null>(null);
   useEffect(()=>{if(screen!=='home')return;let live=true;void fuelRepository.getBatchOverview().then(value=>{if(live)setFuelBadge(fuelHomeBadge(value));}).catch(()=>{if(live)setFuelBadge(null);});return()=>{live=false;};},[screen,fuelRepository]);
   const[dashboardRange,setDashboardRange]=useState<DashboardRange|null>(null);
@@ -137,7 +137,7 @@ export function DromexApp(){
   const navigate=(next:Screen)=>{setHistory(current=>[...current,screen]);setScreen(next);};
   /** Moves on without keeping the current screen in Back history (a saved review becomes its draft). */
   const replaceWith=(next:Screen)=>setScreen(next);
-  /** DEC-487. Opens the original record behind a total or a document line. */
+  /** DEC-500. Opens the original record behind a total or a document line. */
   const openOriginalRecord=(record:RecordSnapshot)=>{if(record.recordType==='company_load')setSearchTarget({id:record.recordId,kind:'Load',title:record.loadNumber??record.reference,subtitle:record.itemName,date:record.recordedAt,route:'loads',projectId:record.projectId});else setSearchTarget({id:record.recordId,kind:'Supplier Load',title:record.reference,subtitle:`${record.partyName} · ${record.itemName}`,date:record.recordedAt,route:'quarry',projectId:record.projectId});navigate(record.recordType==='company_load'?'loads':'quarry');};
   const openUsageReport=(usage:UsageRecord)=>{setSearchTarget({id:usage.reportId,kind:'Daily Report',title:usage.workDate,subtitle:usage.projectName,date:usage.workDate,route:'reports',projectId:usage.projectId});navigate('reports');};
   const startDocument=(start:DocumentStart)=>{setDocumentStart(start);navigate('documentReview');};

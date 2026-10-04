@@ -20,7 +20,7 @@ export function stepUp(level:ExplorerLevel,leave:()=>void,setLevel:(next:Explore
 }
 
 /**
- * DEC-487 (1). Home → Totals: company-wide Material → Project → Supplier → original records, with the
+ * DEC-500 (1). Home → Totals: company-wide Material → Project → Supplier → original records, with the
  * document status of every record read from the shared document links.
  */
 export function CompanyTotalsScreen({totals,documents,series,profiles,level:savedLevel,onLevel,onBack,onOpenRecord,onOpenReport,onCreateDocument,onOpenCompanyLoadTotals,onOpenDocuments}:{

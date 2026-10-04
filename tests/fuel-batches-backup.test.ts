@@ -9,7 +9,7 @@ import {BACKUP_COUNT_TABLES} from '../src/domain/backup';
 import {SEED_TIME,SqliteTestDatabase,migratedDatabaseWithProject} from './support/sqliteTestDatabase';
 
 /**
- * DEC-492. A backup copies the whole SQLite file, so batches, stations, the derived allocation and its
+ * DEC-505. A backup copies the whole SQLite file, so batches, stations, the derived allocation and its
  * history travel with it. These tests restore a real file copy and prove nothing is lost or renumbered.
  */
 const open:SqliteTestDatabase[]=[];const files:string[]=[];

@@ -32,12 +32,12 @@ package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
 internal Android artifact is `output/DROMEX-0.20.0-build28.apk` when present,
 installed in place and accepted by the Owner on 2026-10-04. Build 28 carries the
 0.20.0 work: Company Totals, Invoices & Bills, authorized signers and Company
-Load Number Series (migration 48, DEC-487), Totals and Loads History PDFs
-(DEC-488), Project Totals fuel and block-layout PDFs (DEC-489), the Delivery
-Authorization Supplier signature (migration 49, DEC-490), the receipt Load No.
-and centred contact details (DEC-491), and diesel batches, outside station
+Load Number Series (migration 48, DEC-500), Totals and Loads History PDFs
+(DEC-501), Project Totals fuel and block-layout PDFs (DEC-502), the Delivery
+Authorization Supplier signature (migration 49, DEC-503), the receipt Load No.
+and centred contact details (DEC-504), and diesel batches, outside station
 fills, the History and Usage day cards, per-destination PDFs and the Company
-Settings header on the Diesel Batch Report (migration 50, DEC-492 and its two
+Settings header on the Diesel Batch Report (migration 50, DEC-505 and its two
 amendments). It is built from `feature/android-receipts-diesel-batches`, which
 is not yet merged into `main`. `output/DROMEX-0.19.0-build22.apk` (migration 47,
 DEC-482 to DEC-486) is retained unchanged as the previous accepted installer.

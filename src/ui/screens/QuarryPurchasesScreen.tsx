@@ -30,9 +30,9 @@ function computeTripInfo(purchases:QuarryPurchase[]):Map<string,TripInfo>{
 function matchesSearch(purchase:QuarryPurchase,query:string){const haystack=[purchase.supplierName,purchase.projectName??'',purchase.itemName,purchase.purchaseNumber,purchase.supplierTicketNumber??'',purchase.driverName,purchase.truckPlate].join(' ').toLocaleLowerCase('en-US');return haystack.includes(query);}
 
 export function QuarryPurchasesScreen({ repository, onBack,initialProjectId,startEntry=false,initialPurchaseId,onOpenDocuments,documents,onOpenDocument }: { repository: QuarryRepository; onBack: () => void;initialProjectId?:string|null;startEntry?:boolean;initialPurchaseId?:string|null;
-  /** DEC-487. Opens Invoices & Bills for one supplier. */
+  /** DEC-500. Opens Invoices & Bills for one supplier. */
   onOpenDocuments?:(supplier:{id:string;name:string})=>void;
-  /** DEC-487. Shows each Supplier Load's document status from the shared links. */
+  /** DEC-500. Shows each Supplier Load's document status from the shared links. */
   documents?:BusinessDocumentRepository;onOpenDocument?:(id:string)=>void }) {
   const [setup,setSetup]=useState<QuarrySetup|null>(null); const [purchases,setPurchases]=useState<QuarryPurchase[]>([]); const [draft,setDraft]=useState<QuarryPurchaseDraft>({...emptyQuarryPurchaseDraft});
   const [showEntry,setShowEntry]=useState(false); const [showSupplier,setShowSupplier]=useState(false); const [editingSupplierId,setEditingSupplierId]=useState<string|null>(null);const [supplierName,setSupplierName]=useState(''); const [supplierPhone,setSupplierPhone]=useState('');const[supplierEmail,setSupplierEmail]=useState('');const[supplierAddress,setSupplierAddress]=useState(''); const [supplierTax,setSupplierTax]=useState(''); const [supplierNotes,setSupplierNotes]=useState('');

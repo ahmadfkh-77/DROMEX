@@ -20,7 +20,7 @@ import {stepUp} from './CompanyTotalsScreen';
 const records=(count:number)=>`${count} record${count===1?'':'s'}`;
 
 /**
- * DEC-481 / DEC-487. A project's Totals: Project → Material → Supplier → original records, through the
+ * DEC-481 / DEC-500. A project's Totals: Project → Material → Supplier → original records, through the
  * same explorer as Home → Totals, so a document started here is the same document everywhere. Fuel and
  * wall/foundation materials keep their own sections (DEC-481): each fuel type and each construction
  * source is counted on its own and never added to Daily Report use.

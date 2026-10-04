@@ -4,7 +4,7 @@ import {formatTotalQuantity} from '../domain/projectTotals';
 import {formatDay,formatRecordedAt,recordTitle} from '../domain/recordFormat';
 
 /**
- * DEC-487 (6). Company Load Totals as an A4 PDF: the filters it covers, then each series (or item) with
+ * DEC-500 (6). Company Load Totals as an A4 PDF: the filters it covers, then each series (or item) with
  * its load count and per-unit totals, its projects, and every load. Cancelled loads are listed under
  * their own heading and never added to a total. Table headings repeat on every page.
  */

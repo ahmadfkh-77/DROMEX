@@ -3,7 +3,7 @@ export {summarizeInclusionCounts} from './businessDocuments';
 export type {InclusionCounts} from './businessDocuments';
 
 /**
- * DEC-487 (1). Home → Totals (company-wide), Project → Totals and Company Load Totals.
+ * DEC-500 (1). Home → Totals (company-wide), Project → Totals and Company Load Totals.
  *
  * These are live views over the canonical records and never store a figure. The rules:
  * - Delivered = Active Supplier Loads + Active, non-archived company loads. Used (and Transported) come
@@ -15,7 +15,7 @@ export type {InclusionCounts} from './businessDocuments';
  * - Each record is counted in exactly one leaf (material, project, supplier, unit), so every level adds
  *   up to the level above it.
  * - Recorded value adds only priced records and always says how many were unpriced.
- * - Inclusion counts come from the shared document links (DEC-487 (3)).
+ * - Inclusion counts come from the shared document links (DEC-500 (3)).
  */
 export const NO_PROJECT_KEY = '__none__';
 export const NO_PROJECT_LABEL = 'No project — direct customer deliveries';

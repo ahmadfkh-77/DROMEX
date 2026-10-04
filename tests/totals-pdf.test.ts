@@ -4,7 +4,7 @@ import {emptyInclusion,type CompanyTotalsData} from '../src/domain/companyTotals
 import {totalsFileName} from '../src/domain/recordFormat';
 import {buildTotalsHtml} from '../src/services/totalsTemplate';
 
-/** DEC-487 (1). The Totals PDF: delivered and used quantities, with or without prices. */
+/** DEC-500 (1). The Totals PDF: delivered and used quantities, with or without prices. */
 const counts=(total:number,included=0)=>({...emptyInclusion(),total,included,open:total-included});
 const data:CompanyTotalsData={usageHiddenReason:null,
   deliveries:[

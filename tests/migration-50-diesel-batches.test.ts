@@ -4,7 +4,7 @@ import {DATABASE_VERSION,migrateDatabase} from '../src/data/database/migrations'
 import {SEED_TIME,SqliteTestDatabase,migratedDatabaseWithProject} from './support/sqliteTestDatabase';
 
 /**
- * Migration 50 (DEC-492). Diesel batches, the saved Stations list, and the columns that mark a fill as
+ * Migration 50 (DEC-505). Diesel batches, the saved Stations list, and the columns that mark a fill as
  * coming from the tank or an outside station. Nothing existing is rewritten: every current delivery,
  * fill and gauge reading keeps its values, the new columns start empty, and no batch exists until the
  * Owner starts diesel batch tracking.

@@ -20,7 +20,7 @@ export type DocumentViewData = {
   unitPriceUsd: number | null; subtotalUsd: number | null; vatRatePercent: number | null;
   vatAmountUsd: number | null; finalTotalUsd: number | null;
   signaturePaths: string[];
-  /** DEC-490. The supplier's (Owner's) signature, under the driver's on the Delivery Authorization. */
+  /** DEC-503. The supplier's (Owner's) signature, under the driver's on the Delivery Authorization. */
   supplierSignature?: SignerSnapshot | null;
 };
 

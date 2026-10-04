@@ -714,11 +714,11 @@ values on its next save.
 ## Release — DROMEX 0.20.0, Android build 28 (2026-10-04)
 
 - **Branch**: `feature/android-receipts-diesel-batches`, from `feature/android-totals-documents-load-series`
-  (build 25). Not merged into `main`; DEC-487 to DEC-490 are used for different decisions on the web
-  branch, which must be resolved before either branch merges.
-- **Scope**: receipt Load No. and centred contact details (DEC-491); diesel batches, FIFO allocation, dip
+  (build 25). Not merged into `main`. Its decisions were renumbered DEC-500 to DEC-505 on 2026-10-04 (from
+  DEC-487 to DEC-492) so they no longer clash with the web branch, which uses DEC-487 to DEC-491.
+- **Scope**: receipt Load No. and centred contact details (DEC-504); diesel batches, FIFO allocation, dip
   adjustments, overfill, Opening stock, outside station fills, the Fuel Batches tab, batch page, project
-  Equipment Fuel view, Diesel Batch Report PDF and workbook sheets (migration 50, DEC-492); the History and
+  Equipment Fuel view, Diesel Batch Report PDF and workbook sheets (migration 50, DEC-505); the History and
   Usage tabs in the day-card design with per-destination PDFs (first amendment); the Company Settings logo,
   name and contacts on the report header (second amendment).
 - **Upgrade safety**: `tests/upgrade-from-build22-and-build25.test.ts` upgrades real build-22 (v47) and

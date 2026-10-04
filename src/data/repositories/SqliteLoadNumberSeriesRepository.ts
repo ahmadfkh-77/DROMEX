@@ -24,11 +24,11 @@ async function resolveSeries(db:SQLiteDatabase,itemId:string):Promise<SeriesRow>
   return fallback;
 }
 
-/** DEC-491. The lifetime counter lives in the counters table under this year value; per-year rows are builds 23 to 25. */
+/** DEC-504. The lifetime counter lives in the counters table under this year value; per-year rows are builds 23 to 25. */
 const LIFETIME_COUNTER_YEAR=0;
 
 /**
- * DEC-491. The count the next load of this series receives. A series that has no lifetime counter yet
+ * DEC-504. The count the next load of this series receives. A series that has no lifetime counter yet
  * continues after every number it already issued in the PREFIX-YEAR-NNN format, so the count is never
  * restarted and no number is reused.
  */
@@ -40,7 +40,7 @@ async function nextLifetimeSequence(db:SQLiteDatabase,series:Pick<SeriesRow,'pre
 }
 
 /**
- * DEC-487 (6), DEC-491. Gives one company load its permanent number. Call it inside the transaction that saves
+ * DEC-500 (6), DEC-504. Gives one company load its permanent number. Call it inside the transaction that saves
  * the load, so a failure saves neither. The counter advances in one atomic statement, so two
  * confirmations can never read the same value; the unique index on loads.load_number and the history's
  * own uniqueness are the backstops. The number is written only onto a load that has none.

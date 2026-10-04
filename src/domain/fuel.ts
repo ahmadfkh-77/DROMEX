@@ -7,7 +7,7 @@ export const fuelTypeLabels:Record<FuelType,string>={diesel:'Diesel',gasoline:'G
 export type FuelDestinationType='project'|'company_site'|'unassigned';
 export const fuelDestinationLabels:Record<FuelDestinationType,string>={project:'Project',company_site:'Company Site',unassigned:'Unassigned'};
 export const fuelDestinationOptions:{id:FuelDestinationType;label:string}[]=(['project','company_site','unassigned'] as const).map(id=>({id,label:fuelDestinationLabels[id]}));
-// DEC-492. Where an equipment fill's fuel came from. A missing value on a stored fill means the tank, as
+// DEC-505. Where an equipment fill's fuel came from. A missing value on a stored fill means the tank, as
 // every fill before outside station fills existed. A station fill never touches the tank or a batch.
 export type FuelSource='tank'|'station';
 export const fuelSourceLabels:Record<FuelSource,string>={tank:'From tank',station:'Outside station'};
@@ -51,7 +51,7 @@ export function calculateFuelFillCost(litres:number,priceText:string):{pricePerL
 // The tank holds diesel only (DEC-392), so the running balance is computed from diesel movements
 // alone. A gasoline fill is a purchase-and-consume event with no stock effect: it passes through
 // carrying the diesel balance unchanged, and never contributes previous/difference litres. An outside
-// station fill (DEC-492) is the same: the fuel never entered the tank.
+// station fill (DEC-505) is the same: the fuel never entered the tank.
 export function applyFuelLedger(movements:Omit<FuelMovement,'balanceAfterLitres'>[]):FuelMovement[]{let balance=0;return [...movements].sort((a,b)=>a.confirmedAt.localeCompare(b.confirmedAt)).map(movement=>{let previousBalanceLitres=movement.previousBalanceLitres;let differenceLitres=movement.differenceLitres;if(movement.status==='Active'&&movement.fuelType==='diesel'&&movement.fuelSource!=='station'){if(movement.type==='gauge'){previousBalanceLitres=balance;differenceLitres=movement.litres-balance;balance=movement.litres;}else if(movement.type==='delivery')balance+=movement.litres;else balance-=movement.litres;}return{...movement,previousBalanceLitres,differenceLitres,balanceAfterLitres:balance};});}
 
 export function groupProjectFuelByEquipment(movements:FuelMovement[],projectId:string):ProjectEquipmentFuelUsage[]{

@@ -39,7 +39,7 @@ const article=(label:string)=>`${/^[aeiou]/i.test(label)?'An':'A'} ${label.toLoc
 const chunk=<T>(values:readonly T[],size=400)=>{const chunks:T[][]=[];for(let index=0;index<values.length;index+=size)chunks.push(values.slice(index,index+size));return chunks;};
 
 /**
- * DEC-487 (3). The one place inclusion status is read from, for every screen: the document links of
+ * DEC-500 (3). The one place inclusion status is read from, for every screen: the document links of
  * each record. Every key asked for is present in the result, with [] when the record is unlinked.
  */
 export async function readDocumentLinks(db:SQLiteDatabase,keys:readonly string[]):Promise<Record<string,DocumentLink[]>>{
@@ -55,7 +55,7 @@ export async function readDocumentLinks(db:SQLiteDatabase,keys:readonly string[]
 }
 
 /**
- * DEC-487 (2)-(4). Business documents and the shared document-to-record links.
+ * DEC-500 (2)-(4). Business documents and the shared document-to-record links.
  *
  * Every read of inclusion status goes through `inclusionFor`, which reads only the link rows; no other
  * table carries an inclusion flag. Issuing happens in one transaction that re-reads every record,

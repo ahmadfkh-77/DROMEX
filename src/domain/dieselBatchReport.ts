@@ -4,7 +4,7 @@ import {buildFillRows,fuelDayLabel,groupFillsByDay,type DayFillRow} from './fuel
 import {costSummaryLabel,formatLitres,formatMoney} from './fuelFillForm';
 
 /**
- * DEC-492, Screen F. The content of the Diesel Batch Report PDF for a batch, project, site, station or
+ * DEC-505, Screen F. The content of the Diesel Batch Report PDF for a batch, project, site, station or
  * date range: computed here so it can be tested, then printed by the template. Gasoline is not part of
  * a diesel report; records from before batches and outside station fills keep their own source label.
  */

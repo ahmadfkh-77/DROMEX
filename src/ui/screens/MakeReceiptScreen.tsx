@@ -18,7 +18,7 @@ import { useReducedMotion } from '../components/ExpandableMenu';
 import { colors } from '../theme';
 
 export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId, seriesRepository }: { repository: LoadRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null;
-  /** DEC-487. Previews the Company Load number this load will receive. */
+  /** DEC-500. Previews the Company Load number this load will receive. */
   seriesRepository?: LoadNumberSeriesRepository }) {
   const [options, setOptions] = useState<LoadSetupOptions | null>(null);
   const [draft, setDraft] = useState<LoadDraft>(emptyLoadDraft);

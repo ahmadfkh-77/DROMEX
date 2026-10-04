@@ -193,7 +193,7 @@ export function totalsFilterChoices(data: ProjectTotalsData): { items: TotalsCho
   };
 }
 
-/** DEC-489. One equipment fill to the project, as the Project Totals PDF lists it. Money in US-dollar cents, only where recorded. */
+/** DEC-502. One equipment fill to the project, as the Project Totals PDF lists it. Money in US-dollar cents, only where recorded. */
 export type ProjectFuelFill = { id: string; confirmedAt: string; equipmentName: string; fuelType: FuelType; litres: number; pricePerLitreCents: number | null; costCents: number | null };
 
 /** Fills per fuel type and equipment (diesel never added to gasoline), and the cost of priced fills only. */

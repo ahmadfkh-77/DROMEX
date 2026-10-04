@@ -7,7 +7,7 @@ import {buildCompanyLoadTree,buildMaterialTree,emptyCompanyTotalsFilters,NO_PROJ
 import {type SqliteTestDatabase} from './support/sqliteTestDatabase';
 import {recordsDatabase} from './support/recordFixtures';
 
-/** DEC-487 (1). Company-wide totals: Material → Project → Supplier → records, with inclusion status from the shared links. */
+/** DEC-500 (1). Company-wide totals: Material → Project → Supplier → records, with inclusion status from the shared links. */
 const databases:SqliteTestDatabase[]=[];
 afterEach(()=>{for(const database of databases.splice(0))database.close();});
 

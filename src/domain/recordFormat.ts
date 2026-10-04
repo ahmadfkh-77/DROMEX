@@ -2,7 +2,7 @@ import type {BusinessDocument,RecordSnapshot} from './businessDocuments';
 import {loadNumberLabel} from './loadNumberSeries';
 
 /**
- * DEC-487. How a record and its money are written, shared by screens, PDFs and workbooks so every
+ * DEC-500. How a record and its money are written, shared by screens, PDFs and workbooks so every
  * view uses the same words. Pure formatting: nothing here calculates a total.
  */
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -70,7 +70,7 @@ export function periodFileLabel(fromDate:string|null|undefined,toDate:string|nul
 const localDay=(value:string)=>{const date=new Date(value);return Number.isNaN(date.getTime())?value.slice(0,10):`${date.getFullYear()}-${two(date.getMonth()+1)}-${two(date.getDate())}`;};
 
 /**
- * DEC-487. "INV-2026-014 - Road Co - Mountain Road - Aug 2026.pdf": number first so files sort in
+ * DEC-500. "INV-2026-014 - Road Co - Mountain Road - Aug 2026.pdf": number first so files sort in
  * order, then the party, the one project (or "N projects"), and the period (or the records' own months).
  * A draft is named by its draft number; a cancelled document says CANCELLED.
  */

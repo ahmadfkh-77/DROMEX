@@ -3,7 +3,7 @@ import {formatTotalQuantity} from '../domain/projectTotals';
 import {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
 
 /**
- * DEC-487 (2), (4), (5). The A4 PDF of a statement, invoice or bill. It prints the document's own frozen
+ * DEC-500 (2), (4), (5). The A4 PDF of a statement, invoice or bill. It prints the document's own frozen
  * snapshot only: issuer, recipient, terms, lines, records and signer exactly as they were at issue.
  * Empty fields are left out rather than printed blank. Units are never combined, a missing price is
  * never shown as zero, and a signature keeps its proportions. Nothing here claims legal, tax or

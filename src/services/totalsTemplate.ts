@@ -5,7 +5,7 @@ import {formatTotalQuantity,summarizeFuelFills,type ProjectFuelFill} from '../do
 import {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
 
 /**
- * DEC-487 (1), DEC-488, DEC-489. Company Totals, Project Totals and Loads History as an A4 PDF.
+ * DEC-500 (1), DEC-501, DEC-502. Company Totals, Project Totals and Loads History as an A4 PDF.
  *
  * Layout: a contents list, then every material in its own numbered block -- a navy title bar carrying
  * its name and headline totals, tinted Delivered and Used figures per unit, suppliers grouped under

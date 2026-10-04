@@ -1,7 +1,7 @@
 import {normalizeSupervisorText} from './supervisors';
 
 /**
- * DEC-487 (5). Reusable authorized signers for statements, invoices and bills.
+ * DEC-500 (5). Reusable authorized signers for statements, invoices and bills.
  *
  * A signature is stroke data in the same validated JSON form as Supervisor, Consultant and driver
  * signatures (DEC-479): it lives inside the database, is covered by every encrypted backup, and never

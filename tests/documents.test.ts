@@ -62,7 +62,7 @@ describe('Quick Text PDF documents',()=>{
   });
 });
 
-describe('Load No. on the PDF receipt and authorization (DEC-491)',()=>{
+describe('Load No. on the PDF receipt and authorization (DEC-504)',()=>{
   const numbered={...load,loadNumber:'ASP-00058',loadNumberSeriesName:'Asphalt'} as unknown as ConfirmedLoad;
   it('prints Load No. above the transaction number on both documents',()=>{
     for(const kind of ['receipt','authorization'] as const){

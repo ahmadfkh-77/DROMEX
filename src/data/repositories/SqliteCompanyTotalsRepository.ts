@@ -15,7 +15,7 @@ const number=(value:unknown)=>Math.round(Number(value??0)*1e6)/1e6;
 const SEP='\u001f';
 
 /**
- * Per-record inclusion state, derived in SQL from the shared link table only (DEC-487 (3)), so totals
+ * Per-record inclusion state, derived in SQL from the shared link table only (DEC-500 (3)), so totals
  * can be filtered and counted by extraction status without loading every record.
  */
 const RECORDS=`WITH inc AS (
@@ -62,7 +62,7 @@ function inclusionCounts(row:Row):InclusionCounts{
 }
 
 /**
- * DEC-487 (1). Company-wide totals by grouped SQL over the canonical records; nothing is summed in a
+ * DEC-500 (1). Company-wide totals by grouped SQL over the canonical records; nothing is summed in a
  * screen and nothing is stored. Names come from the current catalog, project and supplier records where
  * they still exist (archived included), otherwise from each record's own snapshot.
  */

@@ -3,7 +3,7 @@ import {describe,expect,it} from 'vitest';
 import {groupDocumentLines,type BusinessDocument,type RecordSnapshot} from '../src/domain/businessDocuments';
 import {buildBusinessDocumentHtml} from '../src/services/businessDocumentTemplate';
 
-/** DEC-487 (2), (4), (5). The issued-document PDF prints the frozen snapshot, never invents a field, and never stretches a signature. */
+/** DEC-500 (2), (4), (5). The issued-document PDF prints the frozen snapshot, never invents a field, and never stretches a signature. */
 const STROKE='M 20.0 80.5 L 60.2 40.0 L 110.1 90.4';
 const snap=(overrides:Partial<RecordSnapshot>):RecordSnapshot=>({recordType:'company_load',recordId:'l1',reference:'20260810-AB12-00007',loadNumber:'ASP-2026-004',loadNumberSeriesName:'Asphalt',itemKey:'id:a',itemName:'Asphalt',unitKey:'unit_ton',unitSymbol:'t',quantity:10,projectId:'p',projectName:'Mountain Road',partyId:'c',partyName:'Road Co',recordedAt:'2026-08-10T09:05:00',enteredAt:null,unitPriceCents:1500,priceBasis:'per_unit',subtotalCents:15000,vatRateBasisPoints:1100,vatCents:1650,totalCents:16650,supplierReference:null,...overrides});
 const records=[snap({}),snap({recordId:'l2',reference:'TX-2',loadNumber:null,unitKey:'unit_m3',unitSymbol:'m³',quantity:4,unitPriceCents:null,subtotalCents:null,vatCents:null,totalCents:null,vatRateBasisPoints:null,itemName:'رمل <Sand>'})];

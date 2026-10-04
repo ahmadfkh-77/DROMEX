@@ -7,7 +7,7 @@ import {
 } from '../../domain/fuelBatches';
 
 /**
- * DEC-492. The SQLite side of diesel batches: which records feed the allocation, the persisted copy of
+ * DEC-505. The SQLite side of diesel batches: which records feed the allocation, the persisted copy of
  * the derived allocation, and the writes that keep it current. The domain module decides who gets which
  * litres; this module only loads, persists, and reports.
  */

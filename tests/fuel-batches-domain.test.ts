@@ -2,7 +2,7 @@ import {describe,expect,it} from 'vitest';
 
 import {allocateDieselBatches,fillCost,formatBatchNumber,previewTankFill,type BatchInput,type FillInput,type GaugeInput} from '../src/domain/fuelBatches';
 
-/** DEC-492. Derived first-in-first-out allocation of diesel fills to numbered batches. */
+/** DEC-505. Derived first-in-first-out allocation of diesel fills to numbered batches. */
 const batch=(sequence:number,arrivedAt:string,deliveredLitres:number,pricePerLitreUsd:number|null=1,extra:Partial<BatchInput>={}):BatchInput=>({id:`b${sequence}`,batchNumber:formatBatchNumber(2026,sequence),arrivedAt,deliveredLitres,pricePerLitreUsd,status:'Active',...extra});
 const fill=(id:string,confirmedAt:string,litres:number,preferredBatchId:string|null=null):FillInput=>({id,confirmedAt,litres,preferredBatchId});
 const dip=(id:string,confirmedAt:string,litres:number):GaugeInput=>({id,confirmedAt,litres});

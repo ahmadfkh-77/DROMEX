@@ -5,7 +5,7 @@ import {formatCents} from '../domain/recordFormat';
 export {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
 
 /**
- * DEC-487. The wording shared by Company Totals, Project Totals, Company Load Totals and documents.
+ * DEC-500. The wording shared by Company Totals, Project Totals, Company Load Totals and documents.
  * Pure formatting only: every figure arrives already calculated by the domain.
  */
 export function recordedValueLine(value:RecordedValue):string{

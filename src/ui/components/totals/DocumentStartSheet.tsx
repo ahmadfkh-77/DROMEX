@@ -35,7 +35,7 @@ export function queriesFor(filters:CompanyTotalsFilters,presetKeys?:string[]):El
 }
 
 /**
- * DEC-487 (3). Starts a document from a totals node or a manual selection: which records, addressed to
+ * DEC-500 (3). Starts a document from a totals node or a manual selection: which records, addressed to
  * which one customer or supplier, as which kind. The records themselves are reviewed on the next screen,
  * where anything can still be removed before the draft is saved.
  */

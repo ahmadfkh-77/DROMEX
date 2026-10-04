@@ -19,7 +19,7 @@ import {SEED_TIME,SqliteTestDatabase} from './support/sqliteTestDatabase';
 import {recordsDatabase} from './support/recordFixtures';
 
 /**
- * DEC-487. Backups copy the whole SQLite file, so documents, links, settings, billing contacts, signers
+ * DEC-500. Backups copy the whole SQLite file, so documents, links, settings, billing contacts, signers
  * and their history, number series, counters and issued-number history all travel with it. These tests
  * restore a real file copy and prove nothing is lost or renumbered.
  */

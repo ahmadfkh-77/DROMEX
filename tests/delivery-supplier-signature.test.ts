@@ -12,7 +12,7 @@ import {SEED_TIME,SqliteTestDatabase} from './support/sqliteTestDatabase';
 import {recordsDatabase} from './support/recordFixtures';
 
 /**
- * DEC-490. The Delivery Authorization carries the supplier's (the Owner's) saved signature under the
+ * DEC-503. The Delivery Authorization carries the supplier's (the Owner's) saved signature under the
  * driver's. Each load keeps its own copy, taken when it is confirmed or set later in Load History, so a
  * later change to the saved signer never alters a printed authorization. The Receipt is unchanged.
  */

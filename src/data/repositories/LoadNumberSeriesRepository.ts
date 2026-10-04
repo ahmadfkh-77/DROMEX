@@ -1,6 +1,6 @@
 import type {LoadNumberPreview,LoadNumberSeries,LoadNumberSeriesDraft} from '../../domain/loadNumberSeries';
 
-/** DEC-487 (6). Owner-managed Company Load Number Series. Changes affect future loads only. */
+/** DEC-500 (6). Owner-managed Company Load Number Series. Changes affect future loads only. */
 export interface LoadNumberSeriesRepository {
   /** Every series, default first, with assigned items, issued count and the next number in `year`. */
   listSeries(year?: number): Promise<LoadNumberSeries[]>;

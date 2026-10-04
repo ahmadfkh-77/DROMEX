@@ -1,7 +1,7 @@
 import type {DocumentRecordType,RecordSnapshot} from '../../domain/businessDocuments';
 
 /**
- * DEC-487. The one way company loads and Supplier Loads are read as document-eligible records, shared
+ * DEC-500. The one way company loads and Supplier Loads are read as document-eligible records, shared
  * by Business Documents, Company Totals and Company Load Totals so that every view groups by the same
  * item key and unit key and copies the same fields. Keys follow DEC-481: a stable id where one exists
  * ("id:<item>", a unit id), otherwise a normalized legacy name or "symbol:<unit>".

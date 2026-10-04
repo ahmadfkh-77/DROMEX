@@ -6,7 +6,7 @@ import {summarizeFuelFills,type ProjectFuelFill} from '../src/domain/projectTota
 import {buildTotalsHtml} from '../src/services/totalsTemplate';
 import {SEED_TIME,migratedDatabaseWithProject,type SqliteTestDatabase} from './support/sqliteTestDatabase';
 
-/** DEC-489. Project Totals PDF: an optional fuel list, and a layout where every item stands apart. */
+/** DEC-502. Project Totals PDF: an optional fuel list, and a layout where every item stands apart. */
 const databases:SqliteTestDatabase[]=[];
 afterEach(()=>{for(const database of databases.splice(0))database.close();});
 

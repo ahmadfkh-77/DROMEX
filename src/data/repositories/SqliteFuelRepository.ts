@@ -25,7 +25,7 @@ async recordDelivery(draft:FuelDeliveryDraft){const setup=await this.getSetup(),
 async recordFill(draft:FuelFillDraft){
   const setup=await this.getSetup(),litres=validatePositiveLitres(draft.litres),choices=draft.equipmentType==='truck'?setup.trucks:setup.machines,equipment=choices.find(v=>v.id===draft.equipmentId);
   if(!equipment)throw new Error(`Select a valid ${draft.equipmentType}.`);
-  // DEC-492. A fill comes from the tank or from an outside station; a station fill needs an active saved station.
+  // DEC-505. A fill comes from the tank or from an outside station; a station fill needs an active saved station.
   const source:FuelSource=draft.fuelSource??'tank',fuelType=draft.fuelType??'diesel';
   const station=source==='station'?setup.fuelStations.find(v=>v.id===draft.stationId&&v.isActive)??null:null;
   if(source==='station'&&!station)throw new Error('Select a saved fuel station.');
@@ -184,13 +184,13 @@ async correctDelivery(movementId:string,draft:FuelDeliveryCorrectionDraft):Promi
 }
 
 
-// DEC-492. The company printed on the Diesel Batch Report, read from Company Settings like the receipts.
+// DEC-505. The company printed on the Diesel Batch Report, read from Company Settings like the receipts.
 async getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>{
   const row=await this.db.getFirstAsync<{company_name:string|null;logo_uri:string|null;address:string|null;phone:string|null;email:string|null}>("SELECT company_name,logo_uri,address,phone,email FROM company_settings WHERE id='company'");
   const contact=[row?.address,row?.phone,row?.email].map(value=>value?.trim()).filter(Boolean).join(' · ');
   return {name:row?.company_name?.trim()||'DROMEX',logoUri:row?.logo_uri?.trim()||null,contactLine:contact||null};
 }
-// DEC-492. Diesel batches. Tracking starts once, creates the Opening stock batch, and from then on every diesel
+// DEC-505. Diesel batches. Tracking starts once, creates the Opening stock batch, and from then on every diesel
 // delivery is a batch. Everything else about deliveries, fills and readings keeps working as before.
 async getBatchOverview():Promise<DieselBatchOverview>{
   const overview=await loadBatchOverview(this.db);
@@ -236,7 +236,7 @@ async previewTankFill(draft:TankFillPreviewDraft):Promise<TankFillPreviewResult|
   return previewFromState(input,{litres,preferredBatchId:draft.batchId.trim()||null,at:timestampForDate(draft.recordDate)});
 }
 
-// DEC-492. Saved fuel stations are deactivated and reactivated, never deleted, so a fill always keeps its station.
+// DEC-505. Saved fuel stations are deactivated and reactivated, never deleted, so a fill always keeps its station.
 async createFuelStation(draft:FuelStationDraft):Promise<FuelStation>{
   const display=this.requireStationName(draft.name),key=companySiteKey(display);
   await this.assertNoActiveStationNamed(key,null);

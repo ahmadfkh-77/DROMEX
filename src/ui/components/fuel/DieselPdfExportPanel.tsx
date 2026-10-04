@@ -6,7 +6,7 @@ import {AppButton,Feedback} from '../AppPrimitives';
 import {SegmentedChoice} from '../SegmentedChoice';
 
 /**
- * DEC-492, Screen F. Export the Diesel Batch Report for what is on screen. Without prices is the default
+ * DEC-505, Screen F. Export the Diesel Batch Report for what is on screen. Without prices is the default
  * (DEC-373); with prices adds only recorded prices, and missing ones print as Unpriced, never $0.
  */
 export function DieselPdfExportPanel({label,scope,onExport}:{label:string;scope:string;onExport:(includePrices:boolean)=>Promise<void>}){

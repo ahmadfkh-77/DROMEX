@@ -9,7 +9,7 @@ export type CompanyTotalsRecord = {
 /** One Daily Report's recorded use of the material behind a Used total. */
 export type UsageRecord = { reportId: string; projectId: string; projectName: string; workDate: string; quantity: number; unitSymbol: string };
 
-/** DEC-487 (1). Live company-wide totals; Project Totals use the same queries narrowed to one project. */
+/** DEC-500 (1). Live company-wide totals; Project Totals use the same queries narrowed to one project. */
 export interface CompanyTotalsRepository {
   getCompanyTotals(filters: CompanyTotalsFilters): Promise<CompanyTotalsData>;
   listRecords(filters: CompanyTotalsFilters, limit?: number): Promise<CompanyTotalsRecord[]>;

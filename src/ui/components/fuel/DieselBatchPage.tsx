@@ -10,7 +10,7 @@ import {AppButton,AppField,EmptyState,Feedback} from '../AppPrimitives';
 import {BatchStatusBadge,FuelDayCard,SectionTitle} from './FuelBatchParts';
 
 /**
- * DEC-492, Screen C of the approved design: one batch, its four figures, its details, where its diesel
+ * DEC-505, Screen C of the approved design: one batch, its four figures, its details, where its diesel
  * went, any dip adjustments, and its fills one card per day. Cancelling needs a reason and keeps the number.
  */
 type Props={

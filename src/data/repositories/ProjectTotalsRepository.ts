@@ -19,6 +19,6 @@ export interface ProjectTotalsRepository {
   getProjectTotals(projectId: string, range: TotalsDateRange): Promise<ProjectTotalsData>;
   /** The newest records behind one delivered or used total, capped for display. */
   listContributingRecords(projectId: string, query: ContributingRecordQuery, limit?: number): Promise<ContributingRecord[]>;
-  /** DEC-489. The project's Active equipment fills in the range, oldest first, for the Project Totals PDF. */
+  /** DEC-502. The project's Active equipment fills in the range, oldest first, for the Project Totals PDF. */
   listFuelFills(projectId: string, range: TotalsDateRange): Promise<ProjectFuelFill[]>;
 }

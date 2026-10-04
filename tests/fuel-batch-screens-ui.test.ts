@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {describe,expect,it} from 'vitest';
 
-// Static contract checks for the approved Screens A, C, D and E (DEC-492). There is no React Native
+// Static contract checks for the approved Screens A, C, D and E (DEC-505). There is no React Native
 // renderer in the test stack; the grouping, wording and numbers are covered by fuel-batch-views.test.ts.
 const source=(path:string)=>readFileSync(join(__dirname,'..',path),'utf8');
 const inOrder=(text:string,parts:string[])=>{const at=parts.map(part=>text.indexOf(part));expect(at.every(index=>index>=0),`missing one of ${parts.join(' | ')}`).toBe(true);expect([...at].sort((a,b)=>a-b)).toEqual(at);};

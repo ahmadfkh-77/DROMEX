@@ -1,7 +1,7 @@
 import type {DocumentKind,DocumentSide,EligibleRecord,SelectionMethod} from '../domain/businessDocuments';
 
 /**
- * DEC-487 (3). What the Review screen needs to start one document: one party, one kind, the candidate
+ * DEC-500 (3). What the Review screen needs to start one document: one party, one kind, the candidate
  * records, which of them start ticked, and how they were chosen. Created by the start sheet from any
  * totals level, or by Invoices & Bills for one customer or supplier.
  */

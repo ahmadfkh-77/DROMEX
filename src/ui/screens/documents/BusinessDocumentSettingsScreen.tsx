@@ -11,7 +11,7 @@ const identity:[TextKey,string,boolean?][]=[['legalName','Legal or business name
 const termsFields:[TextKey,string,boolean?][]=[['paymentTerms','Payment terms (for example: Net 30)'],['bankDetails','Bank and payment instructions',true],['footerNote','Footer or legal note',true]];
 
 /**
- * DEC-487 (4). Reusable business details for Official Bills / Invoices, with per-document overrides on
+ * DEC-500 (4). Reusable business details for Official Bills / Invoices, with per-document overrides on
  * each draft. Nothing here is invented: an empty field reads Not configured and prints nothing. Company
  * Settings fill in where a field here is empty.
  */

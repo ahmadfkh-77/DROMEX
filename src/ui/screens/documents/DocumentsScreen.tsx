@@ -24,7 +24,7 @@ const tabLabel:Record<DocumentKind,string>={customer_invoice:'Invoices issued',c
 const paymentOptions:{id:PaymentTab;label:string}[]=[{id:'all',label:'Any'},{id:'Unpaid',label:'Unpaid'},{id:'Partially paid',label:'Partly paid'},{id:'Paid',label:'Paid'},{id:'Overdue',label:'Overdue'}];
 
 /**
- * DEC-487 (2). Invoices & Bills: every statement, invoice and bill, or one customer's or supplier's,
+ * DEC-500 (2). Invoices & Bills: every statement, invoice and bill, or one customer's or supplier's,
  * searchable by status, dates, project, item, number and current payment status.
  */
 export function DocumentsScreen({documents,totals,party,onBack,onOpenDocument,onCreate,onOpenSettings}:{

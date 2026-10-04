@@ -9,7 +9,7 @@ import {buildProjectReportHtmlWithWaste} from '../src/services/projectReportWast
 import {type SqliteTestDatabase} from './support/sqliteTestDatabase';
 import {recordsDatabase} from './support/recordFixtures';
 
-/** DEC-487 (6)-(7). The Company Load number in every report and export a company load appears in. */
+/** DEC-500 (6)-(7). The Company Load number in every report and export a company load appears in. */
 const report:DailyProjectReport={id:'report-1',projectId:'road',workDate:'2026-08-10',workDescription:'Paving',workers:[],workerSafety:[],drivers:[],truckPlates:[],machines:[],materials:[],photos:[],notes:'',problemsDelaysIncidents:'',weatherSiteConditions:'',workStartTime:'',workEndTime:'',breakMinutes:'',nextWorkPlanned:'',consultantSignoffEnabled:false,consultantName:'',consultantSignaturePaths:[],showMinistryHeader:false,showConsultingAgency:false,showCustomHeader:false,consultingAgencyId:null,consultingAgencyNameEn:null,consultingAgencyNameAr:null,createdAt:'2026-08-10T17:00:00Z',updatedAt:'2026-08-10T17:00:00Z'};
 const project:ReportProject={id:'road',name:'Mountain Road',customerName:'Road Co',location:'Aley',status:'active'};
 const company:ProjectReportSetup['company']={name:'DROMEX Paving',logoUri:null,address:null,phone:null,email:null,taxVatNumber:null,ministryName:null,ministryNameAr:null,ministryLogoUri:null,consultingAgencyName:null,consultingAgencyNameAr:null,customHeaderEn:null,customHeaderAr:null};

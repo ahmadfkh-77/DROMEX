@@ -51,7 +51,7 @@ export function CustomersScreen({
   repository: ProfileRepository;
   financialRepository: FinancialRepository;
   onBack: () => void;
-  /** DEC-487. Opens Invoices & Bills for one customer. */
+  /** DEC-500. Opens Invoices & Bills for one customer. */
   onOpenDocuments?: (customer: { id: string; name: string }) => void;
 }) {
   const reducedMotion = useReducedMotion();

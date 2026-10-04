@@ -7,7 +7,7 @@ import {inclusionLabel,recordKey} from '../src/domain/businessDocuments';
 import {SEED_TIME,type SqliteTestDatabase} from './support/sqliteTestDatabase';
 import {recordsDatabase} from './support/recordFixtures';
 
-/** DEC-487 (2)-(4). Drafts, issue, cancellation, immutable snapshots and the one shared link model. */
+/** DEC-500 (2)-(4). Drafts, issue, cancellation, immutable snapshots and the one shared link model. */
 const databases:SqliteTestDatabase[]=[];
 afterEach(()=>{for(const database of databases.splice(0))database.close();});
 const STROKE='M 20.0 80.5 L 60.2 40.0 L 110.1 90.4';

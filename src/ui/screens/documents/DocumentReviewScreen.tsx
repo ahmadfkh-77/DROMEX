@@ -15,7 +15,7 @@ const methodLabel={filtered:'Current filtered results',date_range:'Date range',m
 const asRow=(record:EligibleRecord):CompanyTotalsRecord=>({key:record.key,snapshot:record.snapshot,seriesId:record.seriesId,status:'Active',cancellationReason:null,correctionCount:0,links:record.links,inclusion:record.inclusion});
 
 /**
- * DEC-487 (3). Review before a draft exists: every candidate record with its item, project, party,
+ * DEC-500 (3). Review before a draft exists: every candidate record with its item, project, party,
  * date and time, quantity, recorded price and reference; tick or untick any of them; see the totals per
  * unit and why some money is missing. Records already in an Issued document of this kind are listed
  * apart with the document that holds them, and cannot be ticked.

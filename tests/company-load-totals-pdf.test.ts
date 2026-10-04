@@ -5,7 +5,7 @@ import type {RecordSnapshot} from '../src/domain/businessDocuments';
 import {buildCompanyLoadTree,type CompanyLoadTotalRow} from '../src/domain/companyTotals';
 import {buildCompanyLoadTotalsHtml} from '../src/services/companyLoadTotalsTemplate';
 
-/** DEC-487 (6). The Company Load Totals PDF: filters, load counts, per-unit totals, project grouping, repeated headings. */
+/** DEC-500 (6). The Company Load Totals PDF: filters, load counts, per-unit totals, project grouping, repeated headings. */
 const rows:CompanyLoadTotalRow[]=[
   {seriesKey:'s_asp',seriesLabel:'ASP · Asphalt',itemKey:'id:a',itemName:'Asphalt',projectKey:'road',projectName:'Mountain Road',unitKey:'unit_ton',unitSymbol:'t',status:'Active',quantity:38.5,loadCount:2},
   {seriesKey:'s_asp',seriesLabel:'ASP · Asphalt',itemKey:'id:a',itemName:'Asphalt',projectKey:'road',projectName:'Mountain Road',unitKey:'unit_ton',unitSymbol:'t',status:'Cancelled',quantity:50,loadCount:1},

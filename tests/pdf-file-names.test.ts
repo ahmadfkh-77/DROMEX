@@ -3,7 +3,7 @@ import {describe,expect,it} from 'vitest';
 import {groupDocumentLines,type BusinessDocument,type RecordSnapshot} from '../src/domain/businessDocuments';
 import {companyLoadTotalsFileName,documentFileName,safeFileNamePart} from '../src/domain/recordFormat';
 
-/** DEC-487. PDF file names say what the document is, for whom, which project and which month. */
+/** DEC-500. PDF file names say what the document is, for whom, which project and which month. */
 const snap=(projectName:string|null,recordedAt='2026-08-10T09:00:00'):RecordSnapshot=>({recordType:'company_load',recordId:Math.random().toString(36),reference:'TX',loadNumber:null,loadNumberSeriesName:null,itemKey:'i',itemName:'Asphalt',unitKey:'u',unitSymbol:'t',quantity:1,projectId:projectName?`id-${projectName}`:null,projectName,partyId:'c',partyName:'Road Co',recordedAt,enteredAt:null,unitPriceCents:null,priceBasis:'per_unit',subtotalCents:null,vatRateBasisPoints:null,vatCents:null,totalCents:null,supplierReference:null});
 const doc=(overrides:Partial<BusinessDocument>,records:RecordSnapshot[]=[snap('Mountain Road')]):BusinessDocument=>({id:'d',kind:'customer_invoice',status:'Issued',draftNumber:'DRAFT-3',documentNumber:'INV-2026-014',partyType:'customer',partyId:'c',partyName:'Road Co',periodFrom:'2026-08-01',periodTo:'2026-08-31',selectionMethod:'date_range',issueDate:'2026-09-01',dueDate:null,reference:null,notes:null,issuer:null,recipient:null,terms:null,signer:null,signerSelection:null,logoUri:null,
   records:records.map((snapshot,position)=>({key:`company_load:${snapshot.recordId}`,snapshot,position})),groups:groupDocumentLines(records),problems:[],history:[],payment:null,issuedAt:null,cancelledAt:null,cancellationReason:null,createdAt:'',updatedAt:'',...overrides});

@@ -13,7 +13,7 @@ import {SearchableSelect} from '../SearchableSelect';
 import {SegmentedChoice} from '../SegmentedChoice';
 
 /**
- * DEC-492, Screen B of the approved design. One numbered card per question: the fuel source, the batch
+ * DEC-505, Screen B of the approved design. One numbered card per question: the fuel source, the batch
  * or station, the equipment, the destination, then litres and date. A "Before you save" panel says
  * exactly what the fill will do, before it is saved.
  */

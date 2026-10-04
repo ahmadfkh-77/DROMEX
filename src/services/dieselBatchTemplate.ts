@@ -1,7 +1,7 @@
 import type {DieselBatchReport} from '../domain/dieselBatchReport';
 
 /**
- * DEC-492, Screen F. The Diesel Batch Report as printable, searchable A4 HTML. Table headings repeat on
+ * DEC-505, Screen F. The Diesel Batch Report as printable, searchable A4 HTML. Table headings repeat on
  * every page (thead), each page carries the running title and "Page X of Y" in its margins, and
  * everything reads in black and white: shading only repeats what the words already say.
  */

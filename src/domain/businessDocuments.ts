@@ -1,7 +1,7 @@
 import type { SignerSnapshot } from './documentSigners';
 
 /**
- * DEC-487 (2)-(5). Statements, invoices and bills built from selected records.
+ * DEC-500 (2)-(5). Statements, invoices and bills built from selected records.
  *
  * - A document is Draft, Issued or Cancelled and is never deleted. Only an Issued document counts as
  *   including a record; a draft never blocks one, and a cancelled document frees its records while
@@ -191,7 +191,7 @@ export type PartyBlock = {
   name: string | null; tradingName: string | null; contactPerson: string | null; address: string | null; phone: string | null; email: string | null;
   website: string | null; taxRegistrationNumber: string | null; companyRegistrationNumber: string | null;
 };
-/** DROMEX records every amount in US dollars, so documents state USD (DEC-487 (4)). */
+/** DROMEX records every amount in US dollars, so documents state USD (DEC-500 (4)). */
 export type DocumentTerms = { currency: 'USD'; paymentTerms: string | null; bankDetails: string | null; footerNote: string | null };
 export type SignerSelection = { signerId: string; display: 'name_only' | 'name_with_signature' };
 

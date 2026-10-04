@@ -5,7 +5,7 @@ import {SqliteLoadNumberSeriesRepository} from '../src/data/repositories/SqliteL
 import {type SqliteTestDatabase} from './support/sqliteTestDatabase';
 import {recordsDatabase} from './support/recordFixtures';
 
-/** DEC-487 (6). The item editor chooses an item's Company Load Number Series in the same save. */
+/** DEC-500 (6). The item editor chooses an item's Company Load Number Series in the same save. */
 const databases:SqliteTestDatabase[]=[];
 afterEach(()=>{for(const database of databases.splice(0))database.close();});
 

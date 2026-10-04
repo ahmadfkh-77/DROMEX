@@ -16,7 +16,7 @@ type Details={id:string|null;draft:DocumentSignerDraft};
 const eventWords:Record<SignerEvent['event'],string>={created:'Created',updated:'Details changed',signature_changed:'Signature changed',disabled:'Disabled',enabled:'Enabled again',used:'Used on a document'};
 
 /**
- * DEC-487 (5). Authorized signers for statements, invoices and bills. A signer is never deleted, only
+ * DEC-500 (5). Authorized signers for statements, invoices and bills. A signer is never deleted, only
  * disabled. Every change and every use is kept in the signer's history, and issued documents keep
  * their own copy of the name, title and signature, so nothing done here changes them.
  */
@@ -52,7 +52,7 @@ export function SignersScreen({repository,onBack}:{repository:DocumentSignerRepo
       onEdit={()=>{setSheetError(null);setDetails({id:signer.id,draft:{name:signer.name,jobTitle:signer.jobTitle??'',department:signer.department??''}});}}
       onSign={()=>{setSheetError(null);setSigning({signer,strokes:[]});}} onHistory={()=>openHistory(signer)} onToggle={()=>disable(signer)} toggleLabel="Disable"/>)}</View>
       :<EmptyState title="No signers yet" body="Add the people who sign your documents. A drawn signature is optional: a signer can sign by name only."/>}
-    {/* DEC-490. The supplier signature every new Delivery Authorization carries under the driver's. */}
+    {/* DEC-503. The supplier signature every new Delivery Authorization carries under the driver's. */}
     <SupplierSignatureChooser title="Delivery Authorization signature" helper="Printed as the Supplier signature under the driver's on every new Delivery Authorization. Each load keeps its own copy; the Receipt is not signed." signers={signers} value={deliverySigner} busy={busy} saveLabel="Use on new authorizations" removeLabel="Stop signing new authorizations"
       onSave={selection=>void run(()=>repository.setDeliverySigner(selection),selection?'New Delivery Authorizations will carry this signature.':'New Delivery Authorizations will not carry a supplier signature.')}/>
     {disabled.length?<>

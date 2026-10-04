@@ -39,7 +39,7 @@ export function wrapText(value:string,width:number):string[]{
 }
 
 /**
- * DEC-491. Centres one line by padding it with spaces, so the result does not depend on the printer
+ * DEC-504. Centres one line by padding it with spaces, so the result does not depend on the printer
  * honouring (or keeping) the ESC a centre command. A line already as wide as the paper is unchanged.
  */
 export function centerLine(value:string,columns:number):string{
@@ -67,7 +67,7 @@ function labelled(doc:EscPosDocument,label:string,value:unknown,strong=false){
   if(strong)doc.bold(false);
 }
 
-// DEC-491. Every header line is centred in software (left-aligned on the printer, padded with spaces).
+// DEC-504. Every header line is centred in software (left-aligned on the printer, padded with spaces).
 // The company name prints at double width, so it is wrapped and centred against half the paper width.
 function companyHeader(doc:EscPosDocument,name:string,address:string|null,phone:string|null,email:string|null,tax:string|null){
   const columns=doc.paper==='58'?32:48;
@@ -90,7 +90,7 @@ export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper
   doc.align(0).bold(true);
   for(const line of centeredLines(kind==='receipt'?'RECEIPT':'DELIVERY AUTHORIZATION',columns))doc.line(line);
   doc.bold(false).line('');
-  // DEC-491. The load number sits first and bold; a load that never had one (before build 23) prints no line.
+  // DEC-504. The load number sits first and bold; a load that never had one (before build 23) prints no line.
   if(record.loadNumber)labelled(doc,'Load No.',record.loadNumber,true);
   labelled(doc,'Transaction',record.transactionNumber);
   labelled(doc,'Date',new Date(record.confirmedAt).toLocaleString());
@@ -127,7 +127,7 @@ export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper
     if(record.signaturePaths.length){
       doc.line('').line(divider(columns)).line('').align(1).raster(signatureRaster(record.signaturePaths,paper)).wrapped(`${crewRole} signature: ${record.driverName}`).align(0);
     }else labelled(doc,`${crewRole} signature`,'Unsigned');
-    // DEC-490. The supplier's (Owner's) signature, as this load keeps it.
+    // DEC-503. The supplier's (Owner's) signature, as this load keeps it.
     const supplier=record.supplierSignature;
     if(supplier){
       const role=[supplier.jobTitle,supplier.department].filter(Boolean).join(' - ');

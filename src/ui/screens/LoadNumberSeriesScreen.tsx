@@ -12,7 +12,7 @@ import {colors} from '../theme';
 type Editing={id:string|null;draft:LoadNumberSeriesDraft;prefixLocked:boolean;isDefault:boolean};
 
 /**
- * DEC-487 (6). Company Load Number Series. Unassigned items use the default LOAD series; an item can
+ * DEC-500 (6). Company Load Number Series. Unassigned items use the default LOAD series; an item can
  * be given its own series, or several items can share one counter. Every change affects future loads
  * only: numbers already given never change and are never reused.
  */

@@ -4,7 +4,7 @@ import {SqliteDocumentSignerRepository} from '../src/data/repositories/SqliteDoc
 import {signerSnapshot,validateSignerDraft} from '../src/domain/documentSigners';
 import {migratedDatabaseWithProject,type SqliteTestDatabase} from './support/sqliteTestDatabase';
 
-/** DEC-487 (5). Reusable authorized signers with a change history; documents keep their own copy. */
+/** DEC-500 (5). Reusable authorized signers with a change history; documents keep their own copy. */
 const databases:SqliteTestDatabase[]=[];
 afterEach(()=>{for(const database of databases.splice(0))database.close();});
 const STROKE='M 20.0 80.5 L 60.2 40.0 L 110.1 90.4';

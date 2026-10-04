@@ -4,7 +4,7 @@ import {emptyFuelFill,type FuelFillDraft} from '../src/domain/fuel';
 import {fillFormKind,fillFormReady,fillFormHelper,formatLitres,overfillMessage,stationFillPreviewLines,tankFillPreviewLines,costSummaryLabel,batchOptionDetail,openBatchOptions} from '../src/domain/fuelFillForm';
 import type {BatchDetail,TankFillPreviewResult} from '../src/domain/fuelBatches';
 
-/** DEC-492, Screen B. The wording and numbers of the Record Fill form and its "Before you save" panel. */
+/** DEC-505, Screen B. The wording and numbers of the Record Fill form and its "Before you save" panel. */
 const draft=(extra:Partial<FuelFillDraft>={}):FuelFillDraft=>({...emptyFuelFill,litres:'100',equipmentId:'exc',...extra});
 const batch=(number:string,status:BatchDetail['status'],remaining:number,extra:Partial<BatchDetail>={}):BatchDetail=>({
   id:number,batchNumber:`DSL-2026-0000${number}`,arrivedAt:'2026-10-01T08:00:00Z',deliveredLitres:1000,pricePerLitreUsd:1.1,filledLitres:0,adjustmentLitres:0,remainingLitres:remaining,status,

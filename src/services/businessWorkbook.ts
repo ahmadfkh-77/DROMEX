@@ -169,7 +169,7 @@ const dictionary: WorkbookRow[] = [
   { Sheet: 'Charts', Purpose: 'Visible chart-source tables calculated from the filtered workbook records.' },
 ];
 
-/** DEC-492. Diesel Batches and Fuel Stations, only when there is something to list. */
+/** DEC-505. Diesel Batches and Fuel Stations, only when there is something to list. */
 function batchSheets(data: BusinessReportData) {
   return [...(data.dieselBatches?.length ? [{ name: 'Diesel Batches', rows: data.dieselBatches }] : []), ...(data.fuelStations?.length ? [{ name: 'Fuel Stations', rows: data.fuelStations }] : [])];
 }

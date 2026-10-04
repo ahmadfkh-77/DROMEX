@@ -11,7 +11,7 @@ import {colors} from '../theme';
 export type SupplierSignatureSelection={signerId:string;display:SignerDisplay};
 
 /**
- * DEC-490. Picks the saved signer whose signature goes under the driver's on the Delivery
+ * DEC-503. Picks the saved signer whose signature goes under the driver's on the Delivery
  * Authorization. Used for the default in Signers and for one load in Load History. Only active signers
  * are offered; a signer without a drawn signature can sign by name only.
  */

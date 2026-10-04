@@ -1,5 +1,5 @@
 /**
- * DEC-492. Diesel batches and their derived first-in-first-out allocation.
+ * DEC-505. Diesel batches and their derived first-in-first-out allocation.
  *
  * A batch is one diesel delivery into the single tank. Equipment fills draw from the oldest batch that
  * still has diesel (or from the batch the user chose), splitting across batches when one runs out. The

@@ -4,7 +4,7 @@ import type {FuelMovement} from '../src/domain/fuel';
 import type {BatchDetail,DieselBatchOverview,FillBatchInfo} from '../src/domain/fuelBatches';
 import {buildDieselBatchReport} from '../src/domain/dieselBatchReport';
 
-/** DEC-492, Screen F. What the Diesel Batch Report PDF contains for each filter. */
+/** DEC-505, Screen F. What the Diesel Batch Report PDF contains for each filter. */
 const STARTED='2026-10-01T06:00:00.000Z';
 const fill=(id:string,extra:Partial<FuelMovement>):FuelMovement=>({
   id,type:'fill',fuelType:'diesel',correctionHistory:[],confirmedAt:'2026-10-03T07:40:00',litres:100,previousBalanceLitres:null,differenceLitres:null,supplierId:null,supplierName:null,

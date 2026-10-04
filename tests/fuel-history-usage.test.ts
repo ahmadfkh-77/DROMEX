@@ -5,7 +5,7 @@ import type {BatchDetail,DieselBatchOverview,FillBatchInfo} from '../src/domain/
 import {buildDieselBatchReport} from '../src/domain/dieselBatchReport';
 import {batchDestinationTotals,buildFillRows,buildHistoryDays,filterUsageFills,fuelUsageSummary,groupFillsByDay,historySummary} from '../src/domain/fuelBatchViews';
 
-/** The Fuel Management History and Usage tabs in the approved day-card design (DEC-492, amended 2026-10-03). */
+/** The Fuel Management History and Usage tabs in the approved day-card design (DEC-505, amended 2026-10-03). */
 const STARTED='2026-10-01T05:00:00';
 let seq=0;
 const move=(extra:Partial<FuelMovement>):FuelMovement=>({

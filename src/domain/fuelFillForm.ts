@@ -2,7 +2,7 @@ import type {FuelBatchTracking,FuelDestinationType,FuelFillDraft} from './fuel';
 import type {BatchDetail,FillCost,TankFillPreviewResult} from './fuelBatches';
 
 /**
- * DEC-492, Screen B. The wording and numbers of the Record Fill form and its "Before you save" panel,
+ * DEC-505, Screen B. The wording and numbers of the Record Fill form and its "Before you save" panel,
  * kept apart from the screen so they can be tested and so every fuel screen prints litres the same way.
  */
 const group=(digits:string)=>digits.replace(/\B(?=(\d{3})+(?!\d))/g,',');

@@ -7,7 +7,7 @@ import {colors} from '../theme';
 import {InclusionPill} from './totals/TotalsParts';
 
 /**
- * DEC-487 (3). The document status of one original record, read from the shared document links: the
+ * DEC-500 (3). The document status of one original record, read from the shared document links: the
  * same answer Totals and Invoices & Bills give. Lists every document the record has been on, including
  * drafts and cancelled history, each opening that document.
  */

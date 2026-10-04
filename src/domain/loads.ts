@@ -80,7 +80,7 @@ export type LoadSetupOptions = {
   trucks: TruckProfile[];
   machines: MachineProfile[];
   companySettings: CompanySettings;
-  /** DEC-490. The default signer a new load will carry on its Delivery Authorization, for preview. */
+  /** DEC-503. The default signer a new load will carry on its Delivery Authorization, for preview. */
   deliverySignature?: SignerSnapshot | null;
 };
 
@@ -273,11 +273,11 @@ export type ConfirmedLoad = Omit<LoadCalculation, 'netWeightKg' | 'convertedQuan
   cancellationReason: string | null;
   cancelledAt: string | null;
   correctionHistory: LoadCorrectionEntry[];
-  /** DEC-487. The generated Company Load number, e.g. ASP-2026-004; null on a legacy load confirmed before series existed. */
+  /** DEC-500. The generated Company Load number, e.g. ASP-2026-004; null on a legacy load confirmed before series existed. */
   loadNumber?: string | null;
   /** The series display name snapshotted when the number was generated. */
   loadNumberSeriesName?: string | null;
-  /** DEC-490. The supplier's (Owner's) signature on the Delivery Authorization, as this load keeps it. */
+  /** DEC-503. The supplier's (Owner's) signature on the Delivery Authorization, as this load keeps it. */
   supplierSignature?: SignerSnapshot | null;
 };
 

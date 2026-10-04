@@ -198,7 +198,7 @@ export class SqliteCatalogRepository implements CatalogRepository {
     return item;
   }
 
-  /** DEC-487. undefined: leave unchanged; null or the default series: no assignment; otherwise an active series. */
+  /** DEC-500. undefined: leave unchanged; null or the default series: no assignment; otherwise an active series. */
   private async resolveSeries(seriesId: string | null | undefined): Promise<string | null | undefined> {
     if (seriesId === undefined) return undefined;
     if (seriesId === null) return null;

@@ -9,7 +9,7 @@ import {useReducedMotion} from '../ExpandableMenu';
 type StationActions={createFuelStation:(draft:FuelStationDraft)=>Promise<unknown>;renameFuelStation:(id:string,name:string)=>Promise<unknown>;setFuelStationActive:(id:string,isActive:boolean)=>Promise<unknown>};
 
 /**
- * DEC-492. The saved list of outside fuel stations. A station is deactivated rather than removed, so every
+ * DEC-505. The saved list of outside fuel stations. A station is deactivated rather than removed, so every
  * fill already recorded from it keeps its station name. There is no payment or balance for a station.
  */
 export function FuelStationsManager({stations,actions,onChanged}:{stations:FuelStation[];actions:StationActions;onChanged:()=>Promise<void>}){

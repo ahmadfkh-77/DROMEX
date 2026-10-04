@@ -13,7 +13,7 @@ import {SegmentedChoice} from '../SegmentedChoice';
 import {FuelDayCard,GroupHeader,SectionTitle} from './FuelBatchParts';
 
 /**
- * DEC-492, Screen E of the approved design. A project's fuel by source, its cost with unpriced litres
+ * DEC-505, Screen E of the approved design. A project's fuel by source, its cost with unpriced litres
  * counted openly, then its fills one card per day. The project is the only destination here, so the
  * day cards list the fills directly, each with its source tag.
  */

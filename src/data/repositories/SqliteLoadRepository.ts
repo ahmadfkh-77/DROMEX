@@ -128,7 +128,7 @@ function conversionFromRow(row: ConversionRow): ConversionOption {
 function safeCorrectionHistory(value: string | null): LoadCorrectionEntry[] {
   try { return JSON.parse(value || '[]') as LoadCorrectionEntry[]; } catch { return []; }
 }
-/** DEC-490. Reads a load's supplier-signature copy without ever throwing; anything unreadable is left off. */
+/** DEC-503. Reads a load's supplier-signature copy without ever throwing; anything unreadable is left off. */
 function parseSupplierSignature(json: string | null | undefined): SignerSnapshot | null {
   if (!json) return null;
   try {
@@ -511,9 +511,9 @@ export class SqliteLoadRepository implements LoadRepository {
         paymentStatus, clean(draft.notes), options.companySettings.companyName, options.companySettings.address,
         options.companySettings.phone, options.companySettings.email, options.companySettings.taxVatNumber, options.companySettings.receiptFooter, options.companySettings.logoUri,
         draft.quantityMethod, isDirect ? calculation.billedQuantity : null, isDirect ? directUnit!.id : null, isDirect ? directUnit!.name : null, isDirect ? directUnit!.symbol : null,enteredAt,crew.role);
-      // DEC-487. The Company Load number is generated in this same transaction, so the load and its number are saved together or not at all.
+      // DEC-500. The Company Load number is generated in this same transaction, so the load and its number are saved together or not at all.
       const issued = await issueLoadNumber(this.db, { loadId: id, itemId: item.id, recordDate: draft.recordDate, issuedAt: enteredAt });
-      // DEC-490. The default supplier signature is copied onto the load in the same transaction.
+      // DEC-503. The default supplier signature is copied onto the load in the same transaction.
       const supplierSignature = await defaultDeliverySignature(this.db);
       if (supplierSignature) {
         await this.db.runAsync('UPDATE loads SET supplier_signature_json = ? WHERE id = ?', JSON.stringify(supplierSignature), id);
@@ -543,7 +543,7 @@ export class SqliteLoadRepository implements LoadRepository {
     const updated = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', loadId);
     if (!updated) throw new Error('Updated load was not found.'); return loadFromRow(updated);
   }
-  /** DEC-490. Adds, replaces or removes the supplier signature a load's Delivery Authorization carries. */
+  /** DEC-503. Adds, replaces or removes the supplier signature a load's Delivery Authorization carries. */
   async saveLoadSupplierSignature(loadId: string, selection: { signerId: string; display: SignerDisplay } | null): Promise<ConfirmedLoad> {
     const row = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', loadId);
     if (!row) throw new Error('Load was not found.');

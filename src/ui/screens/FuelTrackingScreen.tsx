@@ -40,7 +40,7 @@ export function FuelTrackingScreen({repository,onBack,initialProjectId,lockedPro
   // form seeds it from the movement so untouched fields keep their existing values.
   const[correction,setCorrection]=useState<{fill?:FuelFillCorrectionDraft;delivery?:FuelDeliveryCorrectionDraft}|null>(null);
   const refresh=useCallback(async()=>{const[s,o,b]=await Promise.all([repository.getSetup(),repository.getOverview(),repository.getBatchOverview()]);setSetup(previous=>{const prior=previous?.currentFuelPrice?.pricePerLitreUsd.toFixed(2)??'',next=s.currentFuelPrice?.pricePerLitreUsd.toFixed(2)??'';setDelivery(current=>!current.pricePerLitreUsd||current.pricePerLitreUsd===prior?{...current,pricePerLitreUsd:next}:current);setFill(current=>!current.pricePerLitreUsd||current.pricePerLitreUsd===prior?{...current,pricePerLitreUsd:next,priceOverrideReason:''}:current);return s;});setOverview(o);setBatchOverview(b);},[repository]);
-  // DEC-492. The screen opens on Batches once diesel batches have started; before that it opens as it always did.
+  // DEC-505. The screen opens on Batches once diesel batches have started; before that it opens as it always did.
   const[openedOnBatches,setOpenedOnBatches]=useState(false);
   useEffect(()=>{if(openedOnBatches||!batchOverview)return;setOpenedOnBatches(true);if(batchOverview.started&&!initialTab&&!lockedProjectId)setTab(current=>current==='dashboard'?'batches':current);},[batchOverview,initialTab,lockedProjectId,openedOnBatches]);
   useEffect(()=>{void refresh().catch(c=>setError(c instanceof Error?c.message:'Could not load fuel tracking.'));},[refresh]);
@@ -100,13 +100,13 @@ export function FuelTrackingScreen({repository,onBack,initialProjectId,lockedPro
   const visibleTabs:Tab[]=lockedProjectId?(projectIsActive?['history','fill']:['history']):['batches','dashboard','history','usage','delivery','fill','gauge','price','sites','stations'];
   const currentPrice=setup.currentFuelPrice?.pricePerLitreUsd??null;
   const fillPrice=Number(fill.pricePerLitreUsd.replace(',','.')),fillLitres=Number(fill.litres.replace(',','.')),fillPreview=Number.isFinite(fillPrice)&&Number.isFinite(fillLitres)&&fillLitres>0?fillPrice*fillLitres:null;
-  // DEC-492, Screen F. Every Diesel Batch Report is built from what is recorded at the moment of export.
+  // DEC-505, Screen F. Every Diesel Batch Report is built from what is recorded at the moment of export.
   const exportReport=async(filter:DieselExportFilter,includePrices:boolean)=>{
     const projects=lockedProjectId&&!setup.projects.some(project=>project.id===lockedProjectId)?[...setup.projects,{id:lockedProjectId,name:projectName}]:setup.projects;
     const report=buildDieselBatchReport({movements:overview.movements,overview:batchOverview,names:{projects,companySites:setup.companySites,stations:setup.fuelStations},filter:{...filter,includePrices},exportedAt:new Date().toISOString()});
     await exportAndShareDieselBatchReport(report,await repository.getCompanyIdentity());
   };
-  // DEC-492, Screen C. A batch opens as its own page.
+  // DEC-505, Screen C. A batch opens as its own page.
   const openBatch=selectedBatchId?batchOverview.batches.find(value=>value.id===selectedBatchId):undefined;
   if(openBatch)return <DieselBatchPage batch={openBatch} overview={batchOverview} movements={overview.movements} onBack={()=>setSelectedBatchId(null)}
     onRecordFill={value=>{setFill(current=>({...current,fuelSource:'tank',fuelType:'diesel',stationId:'',batchId:value.status==='in_use'?'':value.id}));setSelectedBatchId(null);setTab('fill');setError(null);setMessage(null);}}

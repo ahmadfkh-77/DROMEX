@@ -9,7 +9,7 @@ import {formatRecordedAt,inclusionTone,recordMoneyLine,recordReferences,recordTi
 import type {CompanyTotalsRecord} from '../../../data/repositories/CompanyTotalsRepository';
 
 /**
- * DEC-487. The building blocks of every totals level: one Structural Navy summary band per level
+ * DEC-500. The building blocks of every totals level: one Structural Navy summary band per level
  * (not a stack of cards), a ruled ledger list of rows on one surface, and record rows that state their
  * document status in words. Delivered keeps DEC-484's cool tint and label, Used its warm one.
  */

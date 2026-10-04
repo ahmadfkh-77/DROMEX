@@ -3,7 +3,7 @@ import {join} from 'node:path';
 import {describe,expect,it} from 'vitest';
 
 // Static contract checks, as for the other fuel screens: the project has no React Native renderer in its
-// test stack, so these read the component source to pin the approved Screen B design (DEC-492). The
+// test stack, so these read the component source to pin the approved Screen B design (DEC-505). The
 // wording and numbers themselves are covered by fuel-fill-form.test.ts.
 const source=(path:string)=>readFileSync(join(__dirname,'..',path),'utf8');
 

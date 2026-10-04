@@ -1,12 +1,12 @@
 /**
- * DEC-487 (6)-(7), DEC-491. Company Load Number Series.
+ * DEC-500 (6)-(7), DEC-504. Company Load Number Series.
  *
  * Every company load confirmed from this release carries one generated load number, taken from the series its item is assigned to, or from the default `LOAD`
  * series when the item has none (or its series is inactive). The number belongs to the load forever:
  * corrections, cancellation, restore and later configuration never change or reuse it. Loads confirmed
  * before series existed keep no number and are labelled as legacy -- nothing is backfilled.
  *
- * DEC-491. Numbers issued by builds 23 to 25 are `{PREFIX}-{YYYY}-{NNN}` and stay exactly as issued. New
+ * DEC-504. Numbers issued by builds 23 to 25 are `{PREFIX}-{YYYY}-{NNN}` and stay exactly as issued. New
  * numbers are `{PREFIX}-{NNNNN}`: a five-digit lifetime count per series that never restarts, which
  * continues from the number of loads the series had already issued.
  *
@@ -41,12 +41,12 @@ export function normalizeSeriesPrefix(value: string): string {
   return value.trim().toLocaleUpperCase('en-US');
 }
 
-/** DEC-491. The number a load receives now: prefix and a five-digit lifetime count, widening past 99999. */
+/** DEC-504. The number a load receives now: prefix and a five-digit lifetime count, widening past 99999. */
 export function formatSeriesNumber(prefix: string, sequence: number): string {
   return `${prefix}-${String(sequence).padStart(5, '0')}`;
 }
 
-/** The PREFIX-YEAR-NNN format issued by builds 23 to 25 (DEC-487). Kept for those numbers and their tests. */
+/** The PREFIX-YEAR-NNN format issued by builds 23 to 25 (DEC-500). Kept for those numbers and their tests. */
 export function formatLoadNumber(prefix: string, year: number, sequence: number): string {
   return `${prefix}-${year}-${String(sequence).padStart(3, '0')}`;
 }

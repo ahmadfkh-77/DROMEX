@@ -113,7 +113,7 @@ export type DailyProjectReport = Omit<DailyProjectReportDraft, 'id'> & {
 export type LinkedProjectLoad = {
   id: string;
   transactionNumber: string;
-  /** DEC-487. The Company Load number; null on a legacy load. */
+  /** DEC-500. The Company Load number; null on a legacy load. */
   loadNumber?: string | null;
   itemName: string;
   quantity: number;

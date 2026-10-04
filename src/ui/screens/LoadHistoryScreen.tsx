@@ -24,9 +24,9 @@ import { confirmedDocument } from './MakeReceiptScreen';
 import {truckCrewRoleLabel} from '../../domain/people';
 
 export function LoadHistoryScreen({ repository,supplierRepository,onOpenSupplierLoad, onCorrectLoad, onBack,initialFromDate='',initialToDate='',initialProjectName='',initialLoadId,documents,onOpenDocument,signers }: { repository: LoadRepository;supplierRepository:QuarryRepository;onOpenSupplierLoad:(load:QuarryPurchase)=>void; onCorrectLoad?:(load:ConfirmedLoad)=>void; onBack: () => void;initialFromDate?:string;initialToDate?:string;initialProjectName?:string;initialLoadId?:string|null;
-  /** DEC-487. Shows each load's document status from the shared links. */
+  /** DEC-500. Shows each load's document status from the shared links. */
   documents?:BusinessDocumentRepository;onOpenDocument?:(id:string)=>void;
-  /** DEC-490. Saved signers for the supplier signature on the Delivery Authorization. */
+  /** DEC-503. Saved signers for the supplier signature on the Delivery Authorization. */
   signers?:DocumentSignerRepository }) {
   const reducedMotion=useReducedMotion();
   const [loads, setLoads] = useState<ConfirmedLoad[]>([]); const [selected, setSelected] = useState<ConfirmedLoad | null>(null);

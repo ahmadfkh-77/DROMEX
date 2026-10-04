@@ -36,7 +36,7 @@ import { colors } from '../theme';
 const HISTORY_PAGE=20;
 
 export function ReportsScreen({ repository,businessReportRepository,onBack,onOpenPdfSettings,initialBusinessFilters,initialProjectId,initialReportId,startNewReport=false,documents }: { repository: ProjectReportRepository;businessReportRepository:BusinessReportRepository;onOpenPdfSettings:()=>void;onBack: () => void;initialBusinessFilters?:Partial<BusinessReportFilters>;initialProjectId?:string|null;initialReportId?:string|null;startNewReport?:boolean;
-  /** DEC-487. Shows each linked load's document status from the shared links (never printed on the report). */
+  /** DEC-500. Shows each linked load's document status from the shared links (never printed on the report). */
   documents?:BusinessDocumentRepository }) {
   const [setup, setSetup] = useState<ProjectReportSetup | null>(null);
   const [setupStatus, setSetupStatus] = useState<'loading' | 'error' | 'ready'>('loading');
@@ -108,7 +108,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
     else setLinkedLoads([]);
   }, [draft?.projectId, draft?.workDate, repository]);
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedQuarryLoads(draft.projectId,draft.workDate).then(setLinkedQuarryLoads);else setLinkedQuarryLoads([]);},[draft?.projectId,draft?.workDate,repository]);
-  // DEC-487. Document status of each linked load, read from the shared links; shown in the editor only.
+  // DEC-500. Document status of each linked load, read from the shared links; shown in the editor only.
   useEffect(()=>{if(!documents)return;const keys=[...linkedLoads.map(load=>`company_load:${load.id}`),...linkedQuarryLoads.map(load=>`supplier_load:${load.id}`)];if(!keys.length){setLoadLinks({});return;}let active=true;documents.inclusionFor(keys).then(found=>{if(active)setLoadLinks(found);}).catch(()=>{});return()=>{active=false;};},[documents,linkedLoads,linkedQuarryLoads]);
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedFuelFills(draft.projectId,draft.workDate).then(setLinkedFuelFills);else setLinkedFuelFills([]);},[draft?.projectId,draft?.workDate,repository]);
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedWallWork(draft.projectId,draft.workDate).then(setLinkedWallWork);else setLinkedWallWork([]);},[draft?.projectId,draft?.workDate,repository]);

@@ -21,7 +21,7 @@ const partyFields:[keyof PartyBlock,string][]=[['name','Name'],['contactPerson',
 const statusWords={Draft:'Draft — not issued',Issued:'Issued',Cancelled:'Cancelled'} as const;
 
 /**
- * DEC-487 (2), (4), (5). One statement, invoice or bill. A draft is a working view of live records that
+ * DEC-500 (2), (4), (5). One statement, invoice or bill. A draft is a working view of live records that
  * can be adjusted and then issued; an Issued document shows its frozen snapshot and can only be
  * exported or cancelled with a reason. Payment status is read live from Payments & Balances.
  */

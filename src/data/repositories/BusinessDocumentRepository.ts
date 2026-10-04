@@ -4,7 +4,7 @@ import type {
 } from '../../domain/businessDocuments';
 
 /**
- * DEC-487 (2)-(4). Statements, invoices and bills, and the one shared document-to-record link model
+ * DEC-500 (2)-(4). Statements, invoices and bills, and the one shared document-to-record link model
  * every screen reads inclusion status from. Ordinary PDF/Excel exports never call a write method here.
  */
 export interface BusinessDocumentRepository {

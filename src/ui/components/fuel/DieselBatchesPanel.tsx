@@ -17,7 +17,7 @@ import {DieselPdfExportPanel} from './DieselPdfExportPanel';
 export type DieselExportFilter={batchId?:string;projectId?:string;companySiteId?:string;stationId?:string;unassigned?:boolean;fromDate?:string;toDate?:string};
 
 /**
- * DEC-492, Screen A of the approved design: the tank, the open batches oldest first, then closed batches,
+ * DEC-505, Screen A of the approved design: the tank, the open batches oldest first, then closed batches,
  * outside station fills, history from before batches, and gasoline, each behind its own header.
  */
 type Props={

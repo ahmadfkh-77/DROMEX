@@ -23,7 +23,7 @@ const loadsWord=(count:number)=>`${count} load${count===1?'':'s'}`;
 const unitText=(values:UnitQuantity[])=>values.map(value=>formatTotalQuantity(value.quantity,value.unitSymbol)).join(' · ');
 
 /**
- * DEC-487 (6). Company Load Totals: Number series (or Item) → Project → individual loads, with load
+ * DEC-500 (6). Company Load Totals: Number series (or Item) → Project → individual loads, with load
  * counts and per-unit totals. Cancelled loads keep their numbers and are shown apart, never added in.
  */
 export function CompanyLoadTotalsScreen({totals,series,profiles,onBack,onOpenRecord}:{totals:CompanyTotalsRepository;series:LoadNumberSeriesRepository;profiles:ProfileRepository;onBack:()=>void;onOpenRecord:(record:RecordSnapshot)=>void}){

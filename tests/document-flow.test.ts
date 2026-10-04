@@ -3,7 +3,7 @@ import {describe,expect,it} from 'vitest';
 import type {EligibleRecord,RecordSnapshot} from '../src/domain/businessDocuments';
 import {candidateParties,reviewSplit} from '../src/ui/documentFlow';
 
-/** DEC-487 (3). Turning a selection into one document for one party, without silently dropping anything. */
+/** DEC-500 (3). Turning a selection into one document for one party, without silently dropping anything. */
 const snap=(id:string,type:'company_load'|'supplier_load',partyId:string,partyName:string):RecordSnapshot=>({recordType:type,recordId:id,reference:id,loadNumber:null,loadNumberSeriesName:null,itemKey:'i',itemName:'Sand',unitKey:'u',unitSymbol:'t',quantity:1,projectId:null,projectName:null,partyId,partyName,recordedAt:'2026-08-10T09:00:00',enteredAt:null,unitPriceCents:null,priceBasis:'per_unit',subtotalCents:null,vatRateBasisPoints:null,vatCents:null,totalCents:null,supplierReference:null});
 const record=(id:string,type:'company_load'|'supplier_load',partyId:string,partyName:string,links:EligibleRecord['links']=[]):EligibleRecord=>({key:`${type}:${id}`,snapshot:snap(id,type,partyId,partyName),seriesId:null,inclusion:{state:'not_included'},links});
 

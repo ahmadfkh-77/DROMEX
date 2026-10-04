@@ -4,7 +4,7 @@ import {SqliteFuelRepository} from '../src/data/repositories/SqliteFuelRepositor
 import {SEED_TIME,SqliteTestDatabase,migratedDatabaseWithProject} from './support/sqliteTestDatabase';
 
 /**
- * DEC-492. Diesel batches on top of the existing single-tank ledger: opening stock, a batch per delivery,
+ * DEC-505. Diesel batches on top of the existing single-tank ledger: opening stock, a batch per delivery,
  * derived first-in-first-out allocation of fills, dip adjustments, overfill, cancellations, and outside
  * station fills. Time is controlled so every record has a known date and the tests are repeatable.
  */

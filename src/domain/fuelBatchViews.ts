@@ -3,7 +3,7 @@ import type {BatchDetail,DieselBatchOverview,FillBatchInfo} from './fuelBatches'
 import {formatLitres} from './fuelFillForm';
 
 /**
- * DEC-492, Screens A, C, D and E of the approved design. Everything the fuel screens show about a fill,
+ * DEC-505, Screens A, C, D and E of the approved design. Everything the fuel screens show about a fill,
  * a day, a batch or a project, computed once here so every screen and the PDF say the same thing.
  */
 const WEEKDAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];

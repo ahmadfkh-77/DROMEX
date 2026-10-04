@@ -15,7 +15,7 @@ const makeId=()=>`signer_${Date.now().toString(36)}_${Math.random().toString(36)
 const optional=(value:string)=>normalizeSupervisorText(value)||null;
 
 /**
- * DEC-490. The copy of a signer a Delivery Authorization keeps. Throws when the signer is missing or
+ * DEC-503. The copy of a signer a Delivery Authorization keeps. Throws when the signer is missing or
  * disabled, or when a drawn signature is asked for and none is saved.
  */
 export async function deliverySignatureFor(db:SQLiteDatabase,selection:{signerId:string;display:SignerDisplay}):Promise<SignerSnapshot>{
@@ -26,7 +26,7 @@ export async function deliverySignatureFor(db:SQLiteDatabase,selection:{signerId
 }
 
 /**
- * DEC-490. The default signer copied onto new loads, or null when none is chosen or it can no longer
+ * DEC-503. The default signer copied onto new loads, or null when none is chosen or it can no longer
  * sign (disabled or missing). A drawn signature that was later cleared falls back to Name only.
  */
 export async function defaultDeliverySignature(db:SQLiteDatabase):Promise<SignerSnapshot|null>{
@@ -44,7 +44,7 @@ export async function recordSignerEvent(db:SQLiteDatabase,signerId:string,event:
 }
 
 /**
- * DEC-487 (5). Signers are never deleted; disabling hides them from new documents. Every change and
+ * DEC-500 (5). Signers are never deleted; disabling hides them from new documents. Every change and
  * every use is kept in document_signer_events. The sync queue records that a signature changed, never
  * the strokes.
  */
@@ -114,7 +114,7 @@ export class SqliteDocumentSignerRepository implements DocumentSignerRepository{
     return row?.delivery_signer_id?{signerId:row.delivery_signer_id,display:row.delivery_signer_display??'name_only'}:null;
   }
 
-  /** DEC-490. Chooses the signer copied onto every new Delivery Authorization; null turns it off. */
+  /** DEC-503. Chooses the signer copied onto every new Delivery Authorization; null turns it off. */
   async setDeliverySigner(selection:{signerId:string;display:SignerDisplay}|null):Promise<void>{
     if(selection)await deliverySignatureFor(this.db,selection);
     const now=new Date().toISOString();

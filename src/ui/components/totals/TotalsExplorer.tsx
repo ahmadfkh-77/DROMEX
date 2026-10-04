@@ -36,7 +36,7 @@ type Choice={id:string;label:string};
 const unique=(values:Choice[])=>[...new Map(values.map(value=>[value.id,value])).values()].sort((a,b)=>a.label.localeCompare(b.label,undefined,{sensitivity:'base',numeric:true}));
 
 /**
- * DEC-487 (1). Company Totals and Project Totals share this explorer. Company: Material → Project →
+ * DEC-500 (1). Company Totals and Project Totals share this explorer. Company: Material → Project →
  * Supplier → records. Project: Material → Supplier → records (the project is fixed). Every level shows
  * one summary band and one ruled list; every figure comes from buildMaterialTree. The parent owns the
  * level so its Back button can step up one level at a time.
@@ -154,7 +154,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,loadFuelF
   if(status==='error')return <>{filterBlock}<Feedback kind="error">{error??'Totals could not be calculated.'}</Feedback><AppButton label="Try again" tone="secondary" onPress={()=>setAttempt(value=>value+1)}/></>;
   if(status==='loading'||!data)return <>{filterBlock}<View style={styles.center}><ActivityIndicator color={colors.brand}/><Text style={styles.helper}>Calculating totals…</Text></View></>;
 
-  /** DEC-487. The PDF covers exactly what is on screen: the filters and the level drilled into. */
+  /** DEC-500. The PDF covers exactly what is on screen: the filters and the level drilled into. */
   const exportPdf=async(includePrices:boolean,showProject:boolean,includeFuel:boolean)=>{
     if(!profiles)return;
     setExporting(true);setExportMessage(null);

@@ -1,7 +1,7 @@
 import {SEED_TIME,migratedDatabaseWithProject,type SqliteTestDatabase} from './sqliteTestDatabase';
 
 /**
- * DEC-487 fixtures shared by the totals, documents and load-number suites: a migrated database with two
+ * DEC-500 fixtures shared by the totals, documents and load-number suites: a migrated database with two
  * projects, two customers, two suppliers, a small catalog, and helpers that insert company loads and
  * Supplier Loads exactly as their repositories store them (snapshots included).
  */

@@ -5,7 +5,7 @@ import {
   type DocumentLink,type RecordSnapshot,
 } from '../src/domain/businessDocuments';
 
-/** DEC-487 (2)-(4). Document kinds, derived inclusion status, and unit-separated document lines. */
+/** DEC-500 (2)-(4). Document kinds, derived inclusion status, and unit-separated document lines. */
 const link=(overrides:Partial<DocumentLink>):DocumentLink=>({documentId:'d',kind:'customer_invoice',status:'Draft',draftNumber:'DRAFT-1',documentNumber:null,issueDate:null,...overrides});
 const snap=(overrides:Partial<RecordSnapshot>):RecordSnapshot=>({recordType:'company_load',recordId:'l1',reference:'TX-1',loadNumber:'LOAD-2026-001',loadNumberSeriesName:'Company loads',itemKey:'id:sand',itemName:'Sand',unitKey:'unit_ton',unitSymbol:'t',quantity:10,projectId:'road',projectName:'Mountain Road',partyId:'customer',partyName:'Road Co',recordedAt:'2026-08-10T09:00:00',enteredAt:'2026-08-10T09:00:05',unitPriceCents:null,priceBasis:'per_unit',subtotalCents:null,vatRateBasisPoints:null,vatCents:null,totalCents:null,supplierReference:null,...overrides});
 

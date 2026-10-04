@@ -653,7 +653,7 @@ Total / Paid / Remaining boxes and the status word; **Mark paid in full** (orang
 ### Project Financial Review note
 Customer Revenue and Supplier Payables each carry a bordered note stating that Paid counts only payments applied to the project's records, and that unallocated payments belong to no project.
 
-## Implemented on Totals, Invoices & Bills, Signers and Load Number Series (DEC-487, 2026-10-02)
+## Implemented on Totals, Invoices & Bills, Signers and Load Number Series (DEC-500, 2026-10-02)
 
 Home → Totals, Project → Totals, Company Load Totals, Invoices & Bills, Business document settings, Authorized signers and Load number series share one set of presentation parts in `src/ui/components/totals/TotalsParts.tsx`. Physical acceptance pending.
 

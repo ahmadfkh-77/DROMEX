@@ -3,7 +3,7 @@ import {describe,expect,it} from 'vitest';
 import type {DieselBatchReport} from '../src/domain/dieselBatchReport';
 import {buildDieselBatchReportHtml} from '../src/services/dieselBatchTemplate';
 
-/** DEC-492, Screen F. The printed layout of the Diesel Batch Report. */
+/** DEC-505, Screen F. The printed layout of the Diesel Batch Report. */
 const report=(extra:Partial<DieselBatchReport>={}):DieselBatchReport=>({
   scopeLabel:'DSL-2026-00004 · Invoice 55821',
   metadata:[{label:'Batch',value:'DSL-2026-00004'},{label:'Exported',value:'Sat 3 Oct 2026, 18:42'},{label:'Project filter',value:'All projects'},{label:'Site filter',value:'All sites'},{label:'Station filter',value:'All stations'},{label:'Date range',value:'All dates'},{label:'Prices',value:'Excluded'}],
