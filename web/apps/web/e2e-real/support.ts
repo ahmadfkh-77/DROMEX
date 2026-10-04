@@ -92,3 +92,27 @@ export { totpCode, waitForFreshStep, wrongCode };
 export function lacksAll(text: string, secrets: readonly string[]): boolean {
   return secrets.every((secret) => secret === '' || !text.includes(secret));
 }
+
+/** The API itself, bypassing `vite preview` (which adds CORS headers of its own and is test-only). */
+export const API_ORIGIN = 'http://127.0.0.1:3000';
+
+/**
+ * Runs a same-origin `fetch` inside the page, in real Chrome with its own
+ * cookie jar and the browser's own Origin header, and returns only the status.
+ * Costs no sign-in or verify request.
+ */
+export async function statusFromPage(page: Page, path: string, init?: { method: 'POST'; json: unknown }): Promise<number> {
+  return page.evaluate(
+    async ({ path: target, init: request }) => {
+      const response = await fetch(target, {
+        method: request?.method ?? 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: request === undefined ? undefined : { 'content-type': 'application/json' },
+        body: request === undefined ? undefined : JSON.stringify(request.json),
+      });
+      return response.status;
+    },
+    { path, init },
+  );
+}

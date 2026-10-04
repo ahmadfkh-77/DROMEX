@@ -60,14 +60,19 @@ test('sign-out ends the session on the server, and a replayed code is refused', 
   const session = (await context.cookies()).find((cookie) => cookie.name.includes('session_token'));
   expect(session !== undefined).toBe(true);
 
+  // Positive control: the cookie, sent by hand, opens the session while it is
+  // live, so a 401 afterwards means the server ended it and not that the
+  // probe failed to send the cookie.
+  const probe = await playwright.request.newContext({ baseURL: WEB_ORIGIN });
+  const cookieHeader = { cookie: `${session!.name}=${session!.value}` };
+  expect((await probe.get('/api/session', { headers: cookieHeader })).status()).toBe(200);
+
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('You are signed out');
 
-  // The old cookie, sent by hand, no longer opens a session: the logout
-  // happened on the server, not just in the browser.
-  const probe = await playwright.request.newContext({ baseURL: WEB_ORIGIN });
-  const replayed = await probe.get('/api/session', { headers: { cookie: `${session!.name}=${session!.value}` } });
-  expect(replayed.status()).toBe(401);
+  // The old cookie no longer opens a session: the logout happened on the
+  // server, not just in the browser.
+  expect((await probe.get('/api/session', { headers: cookieHeader })).status()).toBe(401);
   await probe.dispose();
 
   // Sign in again and present the same code in the same step.
