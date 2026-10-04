@@ -49,6 +49,7 @@ describe('DROMEX rate-limit storage on PostgreSQL 18.6', () => {
       { id: '0009', name: 'dromex_admin_enrolment' },
       { id: '0010', name: 'dromex_password_reset' },
       { id: '0011', name: 'dromex_account_management' },
+      { id: '0012', name: 'dromex_rate_limit_prune_index' },
     ]);
 
     const { rows } = await pool.query<{ column_name: string; data_type: string }>(

@@ -17,7 +17,7 @@ const BETTER_AUTH_MIGRATION = fileURLToPath(
 );
 
 const BETTER_AUTH_TABLES = ['user', 'session', 'account', 'verification', 'rateLimit'];
-const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011'];
+const ALL_DROMEX_MIGRATIONS = ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012'];
 
 describe('DROMEX migration mechanism', () => {
   let database: EphemeralDatabase;
@@ -562,7 +562,7 @@ describe('DROMEX migration mechanism', () => {
       ).rows;
     const before = await snapshot();
 
-    const result = await applyMigrations(pool, migrations);
+    const result = await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0011'));
     expect(result.applied).toEqual(['0011']);
     expect(await snapshot()).toEqual(before);
     const stamped = await pool.query(`SELECT count(*)::int AS n FROM dromex_principal WHERE sessions_revoked_at IS NOT NULL`);
@@ -589,6 +589,40 @@ describe('DROMEX migration mechanism', () => {
     await pool.query(sql);
     await pool.query(sql);
     expect(await shape()).toEqual(before);
+  });
+
+  // SEC-1b proposal (DEC-492, pending Owner review).
+  it('preserves existing rate-limit rows exactly when 0012 is applied over 0011, and only adds an index', async () => {
+    const migrations = await loadDromexMigrations();
+    await applyMigrations(pool, migrations.filter((migration) => migration.id <= '0011'));
+    await pool.query(
+      `INSERT INTO dromex_rate_limit (key, count, last_request_ms) VALUES
+         ('192.0.2.1|/sign-in/email', 5, 1789289796705), ('198.51.100.7|/api/invitation/password', 1, 0)`,
+    );
+    const rows = async () => (await pool.query('SELECT key, count, last_request_ms FROM dromex_rate_limit ORDER BY key')).rows;
+    const columns = async () =>
+      (await pool.query(`SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'dromex_rate_limit' ORDER BY column_name`)).rows;
+    const before = { rows: await rows(), columns: await columns() };
+
+    const result = await applyMigrations(pool, migrations);
+    expect(result.applied).toEqual(['0012']);
+
+    expect({ rows: await rows(), columns: await columns() }).toEqual(before);
+    const index = await pool.query(`SELECT indexdef FROM pg_indexes WHERE tablename = 'dromex_rate_limit' AND indexname = 'dromex_rate_limit_last_request'`);
+    expect(index.rows).toHaveLength(1);
+    expect(index.rows[0]!.indexdef).toMatch(/USING btree (last_request_ms)/);
+  });
+
+  it('applies 0012 idempotently: running its SQL again changes nothing', async () => {
+    const migrations = await loadDromexMigrations();
+    await applyMigrations(pool, migrations);
+    const sql = migrations.find((migration) => migration.id === '0012')!.sql;
+    const indexes = async () =>
+      (await pool.query(`SELECT tablename::text, indexname::text, indexdef FROM pg_indexes WHERE schemaname = 'public' ORDER BY 1, 2`)).rows;
+    const before = await indexes();
+    await pool.query(sql);
+    await pool.query(sql);
+    expect(await indexes()).toEqual(before);
   });
 
   it('preserves existing principals exactly when 0010 is applied over 0009', async () => {

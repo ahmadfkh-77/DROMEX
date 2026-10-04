@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { PASSWORD_MAX_LENGTH, type AuthSettings } from '../auth/config.ts';
 import { checkNewPassword } from '../auth/password-policy.ts';
 import { sessionPredatesCredentialChange } from '../auth/principal.ts';
-import { createRateLimitStorage, type RateLimitRule } from '../auth/rate-limit-storage.ts';
+import { RATE_LIMIT_PRUNE_INTERVAL_MS, createRateLimitStorage, type RateLimitRule } from '../auth/rate-limit-storage.ts';
 import { RECOVERY_CODE_COUNT } from '../auth/recovery-codes.ts';
 import { securityEvent, type SecurityAudit, type SecurityAuditActor, type SecurityAuditEventType } from '../auth/security-audit.ts';
 import { createTotpReplayGuard } from '../auth/totp-replay.ts';
@@ -211,7 +211,7 @@ export function createInvitationAcceptance(deps: InvitationAcceptanceDependencie
   const { pool, audit, settings } = deps;
   if (typeof audit?.record !== 'function') throw new Error('Invitation acceptance requires the security audit.');
   const identity: EnrolmentIdentityPort = createEnrolmentIdentity(settings, pool);
-  const limits = createRateLimitStorage(pool);
+  const limits = createRateLimitStorage(pool, Date.now, { pruneIntervalMs: RATE_LIMIT_PRUNE_INTERVAL_MS });
   const replay = createTotpReplayGuard(pool);
   const interrupt = async (point: AcceptanceInterruption) => {
     if (deps.interrupt !== undefined) await deps.interrupt(point);
