@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildServer } from '../../src/server.ts';
+import { settle, syntheticAuthSettings } from '../helpers/auth-settings.ts';
 
 // A closed, reserved port. Liveness must not depend on the database being up.
 const UNREACHABLE_DATABASE_URL = 'postgresql://unused:unused@127.0.0.1:1/unused';
@@ -10,11 +11,15 @@ describe('GET /health (liveness)', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildServer({ databaseUrl: UNREACHABLE_DATABASE_URL });
+    app = await buildServer({
+      databaseUrl: UNREACHABLE_DATABASE_URL,
+      auth: syntheticAuthSettings(),
+    });
     await app.ready();
   });
 
   afterAll(async () => {
+    await settle();
     await app.close();
   });
 

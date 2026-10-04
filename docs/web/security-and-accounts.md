@@ -1,7 +1,35 @@
 # Security and Account Model
 
-Status: **planned. Nothing in this document is implemented.** Phase 1 ships no
-authentication and no users, sessions, MFA, or recovery tables.
+Status: **partly implemented, local development only.** Sign-in with a
+password followed by a mandatory TOTP code, sign-out, and a sanitized session
+endpoint exist, with no public registration, and every authenticated request
+requires an active DROMEX principal and completed MFA (DEC-434). Terminal
+Owner activation — identity, TOTP enrolment, recovery codes, and the Owner
+principal — exists as a local, interactive, non-HTTP service, tested only
+against disposable databases; it is **not approved for real use** until
+checkpoints 3F-B, 3F-C, and 3F-D are accepted (DEC-435) and every item of
+the DEC-443 gate is met with production evidence, including a configured
+provider, SPF/DKIM/DMARC, a monitored `Reply-To` mailbox, a real delivery,
+a physically rehearsed password reset, and separate explicit Owner approval
+(OQ-161's design closure does not unblock it). Its command refuses every
+run, and **no Owner exists**. An Owner
+who has lost the authenticator can sign in with the password and one unused
+recovery code into a short-lived recovery state that reaches no business
+route and permits only replacing the authenticator, and every recovery step
+is recorded in a DROMEX-owned security audit (DEC-436). A terminal emergency
+recovery for an Owner who knows the current password but cannot complete MFA
+exists and is tested on disposable databases only: it prefers supported
+authenticator replacement and retrieval of one stored code, and permits a
+narrowly scoped two-operation factor reset only when neither is possible
+(DEC-437); its command refuses every run. Email password reset is
+implemented and tested on disposable databases only (checkpoint 4C,
+DEC-487, DEC-488); the running server reads email configuration
+(checkpoint 4D, DEC-489) but runs disabled, because no provider is
+configured. Owner account and session management (list and inspect Admin
+accounts and invitations, disable and re-enable an Admin with a reason, and
+revoke one or every session of an Admin) is implemented and tested on
+disposable databases only (checkpoint 4E, DEC-490, confirmed). No
+Owner readiness enforcement, permission model, or deployment exists.
 
 The full authentication and authorization architecture — candidate research,
 the selected system and why, the threat model, session and MFA design, the
@@ -39,7 +67,37 @@ single-Owner constraint will be enforced by a database constraint, not only by
 application logic, following the singleton pattern the SQLite schema already
 uses for the company record.
 
-## Authentication solution: selected, not yet implemented
+## Owner account and session management: implemented locally
+
+Checkpoint 4E (DEC-490, confirmed) implements the
+Owner-only part of DEC-408 and the disabling part of DEC-427, against
+disposable databases and a stubbed browser API only. The full description is
+in
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#implemented-owner-account-and-session-management-phase-2c-checkpoint-4e-local-development-only).
+
+- **Owner only, checked twice.** Six `owner` routes; the guard admits only the
+  MFA-complete Owner and the use case checks again. An Admin reaching any
+  Owner route is refused and the attempt is audited.
+- **The Owner is never a target.** Disabling, re-enabling, or signing out the
+  Owner's own account is refused and audited; the database refuses any
+  account changing its own status.
+- **Disable.** Requires a reason (3 to 500 characters, one line). In one
+  transaction the account becomes `disabled` and every existing session is
+  ended through the `sessions_revoked_at` rule; the disabled Admin cannot
+  sign in, use any session, reset a password into access, or be invited
+  again. Better Auth's session rows are then deleted as cleanup.
+- **Re-enable.** Requires a reason; restores sign-in with the existing
+  password and authenticator, and no earlier session ever returns.
+- **Sessions.** The Owner sees each usable session's sign-in and expiry time
+  and can end one session or all of them. No token, session identifier, IP
+  address, user agent, or invented last-activity time is shown.
+- **No deletion.** Accounts are disabled, never deleted, so every record keeps
+  its author.
+- **Not started:** the permission model (templates, permission blocks,
+  overrides, project scope), Owner readiness enforcement, resetting an
+  Admin's factor, and a designed sign-in screen.
+
+## Authentication solution: selected, partly implemented
 
 **OQ-157 is closed.** DEC-418 selects **Better Auth** (MIT license), embedded
 in the existing Fastify process and sharing the existing PostgreSQL database,
@@ -58,9 +116,112 @@ through the Phase 2 research and is part of why Better Auth — a library that
 does not require assembling separate pieces for sessions, MFA, and recovery —
 was selected over rolling the equivalent by hand.
 
-**No users, sessions, MFA, or recovery schema has been created.** Selecting a
-system is not implementing it; that remains a separate, later, separately
-approved phase.
+**Phase 2C has implemented part of it, for local development only:** the
+Better Auth user, session, account, verification, and rate-limit schema, the
+DROMEX principal table, the sign-in, TOTP verification, sign-out, and session
+transport, mandatory MFA with TOTP replay protection and versioned secrets,
+Better Auth's two-factor schema, recovery-code issuance, terminal Owner
+activation, recovery-code sign-in with restricted authenticator replacement,
+the security audit foundation, and terminal emergency Owner recovery
+(DEC-437), whose command is not enabled. No real account has been created,
+and nothing is deployed.
+
+**Terminal emergency recovery never resets a forgotten password.** It
+requires the current password, verified by Better Auth, and accepts no
+account, password, code, or secret on the command line. The only exception
+to Better Auth owning its own rows is DEC-437's two operations on the single
+Owner's factor, used only when supported recovery is impossible. The detail
+is in
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#terminal-emergency-owner-recovery-phase-2c-checkpoint-3f-d-disposable-databases-only).
+
+**The Owner is created only by a local interactive command, never over HTTP.**
+There is no setup route, no bootstrap website, no public registration, no
+default Owner, and no shared credential. The password is entered through a
+hidden terminal prompt and is never accepted from a command argument, the
+environment, a file, or piped input. Initial Owner creation needs no email
+delivery. Admin invitations and self-service password recovery depend on
+email, which is designed and implemented locally but not configured in the
+running server or production (see below). The detail, including
+the honest non-atomic boundary between Better
+Auth and DROMEX, is in
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#owner-provisioning-tooling-phase-2c-checkpoint-3e-disposable-databases-only).
+
+## Email, invitations, and password reset: implemented locally; not production configured
+
+**OQ-161 is closed as a design decision** (DEC-439 through DEC-442,
+2026-09-16). Only the provider-neutral email transport foundation of DEC-439
+is implemented (checkpoint 4A): disabled, capture, and Resend transports,
+the secure key-file loader, message validation, and bounded retries (a
+documented in-progress idempotency 409 is retried with the same key; a
+conflict or unclassifiable 409 never is), tested
+locally. Checkpoint 4D (DEC-489) wires it to the running server: disabled by
+default, or Resend only when every public setting is valid and the key is
+read from its secret file, with any partial or invalid configuration
+stopping startup. Nothing below is production configured
+or physically verified: no Resend account, DNS record, API key, or secret
+file exists, and no email has been sent. The Owner's side of Admin
+invitations (checkpoint 4B1), restricted invitation acceptance
+(checkpoint 4B2, DEC-444), and password reset (checkpoint 4C, DEC-487,
+DEC-488) are implemented against disposable databases. The full design, failure
+behaviour, and dated sources are in
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#14a-transactional-email-admin-invitations-and-password-reset).
+
+- **Delivery (DEC-439).** Resend through its HTTPS API behind a
+  provider-neutral DROMEX email interface; Postmark is the documented
+  fallback. Self-hosted SMTP and an ordinary mailbox SMTP account are
+  rejected. No webhooks initially, and delivery status never grants
+  anything.
+- **Admin invitations (DEC-440).** Owner-only, single-use, 24 hours, token
+  stored only as a hash; resending supersedes the previous link. The invited
+  Admin sets a password and completes a restricted web TOTP enrolment before
+  any business access, then signs in afresh. The Owner stays terminal-only
+  (DEC-434). **The Owner's side is implemented (checkpoint 4B1, disposable
+  databases only):** `owner`-classified list, create, resend, and cancel
+  routes, re-checked in the use case; refusal of an address that already
+  has an account; at most one issuance per 60 seconds and six per 24 hours
+  per address; truthful delivery state; closed audit events without
+  addresses or tokens. **Acceptance is implemented (checkpoint 4B2,
+  disposable databases only):** the invitee creates a password (or, when
+  resuming an interrupted setup under a newer invitation, proves the
+  password created then), enrols TOTP, sees ten recovery codes once,
+  acknowledges them, and is activated only then, after every session is
+  revoked; a fresh password-and-TOTP sign-in is required.
+- **Pending identities (DEC-444).** An identity whose setup was interrupted,
+  cancelled, superseded, or expired is never deleted. Its principal is
+  `pending`: it cannot sign in, hold an authorized session, or reach any
+  protected route, and both the database and every application gate refuse
+  it. The Owner may invite the same address again; the identity is resumed,
+  never duplicated, and only after proof of its existing password. A
+  forgotten password is reset by email (checkpoint 4C, DEC-487 (4)): the
+  identity stays pending and setup resumes with the new password; a lost
+  authenticator before activation has no path yet (OQ-168). An active or
+  disabled completed account is still ineligible for a new invitation.
+- **Validity at every step (DEC-444 (3)).** Every state-changing acceptance
+  step re-checks the invitation; an expired, cancelled, or superseded
+  invitation stops setup with one generic result and never activates
+  anything, while completed security work is kept for a new invitation.
+- **No public sign-up (DEC-444 (5)).** The identity is created by a
+  server-internal Better Auth instance that is never mounted on a route and
+  is reachable only from the acceptance service; architectural tests prove
+  it.
+- **Password reset (DEC-441, DEC-487).** Available to active and pending
+  accounts, including the Owner; a DROMEX-owned 256-bit token in the link
+  fragment, stored only as a hash, single-use, 30 minutes, superseded by a
+  newer request; one identical `202` for every address (only a per-network
+  limit answers `429`); every session ended by the `credentials_changed_at`
+  rule as well as by Better Auth; never signs in; MFA never removed,
+  bypassed, or required at completion; a password-changed email follows.
+  **Implemented (checkpoint 4C, disposable databases only).**
+- **Common passwords (DEC-488).** Every path that creates or changes a
+  password refuses entries on an offline, pinned NCSC top-100,000 list;
+  nothing is checked over the network.
+- **Links and content (DEC-442).** Tokens only in the URL fragment; no
+  third-party content or tracking; English-only emails with no business or
+  secret information.
+- **Owner activation stays blocked (DEC-443).** Design closure does not
+  enable a real Owner. That requires an implemented, verified, production
+  configured, and physically rehearsed password reset plus a separate
+  approval; the full gate is in the architecture document.
 
 ## Requirements the chosen solution must satisfy
 
@@ -108,3 +269,7 @@ ASVS 5.0) and the decisions above.
 - `web/.env.example` contains placeholders only; `web/.env` is git-ignored.
 - Production secrets are supplied through Docker secrets or an equivalent
   approved mechanism, never baked into an image layer.
+- The email provider key (DEC-439) is a sending-only key restricted to the
+  notification domain, delivered as a Docker Compose secret file; the API
+  receives only its path, never the value through the environment. The
+  Owner creates that file; Claude never reads or creates it.

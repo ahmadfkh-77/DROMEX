@@ -1,3 +1,10 @@
+import type { ComponentType } from 'react';
+
+import { AccountsPage } from './accounts/AccountsPage.tsx';
+import { InvitationPage } from './invitation/InvitationPage.tsx';
+import { ForgotPasswordPage } from './password-reset/ForgotPasswordPage.tsx';
+import { ResetPasswordPage } from './password-reset/ResetPasswordPage.tsx';
+
 const STYLES = `
   :root {
     --signal-orange: #c84b31;
@@ -60,9 +67,71 @@ const STYLES = `
     padding-top: 1rem;
     font-size: 0.875rem;
   }
+  .form { display: grid; gap: 1rem; max-width: 32rem; }
+  .form p { margin: 0; }
+  .form label { display: grid; gap: 0.35rem; font-weight: 600; font-size: 0.9375rem; }
+  .form input:not([type='checkbox']) {
+    font: inherit;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 0.25rem;
+    background: var(--surface);
+    color: var(--ink);
+    width: 100%;
+  }
+  .form .check { display: flex; gap: 0.5rem; align-items: center; font-weight: 400; }
+  .form .check input { width: 1.25rem; height: 1.25rem; }
+  .form button {
+    font: inherit;
+    font-weight: 700;
+    min-height: 2.75rem;
+    border: 0;
+    border-radius: 0.25rem;
+    background: var(--structural-navy);
+    color: #fff;
+    cursor: pointer;
+  }
+  .form button:disabled { opacity: 0.6; cursor: progress; }
+  .codes { margin: 0; padding-inline-start: 1.5rem; display: grid; gap: 0.35rem; }
+  .hint { margin: 0; font-size: 0.875rem; color: var(--ink); opacity: 0.8; }
+  .link { color: var(--structural-navy); font-weight: 700; text-underline-offset: 0.2em; }
+  .link:focus-visible, .form button:focus-visible, .form input:focus-visible, h1:focus-visible {
+    outline: 3px solid var(--signal-orange);
+    outline-offset: 2px;
+  }
+  h1:focus { outline: none; }
+  .alert {
+    border-left: 3px solid var(--signal-orange);
+    background: var(--surface);
+    padding: 0.75rem 1rem;
+    margin: 0 0 1rem;
+  }
 `;
 
+/** The other paths the preview serves: invitation and password reset (DEC-442). */
+const PAGES: Record<string, ComponentType> = {
+  '/invitation': InvitationPage,
+  '/forgot-password': ForgotPasswordPage,
+  '/reset-password': ResetPasswordPage,
+};
+
+/** Owner account management (checkpoint 4E): the list and one account per path. */
+function isAccountsPath(pathname: string): boolean {
+  return pathname === '/owner/accounts' || pathname === '/owner/accounts/' || pathname.startsWith('/owner/accounts/');
+}
+
 export function App() {
+  const Page = isAccountsPath(window.location.pathname) ? AccountsPage : PAGES[window.location.pathname];
+  if (Page !== undefined) {
+    return (
+      <>
+        <style>{STYLES}</style>
+        <Page />
+      </>
+    );
+  }
+
   return (
     <>
       <style>{STYLES}</style>
@@ -94,8 +163,19 @@ export function App() {
           <section className="card">
             <h2>Sign-in</h2>
             <p>
-              Not built yet. The approach is still an open question, so no accounts,
-              sessions, or recovery exist.
+              No designed sign-in screen yet, and no real account exists.{' '}
+              <a className="link" href="/forgot-password">
+                Forgot password?
+              </a>
+            </p>
+          </section>
+          <section className="card">
+            <h2>Accounts</h2>
+            <p>
+              For the Owner: Admin accounts, invitations, and sessions.{' '}
+              <a className="link" href="/owner/accounts">
+                Open accounts
+              </a>
             </p>
           </section>
         </div>

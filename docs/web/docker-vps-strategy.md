@@ -133,7 +133,11 @@ Rules for production:
 - only 80 and 443 published; PostgreSQL has **no `ports:` key at all**,
 - images pinned by explicit tag **and digest**, never `latest`,
 - secrets through Docker secrets or an equivalent approved mechanism, never in
-  an image layer and never committed,
+  an image layer and never committed; the email provider key's secret-file
+  mount, and the ownership and mode it needs for the non-root API user, are
+  designed in
+  [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md#implemented-running-server-email-configuration-phase-2c-checkpoint-4d-local-development-only)
+  (checkpoint 4D; not yet performed),
 - health checks and restart policies on every service,
 - log rotation configured,
 - debugging and detailed internal error output disabled,

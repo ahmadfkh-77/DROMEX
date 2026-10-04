@@ -1,10 +1,19 @@
 # Authentication and Authorization Architecture
 
-Status: **planned. Nothing in this document is implemented, tested, merged,
-released, or deployed.** No authentication code, schema, migration, UI, or
-test exists anywhere in this repository as of this writing. This document
-records the approved *design* so that no future session has to reconstruct it
-from chat history.
+Status: **partly implemented, local development only; not production-ready.**
+Implemented and tested against disposable databases: route classification,
+Argon2id hashing, the Better Auth configuration and schema, the DROMEX
+principal and its migrations, the minimal sign-in, sign-out, and session
+transport (see §11, "Implemented transport"), and Owner provisioning tooling
+that is **not approved for real use** before MFA (see §11, "Owner provisioning
+tooling"). No Owner exists. Later checkpoints implemented more locally, each
+recorded in its own section: MFA and Owner recovery (§11), the security audit
+foundation (§13), email, invitations, and password reset (§14A), and Owner
+account and session management (§14A, checkpoint 4E). Owner readiness
+enforcement, permissions, the designed authentication screens, and any
+deployment remain **design only**. Nothing is
+merged, released, or deployed. This document records the approved design so
+that no future session has to reconstruct it from chat history.
 
 This document is the detailed companion to
 [security-and-accounts.md](security-and-accounts.md), which remains the short
@@ -14,9 +23,11 @@ security-and-accounts.md links here rather than duplicating it.
 
 Research conducted 2026-09-11. Decisions recorded here were approved by the
 Owner on 2026-09-12 and are numbered DEC-418 through DEC-433 in
-`requirements/decisions.md`. Six related questions remain open and are
-tracked as OQ-160 through OQ-165 in `requirements/open-questions.md`; they
-are named throughout this document and **must not be answered here**.
+`requirements/decisions.md`. Six related questions were opened as OQ-160
+through OQ-165 in `requirements/open-questions.md`. **OQ-161 (email delivery)
+was closed on 2026-09-16 as a design decision by DEC-439 through DEC-442**
+(§14A: approved design only, not implemented). The other five remain open,
+are named throughout this document, and **must not be answered here**.
 
 ## 1. Plain-language objective
 
@@ -214,31 +225,112 @@ repository, and the npm registry), 2026-09-11
   CORS via `@fastify/cors`; `trustedOrigins` configured on the `betterAuth()`
   instance.
 - **PostgreSQL**: via the Kysely adapter over a standard `pg` `Pool`.
-  **Better Auth generates and owns its own tables** through its own CLI
-  (`npx auth@latest generate`, `npx auth@latest migrate`); it can be pointed
-  at an existing database.
+  **Better Auth generates and owns its own tables** through its own CLI,
+  invoked as the repository-local pinned binary — `auth@1.7.4`, run as
+  `node node_modules/auth/dist/index.mjs generate` (or `migrate`) — never as
+  a floating `npx auth@latest`, which would resolve an unpinned version at
+  run time. It can be pointed at an existing database. Note that with the
+  Kysely/PostgreSQL adapter, `generate` **introspects a live database** to
+  compute what is missing, so it requires a reachable server; schema
+  generation is therefore run against a disposable database, never against
+  the development or production one.
+- **Better Auth keeps no migration ledger.** Verified against a disposable
+  PostgreSQL 18.6 database on 2026-09-12: after `migrate`, the only tables
+  present are Better Auth's own five. The CLI tracks what has been applied by
+  introspecting the live schema, so re-running `migrate` reports
+  `No migrations needed` and a second `generate` reports
+  `Your schema is already up to date`. Replaying the generated `.sql` file
+  **by hand** is a different matter and fails with `already exists`, so any
+  tooling that applies that file directly needs its own tracking.
+- **DROMEX keeps its own ledger, and the two mechanisms never meet.** Better
+  Auth discovers its state by introspection; DROMEX records what it applied
+  in a `dromex_migration` table (identifier, name, SHA-256 checksum, applied
+  timestamp). The DROMEX migrator never reads, applies, or reasons about
+  Better Auth's SQL, and Better Auth never sees DROMEX's ledger. Keeping them
+  apart is what stops a DROMEX change from being credited to Better Auth's
+  schema state, or the reverse (DEC-431). The migrator holds a PostgreSQL
+  advisory lock for the whole run so two API instances starting at once
+  cannot both apply the same migration — proven by a test that fails when the
+  lock is removed — runs each migration in its own transaction alongside its
+  ledger row, and fails closed on a changed checksum, a duplicate identifier,
+  or a migration recorded as applied but absent from the set.
+- **`rateLimit.lastRequest` type — verified 2026-09-13; defect resolved by
+  DROMEX-owned storage (Owner decision, Option C).**
+  Better Auth's generated SQL declares `lastRequest bigint`, and its runtime
+  schema check warns `Expected number but got int8`. Tested through the real
+  sign-in route against disposable PostgreSQL 18.6 databases: node-postgres
+  returns `int8` to JavaScript as a **string**, and Better Auth's database
+  rate limiter converts only a JavaScript `bigint`, so it receives the string
+  unchanged.
+  - **Enforcement is correct.** Comparisons subtract, which coerces the string
+    to a number. The five-attempt, 60-second rule blocks the sixth attempt —
+    even with the right password — persists in PostgreSQL across a freshly
+    constructed application, resets once the window has elapsed, cannot be
+    bypassed with forged forwarding headers, and gives a genuinely different
+    socket address its own bucket.
+  - **The retry-after value is wrong.** Better Auth computes it as
+    `lastRequest + windowInMs`, which concatenates the string; testing
+    observed `X-Retry-After: 178928925868309` seconds.
+  - **Resolution.** Better Auth 1.7.4 officially supports
+    `rateLimit.customStorage` with an atomic `consume(key, { window, max })`
+    operation. DROMEX supplies one (`src/auth/rate-limit-storage.ts`) backed
+    by its own `dromex_rate_limit` table, created by DROMEX migration `0002`
+    through the DROMEX ledger. Its `last_request_ms` column is `BIGINT`,
+    converted explicitly: only canonical non-negative integer text within
+    `Number.MAX_SAFE_INTEGER` is accepted, and anything else fails closed
+    without changing the row. Each decision runs in one transaction under a
+    `SELECT … FOR UPDATE` row lock, so concurrent requests can neither lose
+    an increment nor be over-granted. The retry time is
+    `ceil((last + window − now) / 1000)`, clamped to `1…window`.
+  - **Rejected alternatives.** A global node-postgres `int8` parser would
+    silently change every `BIGINT` read in the process, including future
+    business columns where exact 64-bit values matter. Editing Better Auth's
+    generated schema would break the separation of the two migration
+    sequences (DEC-431) and be overwritten by the next generation. Better
+    Auth's generated `rateLimit` table is left exactly as generated
+    (`storage: 'database'` is kept for that reason) and is no longer written.
+  - **Verified:** the sixth attempt is blocked with `Retry-After` between 1
+    and 60; state survives a fresh server instance; 12 concurrent sign-ins
+    yield exactly five 401s and seven 429s; forged forwarding headers create
+    no new bucket; the global `BIGINT` parser is unchanged. Removing the row
+    lock makes the concurrency test fail.
 - **Two-factor plugin (`twoFactor`)**: TOTP enrolment returns `{ method,
   totpURI, backupCodes }`; verification accepts one period before and after
-  the current code. `skipVerificationOnEnable` defaults to `false`.
-  `trustDevice`, when used, trusts a device for 30 days.
-- **Backup codes**: `backupCodeOptions` defaults to `amount: 10`,
-  `length: 10`. **`storeBackupCodes` defaults to `"plain"`** — codes are
-  stored **unhashed** in the database unless explicitly configured to
-  `"encrypted"`. The documentation states this option accepts `"plain"`,
-  `"encrypted"`, or a custom encryptor function — **all three are
-  reversible encryption or no encryption at all; none is a one-way hash.**
-  `customBackupCodesGenerate` was checked separately and controls only how
-  codes are *generated*, not how they are *stored* or *verified*. The
-  `verify-backup-code` endpoint accepts a plain code string, implying an
-  exact-match (or decrypt-and-compare) lookup rather than a hash
-  comparison. **Conclusion, checked directly against the current official
-  documentation: one-way hashed storage of backup codes is not a
-  documented or supported option in Better Auth, in any configuration.**
-  This is recorded as a limitation of the library, not worked around by
-  DROMEX — see DEC-423 and §14 for what closes the resulting gap instead.
-  `generateBackupCodes()` deletes the previous set and issues a new one.
-  `viewBackupCodes()` is server-side and documented as requiring a fresh
-  session. A used code is removed from the database and cannot be reused.
+  the current code — about 90 seconds in all, with no replay protection of
+  its own. `skipVerificationOnEnable` defaults to `false`. `trustDevice`,
+  when used, trusts a device for 30 days, and **1.7.4 has no option that
+  disables it**. *Corrected 2026-09-14 against the installed 1.7.4 source.*
+- **Backup codes** *(corrected 2026-09-14 against the installed 1.7.4
+  source)*: `backupCodeOptions` defaults to `amount: 10`, `length: 10`
+  (10 characters from 62 symbols, about 59.5 bits). **`storeBackupCodes`
+  defaults to `"encrypted"` in 1.7.4**, not `"plain"` as this section
+  previously stated; it accepts `"plain"`, `"encrypted"`, or a custom
+  `{ encrypt, decrypt }` pair, which encrypts the whole code list as one
+  blob. **All three are reversible; none is a one-way hash**, and
+  verification decrypts the list and compares the submitted code by exact
+  string match. `customBackupCodesGenerate` controls only generation.
+  **One-way hashed storage of backup codes is not supported in any
+  configuration.** `generateBackupCodes()` overwrites the previous set. A
+  used code is removed under a compare-and-swap and cannot be reused.
+  **`viewBackupCodes()` is server-only** — created with
+  `createAuthEndpoint.serverOnly`, which the router never mounts — and in
+  the installed source it **enforces no session, freshness, or password
+  check**: it takes a bare `userId`. The official documentation calls it
+  server-only yet also lists an HTTP path and advises a fresh session; the
+  source is authoritative. DROMEX's hardened configuration is recorded in
+  DEC-435.
+- **Schema versus documentation** *(verified 2026-09-14)*: the generated
+  `twoFactor` table has **no `createdAt`** although the documentation lists
+  one; `userId` is indexed but **not unique**; and the encrypted `secret`
+  column is indexed. The plugin schema declares `verified` defaulting to
+  `true` and `failedVerificationCount` to `0`, but **the generated PostgreSQL
+  columns carry no default for either**: Better Auth's adapter supplies both
+  at runtime (verified 2026-09-14; see checkpoint 3F-B in §11).
+- **Ambient secret override** *(verified 2026-09-14)*: when `secrets` is not
+  set explicitly, Better Auth reads `BETTER_AUTH_SECRETS` from the process
+  environment on its own, and `BETTER_AUTH_SECRET` or `AUTH_SECRET` as a
+  legacy fallback. DROMEX sets `secrets` explicitly and refuses to start if
+  any of the three is present (DEC-434).
 - **Mandatory MFA is not a built-in policy.** The documentation states only
   that "2FA sign-in enforcement applies to the credential-based sign-in
   endpoints"; other methods need custom hooks. Enforcing MFA for every
@@ -285,20 +377,33 @@ repository, and the npm registry), 2026-09-11
   only for APIs that don't support cookies" and that "improper
   implementation could easily lead to security vulnerabilities," without
   elaborating on the specific XSS/CSRF trade-off.
-- **Security advisories**: 10 published on the repository's advisories page,
-  including one Critical (`GHSA-rjg6-39jm-rgg4`, account takeover via SCIM
-  provider-id collision) and several High (including
-  `GHSA-qq9h-g4jm-xgf3`, account takeover via magic-link/email-OTP
-  hijacking). **Every published advisory found sits in SSO, SCIM,
-  OIDC-provider, Stripe, magic-link, or email-OTP** — features this design
-  does not enable. **This is time-bounded evidence of where past
-  vulnerabilities were found, not a guarantee about the code this design
-  does use.** Not enabling those features removes them as an attack
-  surface; it does not and cannot prove the enabled password-plus-TOTP
-  core is free of undiscovered issues. Ongoing version upgrades (DEC-431),
-  the testing strategy in §19, and advisory monitoring remain required
-  regardless. The repository states it supports only the latest version;
-  there are no backported patches.
+- **Security advisories** *(corrected 2026-09-14)*: **32 are published**
+  across four pages of the repository's advisories page, not the 10 first
+  recorded here; the newest verified on 2026-09-14 is dated 2026-08-11. The
+  earlier statement that every advisory sits in SSO, SCIM, OIDC-provider,
+  Stripe, magic-link, or email-OTP was **false**. Advisories in areas this
+  design does use include:
+  - `GHSA-xg6x-h9c9-2m83` (High): two-factor authentication bypass through
+    premature session caching, when both 2FA and `session.cookieCache` are
+    enabled; affected 1.4.5, **fixed in 1.4.9**. DROMEX disables the cookie
+    cache (DEC-420).
+  - `GHSA-vp58-j275-797x` (High): bypass of `trustedOrigins` protection
+    leading to account takeover (2025-02-24).
+  - `GHSA-x732-6j76-qmhm` (High): double-slash path normalisation bypassing
+    `disabledPaths` and rate limits; **fixed in 1.4.6**.
+  - `GHSA-p6v2-xcpg-h6xw` (High): rate limiter keying IPv6 addresses
+    individually, bypassable by prefix rotation; **fixed in 1.4.17**.
+  - `GHSA-2vg6-77g8-24mp` (Low): stale sessions after user deletion with
+    secondary storage; **fixed in 1.6.11**.
+
+  **Better Auth 1.7.4 is not affected by any of them.** Others concern
+  SSO, SCIM, OIDC-provider, OAuth, Stripe, magic-link, email-OTP, passkeys,
+  API keys, organization invitations, multi-session, open redirects, and
+  reflected XSS. This remains time-bounded evidence, not a guarantee about
+  the code DROMEX uses. Ongoing version upgrades (DEC-431), the testing
+  strategy in §19, and advisory monitoring remain required. The repository
+  states it supports only the latest version; there are no backported
+  patches.
 - **Not stated in official documentation, checked directly and confirmed
   absent**: whether one account can hold more than one enrolled TOTP
   authenticator at a time; an automatic low-backup-code warning; a
@@ -314,22 +419,34 @@ enforcement, required by the decisions cited inline below and recorded in
   acceptable but not OWASP's first choice.
 - Disabling `session.cookieCache` entirely (DEC-420), because its documented
   behaviour is incompatible with immediate revocation.
-- Disabling `trustDevice` (DEC-421), because a 30-day MFA bypass contradicts
-  mandatory MFA.
+- Neutralising `trustDevice` (DEC-421, DEC-434), because a 30-day MFA bypass
+  contradicts mandatory MFA and 1.7.4 cannot switch it off: DROMEX forces
+  `trustDevice: false`, drops any incoming trusted-device cookie, never
+  forwards one, and pins its lifetime to one second.
 - Enforcing mandatory MFA for every account at a single authorization gate
-  that rejects any authenticated request from a user without an enrolled
-  TOTP, allowing only the enrolment endpoints (DEC-421).
+  (DEC-421, DEC-434): Better Auth session, active principal,
+  `twoFactorEnabled`, `mfa_completed_at`, and a session no older than MFA
+  completion must all agree. There are no web enrolment endpoints; the
+  Owner enrols in the terminal.
+- Recording every accepted TOTP code in `dromex_totp_replay` (DEC-434),
+  because Better Auth accepts a code repeatedly within its window.
+- Explicit versioned `secrets`, refusing ambient Better Auth secret
+  variables (DEC-434).
 - Enabling no feature DROMEX does not need — no SSO, SCIM, OIDC-provider,
   Stripe, magic-link, or email-OTP (DEC-422). Every published advisory
   found lives in those, so not enabling them is a deliberate reduction of
   attack surface — **it reduces exposure to known past issues; it is not
   proof that the remaining, enabled surface is safe.**
-- Configuring `storeBackupCodes: "encrypted"` rather than accepting the
-  default `"plain"` (DEC-423) — the strongest built-in option available,
-  **explicitly still reversible encryption, not a one-way hash, which
-  Better Auth does not support for backup codes in any configuration** —
-  paired with the Owner-specific emergency-recovery design in §14, because
-  Better Auth's own protection for backup codes stops there.
+- Pinning `storeBackupCodes: "encrypted"` explicitly (DEC-423, DEC-435) —
+  1.7.4's default is already `"encrypted"`, and it is pinned so a future
+  default change cannot silently weaken it — and replacing the 59.5-bit
+  default codes with 10 generated 24-symbol Crockford Base32 codes of
+  exactly 120 bits each. This is **explicitly still reversible encryption,
+  not a one-way hash**, which Better Auth does not support for backup codes
+  in any configuration: an **accepted deviation from NIST SP 800-63B Rev. 4
+  §3.1.2.2** (DEC-435). At 120 bits the codes are outside ASVS 5.0.0 6.5.2,
+  which requires hashing only below 112 bits. The Owner-specific recovery
+  design in §14 closes what storage alone cannot.
 - Every part of authorization: role templates, per-user overrides, project
   scope, effective-permission computation, the business audit trail, and
   invitation onboarding (§6 through §11) — Better Auth provides none of
@@ -340,9 +457,23 @@ enforcement, required by the decisions cited inline below and recorded in
 
 Implements DEC-408 without change.
 
-- Exactly one Owner, enforced by a **database constraint** — a partial
-  unique index on `is_owner WHERE is_owner = true` — mirroring the existing
-  SQLite singleton pattern for the company record (DEC-426).
+- Exactly one Owner **once the system is initialised** — but that rule is
+  assembled from three mechanisms, and it is worth being precise about which
+  one does what, because the imprecise version invites a false sense of
+  safety:
+
+  | Mechanism | Guarantees | Status |
+  |---|---|---|
+  | Partial unique index on `is_owner WHERE is_owner` (DEC-426) | **At most** one Owner. A second is impossible | **Implemented** (`dromex_principal`, migration `dromex/0001`) |
+  | Bootstrap workflow (DEC-426's "bootstrap transaction") | Creates the first and only Owner | **Tooling implemented and tested on disposable databases only; not approved for real use before MFA; no Owner exists.** It is *not* one transaction: Better Auth's identity commit and DROMEX's Owner commit are separate, bridged by a resumable intent under an advisory lock (§11, "Owner provisioning tooling") |
+  | Runtime readiness + service rules | Refuse an initialised system with no Owner; refuse to remove or demote the Owner | **Not implemented** |
+
+  A unique index can only forbid a second row; it cannot require a first.
+  **Zero Owners is therefore a legitimate, expected state before bootstrap**,
+  and the schema deliberately permits it — a test asserts this. No trigger or
+  placeholder Owner row is used to force existence, because a fabricated
+  Owner would be worse than an absent one. Until the readiness check exists,
+  nothing detects an initialised system that has lost its Owner.
 - Two individually named Admins at launch, identical initial permissions,
   each with their own credentials. No shared credential ever exists.
 - No public registration. The only way an account comes into being is the
@@ -537,6 +668,810 @@ Errors are generic to the user, detailed to the log, with a correlation ID
 deliberately indistinguishable for records outside a user's scope, so scope
 cannot be used to enumerate what exists.
 
+### Implemented transport (Phase 2C checkpoint 3D, local development only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases; not production-ready.** MFA, Owner bootstrap, permissions, account
+management, and the frontend are not implemented.
+
+*Superseded in part by checkpoint 3F-B, below: mandatory TOTP MFA is now
+enforced, a fourth route exists, and a correct password alone no longer
+yields a session. This section remains the record of the 3D transport.*
+
+**Exact route surface.** Three authentication routes exist, and nothing else:
+
+| Method | Path | Classification |
+|---|---|---|
+| `POST` | `/api/auth/sign-in/email` | `guest-only` |
+| `POST` | `/api/auth/sign-out` | `session-cleanup` |
+| `GET` | `/api/session` | `authenticated` |
+
+There is **no catch-all route**. Better Auth's documented Fastify integration
+mounts a handler at `/api/auth/*`; DROMEX deliberately does not. Each approved
+route forwards to one fixed Better Auth path, so a client query string or path
+suffix never reaches Better Auth. Any other path — sign-up, raw `get-session`,
+password reset, account updates, provider or plugin routes — is answered by a
+generic 404 that never touches Better Auth. `/health` and `/ready` remain
+explicitly `public`.
+
+**The active principal is enforced twice.**
+
+1. *At issuance.* A `session.create.before` database hook, built into
+   `createAuthOptions` so that no construction path can omit it, returns
+   `false` unless the user has an active principal. Better Auth then aborts
+   the insert, so a user with a missing or disabled principal is never issued
+   a session: the row is never written, rather than written and hidden. A
+   failed lookup throws, which also aborts.
+2. *On every request.* The request-time guard resolves the session and then
+   requires an active principal from PostgreSQL. Missing, malformed, expired,
+   revoked, orphaned, and disabled-principal sessions all receive one
+   identical `401`.
+
+**Session resolution bypasses Better Auth's router.** Sessions are resolved
+with `auth.api.getSession({ headers, asResponse: true })` rather than through
+the HTTP router, so an authenticated request neither consumes a rate-limit
+bucket nor writes a rate-limit row, while refresh and expiry `Set-Cookie`
+headers are still forwarded.
+
+**Raw Better Auth output is never returned.** `/api/session` returns exactly
+`{ "user": { "id", "name", "email" }, "isOwner" }`. The sign-in body is
+replaced with `{ "authenticated": true }`, because Better Auth's own body
+carries the session token.
+
+**Sign-in failures are normalised.** Unknown email, wrong password, missing
+principal, disabled principal, malformed input, and a refused Origin all
+return `401 { "error": "invalid_credentials" }` with no cookie. A rate-limited
+attempt returns `429 { "error": "too_many_requests" }` with a standard
+`Retry-After` header; the transport forwards it only when it is an integer
+from 1 to 3600 and never forwards Better Auth's `X-Retry-After`. Timing
+equivalence has **not** been measured.
+
+**Client address.** The transport discards every client-supplied address
+header (`x-forwarded-for`, `x-real-ip`, `forwarded`, `cf-connecting-ip`,
+`true-client-ip`, and similar) and sets `x-dromex-client-ip` from Fastify's
+socket address, with `trustProxy` disabled. Better Auth is configured to read
+only that header. Trusting a reverse proxy is deferred until one exists and
+can be configured to overwrite forwarded headers.
+
+**CSRF boundary.** Better Auth's Origin checks protect sign-in whenever an
+Origin, Referer, Fetch Metadata header, or cookie is present. Sign-out has its
+own DROMEX exact-match Origin check against the trusted origins, because
+Better Auth skips its check when no cookie is sent; a missing, opaque
+(`null`), or untrusted Origin receives `403` before Better Auth is reached. No
+general DROMEX Fastify-level Origin policy exists yet; one is required before
+the first state-changing DROMEX business route.
+
+**Configuration fails closed.** `buildServer` requires explicit
+authentication settings and a database URL. The executable entry point reads
+them once from the environment through a validated boundary whose errors name
+variables, never values. `web/.env.example` leaves the secret empty, so the
+API refuses to start until a real one is set. The local Docker Compose `api`
+service does not yet supply these variables and will not start until it does;
+that file is unchanged.
+
+**Sign-out is security cleanup (Owner decision, 2026-09-13).** It is
+classified `session-cleanup`, a fourth route classification that the
+request-time guard lets through without resolving a session or principal.
+This is deliberate: sign-out only destroys the caller's own authentication
+state and reveals nothing, so a user whose principal is disabled or missing
+must still be able to revoke their session. Better Auth revokes the session
+named by the caller's own signed cookie (never another user's) and expires the
+session cookies. The response is one generic `200 { "signedOut": true }` with
+cookie-clearing headers whether the session was valid, expired, malformed,
+missing, already revoked, or belonged to a disabled or missing principal. A
+failed revocation is reported as `500`, never as success. `GET` is `404`.
+This does **not** widen access anywhere else: a missing or disabled principal
+still receives `401` from `/api/session` and from every `authenticated` route.
+
+### Owner provisioning tooling (Phase 2C checkpoint 3E, disposable databases only)
+
+Status: **implemented and tested against disposable PostgreSQL 18.6 databases
+only. Not approved for real use.** No Owner exists, and none may be created
+until mandatory MFA and recovery are implemented and separately approved
+(DEC-421, DEC-423). Owner readiness enforcement — refusing an initialised
+system that has no Owner, and refusing removal or demotion of the Owner —
+remains **unimplemented**.
+
+*Extended by checkpoint 3F-B, below: the workflow now enrols and verifies
+TOTP, issues recovery codes, requires typed acknowledgements, and records
+`mfa_completed_at`. The command is unchanged and still refuses every run.*
+
+**A local, interactive command; never HTTP.** The Owner is created only by
+`apps/api/src/provisioning/owner-command.ts`, run by a person at a terminal.
+There is no setup route, no temporary bootstrap website, no public
+registration, no default Owner, and no shared credential. A test walks the
+server's import graph and proves no provisioning module is reachable from
+`server.ts`, and the complete route table is asserted unchanged.
+
+- The only accepted input is `--database-url-file <path>` (and `--help`). A
+  password or connection string given as an argument is refused and never
+  echoed; the environment is never read, so it cannot supply either.
+- **Pre-MFA gate.** Every run except `--help` is refused with "Production
+  Owner provisioning is unavailable until mandatory MFA and recovery are
+  implemented and approved", exit status 1, before any file is read, any
+  prompt is shown, or any connection is opened. No flag, environment variable,
+  or hidden switch enables it: enabling it is a reviewed code change in a
+  later, separately approved checkpoint. The service below is exercised only
+  by automated tests against disposable databases.
+- **Hidden prompt** (`terminal-prompt.ts`, Node's own raw-mode TTY only, no
+  dependency). The password and its confirmation echo nothing at all, not
+  even a mask character, so neither the password nor its length reaches the
+  screen. Password-manager paste works, including bracketed-paste markers;
+  backspace and delete work; terminal escape sequences are discarded; Ctrl+C
+  or Ctrl+D cancels, empties the per-character buffer, and restores the
+  terminal. It refuses when input or output is not a terminal, and there is
+  no piped-input fallback. *Honest limit:* a JavaScript string cannot be
+  zeroed, so the completed entry lives until garbage collection.
+
+**Provisioning-only Better Auth instance** (`owner-identity.ts`). It lives
+outside `src/auth/`, reads no environment value, is mounted on no route, and
+is constructed from exactly the runtime options with three differences, each
+required to create the first Owner and nothing else:
+
+1. `disableSignUp: false`, because `signUpEmail` is Better Auth's documented
+   way to create an email/password identity. `autoSignIn` stays `false`, so
+   creation issues no session.
+2. Its session hook admits exactly one kind of session: the one requested to
+   verify an orphaned identity (below), for that identity only, and only
+   while it has no principal. Every other session is refused.
+3. Better Auth's logger is disabled, so a database error carrying row data is
+   never printed to the operator's terminal.
+
+The runtime `createAuthOptions` keeps `disableSignUp: true` in every
+environment and cookie setting, which is asserted.
+
+**The transaction boundary, stated honestly.** Better Auth identity creation
+and the DROMEX Owner principal insert are **not one transaction**. Verified
+2026-09-13 against the installed 1.7.4 source: `signUpEmail` creates the
+`user` and `account` rows inside `runWithTransaction(ctx.context.adapter, …)`;
+the Kysely adapter opens that transaction on a connection it takes from the
+pool it was configured with; and the AsyncLocalStorage store that carries it
+is marked internal in `@better-auth/core`. Better Auth's official
+email/password, server-API, and database documentation (accessed 2026-09-13)
+describes no way to hand `auth.api` a caller-controlled transaction. DEC-426
+and the table in §6 call this mechanism the "bootstrap transaction"; the
+honest description is two commits — Better Auth's, then DROMEX's — made
+recoverable by the workflow below. That is a precision correction of wording,
+not a change of policy.
+
+**Workflow** (`owner-provisioning.ts`):
+
+1. The name, email, password length (15 to 128, measured as Better Auth
+   measures it), and confirmation are validated before any connection opens.
+   The email is trimmed and lower-cased; the password is used exactly as
+   entered, consistent with the existing hashing policy.
+2. `pg_try_advisory_lock` on a fixed key (distinct from the migrator's) is
+   taken on one dedicated connection and held for the whole run. If another
+   run holds it, provisioning refuses immediately and changes nothing.
+3. An existing Owner refuses the run before Better Auth is asked anything.
+4. An existing Better Auth identity with that email that this workflow did
+   not start is refused, so no foreign identity can be adopted. This matters
+   because, with `autoSignIn: false`, Better Auth answers a duplicate
+   sign-up with a synthetic success rather than an error; after creation the
+   returned id is also confirmed against a real row.
+5. A singleton intent row (`dromex_owner_bootstrap`, DROMEX migration `0003`)
+   is written as `pending_identity` before `signUpEmail` is called, then
+   moved to `identity_created` with the new user id.
+6. One DROMEX transaction confirms the identity has no session, inserts the
+   active `is_owner` principal — under the unchanged partial unique index —
+   and deletes the intent. That commit alone makes an Owner.
+
+The intent table stores only state, the normalised email, the user id, and
+timestamps. A `CHECK` allows only the value `TRUE` as its key, another allows
+only the two states, a third ties each state to the presence or absence of
+the user id, and the email must be lower-case. Its foreign key to `user` is
+`RESTRICT`.
+
+**Interruption and orphan reconciliation.**
+
+| Interrupted | Left behind | Retry, same email and password | Retry, different email | Retry, wrong password |
+|---|---|---|---|---|
+| Before Better Auth creation | `pending_identity` intent, no identity | Creates the identity and completes | Refused, nothing changes | Nothing to verify; creates the identity with the password given |
+| After Better Auth creation, before the user id is recorded | `pending_identity` intent and an orphaned identity with no principal | Better Auth verifies the password, then completes | Refused, nothing changes | Refused, nothing claimed |
+| After the user id is recorded, including a failed principal insert (rolled back) | `identity_created` intent and an orphaned identity | Better Auth verifies the password, then completes | Refused, nothing changes | Refused, nothing claimed |
+| After the Owner commit | An Owner; no intent | Refused: an Owner exists | Refused | Refused |
+
+An orphan is claimed only after `auth.api.signInEmail` succeeds for that
+identity. The session that sign-in issues is revoked immediately with
+`auth.api.signOut` using Better Auth's own signed cookie, and the Owner commit
+refuses to proceed if any session for the identity remains. A second Better
+Auth identity is never created to work around an orphan, and an orphan is
+never deleted.
+
+**No DROMEX SQL mutates a Better Auth-owned row.** Provisioning only *reads*
+`user` (by email) and `session` (a count). Identity creation, sign-in, and
+revocation go exclusively through Better Auth's documented server API. This
+is asserted twice: by scanning every provisioning module for mutating SQL
+against Better Auth tables, and by recording every statement sent on
+provisioning's own connections during a real run.
+
+**Email delivery.** Initial Owner creation needs none. Admin invitations and
+self-service password recovery were gated on OQ-161, which is now closed as a
+design decision (DEC-439 through DEC-442, §14A); neither exists yet.
+
+**Known limits, not yet addressed:**
+
+- Verifying an orphan's password calls `auth.api.signInEmail` directly, which
+  Better Auth's HTTP rate limiter does not cover. Reaching it requires local
+  execution and database access, which already exceed what the check
+  protects; it is recorded rather than assumed away.
+- The advisory lock is session-scoped to one connection, while Better Auth
+  works on others. If that connection were lost mid-run, a second run could
+  begin while a Better Auth call was still in flight. Better Auth's unique
+  email, the singleton intent, the post-creation identity confirmation, and
+  the single-Owner index still bound the outcome to at most one identity per
+  email and at most one Owner, but that scenario is not covered by a test.
+- The interactive prompt and the service are each tested, but the command is
+  not yet wired to them; that wiring belongs to the checkpoint that enables
+  real use after MFA.
+- The comment in the already-applied migration `0001` still describes the
+  bootstrap as unimplemented. Applied migrations are never edited (their
+  checksum is enforced); this section supersedes that comment.
+
+Sources, accessed 2026-09-13: Better Auth documentation
+<https://www.better-auth.com/docs/authentication/email-password>,
+<https://www.better-auth.com/docs/concepts/api>, and
+<https://www.better-auth.com/docs/concepts/database>; installed package
+source `better-auth@1.7.4` (`dist/api/routes/sign-up.mjs`, `sign-in.mjs`,
+`sign-out.mjs`, `dist/api/index.mjs`), `@better-auth/core@1.7.4`
+(`dist/context/transaction.mjs`), and `@better-auth/kysely-adapter@1.7.4`
+(`dist/index.mjs`).
+
+### Mandatory MFA and terminal Owner activation (Phase 2C checkpoint 3F-B, disposable databases only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases on exact Node 24.20.0 only. Not production-ready and not approved
+for real use.** The Owner command is unchanged and still refuses every run
+(DEC-435 (6)); no Owner exists. Recovery-code *use* (checkpoint 3F-C),
+break-glass retrieval (3F-D), and password recovery (OQ-161) are not
+implemented. Governing decisions: DEC-434 and DEC-435.
+
+*Extended by checkpoint 3F-C, below: recovery-code sign-in, authenticator
+replacement, three further routes, and the security audit foundation. This
+section remains the record of the 3F-B transport.*
+
+**Exact route surface.** Four authentication routes exist, superseding the
+three-route table of checkpoint 3D:
+
+| Method | Path | Classification |
+|---|---|---|
+| `POST` | `/api/auth/sign-in/email` | `guest-only` |
+| `POST` | `/api/auth/two-factor/verify-totp` | `mfa-challenge` |
+| `POST` | `/api/auth/sign-out` | `session-cleanup` |
+| `GET` | `/api/session` | `authenticated` |
+
+`mfa-challenge` is a fifth route classification: the route consults no
+ordinary session, and must itself require the signed challenge cookie and a
+trusted Origin and refuse to return a session unless the full gate passes.
+Every other Better Auth two-factor path — enable, disable, get-TOTP-URI,
+verify-backup-code, generate-backup-codes, view-backup-codes, send-OTP,
+verify-OTP — and `revoke-sessions` answer the generic 404 without reaching
+Better Auth.
+
+**Two-step sign-in.** For an account with a verified factor, a correct
+password returns `200 { "mfaRequired": true }` and only Better Auth's signed
+challenge cookie (`__Secure-better-auth.two_factor`, `HttpOnly`,
+`SameSite=Lax`, `Max-Age=300`). If Better Auth issues a session instead —
+which it does for an account with no verified factor — the transport revokes
+that session and answers exactly as for a wrong password. The verify route
+requires an exact trusted Origin, a body of exactly `{ "code": "<six
+digits>" }`, and the challenge cookie; it forwards only that cookie, with
+`trustDevice: false`. Before any session reaches the browser, the accepted
+code is recorded against replay and the full gate below runs; a refusal
+revokes the new session and returns `401 { "error": "invalid_code" }`.
+
+**The mandatory MFA gate** runs on every `authenticated` request and at the
+end of every challenge. All five facts are read from the database each time:
+a valid Better Auth session; an active DROMEX principal; Better Auth
+reporting `twoFactorEnabled === true`; a non-null
+`dromex_principal.mfa_completed_at` (DROMEX migration `0004`, no default and
+no backfill); and a session created at or after that moment. Any
+disagreement is the generic `401`.
+
+**No trusted-device bypass.** Better Auth 1.7.4 cannot disable trusted
+devices, so the transport drops any incoming trusted-device cookie, never
+forwards one, always sends `trustDevice: false`, and the plugin's lifetime
+is pinned to one second. A test mints a genuine trusted-device cookie through
+Better Auth's own API, proves it skips TOTP when sent straight to Better
+Auth, and proves the transport still demands the challenge.
+
+**Attempt limits.** `/two-factor/verify-totp` is limited to 5 requests per
+60 seconds per client address in DROMEX-owned storage; Better Auth allows 5
+attempts per challenge; and its account lockout is pinned to 10 consecutive
+failures for 900 seconds, across challenges and addresses. Both limits
+surface as `429 { "error": "too_many_requests" }`.
+
+**Replay protection.** `dromex_totp_replay` (DROMEX migration `0004`) holds
+one row per accepted code per user for 180 seconds, keyed on a SHA-256 marker
+of a fixed label, the user id, and the code — a recognition marker, not
+secret storage, since six digits are enumerable. The primary key makes
+concurrent acceptance of one code impossible, and markers past retention are
+pruned when a code is accepted. It does **not** shorten Better Auth's
+acceptance window of about 90 seconds: an accepted deviation from ASVS 5.0.0
+6.5.5 (DEC-434 (6)).
+
+**Versioned secrets.** `DROMEX_AUTH_SECRETS` holds comma-separated
+`<version>:<secret>` entries. `createAuthOptions` always sets Better Auth's
+`secrets` explicitly, newest version first, and never sets `secret`. Startup
+refuses the retired `DROMEX_AUTH_SECRET` and any of `BETTER_AUTH_SECRETS`,
+`BETTER_AUTH_SECRET`, or `AUTH_SECRET`, which Better Auth would otherwise
+read from the environment itself. New TOTP secrets and recovery codes carry
+the newest version in their `$ba$<version>$` envelope, and data encrypted
+under an older configured version still decrypts.
+
+**Recovery codes.** Ten codes of 24 Crockford Base32 symbols (exactly 120
+bits each) are generated through `customBackupCodesGenerate` and stored
+through `storeBackupCodes: "encrypted"` — reversible encryption, an accepted
+deviation from NIST SP 800-63B Rev. 4 §3.1.2.2 (DEC-435 (2)). No HTTP route
+accepts, shows, or regenerates them in this checkpoint.
+
+**Terminal activation** (`owner-provisioning.ts`, `terminal-prompt.ts`)
+extends checkpoint 3E's workflow after Better Auth proves the password:
+
+1. *No verified factor yet:* TOTP is enabled, which replaces any unverified
+   secret and code set left by an interrupted run. The terminal shows the
+   Base32 secret grouped in fours and the `otpauth://` URI, with a scrollback
+   warning and an instruction to enrol **two** authenticator devices.
+2. *Factor already verified by an interrupted run:* the Owner must pass a
+   TOTP challenge, and the recovery codes are regenerated so that no code an
+   interrupted run displayed stays valid.
+3. At most five TOTP attempts per run; a lockout stops the run.
+4. The operator types `TWO DEVICES ENROLLED`; only then are the ten codes
+   shown, once; the operator types `CODES RECORDED`; the screen is cleared.
+5. Every provisioning session is revoked, then the DROMEX transaction inserts
+   the Owner principal with `mfa_completed_at`.
+
+An interruption at any step leaves no principal, so the runtime session hook
+refuses every web session for that identity. The command is **not** wired to
+this service, by design, until real activation is separately approved.
+
+**Better Auth's `twoFactor` defaults are runtime defaults, not database
+defaults** *(verified 2026-09-14 against the installed source and the
+generated migration)*. The pinned `auth@1.7.4` CLI generated `verified` and
+`failedVerificationCount` as nullable columns with **no PostgreSQL default**.
+Better Auth migration `0002` is committed exactly as generated — a test pins
+its SHA-256 — and DROMEX adds no default, constraint, or trigger to the table,
+because Better Auth owns its tables and their migrations (DEC-431).
+
+The authoritative values are Better Auth's own. Its plugin schema declares
+`verified` defaulting to `true` and `failedVerificationCount` to `0`, both
+with `input: false`; its adapter factory applies those values to every row it
+inserts; and enrolment writes `verified: false` explicitly. That is
+sufficient because Better Auth's adapter is the **only writer** of the table:
+no DROMEX source module writes `twoFactor` with its own SQL (asserted
+statically), and every supported flow — enrolment, re-enrolment, sign-in
+failure, success, lockout, lock expiry, recovery-code regeneration and
+retrieval, and every Owner activation path including interruption and
+resumption — is asserted to leave both columns non-null.
+
+The invariant is security-relevant. The pinned Kysely adapter increments the
+counter as `"failedVerificationCount" + 1`. On PostgreSQL a NULL counter stays
+NULL, the plugin reads it as 0, and the ten-failure lockout **never
+triggers** — even though Better Auth's own source comment says the unguarded
+increment still applies to a null counter. A negative-control test
+demonstrates this on a deliberately corrupted row in a disposable database.
+Consequences:
+
+- Any future break-glass or repair tooling (checkpoint 3F-D) must never
+  insert or rewrite a `twoFactor` row outside Better Auth's API.
+- Every Better Auth upgrade must re-run these tests, because both the
+  declared defaults and the increment behaviour belong to the library.
+- The protection is an enforced invariant, not a database constraint.
+
+**Mutation testing.** 25 targeted mutations, one against each
+security-relevant line described above, were each applied alone to a
+disposable copy of the sources and required to make at least one test fail;
+**25 of 25 were killed**, with sources restored and confirmed unchanged
+after every mutation (`docs/web/testing-and-production-readiness.md`
+records the full result). One genuine gap surfaced during the first pass: a
+mutation making Owner activation request `trustDevice: true` while resuming
+through a TOTP challenge survived, because `owner-identity.ts` discards
+Better Auth's trusted-device cookie and no test inspected the database for
+one. The fix was an added invariant — the Owner activation suite now asserts
+after every test, not only the ones that exercise the challenge-resume path,
+that Better Auth's `verification` table holds no `trust-device-*` row —
+rather than any change to production code, which was already correct.
+
+**Known limits, not yet addressed:**
+
+- The ASVS 6.5.5 and NIST SP 800-63B §3.1.2.2 deviations above.
+- Better Auth's server-only `viewBackupCodes` enforces no session check, and
+  it is not mounted on any route. *(Updated 2026-10-04: three DROMEX callers
+  now exist — web recovery (`auth/recovery-http.ts`, through the server's
+  recovery backend), invitation setup (`invitations/invitation-acceptance.ts`
+  through `enrolment-identity.ts`), and terminal recovery
+  (`provisioning/terminal-recovery.ts` through
+  `terminal-recovery-identity.ts`). Each passes a server-derived user ID —
+  the verified session's user, the invited user after their TOTP-verified
+  session matches, or the Owner resolved after the terminal password check —
+  never one taken from a request. No test yet enforces that rule.)*
+- `dromex_rate_limit` rows are still never pruned.
+- Timing equivalence of failures is not measured, and cookie attributes are
+  verified through Fastify injection rather than a real browser.
+- A lost provisioning lock connection during a Better Auth call (checkpoint
+  3E) remains untested.
+
+Sources, inspected 2026-09-14: installed `better-auth@1.7.4`
+(`dist/plugins/two-factor/index.mjs`, `schema.mjs`, `totp/index.mjs`,
+`backup-codes/index.mjs`, `verify-two-factor.mjs`),
+`@better-auth/core@1.7.4` (`dist/db/adapter/factory.mjs`, `utils.mjs`),
+`@better-auth/kysely-adapter@1.7.4` (`dist/index.mjs`, `incrementOne`), and
+the output of `auth@1.7.4 generate` against a disposable database.
+
+### Owner recovery-code sign-in and authenticator replacement (Phase 2C checkpoint 3F-C, disposable databases only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases on exact Node 24.20.0 only. Not production-ready and not approved
+for real use.** No Owner exists and the Owner command is unchanged and still
+refuses every run (DEC-435 (6)). Terminal recovery for an existing Owner
+(checkpoint 3F-D), password recovery, and every web screen are not
+implemented. Governing decisions: DEC-435 (precision correction) and
+DEC-436.
+
+**Route surface.** Seven routes now exist, superseding the four-route table
+of checkpoint 3F-B:
+
+| Method | Path | Classification |
+|---|---|---|
+| `POST` | `/api/auth/sign-in/email` | `guest-only` |
+| `POST` | `/api/auth/two-factor/verify-totp` | `mfa-challenge` |
+| `POST` | `/api/auth/recovery/verify-code` | `mfa-challenge` |
+| `POST` | `/api/auth/recovery/authenticator/start` | `recovery` |
+| `POST` | `/api/auth/recovery/authenticator/verify` | `recovery` |
+| `POST` | `/api/auth/sign-out` | `session-cleanup` |
+| `GET` | `/api/session` | `authenticated` |
+
+`recovery` is a sixth route classification. A `recovery` route must carry
+its own `recoveryGate`; the authentication guard runs that gate and refuses
+the request unless it admits, and refuses a `recovery` route that has no
+gate at all. Better Auth's own `verify-backup-code`, `disable`, `enable`,
+`get-totp-uri`, `generate-backup-codes`, and `view-backup-codes` paths
+remain the generic 404: DROMEX calls those APIs only from inside its own
+routes.
+
+**1. Entering recovery.** The Owner completes the ordinary password step and
+receives the signed challenge cookie. `verify-code` then requires an exact
+trusted Origin, that cookie, and a body of exactly `{ "code": "…" }`; the
+code is normalised with the Crockford rules and forwarded through Better
+Auth's router to `verify-backup-code` with `trustDevice: false`. That router
+applies DROMEX's 5-per-60-second limit for the path, and Better Auth applies
+the same account lockout it applies to TOTP (10 consecutive failures across
+both, 900 seconds) and consumes the code under its compare-and-swap.
+
+If Better Auth accepts the code, it creates a session. **That session exists
+only on the server until DROMEX has contained it.** In one transaction,
+DROMEX locks the principal, refuses anyone but an active Owner, ends any
+expired recovery, clears `dromex_principal.mfa_completed_at`, inserts the
+recovery state (`dromex_owner_recovery`, DROMEX migration `0006`) bound to
+that session's Better Auth identifier with an expiry of 300 seconds, records
+the session in `dromex_recovery_session`, and writes the audit events. If
+anything fails, the session is revoked and `500 { "error": "internal_error" }`
+is returned without its cookie. Only after that commit does DROMEX revoke
+every other Owner session and return `200 { "recovery":
+"authenticator_replacement_required", "expiresInSeconds": 300 }` with the
+session cookie. A non-Owner's session is revoked and the response is the
+same `401 { "error": "invalid_code" }` as an invalid code.
+
+**2. Why no temporary window reaches a business route.** Three independent
+controls, each sufficient on its own:
+
+1. The session token is held only by the server until the containment
+   transaction commits.
+2. The ordinary gate refuses every session while `mfa_completed_at` is null,
+   and recovery clears it for the Owner before releasing anything.
+3. The ordinary gate refuses every session listed in
+   `dromex_recovery_session`, permanently, including after MFA is complete
+   again.
+
+Business routes do not exist yet, so the tests register stand-in routes for
+projects, reports, finance, settings, backups, and accounts with the
+`authenticated` classification every real one will carry, and prove the
+recovery session is refused on each, including while replacement requests
+run concurrently.
+
+**3. The recovery state** allows at most one open recovery per Owner and per
+session (partial unique indexes), a lifetime of at most five minutes
+(a database check constraint), and only these steps: `code_accepted` →
+`replacement_started` → `enrolment_started` → `completed`, or `failed`,
+`expired`, or `abandoned`. Every step re-reads the Better Auth session, the
+recovery bound to exactly that session, its step and expiry on the
+database's own clock, and the principal (active, Owner, `mfa_completed_at`
+null). An expired recovery is ended and its session revoked on the next
+request that touches it. A disabled or non-Owner principal ends it. An
+out-of-order request is refused without side effects.
+
+**4. Replacement.** `start` requires `{ "password": "…" }`, claims
+`code_accepted` → `replacement_started` atomically (so concurrent starts
+cannot both proceed), and calls Better Auth's `disableTwoFactor`, which
+removes the old secret and every old recovery code and rotates the session,
+then immediately `enableTwoFactor`. It binds the recovery to the rotated
+session, records that session as a recovery session, and returns `200 {
+"totpUri", "manualEntrySecret" }` with `Cache-Control: no-store`. The
+recovery codes `enableTwoFactor` returns are never shown. A wrong password
+ends the recovery with the old factor intact (`401 { "error":
+"recovery_failed" }`). Because Better Auth does not disable a factor
+atomically, any other failure re-reads `twoFactorEnabled` from the database
+and treats a factor that is gone as disabled, whatever the response said.
+
+`verify` requires `{ "code": "<six digits>" }`, reserves one of five attempts
+atomically, and forwards the code through Better Auth's router to
+`verify-totp`, which applies the 5-per-60-second limit. The fifth wrong code
+ends the recovery. On success Better Auth enables the factor and rotates the
+session; DROMEX records the accepted code in `dromex_totp_replay`, reads the
+new codes through Better Auth's server-only `viewBackupCodes`, and only then,
+in one transaction, sets `mfa_completed_at`, ends the recovery as completed,
+and records the final session as a recovery session. It then revokes every
+Owner session and returns `200 { "recoveryCodes": [ten codes],
+"signInRequired": true }` with `Cache-Control: no-store` and expired session
+cookies. Ordinary access returns only through a fresh password-and-TOTP
+sign-in.
+
+**5. Containing the disabled period.** Between `disableTwoFactor` and a
+verified new factor, the Owner has no verified factor. Ordinary access is
+refused throughout by `mfa_completed_at` being null, by the recovery-session
+list, and by Better Auth reporting `twoFactorEnabled` false. If the
+replacement is abandoned (sign-out), expires, fails five times, or fails at
+any later step, nothing is restored or re-enabled: the recovery ends,
+`terminal_recovery_required` is audited, and business access stays blocked.
+With no verified factor the password step issues no challenge, so no web
+path remains; the Owner needs terminal recovery, which is checkpoint 3F-D
+(DEC-437, described below; implemented on disposable databases, not enabled).
+
+**6. Security audit foundation** (`dromex_audit_event`, DROMEX migration
+`0005`; `src/auth/security-audit.ts`). Events: recovery code accepted and
+rejected, recovery session created, other sessions revoked, replacement
+started, old factor disabled, new TOTP rejected and verified, replacement
+completed and failed, recovery expired and abandoned, recovery sessions
+revoked, and terminal recovery required. Columns: event type from a closed
+list, outcome, actor user id and a name snapshot, recovery reference, a
+reason matching `^[a-z][a-z_]{0,63}$`, a revoked-session count, and a client
+address matching `^[0-9A-Fa-f:.]{1,45}$`. There is no free-text or JSON
+column. The writer refuses any event with an unknown type, a missing or
+extra property, or a value outside those shapes before a statement is sent,
+and its errors never repeat a value. A rejected code is recorded with no
+actor, because the transport cannot prove whose challenge it was.
+
+Protection, stated plainly: PUBLIC holds no UPDATE, DELETE, or TRUNCATE
+privilege, and triggers reject all three. That stops an ordinary application
+defect. It does **not** stop the table owner or a database administrator,
+who can disable the triggers or alter the table, and the least-privilege
+runtime role DEC-429 and DEC-430 require is not provisioned yet, so the
+application currently connects as the table owner.
+
+**Known limits, not yet addressed:**
+
+- An abandoned replacement after the old factor is disabled can be recovered
+  only by terminal recovery (3F-D, DEC-437), whose command is not enabled.
+- An expired recovery is ended when a request next touches it (the recovery
+  session, a new recovery for the same Owner, or sign-out). An Owner who
+  simply walks away produces no expiry event until then.
+- If the final response is lost after completion, the new recovery codes
+  were never seen; the new authenticator still works for ordinary sign-in.
+- Every recovery-code attempt, including a malformed or non-string code and
+  a request with no challenge, passes Better Auth's rate limiter (same key,
+  rule, and PostgreSQL storage) before any rejection is audited. A malformed
+  code is never forwarded: the request carries no code, is counted, and fails
+  Better Auth's body schema without reaching verification, so it does not
+  count toward the account lockout. A rate-limited or locked-out attempt is
+  never audited, and a request without a challenge is limited but not
+  audited, so at most five `recovery_code_rejected` rows can be written per
+  client address per 60 seconds. A distributed caller with many addresses
+  can still add five rows per address.
+- The ordinary gate now performs one additional indexed lookup per request.
+- Better Auth's official documentation says `verifyBackupCode`'s
+  `trustDevice` defaults to true; the installed 1.7.4 source trusts a device
+  only when it is explicitly true. DROMEX always sends `false`, so neither
+  reading applies.
+
+Sources, inspected 2026-09-14: installed `better-auth@1.7.4`
+(`dist/plugins/two-factor/index.mjs` — `enableTwoFactor`,
+`disableTwoFactor`; `backup-codes/index.mjs` — `verifyBackupCode`,
+`viewBackupCodes`; `totp/index.mjs` — `verifyTOTP`; `verify-two-factor.mjs`;
+`dist/api/routes/session.mjs` — `sensitiveSessionMiddleware`,
+`revokeSessions`, `revokeOtherSessions`, `getSession`;
+`dist/api/rate-limiter/index.mjs`), and
+<https://www.better-auth.com/docs/plugins/2fa>.
+
+### Terminal emergency Owner recovery (Phase 2C checkpoint 3F-D, disposable databases only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases on exact Node 24.20.0 only. Not production-ready, not enabled, and
+not approved for real use.** The command refuses every run, no Owner exists,
+and the Owner activation command is unchanged and still refuses every run.
+Governing decision: DEC-437, which refines DEC-423 and realises DEC-435 (5).
+Password recovery is designed (DEC-441, §14A) but not implemented: this
+procedure requires the current password.
+
+**Modules.** All live under `src/provisioning/`, which nothing the server
+imports can reach (a static boundary test), and no HTTP route was added (the
+complete route table is asserted unchanged).
+
+| Module | Role |
+|---|---|
+| `terminal-recovery.ts` | The recovery service: checks, path selection, containment, completion |
+| `terminal-recovery-identity.ts` | The seam to Better Auth's server API, through a terminal-only instance |
+| `owner-mfa-reset.ts` | The DEC-437 exception (W1 and W2), the version and schema pin, the factor fingerprint |
+| `terminal-recovery-prompt.ts` | The interactive terminal: hidden entries, one-time displays, typed confirmations |
+| `recovery-config.ts` | File-path-only configuration with owner-only permission checks |
+| `owner-recovery-command.ts` | The entry point, which refuses every run |
+| `terminal-recovery-errors.ts` | Fixed error messages; causes are dropped |
+
+**1. Before the password — nothing changes but the audit trail.** A run takes
+a PostgreSQL advisory lock (a distinct key) on one connection for its whole
+life; a second run is refused and audited without an actor. It then refuses
+unless Better Auth reports exactly version 1.7.4, the columns and types of
+`user`, `session`, and `twoFactor` match the verified set exactly, and the
+DROMEX migration ledger matches the migration list. It selects owners with
+`LIMIT 2` and refuses none, several, or a disabled one. It refuses when five
+`terminal_password_rejected` events were audited for the Owner in the last 15
+minutes. An open run record found while this process holds the lock belongs
+to a process that died, so it is ended as `interrupted` and audited. The
+operator sees the environment and a masked email, and must type the full
+email before the password is asked for.
+
+**2. Password proof.** One attempt per run, through Better Auth's
+`signInEmail` on a terminal-only instance built from the runtime options
+(public sign-up still disabled, logger disabled) whose session hook admits
+only the target Owner while it is an active Owner principal. Better Auth
+checks the password before creating anything; for an enabled factor the
+two-factor plugin deletes that session and returns only a challenge, so a
+challenge proves the password without granting a session. A rejection is
+audited and the run ends; no DROMEX state has changed.
+
+**3. Containment.** One transaction then locks the principal, ends any open
+web recovery as `abandoned` (audited with reason
+`terminal_recovery_superseded`), clears `mfa_completed_at`, records the run
+(`dromex_terminal_recovery`, DROMEX migration `0007`, at most one open per
+Owner), and audits `terminal_identity_verified`. From here, business access is
+refused by `mfa_completed_at` being null; by `dromex_terminal_recovery_session`,
+where every Better Auth session the run obtains is recorded before it is used
+and which the ordinary gate now refuses permanently alongside
+`dromex_recovery_session`; and, while the factor is disabled, by Better Auth
+reporting `twoFactorEnabled` false. Web recovery's `begin` refuses while a
+terminal run is open.
+
+**4. Path selection.**
+
+| Better Auth state after the password | Operator | Path |
+|---|---|---|
+| No enabled factor (absent, unverified, or flag off with a leftover row) | — | Supported replacement |
+| Enabled factor | Types `AUTHENTICATOR AVAILABLE` and proves a code | Supported replacement |
+| Enabled factor, a usable stored code | Types `NO AUTHENTICATOR AVAILABLE`, then `SHOW ONE CODE` | Supported retrieval |
+| Enabled factor, no usable stored code, or codes encrypted under a retired secret version | Types `NO AUTHENTICATOR AVAILABLE`, then `RESET OWNER MFA` and an incident reference | DEC-437 reset, then supported replacement |
+
+"Retired secret version" is decided without decrypting: the stored codes'
+Better Auth envelope names a version that is not configured. Any other
+decryption failure fails closed and never leads to a reset.
+
+**5. Supported replacement.** `disableTwoFactor` removes any old secret and
+every old code and rotates the session; `enableTwoFactor` creates the new,
+unverified factor through Better Auth's adapter; the secret and URI are shown
+once. At most five codes from the new authenticator are accepted. Unlike
+checkpoints 3F-B and 3F-C, which record a code after Better Auth accepts it,
+terminal recovery claims each code in `dromex_totp_replay` **before** Better
+Auth sees it, so a replayed code can never enable the factor; a malformed,
+replayed, or incorrect code is audited as `terminal_new_totp_rejected`. After
+the two-device acknowledgement, `generateBackupCodes` issues ten new codes —
+only now that the new authenticator is proven, and on every run, so no set an
+interrupted run showed stays valid — shown once and acknowledged. Every Owner
+session is revoked through `revokeSessions`, counted before and after, and
+audited. The completion transaction then locks the principal and the run and
+refuses unless the principal is an active Owner with `mfa_completed_at` null,
+the run is at `factor_verified`, **no Owner session remains**, the Owner has
+exactly one verified factor, and no web recovery is open; only then does it
+set `mfa_completed_at` and end the run. Normal password-and-TOTP sign-in is
+required afterwards.
+
+**6. Supported retrieval.** After the typed confirmation, one canonical unused
+code is read through server-only `viewBackupCodes`; the run is ended as
+`code_retrieved` and `recovery_code_retrieved` is audited in one transaction
+**before** the code is displayed once, with a sensitivity warning and the
+instruction to use it in web recovery. `mfa_completed_at` stays null, so the
+Owner must finish through DEC-436 web recovery.
+
+**7. The DEC-437 reset.** After the reset warning, the exact phrase, and a
+valid incident reference, `resetOwnerFactor` runs one transaction:
+`lock_timeout` 5 s and `statement_timeout` 15 s; the single Owner principal
+locked with `LIMIT 2 FOR UPDATE` and re-checked; the Owner's `user` row and
+any factor row locked; the enabled flag, the factor-row count (at most one),
+and a SHA-256 fingerprint of the flag and stored ciphertext compared with the
+state classified before the confirmations; `mfa_completed_at` cleared; then
+exactly:
+
+```sql
+-- W1: must change exactly one row
+UPDATE "user" SET "twoFactorEnabled" = FALSE, "updatedAt" = CURRENT_TIMESTAMP WHERE id = $1 AND "twoFactorEnabled" = TRUE
+-- W2: must change exactly the locked factor-row count (0 or 1)
+DELETE FROM "twoFactor" WHERE "userId" = $1
+```
+
+The run moves to `factor_reset` with path `reset` and the incident reference,
+and `owner_emergency_mfa_reset` and `terminal_old_factor_removed` are written
+in the same transaction. Any mismatch, count difference, or error rolls all of
+it back (`factor_changed`, `not_eligible`, or `failed`). The run then signs in
+again — now an ordinary session — and continues with supported replacement.
+No DROMEX SQL inserts or rewrites a `twoFactor` row; the static allowlist test
+permits exactly these two statements in exactly this module and nothing
+anywhere else.
+
+**8. Failures, crashes, and reruns.** Any failure or cancellation after the
+password ends the run as `failed` (or `abandoned` for a missing confirmation
+or Ctrl+C), revokes the run's newest session, audits the outcome with a
+reason code, and restores nothing.
+
+| Interrupted at | State left | A later run |
+|---|---|---|
+| Before the password | Unchanged | Starts normally |
+| After the password, before any factor change | Factor intact, access blocked | Reclassifies; may retrieve, replace, or reset |
+| After a committed reset | No factor, access blocked | Supported replacement; never a second reset |
+| After enrolment started | Unverified factor | `enableTwoFactor` replaces it |
+| After the new code verified, before or after codes shown | New factor, codes unseen or seen | Operator proves the new authenticator; codes are rotated |
+| A process killed while holding the lock | Open run record | Ended as `interrupted` and audited, then a normal run |
+
+**9. Secrets.** The password, codes, and confirmations are read only through
+the raw-mode prompt, which echoes nothing for hidden entries and refuses a
+non-terminal. Arguments are two paths; anything secret-bearing or naming an
+account is refused without being echoed. Better Auth's logger is disabled.
+Every error leaving the service is a fixed `TerminalRecoveryError`; the
+underlying cause — which may carry a password, as a test deliberately
+arranges — is dropped. The audit writer refuses any value outside its
+structured shape. Only three things are ever displayed: one retrieved code,
+the new secret and URI, and the new codes, each once, after a warning that
+scrollback and recordings may retain them.
+
+**10. Audit events.** `terminal_recovery_requested`,
+`terminal_identity_verified`, `terminal_password_rejected`,
+`terminal_recovery_concurrent_refused`, `terminal_stale_recovery_cleared`,
+`terminal_recovery_refused` (reasons `not_eligible`, `version_mismatch`,
+`schema_mismatch`, `throttled`, `not_confirmed`), `recovery_code_retrieved`,
+`owner_emergency_mfa_reset`, `terminal_replacement_started`,
+`terminal_old_factor_removed` (`removed` or `absent`),
+`terminal_new_totp_rejected`, `terminal_new_totp_verified`,
+`terminal_recovery_codes_issued`, `terminal_sessions_revoked` (with a count),
+`terminal_recovery_completed`, `terminal_recovery_failed`, and
+`terminal_recovery_abandoned`. Migration `0007` replaces only the event-type
+check (the earlier list is carried over unchanged) and adds two constrained
+columns, `terminal_recovery_id` and `incident_reference`
+(`^INC-[0-9]{8}-[0-9]{2}$`). The append-only protection is unchanged, and so
+is its limit: the table owner and database administrators can still disable
+the triggers or alter the table.
+
+**11. Configuration.** `recovery-config.ts` reads a JSON configuration file
+(environment, base URL, trusted origins, versioned secrets, optional
+insecure-cookie flag — exactly these keys) and a one-line PostgreSQL URL file.
+Each must be a non-empty regular file under a size limit and, on POSIX,
+carry no group or other permission bits; on Windows the file ACL governs.
+The configuration then passes the same `createAuthOptions` validation the API
+applies. It is tested with synthetic files only and is not wired to the
+command, which refuses every run.
+
+**Known limits, not yet addressed:**
+
+- The command is not enabled, and production secret delivery is undecided.
+- Identity proof on this path is server authority plus the current password;
+  possession of a second factor is not checked for the reset. Anyone with
+  privileged database access and the secrets already has substantial
+  control.
+- Re-enrolment is not atomic with the reset: Better Auth's calls run in its
+  own transactions. Containment and reruns handle the gap.
+- The operator's operating-system identity is not recorded, and there is no
+  second-person approval.
+- A challenge record from the password step lingers until Better Auth expires
+  it (300 seconds).
+- Terminal scrollback and recordings can retain the displayed secrets.
+- A JavaScript string holding the password cannot be zeroed.
+- The table owner and database administrators remain outside the audit
+  table's tamper resistance.
+
+Sources, inspected 2026-09-15: installed `better-auth@1.7.4`
+(`dist/plugins/two-factor/index.mjs` — `enableTwoFactor`, `disableTwoFactor`,
+the sign-in challenge hook; `backup-codes/index.mjs` — `viewBackupCodes`,
+`generateBackupCodes`; `totp/index.mjs` — `verifyTOTP`;
+`verify-two-factor.mjs`; `dist/api/routes/sign-in.mjs`;
+`dist/api/routes/session.mjs`; `dist/crypto/index.mjs` — `parseEnvelope`,
+`symmetricDecrypt`). Online documentation was not consulted for this
+checkpoint, which was restricted to the repository and the installed source.
+
 ## 12. PostgreSQL security and the row-level-security decision
 
 **Row-level security will not be used in the first release (DEC-429).**
@@ -615,6 +1550,29 @@ and `DELETE` by database grant for the application's own runtime role
 (§12) — an independent safeguard against an application defect, not a
 guarantee against a privileged database administrator.
 
+*Implemented foundation, 2026-09-14 (checkpoint 3F-C, DEC-436).* What exists
+is deliberately narrower than the full design above, and differs from it in
+four stated ways:
+
+- The table is `dromex_audit_event` (DROMEX migration `0005`), carrying only
+  the columns recovery needs: `id` (`bigint` identity rather than
+  `uuidv7`), `occurred_at`, `event_type` from a closed list, `outcome`,
+  `actor_user_id`, `actor_name` (the snapshot), `recovery_id`, a constrained
+  `reason`, `revoked_session_count`, and `client_address`.
+- There is **no `detail_json`, `user_agent`, or any other free-form column**,
+  on purpose: a free-form column is exactly where a secret could be written.
+  Target, project, permission, and correlation columns will be added by
+  forward migrations when the events that need them exist.
+- Only the recovery events listed in §11, checkpoint 3F-C, are recorded so
+  far. Sign-in, ordinary TOTP challenges, sign-out, and every account,
+  permission, and business event are not audited yet.
+- The least-privilege runtime role is not provisioned, so the grant-level
+  protection described above does not exist yet. In its place, PUBLIC holds
+  no `UPDATE`, `DELETE`, or `TRUNCATE` privilege and triggers reject all
+  three. That stops an ordinary application defect; the table owner — which
+  the application currently is — or any database administrator can disable
+  the triggers.
+
 ## 14. Owner recovery: the verified design
 
 **This section records an approved decision (DEC-423), not an open
@@ -635,30 +1593,33 @@ phase; *running* it against production is an Owner action.
 
 ### What is verified capability (§5) versus what DROMEX must build
 
-Better Auth's `twoFactor` plugin generates 10 single-use backup codes at
-enrolment, deletes and reissues them on regeneration, and requires a fresh
-session to view them — all verified. It does **not** provide: hashed
-storage of those codes (the default is plaintext; the strongest built-in
-option is reversible encryption in every configuration, including a custom
-encryptor — never a one-way hash, confirmed by checking the documented
-`storeBackupCodes` values directly, since no `"hashed"` value or hash-based
-verification path exists), any admin-side function to reset another user's
-TOTP enrolment, or any concept of a protected super-admin role. Those gaps
-are exactly what the Owner recovery design has to close, because the Owner
-has no one above them to perform an admin-side reset.
+Better Auth's `twoFactor` plugin generates single-use backup codes at
+enrolment and overwrites them on regeneration — verified. *Corrected
+2026-09-14 against the installed 1.7.4 source:* storage **defaults to
+encrypted**, not plaintext, and the server-only `viewBackupCodes` API
+**enforces no session or freshness check** — it returns a user's unused
+codes for a bare user ID, so its authority is whatever authority the calling
+server code has. Better Auth does **not** provide: hashed storage of those
+codes (every configuration, including a custom encryptor, is reversible,
+and verification decrypts and compares), any admin-side function to reset
+another user's TOTP enrolment, or any concept of a protected super-admin
+role. Those gaps are what the Owner recovery design has to close, because
+the Owner has no one above them to perform an admin-side reset.
 
 ### The design
 
-1. **Recovery codes, stored outside the application.** At Owner setup, the
-   ten Better Auth backup codes are displayed once, with an explicit
-   acknowledgement step, and the Owner prints or writes them and stores
-   them in a sealed physical location outside any computer system — a
-   safe or an equivalent the Owner controls. `storeBackupCodes` is
-   configured to `"encrypted"` rather than the default `"plain"` (DEC-423).
-   This is recorded honestly as **encryption, not hashing** — reversible
-   with the Better Auth secret, which is a real limitation Better Auth
-   does not offer a way around, not a claim that it is equivalent to a
-   one-way hash. The design does not depend on the database copy for
+1. **Recovery codes, stored outside the application, with redundancy.** At
+   terminal Owner activation, ten recovery codes of 24 Crockford Base32
+   symbols (exactly 120 bits each) are displayed once, only after TOTP
+   verification and a typed acknowledgement, followed by a second typed
+   acknowledgement (DEC-435). The Owner enrols **two authenticator devices**
+   and keeps **two sealed paper copies** of the codes in **separate physical
+   locations**, outside any computer system. `storeBackupCodes` is pinned to
+   `"encrypted"` under versioned secrets. This is recorded honestly as
+   **encryption, not hashing** — reversible with the Better Auth secret, an
+   accepted deviation from NIST SP 800-63B Rev. 4 §3.1.2.2 that Better Auth
+   offers no way around, not a claim that it is equivalent to a one-way
+   hash. The design does not depend on the database copy for
    Owner recovery in any case, because a database compromise should not
    also be a recovery-path compromise: the codes' *authoritative* copy,
    for Owner-recovery purposes, is the sealed physical copy, never the
@@ -666,14 +1627,53 @@ has no one above them to perform an admin-side reset.
 
 2. **A documented, tested, narrowly scoped break-glass administrative
    procedure** — not ad hoc manual SQL run by hand at the moment of need —
-   for the case where the Owner has lost both the authenticator device and
-   the sealed codes. Because Better Auth provides no admin-side TOTP-reset
-   function and `twoFactor.disable()` requires an existing valid session
-   the Owner would not have, closing this gap requires direct
-   administrative action against the database. The production
-   implementation of that action must be a **version-controlled
-   administrative command or runbook**, reviewed and stored in this
-   repository like any other operational tooling, that:
+   for the case where the Owner has lost both authenticator devices and
+   both sealed copies of the codes.
+
+   *Refined 2026-09-14 (DEC-435), following read-only research Checkpoint
+   3F-A3.* The **primary** break-glass method is **supported retrieval, not
+   clearing MFA**: a version-controlled local command selects the single
+   Owner and calls Better Auth's documented, server-only `viewBackupCodes`
+   API to display **one unused recovery code**. The Owner then signs in
+   normally with password, challenge, and that code, and immediately
+   replaces the authenticator, which issues a new code set and invalidates
+   every code the database copy could reveal. No Better Auth-owned row is
+   written by DROMEX SQL.
+
+   *Precision correction, 2026-09-14 (DEC-435, DEC-436).* This paragraph
+   previously said that MFA is never disabled. That is not achievable
+   through Better Auth 1.7.4's supported APIs: `enableTwoFactor` refuses an
+   account that already has a verified factor, so replacing an
+   authenticator requires `disableTwoFactor` — which removes the old secret
+   and every old recovery code — before `enableTwoFactor` can enrol the new
+   one. **Better Auth therefore temporarily disables the old factor during a
+   supported replacement.** What holds instead is that **ordinary business
+   access is never available while the Owner lacks a verified factor**, and
+   that a replacement abandoned, expired, or failed after the old factor is
+   disabled restores and re-enables nothing, keeps business access blocked,
+   and requires terminal recovery. The restricted web recovery flow that
+   contains this period is described in §11, checkpoint 3F-C.
+
+   It works only while an
+   unused code exists and the secret version that encrypted it is still
+   configured. A **version-controlled direct database reset** of the
+   Owner's factor remains only an **unimplemented, conditional last
+   resort** for when retrieval cannot work, requiring **separate explicit
+   Owner approval** as an exception to the rule against mutating Better
+   Auth-owned rows; where a property below refers to clearing MFA, it
+   applies only to that fallback.
+
+   *Implemented 2026-09-15 (DEC-437, Checkpoint 3F-D), on disposable databases
+   only and not enabled.* Both now exist in one terminal command. Supported
+   retrieval of one code is preferred; the reset is narrowed to two exact
+   operations (turning the Owner's factor flag off and removing the Owner's
+   factor row) and is permitted only when supported replacement and
+   retrieval are both impossible. The command verifies the current password
+   first and completes re-enrolment in the same run instead of at the next
+   login, following DEC-434. See §11, checkpoint 3F-D. The production
+   implementation must be a
+   **version-controlled administrative command or runbook**, reviewed and
+   stored in this repository like any other operational tooling, that:
 
    - **targets exactly one protected Owner account** — it must not accept
      an arbitrary user ID as a parameter, or otherwise be usable against
@@ -716,11 +1716,11 @@ has no one above them to perform an admin-side reset.
    reached for casually.
 
 3. **The single-Owner rule is untouched.** Nothing in this design creates a
-   second Owner-equivalent account, permanently or temporarily. The
-   database constraint from DEC-426 continues to guarantee exactly one row
-   with `is_owner = true` throughout, and the break-glass procedure above
-   never creates, promotes, or substitutes a second account to work around
-   that constraint.
+   second Owner-equivalent account, permanently or temporarily. The database
+   constraint from DEC-426 continues to guarantee **at most** one row with
+   `is_owner = true` throughout (see §6 for why "at most" is the precise
+   word), and the break-glass procedure above never creates, promotes, or
+   substitutes a second account to work around that constraint.
 
 ### What this deliberately does not decide
 
@@ -732,6 +1732,1319 @@ and tests it, not for this documentation pass. What is decided now is the
 shape: physical-custody codes as the first line, a version-controlled,
 tested, transactional, audited administrative procedure as the last
 resort, and the single-Owner rule never bent to provide either.
+
+## 14A. Transactional email, Admin invitations, and password reset
+
+Status: **approved design (DEC-439 through DEC-442, closing OQ-161,
+2026-09-16); the provider-neutral email transport foundation is
+implemented locally (checkpoint 4A), and Owner-side Admin invitation
+issuance (checkpoint 4B1), restricted Admin invitation acceptance
+(checkpoint 4B2, DEC-444), and password reset with the common-password
+blocklist (checkpoint 4C, DEC-487, DEC-488) are implemented against
+disposable databases only (below). Nothing is production configured or
+physically verified.** No real reset, invitation, account, Resend account,
+API key, DNS record, or secret file exists, and no email has been sent; the
+running server reads email configuration since checkpoint 4D (DEC-489), but
+no provider is configured, so every real deployment runs disabled. Owner
+account and session management (checkpoint 4E, DEC-490) is implemented against
+disposable databases only (below); of the rest of the Accounts and Sessions
+phase (§23), runtime Owner readiness enforcement has not started. The Owner
+activation command and the terminal recovery command are unchanged and still
+refuse every run.
+
+**Owner activation gate (DEC-443).** Closing OQ-161 by design does not
+unblock real Owner activation. The Owner activation command may be enabled
+only after the password-reset flow is implemented and verified (enumeration
+resistance, token lifecycle, session revocation, MFA preservation, auditing,
+failure behaviour); Resend is configured through the secret-file mechanism;
+the sending domain has valid SPF, DKIM, and DMARC; a monitored `Reply-To`
+mailbox exists; a real invitation or controlled test message is delivered; a
+complete password-reset recovery is physically rehearsed; and enabling the
+command is separately and explicitly approved. Local tests and documentation
+alone never satisfy this gate. The terminal recovery command stays
+separately disabled.
+
+The labels below follow §2: **verified** means fetched from official
+documentation, or read directly from the installed package source, on the
+date given.
+
+### Provider and integration (DEC-439)
+
+| Aspect | Approved design |
+|---|---|
+| Provider | Resend. Postmark is the documented fallback; activating it is a later reviewed operational change, never an automatic switch |
+| Rejected | A self-hosted SMTP server on the Contabo VPS; an ordinary mailbox SMTP account as the primary mechanism |
+| Plan | Resend Free if its then-current terms permit DROMEX's business use (**unverified; operational check**), otherwise Resend Pro with no architectural change |
+| Transport | Resend's HTTPS API through Node 24's built-in `fetch`; no provider SDK |
+| Interface | One small provider-neutral DROMEX email interface. Planned implementations: Resend production transport; deterministic capture transport (tests and disposable development only); disabled transport that fails closed when email is not configured |
+| Retries | At most three attempts within two minutes, all with the same idempotency key |
+| Webhooks | None initially; no inbound webhook route. Bounces and complaints are reviewed in the Resend dashboard |
+| Delivery status | Advisory only. It never activates an account, validates a token, or changes authentication state; PostgreSQL remains authoritative |
+| Tracking | Open tracking, click tracking, pixels, advertising, and remote images disabled |
+| Sender | `DROMEX <no-reply@notify.fakihbrothers.com>` on a dedicated notification subdomain of the DEC-409 domain; `Reply-To` a monitored company mailbox (exact mailbox and DNS values are operational setup) |
+| Outage | Existing password-plus-TOTP sign-in is unaffected; invitation and reset emails fail closed; the public reset response stays generic |
+
+**Secret delivery and handling.** The only provider credential is a Resend
+API key with sending-only permission, restricted to the notification domain.
+In production it is supplied as a Docker Compose secret backed by a
+tightly permissioned file on the host, mounted into the API container under
+`/run/secrets/`. The API receives only the path to that file through its
+validated configuration boundary, never the key as an ambient environment
+variable, and errors name the setting, never its value. The key is never
+logged, displayed, audited, or returned. **Claude never reads or creates the
+real secret file; the Owner creates it on the VPS.** Local development and
+automated tests use no key at all: they run the capture or disabled
+transport.
+
+| Procedure | Steps (Owner-performed) |
+|---|---|
+| Creation | Create the Resend account with account-level two-factor protection; verify the notification subdomain; create a key with sending-only permission restricted to that domain; write it once into the secret file; restrict the file to the account the API container reads it as |
+| Rotation | Create a new restricted key; replace the file contents; restart the API; confirm one real delivery to a company mailbox; revoke the old key |
+| Revocation | Revoke the key in the Resend dashboard. Sending then fails closed; sign-in is unaffected |
+| Incident (suspected key exposure) | Revoke immediately; create and install a new key; review Resend's email log (retained 30 days) for messages DROMEX did not send; review DMARC reports for the domain; record the incident in the security audit and incident record |
+| Least privilege | Sending-only permission, one domain, one key per environment, no key in development or tests, no key in any image layer, repository, document, or log |
+
+### Admin invitations (DEC-440)
+
+Owner-only creation, resend, and cancellation; no public signup. The
+recipient email is stored normalized, and at most one invitation per
+normalized email may be pending. Each invitation carries a single-use
+256-bit random token; PostgreSQL stores only its SHA-256 hash in a
+DROMEX-owned table, never Better Auth's (DEC-431). It expires after 24
+hours. Resending issues a new token and immediately supersedes the old one.
+The Owner's screen never shows a transferable link.
+
+```mermaid
+flowchart TD
+  A["Owner creates invitation"] --> B["Hash stored; email handed to provider"]
+  B --> C{"Link opened within 24 hours,<br/>latest token, not cancelled?"}
+  C -- no --> X["One generic 'link not valid' response"]
+  C -- yes --> D["Restricted, inactive principal created"]
+  D --> E["Password set under the existing policy"]
+  E --> F["Restricted web TOTP enrolment;<br/>recovery codes issued once"]
+  F --> G["Principal activated;<br/>every session revoked"]
+  G --> H["Fresh password + TOTP sign-in"]
+```
+
+**Refinement of DEC-434.** The terminal-only initial setup rule remains for
+the protected Owner. Invited Admins enrol TOTP through a restricted web flow
+that reaches only its own enrolment steps, following the containment pattern
+of DEC-436. The DEC-434 authentication gate is unchanged, so no business
+route is reachable before enrolment completes.
+
+### Password reset (DEC-441)
+
+Available to the Owner, Admins, and future enabled users. Tokens are
+single-use, stored only as a hash, and expire after 30 minutes; a new request
+supersedes older outstanding tokens. The response is identical for known,
+unknown, disabled, and rate-limited addresses, and timing is **measured**, not
+assumed. A disabled account gets no email. Success never signs the user in,
+revokes every session for that user, and sends a password-changed notification.
+MFA is never removed, bypassed, or replaced: the next sign-in requires the
+password and TOTP. Rate limits apply by account and by network source.
+
+**Owner eligibility and residual risk.** The Owner may reset by email
+because mailbox control alone still cannot pass TOTP. Someone who controls
+the Owner's mailbox can still change the Owner's password and cause a
+**nuisance lockout** without gaining access; this is accepted, made visible
+by the password-changed notification and the audit, and recorded in §21.
+
+**Better Auth 1.7.4 behaviour this design must correct** (verified by reading
+the installed package source, `better-auth@1.7.4`
+`dist/api/routes/password.mjs`, `dist/db/internal-adapter.mjs`,
+`dist/db/verification-token-storage.mjs`, and
+`dist/context/create-context.mjs`, 2026-09-16; not re-checked against its
+documentation):
+
+| Better Auth 1.7.4 behaviour | Required DROMEX handling |
+|---|---|
+| Reset tokens are stored as plaintext verification identifiers by default | Configure its hashed verification-identifier storage (SHA-256) for reset tokens |
+| A new request does not invalidate earlier reset tokens | DROMEX enforces supersession without writing Better Auth-owned rows (DEC-431) |
+| Other sessions survive a reset unless `revokeSessionsOnPasswordReset` is enabled, and revocation runs after the password update, not in the same transaction | Enable it; verify revocation and fail closed with an audit event if it does not complete |
+| The request waits for the email send for a real account unless a background-task handler is configured | Dispatch the send so that response timing does not depend on whether the account exists; measure it |
+| Its reset link is a GET callback that redirects with the token in a query string | Never expose that route; DROMEX builds its own fragment link (DEC-442) |
+| Unknown addresses already receive the same message as known ones | Keep; extend the same response to disabled and rate-limited cases |
+| Reset tokens are 24 random alphanumeric characters (about 143 bits) and are consumed once under a lock inside a transaction | Relied on, and covered by concurrency tests |
+
+### Links, pages, and email content (DEC-442)
+
+- Tokens travel only in the URL **fragment**
+  (`https://app.fakihbrothers.com/<page>#<token>`, shape only). The page
+  removes the fragment from the address bar and POSTs the token in the
+  request body.
+- Links are built from the configured HTTPS application origin, never the
+  request's `Host` header.
+- Invitation and reset pages send `Referrer-Policy: no-referrer` and load no
+  third-party script, analytics, remote asset, or tracking.
+- Invalid, expired, used, cancelled, and superseded links get one generic
+  response.
+- Emails are English only for now (Arabic is a later, separate decision),
+  in plain text and HTML, with no password, MFA secret, recovery code, role,
+  permission, financial or other business information, and no remote image,
+  pixel, advertising, or tracking. Each states its expiry and that DROMEX
+  never emails sign-in links and never asks users to send security codes.
+
+### Failure behaviour
+
+| Situation | Behaviour |
+|---|---|
+| Delivery delayed | No state changes; the token keeps its own expiry |
+| Provider rejects a message | The failure is audited; the Owner sees that an invitation email was not sent; a reset requester still receives the generic response |
+| Provider unavailable | Up to three attempts within two minutes with one idempotency key, then fail closed; sign-in unaffected; no automatic provider switch |
+| Delivery succeeded but the provider response was lost | Retrying with the same idempotency key does not send a second copy |
+| Invitation bounces | Visible in the Resend dashboard; the Owner corrects the address and issues a new invitation |
+| Same invitation resent | New token; the previous token stops working |
+| Reset requested repeatedly | Newest token supersedes older ones; rate limits apply; responses stay generic |
+| Provider key compromised | Revoke, rotate, and review as in the incident procedure above |
+| Webhooks | None exist. If added later, they require a separate reviewed decision with signature, timestamp, and duplicate checks, and still may never change authentication state |
+
+### Implemented transport foundation (Phase 2C checkpoint 4A, local development only)
+
+Status: **implemented and verified on exact Node 24.20.0 in a disposable
+Linux container; not wired to the server, not production configured, and
+never connected to Resend.** No route, workflow, template, or audit event
+uses it yet. The verification record is in
+[testing-and-production-readiness.md](testing-and-production-readiness.md#phase-2c-email-transport-foundation-checkpoint-4a-local-verification).
+
+**Modules** (`web/apps/api/src/email/`, no new dependency):
+
+| Module | Responsibility |
+|---|---|
+| `message.ts` | The message model, the approved purposes, and validation |
+| `result.ts` | The closed result model and the transport interface |
+| `transport.ts` | The disabled and capture transports, and the factory |
+| `resend.ts` | The Resend HTTPS transport, retries, and response handling |
+| `secret-file.ts` | The secure loader for the Resend key file |
+| `config.ts` | Transport selection from a supplied environment object |
+| `errors.ts` | Fixed-text configuration errors |
+
+**Interface.** Every transport exposes `kind` and one `send(message)`
+returning exactly one of `accepted` (with a validated provider message id),
+`retryable_failure`, `permanent_failure`, or `disabled`, each with a fixed
+reason code and an attempt count. No result carries a provider body, header,
+address, subject, body, link, or key. Nothing writes to the console.
+
+**Message model.** One purpose from `admin_invitation`, `password_reset`,
+`password_changed`, `delivery_test`; an idempotency key of the form
+`<purpose>/<8–128 letters, digits, or hyphens>` that must match the purpose;
+one lower-case ASCII sender address with an optional plain display name; one
+lower-case ASCII recipient; an optional Reply-To; a subject of at most 150
+characters; and both a plain-text (at most 20,000 characters) and an HTML
+(at most 100,000 characters) body. Any other field is refused, so copies,
+custom headers, attachments, and scheduling cannot reach a provider. Control
+characters, including CR, LF, and the Unicode line separators, are refused
+in every header field. The HTML guard refuses images, scripts, frames,
+styles, forms, SVG, comments, character references, event handlers, URL-
+bearing attributes, `javascript:` and `data:` values, CSS `url()` and
+`@import`, and any link that is not double-quoted; every absolute URL in
+either body, and every `href`, must use the one configured link origin.
+Provider-key, bearer-token, private-key, and similar patterns are refused in
+the metadata, and the Resend transport also refuses any field containing its
+own key. This is a strict guard for DROMEX-authored static templates, not a
+general HTML sanitizer.
+
+**Selection** (`loadEmailTransportConfig`; since checkpoint 4D the running
+server calls it through `loadEmailSettings`, which also refuses `capture`,
+below):
+`DROMEX_EMAIL_TRANSPORT` unset or empty means `disabled`; `capture` is
+refused in production; `resend` requires `DROMEX_EMAIL_RESEND_API_KEY_FILE`,
+an absolute path, and that variable is refused for any other transport. A
+key supplied directly as `RESEND_API_KEY`, `DROMEX_EMAIL_RESEND_API_KEY`,
+`DROMEX_EMAIL_API_KEY`, or `POSTMARK_SERVER_TOKEN` stops configuration
+rather than being used. The link origin must be one exact HTTPS origin;
+plain HTTP is accepted only for a loopback host outside production. The
+capture transport also refuses production at construction, independently of
+the configuration loader.
+
+**Key file.** Refused outright on Windows, where no equivalent guarantee
+exists. Otherwise the path must be absolute; the file is opened once with
+`O_RDONLY | O_NOFOLLOW | O_NONBLOCK`; `fstat` on that descriptor must show a
+regular file with no group or other permission bit and a size from 1 to 512
+bytes; the content must decode as UTF-8 and, after removing one final `\n`
+or `\r\n`, match the key shape Resend's documentation shows (`re_` then 8 to
+250 letters, digits, `_`, or `-`). The read buffer is zeroed and the
+descriptor closed on every path; errors never contain the path or content.
+Owner-matching of the file is **not** checked, so a root-owned `0400` Docker
+secret remains readable by design. The key must still become a JavaScript
+string to be sent in a header, and no JavaScript code can erase that string
+from memory; a process-memory disclosure remains an operational risk.
+
+**Resend request** (re-verified against Resend's official API reference,
+error, idempotency, and rate-limit pages on 2026-09-16): `POST
+https://api.resend.com/emails` with `Authorization: Bearer <key>`,
+`Content-Type` and `Accept` of `application/json`, `Idempotency-Key`, and
+`User-Agent: dromex-api/0.1.0` (Resend rejects requests without a
+User-Agent with 403). The body carries only `from`, `to`, `subject`, `text`,
+`html`, and `reply_to` when present. Redirects are refused. A success needs a
+2xx status, a JSON content type, a body of at most 16 KiB, and an `id` of 1 to
+128 letters, digits, `_`, or `-` starting with a letter or digit; anything
+else is a permanent `provider_response_invalid` and is not retried. Apart from
+a 409 body (below), no other response body is ever read.
+
+**HTTP 409** (re-verified 2026-09-16 against Resend's official
+[error reference](https://resend.com/docs/api-reference/errors) and
+[idempotency guide](https://resend.com/docs/dashboard/emails/idempotency-keys);
+the discriminating field is `name`, as typed by `ErrorResponse` in Resend's
+official Node SDK, `resend/resend-node` `src/interfaces.ts`). Resend documents
+three 409 types: `concurrent_idempotent_requests` (another request with the
+same key is in progress; "safe to retry this request later"),
+`invalid_idempotent_request` (the key was already used within 24 hours with a
+different body; retrying is useless), and `resource_locked` (resource
+updates). DROMEX reads a 409 body only when its content type is JSON and it is
+at most 4 KiB, parses it as an object, and compares only its top-level `name`
+exactly with the first two strings; no other field is used, and nothing from
+the body is kept, returned, or logged.
+
+| 409 body | Result | Retried |
+|---|---|---|
+| `name` exactly `concurrent_idempotent_requests` | retryable `idempotency_in_progress` | Yes, as a temporary failure: same key, byte-identical body, same backoff, `Retry-After` bound, three-attempt limit, and two-minute deadline; exhaustion ends as `retryable_failure` `idempotency_in_progress` |
+| `name` exactly `invalid_idempotent_request` | permanent `idempotency_conflict` | Never; the key is never changed to force a send |
+| `resource_locked`, any other or case-varied name, a missing or nested `name`, a non-object, invalid or empty JSON, a non-JSON content type, or a body over 4 KiB | permanent `provider_rejected` | Never |
+
+An exhausted in-progress result is reported as retryable, not accepted and not
+permanently failed, because the earlier request with that key may still
+complete: the caller must treat delivery as unknown, and a later attempt with
+the same key within Resend's 24-hour retention cannot create a second email.
+The capture transport mirrors this: a reused key with a changed payload
+returns `idempotency_conflict`.
+
+**Retries** (DEC-439). At most three attempts, all within 120 seconds of the
+first; the same idempotency key and byte-identical body on every attempt.
+Retried: HTTP 429, HTTP 5xx, the documented in-progress 409 above, an attempt timeout (30 seconds, or less when
+less time remains), and the network codes `ECONNRESET`, `ECONNREFUSED`,
+`ECONNABORTED`, `EPIPE`, `ETIMEDOUT`, `EAI_AGAIN`, `ENETUNREACH`,
+`ENETDOWN`, `EHOSTUNREACH`, and Undici's socket, close, and timeout codes.
+Not retried: every other 4xx, including every other 409 (401 and 403 as `provider_authentication`), a
+redirect, an unexpected status, and any other thrown error. Backoff is 1
+second, then 2 seconds, plus up to 250 ms of jitter. A `Retry-After` given as one
+to six digits of whole seconds lengthens the wait when it is at most 30 and
+ends the send as retryable, rather than retrying early, when it is above 30;
+any other form (an HTTP date, a fraction, a sign, or more digits) is ignored. No attempt starts, and
+no sleep begins, unless at least one second would remain before the deadline,
+and the deadline is re-checked after every sleep. Clock, sleep, randomness,
+timers, and `fetch` are injectable, and every loop is bounded.
+
+**Known limits of the foundation, not yet addressed:**
+
+- The 409 classification depends on Resend keeping its documented `name`
+  values and field. If either changes, an in-progress 409 fails closed as a
+  permanent `provider_rejected` rather than being retried; the email may then
+  in fact be sent, so a caller must never read a failure as proof of
+  non-delivery.
+- A 429 for an exhausted daily or monthly quota is retried like a rate limit,
+  because 429 bodies are not read; it ends as `retryable_failure`
+  after at most three attempts.
+- Open and click tracking are controlled per domain in the Resend dashboard;
+  the code sends no tracking field but cannot prove the dashboard setting.
+- The key's `re_` shape comes from Resend's documented example; a change in
+  Resend's key format would fail closed at startup.
+
+### Implemented invitation issuance (Phase 2C checkpoint 4B1, local development only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases only, on exact Node 24.20.0.** This section covers the Owner's
+side: create, list, resend, cancel, expiry, delivery handoff, and audit.
+Acceptance and restricted enrolment were added by checkpoint 4B2 (next
+section), which also refines the `account_exists` rule below. No
+email has been sent; tests use the capture transport and scripted fakes.
+At 4B1 the running server entry point passed no email configuration, so a
+real deployment would record invitations as `not_sent` (`email_disabled`);
+checkpoint 4D added the configuration path, still with no provider
+configured. No
+Owner exists and Owner activation still refuses every run.
+
+**Routes.** A seventh route classification, `owner`, admits only what
+`authenticated` admits (a valid session, an active principal, an enabled
+factor, recorded MFA completion, a session created after it, and not a
+recovery session) and additionally requires `isOwner`; for a method other
+than `GET` or `HEAD` it first requires an exact trusted `Origin`, before any
+session work. Unauthenticated callers receive 401, any non-Owner 403.
+
+| Route | Result |
+|---|---|
+| `GET /api/owner/invitations` | `200 { invitations }`, newest first by creation time, at most 200 |
+| `POST /api/owner/invitations` with exactly `{ "email" }` | `201 { invitation }`; `400 invalid_email`; `409 account_exists`; `409 invitation_pending`; `429 too_many_requests` with `Retry-After` |
+| `POST /api/owner/invitations/:id/resend` | `200 { invitation }` (the new invitation); `404 not_found`; `409 invitation_not_pending`; `429` |
+| `POST /api/owner/invitations/:id/cancel` | `200 { invitation }`; `404 not_found`; `409 invitation_not_pending` |
+
+An invitation view has exactly `id`, `email`, `status` (`pending`,
+`accepted`, `superseded`, `cancelled`, `expired`), `createdAt`, `expiresAt`,
+`endedAt`, and `delivery` (`status` of `sending`, `provider_accepted`,
+`failed`, or `not_sent`, and a reason code). No token, hash, link, delivery
+id, idempotency key, provider id, or message content is ever returned, and
+no webhook route exists.
+
+**Use-case authorization (DEC-428).** `createAdminInvitationService`
+re-reads the caller's principal with `FOR SHARE` inside every operation and
+refuses anyone who is not active, the Owner, and MFA-complete, independently
+of the route; such a refusal is audited.
+
+**Data (migration `0008`).** `dromex_admin_invitation` holds the normalised
+email, a 32-byte token hash (unique), the status, the inviting user, the
+invitation it superseded (each at most once), creation, expiry, and end
+times, and the delivery id, status, reason, and attempt count. The database
+requires the lifetime to be exactly 24 hours, `ended_at` to be set exactly
+when the status is not `pending`, a reason exactly for `failed` and
+`not_sent`, a lower-case trimmed email, and at most one pending invitation
+per email (partial unique index). Triggers refuse any change to identifying
+columns, any status change once ended, and every delete; as for the audit
+table, this stops application defects, not the table owner.
+
+**Token.** 32 bytes from `crypto.randomBytes`, as 43 unpadded base64url
+characters. Stored only as SHA-256 over the label
+`dromex/admin-invitation/v1` and a NUL byte followed by the token, so the
+hash cannot be confused with one made for another purpose. The token is
+generated before the issuing transaction, only its hash is written, and it
+is passed once to the email renderer after that transaction commits. It is
+never returned, stored, logged, or audited; a JavaScript string cannot be
+erased from memory, so this is the practical meaning of "in memory only".
+
+**Email.** `renderAdminInvitationEmail` builds
+`<configured origin>/invitation#<token>` (fragment only, DEC-442), a
+subject without the token, and an idempotency key
+`admin_invitation/<delivery id>`, one per invitation row and never derived
+from the token. The English plain-text and HTML bodies state the 24-hour
+expiry, single use, and supersession, and the DEC-442 sentence "DROMEX never
+emails sign-in links and never asks users to send security codes"; they name
+no role, permission, or business data. The configured origin is validated by
+the 4A link-origin rule when the server is built.
+
+**Serialization.** Create, resend, and cancel take a transaction-scoped
+advisory lock derived from the normalised email, then row locks, always in
+that order; the partial unique index is the final guard. Concurrent
+creations for one email produce one invitation; concurrent resends produce
+one new invitation; a resend racing a cancellation ends as exactly one of
+the two outcomes.
+
+**Resend and supersession.** A resend requires a pending, unexpired
+invitation, marks it `superseded` and inserts its replacement with a new
+token, a new delivery id, and a fresh 24-hour lifetime, in one transaction.
+
+**Expiry.** Database time only. Every operation first ends due pending
+invitations (at most 100 per call, skipping rows another transaction has
+locked) and audits each once; a due row found under lock is expired on the
+spot; the list reports a due row as `expired` even before it is swept.
+
+**Rate limits** (implementation detail under DEC-440 (10), counted from
+the invitation rows in database time, per normalised email): at most one
+issuance (creation or resend) per 60 seconds, and at most six issuances in
+any 24 hours, which is the initial invitation plus five resends. Counting
+every issuance means cancelling and creating again cannot bypass the daily
+limit. `Retry-After` is the whole seconds until the governing limit frees.
+
+**Delivery.** A row is inserted as `sending`; no network call happens while
+a lock is held. The transport result is then recorded in a second
+transaction: `provider_accepted`; `failed` with the transport's safe reason
+(`provider_unavailable`, `rate_limited`, `timeout`, `network_unavailable`,
+`idempotency_in_progress`, `deadline_exhausted`, `provider_rejected`,
+`provider_authentication`, `provider_response_invalid`,
+`idempotency_conflict`, `invalid_message`, or `unexpected_failure`, including
+a thrown error); or `not_sent` with `email_disabled` for the disabled
+transport or no email configuration. The invitation stays pending in every
+case, so the Owner can resend it. A process that stops between the two
+transactions leaves `sending`, which means the outcome is unknown. Delivery
+status never grants anything (DEC-439 (5)).
+
+**Audit.** Closed events `admin_invitation_created`, `_resent`,
+`_superseded`, `_cancelled`, `_expired`, `_delivery_accepted`,
+`_delivery_failed`, and `_refused`, each with the acting user and name
+snapshot (none for expiry), the client address, a reason code where
+relevant (`forbidden`, `invalid_email`, `account_exists`,
+`invitation_pending`, `invitation_not_pending`, `not_found`, `rate_limited`,
+or a delivery reason), and a new plain `invitation_id` reference. No audit
+row holds an address, token, hash, link, or message body.
+
+**Known limits of checkpoint 4B1:**
+
+- An invitation whose email could not be delivered stays pending but is
+  unusable, because its token was never kept; the Owner must resend.
+- A resend supersedes the old invitation even if its email is still in the
+  provider's retry window; the old link then fails generically.
+- The Owner's route authorization refusals by the guard (401 and 403) are
+  not audited; refusals inside the use case are. *Resolved by checkpoint 4E:*
+  the guard now audits an authenticated non-Owner refused at any `owner`
+  route as `owner_route_refused`; unauthenticated refusals stay unaudited.
+- `list` is capped at 200 rows with no pagination.
+- The `sending` state is not reconciled automatically after a crash.
+- Email configuration was not yet read from the process environment
+  (resolved by checkpoint 4D).
+
+### Implemented invitation acceptance (Phase 2C checkpoint 4B2, local development only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases only, on exact Node 24.20.0 (DEC-440 (7) to (9), DEC-442,
+DEC-444).** An invited Admin can now accept an invitation end to end on a
+development machine: create or prove a password, enrol TOTP, receive ten
+recovery codes once, acknowledge them, and be activated, after which only a
+fresh password-and-TOTP sign-in grants access. No real invitation, account,
+or email exists; every test identity is synthetic. At 4B2 the running server
+entry point still passed no email configuration (added by checkpoint 4D, with
+no provider configured), so no invitation email could be delivered by a real
+deployment. No Owner exists, and the Owner activation and
+terminal recovery commands still refuse every run.
+
+**The `pending` principal lifecycle (DEC-444 (4)).** Migration `0009` widens
+`dromex_principal.status` to `pending`, `active`, `disabled`, without
+rewriting any existing row. The database refuses a pending principal that is
+the Owner or carries `mfa_completed_at`; a trigger allows a pending principal
+to become only `active`, and only together with `mfa_completed_at`, and never
+lets any principal return to `pending`. `active` and `disabled` move between
+each other exactly as before. In the application, `requireActivePrincipal`
+refuses `pending` exactly like a missing or disabled principal, so the
+ordinary gate, the `owner` gate, the recovery gate, and Better Auth's runtime
+session hook all deny it. A pending identity therefore cannot sign in, obtain
+an authorized session, or reach any protected route, and it never appears as
+an active Admin. It is never deleted.
+
+**Routes.** An eighth route classification, `invitation`, admits a request
+only with an exact trusted `Origin`, checked by the authentication guard
+before the handler runs. Each handler additionally requires
+`application/json` (415 otherwise) and a body of exactly the listed keys (400
+`invalid_request` otherwise), and every response carries `Cache-Control:
+no-store` and `Referrer-Policy: no-referrer`.
+
+| Route | Body | Success | Refusals |
+|---|---|---|---|
+| `POST /api/invitation/inspect` | `{ token }` | `{ next: "create_password" \| "confirm_password" }` | `400 invitation_invalid`; `429` |
+| `POST /api/invitation/password` | `{ token, name, password }` (new) or `{ token, password }` (resume) | `{ next: "verify_totp", totpUri, manualEntrySecret }` with the setup session cookie, or `{ next: "verify_existing_totp" }` with Better Auth's challenge cookie | `400 invitation_invalid`, `invalid_name`, `password_rejected`; `401 invalid_password`; `409 setup_in_progress`; `429` |
+| `POST /api/invitation/totp` | `{ code }` (setup session) or `{ token, code, password }` (existing-authenticator challenge) | `{ recoveryCodes, next: "acknowledge_recovery_codes" }` with the rotated setup session cookie | `400 invitation_invalid`; `401 invalid_code`, `invalid_password`, `unauthorized`; `409 setup_incomplete`, `setup_in_progress`; `429` |
+| `POST /api/invitation/complete` | `{ recoveryCodesSaved: true }` | `{ signInRequired: true }`, with both cookies expired | `400 acknowledgement_required`, `invitation_invalid`; `401 unauthorized`; `409 setup_incomplete`, `setup_in_progress`; `429` |
+
+`invitation_invalid` is one response for an unknown, malformed, expired,
+cancelled, superseded, or consumed invitation, and for an address that is not
+eligible; it also expires the setup cookies, because the setup sessions were
+just revoked. `unauthorized` never clears cookies, so an Owner who opens an
+invitation link in the same browser is refused without being signed out.
+What `inspect` reveals (whether a password already exists) is known only to
+the holder of a valid token, so no address can be enumerated.
+
+**The browser page (DEC-442).** The development preview serves
+`/invitation`. It reads the token from the fragment once, immediately removes
+the fragment from the address bar and the history entry with
+`history.replaceState`, keeps the token (and, until TOTP verification, the
+typed password) only in memory, and sends same-origin JSON `POST` requests.
+Nothing is written to `localStorage`, `sessionStorage`, or a cookie by the
+page. `index.html` sets `<meta name="referrer" content="no-referrer">`. The
+forms are plain and functional; the designed authentication screens remain
+the later UX phase (§23).
+
+**The state machine.** `src/invitations/enrolment-state.ts` defines it, and
+migration `0009` enforces the same pairs in a trigger; a unit test compares
+the two pair for pair.
+
+```mermaid
+stateDiagram-v2
+  [*] --> identity_pending: intent recorded before Better Auth creates the identity
+  identity_pending --> identity_pending: re-recorded under a newer invitation
+  identity_pending --> password_verified: identity confirmed, pending principal created
+  password_verified --> password_verified: password step repeated
+  password_verified --> totp_enrolling: TOTP secret issued
+  totp_enrolling --> password_verified: resumed before verification
+  totp_enrolling --> totp_enrolling
+  totp_enrolling --> codes_issued: code verified, ten codes shown
+  totp_enrolling --> factor_challenge: resumed after Better Auth verified the factor
+  factor_challenge --> factor_challenge
+  factor_challenge --> codes_issued: existing code passed, codes regenerated
+  codes_issued --> factor_challenge: resumed before acknowledgement
+  codes_issued --> completed: acknowledged, sessions revoked, activated
+  completed --> [*]
+```
+
+A verified factor never falls back to password-only enrolment, and only
+`codes_issued` reaches `completed`. `dromex_admin_enrolment` holds one row
+per invited address (email, the Better Auth user id once confirmed, the
+current invitation, the step, and times); it has no column for any secret,
+its identifying columns are immutable, it is never deleted, and completion is
+terminal. `dromex_admin_enrolment_session` records every Better Auth session
+ever issued to an enrolment, with the invitation it was issued under; rows
+are never changed or deleted.
+
+**The internal sign-up capability (DEC-444 (5)).**
+`src/invitations/enrolment-identity.ts` builds a second Better Auth instance
+from exactly the runtime options, with `disableSignUp: false`, `autoSignIn:
+false`, Better Auth's logger disabled, and its own session hook. It exports
+only its constructor; the instance never leaves that function, no handler is
+referenced, and nothing is mounted. The only importer is
+`invitation-acceptance.ts`, and the server constructs that service with the
+runtime settings. The hook admits a session only for an identity whose
+address has an open enrolment and a pending, unexpired invitation, and that
+has either no principal yet (created but unrecorded) or a non-Owner `pending`
+principal; every other session, including the Owner's and any active
+Admin's, is refused. Boundary tests prove that only the acceptance service
+imports it, that `signUpEmail` and `disableSignUp: false` appear only here and
+in Owner provisioning, that no route matches sign-up or registration, and
+that `POST /api/auth/sign-up/email` and eight similar paths are a plain 404.
+The Owner terminal-provisioning boundary is unchanged.
+
+**The workflow and its transaction boundaries.** Better Auth changes the
+identity, factor, recovery codes, and sessions in its own transactions;
+DROMEX records each step in separate transactions. Every state-changing step
+holds a session-level advisory lock per address (a concurrent attempt gets
+`setup_in_progress` at once), and every DROMEX transaction first takes the
+Owner operations' address lock and a row lock on the invitation, expires it
+if due (audited once), and refuses it if it is no longer pending (audited
+with its reason). Validity is therefore re-checked at the token exchange,
+before identity creation, at pending-principal association, before and after
+TOTP enrolment, at session binding, before and after TOTP verification, at
+recovery-code issuance, before revoking sessions, and inside the activation
+transaction (DEC-444 (3)).
+
+1. **Password step, new address.** The enrolment intent (`identity_pending`)
+   is committed; Better Auth's `signUpEmail` creates the identity; one
+   transaction confirms a real user row with that id and address (Better
+   Auth answers a duplicate address with a synthetic user), inserts the
+   `pending` principal, and moves to `password_verified`. The password is
+   then proven through Better Auth's `signInEmail`.
+2. **Password step, pending address (DEC-444 (2)).** The existing password
+   must be proven through `signInEmail`; no request can replace it, and a
+   forgotten password is simply a failed proof until checkpoint 4C. An
+   identity created by an interrupted run but never recorded is proven the
+   same way and then associated.
+3. **Session binding.** A session never leaves the server before it is bound
+   to the enrolment. Every other session of the identity is revoked, so an
+   older setup session never survives a new password step.
+4. **TOTP.** With no verified factor, `enableTwoFactor` issues a new secret
+   (replacing an unverified one) and the step becomes `totp_enrolling`; the
+   first code is verified through Better Auth's enrolment path, which Better
+   Auth does not rate limit, so DROMEX limits it per enrolment. When an
+   interrupted run already verified the factor, sign-in returns a challenge,
+   the step becomes `factor_challenge`, and the invitee must pass it with a
+   current code, the password, and the invitation token, all in the JSON body
+   (never a URL, header, or cookie; the page keeps the token and password in
+   memory only). Before Better Auth verifies anything, DROMEX resolves the
+   token and re-checks the invitation and enrolment under the locks: an ended
+   invitation returns `invitation_invalid` and consumes nothing; an enrolment
+   that is missing, has no identity, or belongs to another invitation returns
+   `unauthorized` and is audited as `admin_invitation_acceptance_refused` with
+   reason `not_eligible`; then the attempt counts against the per-enrolment
+   limit. Every accepted code is recorded against replay.
+5. **Recovery codes.** After a first verification, the ten codes Better Auth
+   generated at enrolment are read with the server-only `viewBackupCodes`;
+   after a challenge they are regenerated with `generateBackupCodes`, so no
+   code an interrupted run may have shown stays valid. Exactly ten canonical
+   codes are required, or the step fails closed.
+6. **Activation.** Only from `codes_issued` with an explicit acknowledgement:
+   every session of the identity is revoked through Better Auth, then one
+   DROMEX transaction re-checks the invitation, the step, the pending
+   principal, the enabled factor, and that no session remains, sets the
+   principal `active` with `mfa_completed_at`, marks the invitation
+   `accepted`, completes the enrolment, and audits the revocation count and
+   the acceptance.
+
+**Crash recovery.** A crash leaves either nothing or a `pending` identity
+that no gate admits, and the same still-valid invitation, or a new one,
+resumes it. After an intent only, the next password step creates the identity
+under the current invitation. After Better Auth created the identity but before DROMEX
+recorded it, the next step finds the unrecorded identity through the intent,
+proves its password, and associates it. After TOTP was enabled but not
+recorded, a new secret replaces it. After Better Auth verified the factor but
+before DROMEX recorded codes, the next attempt passes a TOTP challenge and
+receives regenerated codes. After sessions were revoked but before
+activation, the invitee repeats the challenge and acknowledgement. The eight
+interruption points are named in `ACCEPTANCE_INTERRUPTIONS` and each is
+tested. Sessions a crash leaves unbound never reached a browser, belong to a
+pending principal, and are revoked at activation.
+
+**Rate limits** (DROMEX's PostgreSQL-backed storage; implementation detail
+under DEC-440 (10) and DEC-444): token checks 10 per 60 seconds per network
+source; password creations and proofs 5 per 15 minutes per invitation from
+any source; TOTP submissions 10 per 60 seconds per source and 5 per 5 minutes
+per enrolment (the existing-factor path also has Better Auth's per-challenge
+and account lockouts); completion 10 per 60 seconds per source. Limits
+survive a process restart. A limited attempt adds no audit row, and unknown
+or malformed tokens are never audited, so repeated guessing cannot grow the
+audit table.
+
+**Audit.** New closed events: `admin_invitation_acceptance_refused` (reasons
+`invitation_expired`, `invitation_cancelled`, `invitation_superseded`,
+`invitation_accepted`, `not_eligible`, `invalid_state`,
+`identity_rejected`), `_identity_created`, `_identity_resumed`,
+`_password_rejected`, `_totp_enrolment_started`, `_totp_rejected`,
+`_totp_verified`, `_recovery_codes_issued`, `_sessions_revoked` (with the
+count), and `_accepted`. Each carries the invitation reference, the invitee's
+user id and display-name snapshot when known, a reason code, and the client
+address; never an address, token, password, TOTP secret or code, recovery
+code, cookie, or session value.
+
+**Refinement of 4B1's `account_exists` (DEC-444 (2)).** The Owner may invite
+an address again when its identity is still pending in setup (or was created
+but never recorded). An address with an active or disabled principal, or with
+an identity invitation setup did not create, is still refused.
+
+**Verification and mutation testing (checkpoint 4B2).** Every test runs
+against disposable PostgreSQL 18.6 databases with synthetic identities, and
+the authoritative runtime is exact Node 24.20.0 in a disposable container. On
+the host's Node 22.17.1, two unit tests that spawn a `.ts` child process fail
+with `ERR_UNKNOWN_FILE_EXTENSION`, and TOTP-dependent integration tests were
+seen to fail intermittently on the host while passing on Node 24.20.0 (the cause
+was not investigated). A host result is not evidence about Node 24.20.0.
+
+The first pass applied 40 targeted mutations to acceptance and killed 38. A
+review of the resume path then found that the existing-authenticator step let
+Better Auth verify a code before DROMEX re-checked the invitation, and that
+the resume body did not carry the token. The step now takes
+`{ token, code, password }`, re-checks the invitation and enrolment first,
+counts the attempt per enrolment, audits an ineligible refusal once, and only
+then lets Better Auth verify. The ten mutations rerun after that change were
+these, each applied alone to a container copy, with the file restored and
+confirmed byte-identical by SHA-256:
+
+| Mutation | Result |
+|---|---|
+| Skip the invitation re-check on the resume path | Survived at first; killed by a new test that cancels the invitation between the password step and the code, and expects `invitation_invalid`, no new session, and no replay marker |
+| Remove the per-enrolment limit on the enrolment path | Killed |
+| Remove the per-enrolment limit on the resume path | Survived at first; killed by a new test in which the attempt after the limit is refused with `429` even with the right code |
+| Remove the refusal audit for an ineligible resume | Killed (the new test also proves repeated attempts add no rows beyond the per-source limit and that no secret is stored) |
+| Accept a session bound to a replaced invitation | Killed |
+| Allow TOTP replay, on each path | Both killed |
+| Clear cookies on `unauthorized` | Killed |
+| Accept a session bound to a completed enrolment | **Survives** |
+| Ignore a session/enrolment user mismatch | **Survives** |
+
+The two survivors are redundant layers, not gaps, and production logic was not
+distorted to kill them. Activation revokes every session of the identity and
+re-checks, inside the same transaction under the row lock, that none remains
+before marking the enrolment `completed`, so no session can exist for a
+completed enrolment; and the session-to-enrolment binding row is written from
+the identity the session belongs to and is immutable, so a mismatch could only
+follow direct database tampering. The ordinary gate independently refuses every
+session ever bound to invitation setup. These are consistent with the two
+survivors recorded in the first pass; the scripts of that pass were temporary
+and are not kept.
+
+**Known limits and residual risks of checkpoint 4B2:**
+
+- **Lost authenticator before activation (OQ-168).** An invitee who verified
+  a factor and then lost the authenticator before completing setup cannot
+  resume: resumption requires a current TOTP code, the pending identity
+  cannot be deleted, and password reset never removes MFA (DEC-441 (8)). No
+  recovery path is designed; this is an open question for the Owner.
+- The invitee's display name is collected at password creation because
+  Better Auth requires one; it is refused if empty, over 100 characters, or
+  containing `@` or control characters, so an address never becomes an audit
+  name snapshot.
+- Owner cancellation or resend does not itself revoke setup sessions; they
+  are refused and revoked on their next use.
+- A pending identity is not yet listed for the Owner. *Resolved by checkpoint
+  4E:* the Owner's Accounts list shows it as enrolment in progress, or by its
+  newest invitation's end.
+- The page is a plain development preview, and the API and page are not
+  served from one origin outside development (the Vite proxy stands in).
+- Recovery codes remain Better Auth's reversible encrypted storage (DEC-435).
+- Better Auth's own sign-up endpoint exists inside the internal instance's
+  router; it is unreachable only because that router is never mounted, which
+  the boundary tests enforce.
+- Behaviour under a least-privilege runtime database role is not verified;
+  that role is not provisioned.
+
+### Implemented password reset (Phase 2C checkpoint 4C, local development only)
+
+Status: **implemented and locally verified against disposable PostgreSQL
+18.6 databases on exact Node 24.20.0 (DEC-441, DEC-442, DEC-487, DEC-488);
+not production-verified.** Every test identity is
+synthetic, every email goes to the capture transport, and, until checkpoint
+4D wired email configuration into the running server, a real deployment
+would have recorded every reset email as `not_sent` (`email_disabled`). No Owner
+exists; the Owner activation and terminal recovery commands still refuse
+every run. The verification record is in
+[testing-and-production-readiness.md](testing-and-production-readiness.md#phase-2c-password-reset-checkpoint-4c-local-verification).
+
+**Why DROMEX owns the token (DEC-487 (1), (2)).** Better Auth 1.7.4's
+`requestPasswordReset` and `resetPassword` are its only supported way to set
+a password without a session or the current password (its admin plugin is
+excluded by DEC-422, and DEC-431 forbids writing its rows). Its native flow
+issues a 24-character token, never supersedes older ones, knows nothing
+about DROMEX principals, redirects with the token in a query string, and
+deletes sessions only after the update. DROMEX therefore owns the only
+token a user ever sees and uses Better Auth solely for the final write.
+
+| Concern | Where it lives |
+|---|---|
+| Public token, lifecycle, eligibility, limits, audit | `src/password-reset/password-reset.ts`, table `dromex_password_reset` (migration `0010`) |
+| Token (256 bits, labelled SHA-256 `dromex/password-reset/v1`) | `src/password-reset/reset-token.ts` |
+| Reset and password-changed emails | `src/password-reset/reset-email.ts` |
+| Final password write | `src/password-reset/reset-identity.ts`: an unmounted internal Better Auth instance, imported only by the service |
+| Bounded background job queue | `src/password-reset/reset-queue.ts` |
+| HTTP routes | `src/password-reset/reset-http.ts` |
+| Pages | `apps/web/src/password-reset/` (`/forgot-password`, `/reset-password`) |
+| Common-password blocklist | `src/auth/password-policy.ts`, `src/auth/common-passwords.txt`, `tools/derive-common-password-blocklist.ts` |
+
+**Routes.** A ninth route classification, `password-reset`, admits a request
+only with an exact trusted `Origin` (403 otherwise) and never consults a
+session. Every handler requires `application/json` (415) and a body of
+exactly the listed keys (400 `invalid_request`), and every response,
+including a refusal by the guard, carries `Cache-Control: no-store` and
+`Referrer-Policy: no-referrer`.
+
+| Route | Body | Success | Refusals |
+|---|---|---|---|
+| `POST /api/password-reset/request` | `{ email }` (a string) | `202 { "status": "requested" }`, identical for every address | `429 too_many_requests` with `Retry-After`, for the per-network-source limit only |
+| `POST /api/password-reset/inspect` | `{ token }` | `200 { "next": "choose_password" }`; nothing changes | `400 reset_link_invalid`; `429` |
+| `POST /api/password-reset/complete` | `{ token, newPassword }` | `200 { "signInRequired": true }`, the session and challenge cookies expired | `400 reset_link_invalid`; `400 password_rejected` with `reason` `too_short`, `too_long`, or `common`; `500 reset_failed`; `429` |
+
+Better Auth's own `/request-password-reset`, `/reset-password`, and
+`/reset-password/:token` stay a plain 404, because the transport forwards
+only its allowlisted paths; a boundary test asserts it.
+
+**The neutral request (DEC-487 (5)).** The handler checks the body shape and
+the per-source limit, offers `{ normalised address, client address }` to a
+bounded in-process queue (50 jobs, one at a time), and returns. The address
+is looked up only by the job, after the response, so the response is
+byte-identical (status, body, and every header but `Date`) for known,
+unknown, disabled, pending, principal-less, limited, malformed, and
+dropped requests. An integration test holds the queue and proves no row,
+audit entry, or email exists when the responses are compared. Queued jobs
+are lost if the process stops; the requester simply asks again.
+
+**Eligibility (DEC-441 (1), DEC-487 (4)).** A Better Auth identity with a
+credential account and a DROMEX principal that is `active` or `pending`.
+Disabled accounts and identities without a principal are suppressed and
+audited (at most once per account per minute); unknown addresses leave no
+row, audit entry, or log line. A reset of a pending invitee changes only its
+password: the principal stays `pending`, its invitation is untouched, and
+setup resumes under DEC-444 by proving the new password.
+
+**Issuance (the job).** Under a per-account transaction-scoped advisory
+lock: sweep due and abandoned resets; lock the account; refuse an
+ineligible one; refuse while another reset is being written; apply the
+limits; mark the open `issued` row `superseded`; insert the new row
+(`issued`, delivery `sending`) with only the token hash; commit; then render
+`<configured origin>/reset-password#<token>` and hand one email to the
+transport outside any lock, recording its truthful outcome as 4B1 does.
+
+**Completion.** Under a per-account session-level advisory lock held across
+the whole operation (a second concurrent completion receives
+`reset_link_invalid` at once):
+
+1. The new password is checked against the shared policy **before** anything
+   is claimed, so a rejected password never uses up the link.
+2. One transaction locks the row, ends it if due (audited), refuses it if it
+   is not `issued` or the account is no longer eligible (audited), counts the
+   account's sessions, moves it to `claimed`, and **stamps
+   `dromex_principal.credentials_changed_at`**. From that moment every gate
+   refuses every earlier session.
+3. The internal capability writes the password: `requestPasswordReset` for
+   exactly that account, its token captured in memory by `sendResetPassword`
+   (no email, log, or URL), then `resetPassword` at once. That token expires
+   within 60 seconds, its verification identifier is stored as a SHA-256 hash
+   (`verification.storeIdentifier`, also pinned in the runtime configuration),
+   `revokeSessionsOnPasswordReset` deletes the account's sessions, the session
+   hook refuses every session, and sign-up stays disabled.
+4. A second transaction stamps `credentials_changed_at` again (closing the gap
+   between the claim and the write), completes the reset, counts the sessions
+   left, and audits the revoked count and, if any remain,
+   `password_reset_session_revocation_incomplete`. Such a session predates the
+   stamp and is refused by every gate.
+5. A password-changed email is queued. Nothing signs the user in, and nothing
+   calls a two-factor API: the factor, its recovery codes, and
+   `mfa_completed_at` are unchanged, and the next sign-in needs the new
+   password and an authenticator code (DEC-441 (8), DEC-487 (6)).
+
+Any failure after the claim ends the reset `failed` (`write_failed`,
+`completion_failed`) and is audited; sessions stay ended and the user asks
+again. A crash leaves the row `claimed`; after 120 seconds the next reset
+operation sweeps it to `failed` (`claim_abandoned`).
+
+**The credential-change session rule (DEC-487 (3)).** `sessionPredatesCredentialChange`
+(`src/auth/principal.ts`) refuses a session created before
+`credentials_changed_at`, or with no usable creation time. It is applied in
+the ordinary and Owner gates, the Owner recovery gate (ending that recovery),
+and the invitation setup-session gate. Every session-creation hook (runtime,
+invitation setup, terminal recovery) also refuses a new session while a
+reset for that account is `claimed` and less than 120 seconds old. The column
+only moves forward (database trigger). In the recovery and setup-session
+gates the rule is a backstop: Better Auth's own deletion already removes
+those sessions, which is why removing the rule there is not caught by a test
+(mutation survivors I20 and I21, recorded in the testing document).
+
+**Clock domain.** `credentials_changed_at` is stamped from the API process's
+clock, not the database's, because Better Auth sets each session's
+`createdAt` from the API process's clock and the rule compares the two. This
+was found during 4C verification on the Windows host, where PostgreSQL runs
+in Docker's WSL virtual machine: with a database-clock stamp, sessions
+created seconds after a reset were refused. `mfa_completed_at` is still
+stamped from the database clock by earlier checkpoints, so the same skew can
+affect the MFA completion rule; that is recorded under residual risks and not
+changed here.
+
+**Common-password blocklist (DEC-488).** `checkNewPassword` refuses a
+password outside 15 to 128 UTF-16 code units, one whose NFKC form is shorter
+than 15, or one whose NFKC, lower-cased form is on the committed list. It is
+applied inside every identity port that hands Better Auth a new password
+(`owner-identity.ts`, `enrolment-identity.ts`, `reset-identity.ts`), and by
+the callers first so the user sees the reason: terminal Owner activation
+(`common_password`), invitation setup (`password_rejected`), and reset
+(`password_rejected` with `reason: "common"`). A source-scanning boundary test
+proves every Better Auth password write is in one of those three modules,
+that each applies the policy, and that no other Better Auth password API
+(`changePassword`, `setPassword`, `setUserPassword`, `internalAdapter.updatePassword`)
+is called. It is deliberately not in the hash function, because Better Auth
+also hashes candidate passwords while signing in unknown accounts, where a
+refusal would reveal whether an account exists. Existing passwords are not
+re-checked.
+
+| Blocklist fact | Value |
+|---|---|
+| Source | UK NCSC "PwnedPasswordsTop100k", as mirrored in SecLists `Passwords/Common-Credentials/100k-most-used-passwords-NCSC.txt` (NCSC's own page has been removed) |
+| Pinned commit | `a23e8a413d8facdad2aa8093492f396e19ab64c1` (MIT licence) |
+| Source file | 835,538 bytes, 99,839 non-empty entries, SHA-256 `c2e5696882c603b76bb67a47ee970897e5a76fc4c3f5547abe3d0ca340c576e0`, downloaded once on 2026-09-26 at development time |
+| Derivation | NFKC, lower case, 15 to 128 UTF-16 code units, unique, sorted: 329 entries |
+| Integrity | SHA-256 of the entries joined by `\n` (line-ending independent), `70e286518746e80dd6670c62cdd6aa775b2f0bb83802dfa4033e7f397a26211d`, verified when the server is built; a mismatch stops startup |
+| Updates | Only by a reviewed repository change: pin the new source, run `node tools/derive-common-password-blocklist.ts <source>`, update the pinned hashes |
+| Runtime network use | None |
+
+**Limitations of the blocklist.** Because DROMEX already requires 15
+characters, the list catches only long common values; it does not score
+strength, detect keyboard walks or repetition beyond the listed values, check
+context words such as the user's name or address, or consult a breach
+corpus. Some source entries are literal encoded strings (`$hex[...]`) kept as
+they appear.
+
+**Rate limits and noise** (implementation detail under DEC-441 (9)):
+
+| Boundary | Limit | When exceeded |
+|---|---|---|
+| Request, per network source | 5 per 15 minutes | `429` |
+| Request, per account (counted from rows, no address stored) | 1 per 60 s, 3 per hour, 6 per 24 hours | same `202`; no new token, so the latest link stays valid; audited `rate_limited` at most once per minute |
+| Request, global | 30 issued per hour | same `202`; audited `global_limit` |
+| Request queue | 50 waiting jobs | dropped; same `202` |
+| Inspect, per source | 10 per minute | `429` |
+| Complete, per source | 10 per minute | `429` |
+| Complete, per reset | 5 per 15 minutes | `429`; the link is never locked permanently |
+
+Unknown or malformed tokens and unknown addresses are never audited.
+
+**Audit (DEC-441 (10)).** Closed events `password_reset_requested`,
+`_request_suppressed` (`account_disabled`, `not_eligible`, `rate_limited`,
+`global_limit`, `reset_in_progress`), `_superseded`, `_expired`,
+`_delivery_accepted`, `_delivery_failed`, `_rejected` (`reset_expired`,
+`reset_superseded`, `reset_used`, `account_disabled`, `not_eligible`,
+`password_rejected`), `_claimed`, `_failed` (`write_failed`,
+`completion_failed`, `claim_abandoned`), `_sessions_revoked` (with the count),
+`_session_revocation_incomplete`, `_completed`, and
+`password_changed_notification_accepted` / `_failed`. Each carries a new
+plain `password_reset_id` reference, the account's id and name snapshot, a
+reason code, and the client address; never an address, token, token hash,
+link, or password.
+
+**The pages.** `/forgot-password` and `/reset-password` are plain development
+preview pages like `/invitation`. The token is read from the fragment once,
+removed from the address bar and history before any request, kept in memory
+only (surviving a network error so the user can retry), and sent only in a
+same-origin POST body. Expired, used, superseded, and unknown links share
+one message (DEC-442 (2)). Every string is in `password-reset/strings.ts` for
+a later translation; the address field is `dir="ltr"`, the layout uses
+logical properties, and focus moves to the heading on each state change.
+
+**Known limits and residual risks of checkpoint 4C:**
+
+- Email configuration was not read by the running server; checkpoint 4D
+  added it (below), but no provider is configured, so no reset email can
+  leave a real deployment yet.
+- Queued request jobs are in memory and lost on a crash.
+- Many network sources can exhaust one account's issuance quota and delay
+  its owner's own reset for up to 24 hours; the latest link stays valid.
+- Someone who controls a user's mailbox can reset the password and cause a
+  nuisance lockout, never access (DEC-441 (2)); visible through the
+  password-changed email and the audit.
+- The internal write depends on Better Auth 1.7.4 awaiting
+  `sendResetPassword` when no background handler is configured; the
+  integration suite fails if that changes.
+- `mfa_completed_at` is stamped from the database clock (above).
+- Reset pages send `no-referrer` by `<meta>` and API header; production page
+  headers and CSP belong to the Hardening phase.
+- Behaviour under a least-privilege runtime database role is not verified.
+
+### Implemented running-server email configuration (Phase 2C checkpoint 4D, local development only)
+
+Status: **implemented and tested locally (DEC-489); no real provider, key,
+secret file, or sending identity was configured, and no email was sent.**
+The running API now reads email configuration, so the configuration path
+exists end to end, but every real deployment today runs **disabled** until
+the Owner performs the production setup below. The Owner activation and
+terminal recovery commands still refuse every run; 4D satisfies no item of
+the DEC-443 gate by itself. The verification record is in
+[testing-and-production-readiness.md](testing-and-production-readiness.md#phase-2c-running-server-email-configuration-checkpoint-4d-local-verification).
+
+**Configuration source (verified in code).** The entry point
+(`server.ts`) is the only code that reads `process.env`; it passes it once to
+`loadRuntimeConfig`, which now returns `email` settings from
+`loadEmailSettings` (`email/config.ts`). `buildServerFromConfig` then builds
+the delivery once with `createEmailDelivery` (`email/transport.ts`) and
+injects it into `buildServer`, which hands the same delivery to Admin
+invitations, password reset, and the password-changed notification. No
+business module reads the environment or imports the Resend transport, the
+key loader, or the configuration loader; a boundary test enforces this. The
+existing selector names are reused; the four public-identity names below are
+new, because none existed before 4D.
+
+| Setting | Disabled mode | Resend mode |
+|---|---|---|
+| `DROMEX_EMAIL_TRANSPORT` | unset, empty, or `disabled` | `resend` (this is the enabled flag; there is no second one) |
+| `DROMEX_EMAIL_RESEND_API_KEY_FILE` | refused | required; an absolute path |
+| `DROMEX_EMAIL_FROM_ADDRESS` | refused | required; one lower-case address, no display-name syntax |
+| `DROMEX_EMAIL_FROM_NAME` | refused | optional; a plain display name (the 4A sender rule) |
+| `DROMEX_EMAIL_REPLY_TO` | refused | required; one lower-case address |
+| `DROMEX_EMAIL_LINK_ORIGIN` | refused | required; one exact origin, HTTPS in production (HTTP only for a loopback host elsewhere), and also listed in `DROMEX_AUTH_TRUSTED_ORIGINS` |
+
+**Disabled mode** is the default and the local-development mode. No transport
+is created, no file is opened, and no request is made. Invitations and resets
+are still recorded and are reported truthfully as `not_sent`
+(`email_disabled`), exactly as before; the startup log records
+`emailDelivery: "disabled"` and that emails are recorded as not sent. It
+never claims a send.
+
+**Resend mode.** Startup validates every public setting, then reads the key
+once through the unchanged 4A secret-file loader (`O_NOFOLLOW`,
+`O_NONBLOCK`, `fstat` on the opened descriptor, regular file, no group or
+other permission bit, 1 to 512 bytes, UTF-8, one key with at most one final
+newline; refused outright on Windows). Nothing is sent and the provider is
+never contacted at startup, so `/health`, `/ready`, and startup itself stay
+independent of Resend. Retries, the idempotency and 409 rules, the no-tracking
+and no-webhook rules, and the rule that delivery status never grants anything
+are unchanged from 4A to 4C.
+
+**Fail-closed startup.** Each of these stops the process with exit code 1
+and one fixed line, `The API cannot start: <message>`, that names settings
+and never a value, path, or key, with no stack trace:
+
+- partial Resend configuration (any required setting missing);
+- any public setting present while email is disabled (never a silent
+  fallback to disabled);
+- a key supplied directly as `RESEND_API_KEY`,
+  `DROMEX_EMAIL_RESEND_API_KEY`, `DROMEX_EMAIL_API_KEY`, or
+  `POSTMARK_SERVER_TOKEN`, in either mode;
+- an unsupported transport value (for example `true` or `postmark`), or
+  `capture`, which is for automated tests only and is refused in the running
+  server (DEC-489 (3));
+- an invalid sender, display name, Reply-To, or link origin, a link origin
+  that is not a trusted origin, or any public setting that looks like a
+  credential;
+- a key file that is missing, unreadable, empty, oversized, not UTF-8, not
+  exactly one key, a symbolic link, a directory, a FIFO, or group- or
+  world-accessible.
+
+**Link origin.** Links are built only from `DROMEX_EMAIL_LINK_ORIGIN`, never
+from a request's `Host` header (tested with a hostile `Host`). It must also be
+a trusted origin because the invitation and reset pages post back to the API
+from it and those routes require an exact trusted `Origin`; any other origin
+would make every emailed link fail. 4D also tightened the shared 4A
+link-origin rule: the URL parser accepts `*` in a host, so
+`https://*.example.test` was previously accepted as an exact origin; the host
+must now be DNS labels, an IPv4 address, or `[::1]`.
+
+**Docker Compose secret-mount design (production; not implemented, not
+performed).** The development Compose file is unchanged and runs disabled.
+In production the Owner creates the key file on the host, outside the
+repository and every image, and mounts it as a Compose secret:
+
+```yaml
+# Shape only. The host path, and the real values of every setting, are
+# operational setup performed by the Owner on the server.
+services:
+  api:
+    environment:
+      DROMEX_EMAIL_TRANSPORT: resend
+      DROMEX_EMAIL_RESEND_API_KEY_FILE: /run/secrets/dromex_resend_api_key
+      DROMEX_EMAIL_FROM_ADDRESS: no-reply@notify.<production domain>
+      DROMEX_EMAIL_FROM_NAME: DROMEX
+      DROMEX_EMAIL_REPLY_TO: <monitored company mailbox>
+      DROMEX_EMAIL_LINK_ORIGIN: https://<application origin>
+    secrets:
+      - dromex_resend_api_key
+secrets:
+  dromex_resend_api_key:
+    file: <host path chosen by the Owner>
+```
+
+The API image runs as the non-root `node` user. The loader does not check
+ownership, but the kernel must still let that user open the file, so the host
+file must be owned by the user ID the container runs as, with mode `0400` or
+`0600`. (The 4A note that a root-owned `0400` secret "remains readable by
+design" means only that the loader does not refuse it for its owner; a
+non-root container process cannot open such a file, and startup then fails
+closed as `api_key_file_unavailable`.) **Unverified, and an operational
+check before production:** how the production Docker Compose version carries
+a file secret's owner and mode into the container, and the numeric user ID
+of `node` in the pinned image. If the mounted file is unreadable or shows
+group or other permission, the API refuses to start rather than running
+without email.
+
+**What remains before real email** (all Owner-performed, none by Claude):
+the Resend account and plan check; domain verification with SPF, DKIM, and
+DMARC; the monitored Reply-To mailbox; a sending-only key restricted to the
+notification domain written into the host file; the production Compose
+settings above; confirmation that the mounted file passes the loader; and a
+real controlled delivery. Owner activation additionally needs the physically
+rehearsed reset and its own separate approval (DEC-443).
+
+**Runtime-compatibility correction (a pre-existing defect found in 4D).**
+The real entry point (`node apps/api/src/server.ts`, the container's command)
+could not start. Verified on exact Node 24.20.0 against the committed code
+(`fc63764`): `server.ts`, `admin-invitations.ts`, and `owner-recovery.ts`
+were each refused with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` ("TypeScript
+parameter property is not supported in strip-only mode"), and the entry point
+exited before listening. Two error classes on the server's import path
+(`RecoveryRefusal` in `owner-recovery.ts`, since checkpoint 3F-C, and
+`Refusal` in `admin-invitations.ts`, since 4B1) used TypeScript parameter
+properties, which Node's type stripping refuses. Vitest transpiles sources,
+so no test noticed. Only those two classes changed: each now declares its
+fields explicitly, with identical behaviour. A focused test loads
+`server.ts` and both modules in a real Node process, and another starts the
+real entry point.
+
+`FactorResetRefused` in `owner-mfa-reset.ts` also uses a parameter property
+and is also refused by Node 24.20.0, but no production import path reaches it
+today: only `terminal-recovery.ts` imports it, and only
+`terminal-recovery-prompt.ts` imports that, which nothing in the source
+imports (the terminal recovery command is disabled). It is therefore
+deliberately left unchanged in 4D. **Whoever wires the terminal recovery
+command must convert it the same way, or the command will not load.**
+
+**Known limits of checkpoint 4D:**
+
+- The Resend-mode tests that read a real key file run only on POSIX (the
+  disposable Node 24.20.0 Linux container), because the loader refuses
+  Windows by design.
+- The key stays in process memory as a JavaScript string (4A limit).
+- The startup log states the mode (`disabled` or `resend`); no route reveals
+  it.
+- The development Compose `api` service passes no authentication settings, so
+  it cannot start as it stands; this predates 4D and is unchanged.
+
+### Implemented Owner account and session management (Phase 2C checkpoint 4E, local development only)
+
+Status: **implemented and verified against disposable PostgreSQL 18.6
+databases and a stubbed browser API only (DEC-490, confirmed). Not
+production-verified.** No real Owner, Admin, session, invitation,
+or email exists. This implements DEC-408's Owner-only account management and
+the disabling part of DEC-427. It does not start the permission model: there
+is no role, template, permission block, project scope, or effective-access
+computation, and none is implied by anything below. (Earlier sections of this
+document referred to this work as checkpoint 4E2.)
+
+**Routes.** Six, each classified `owner`: the guard admits only a fully
+authenticated, MFA-complete Owner session and, for `POST`, an exact trusted
+Origin; the use case then re-reads the caller's principal and admits only the
+active, MFA-complete Owner (DEC-428). Every response carries
+`Cache-Control: no-store`.
+
+| Route | Does | Body |
+|---|---|---|
+| `GET /api/owner/accounts` | Every non-Owner principal (active, disabled, pending) and the newest invitation of every address that has no principal | none |
+| `GET /api/owner/accounts/:userId` | One account in detail | none |
+| `POST /api/owner/accounts/:userId/disable` | Disables an active Admin and ends every session | exactly `{ "reason" }` |
+| `POST /api/owner/accounts/:userId/enable` | Re-enables a disabled Admin; no earlier session returns | exactly `{ "reason" }` |
+| `POST /api/owner/accounts/:userId/sessions/revoke-all` | Ends every session of an active or disabled Admin | empty |
+| `POST /api/owner/accounts/:userId/sessions/:sessionRef/revoke` | Ends one session of an active Admin | empty |
+
+Refusals are fixed codes: `forbidden` (403), `not_found` and
+`session_not_found` (404), `invalid_reason` and `invalid_request` (400), and
+`owner_protected`, `account_not_active`, and `account_not_disabled` (409).
+Invitations keep their existing routes (§14A, checkpoint 4B1) unchanged; the
+Accounts screen calls them.
+
+**States.** Plain language, derived only from recorded facts: *active* and
+*disabled* from the principal; a `pending` principal is *enrolment in
+progress*, *invitation expired*, or *invitation cancelled* from its newest
+invitation; an address with no principal is *invitation pending*,
+*enrolment in progress* (an identity exists but setup has not recorded a
+principal), *invitation expired*, or *invitation cancelled*. Superseded and
+accepted invitations appear only as an account's invitation history.
+
+**What the Owner sees.** Name, address, state, the identity's creation time,
+setup completion where the enrolment recorded it, the newest invitation's
+status and times, and the last status change with its reason, time, and the
+changer's name. For an active account only, the sessions the ordinary gate
+would admit now (unexpired, created no earlier than MFA completion, the last
+password change, or the Owner's last revocation, with an enabled factor, and
+never bound to a recovery or setup), each with its sign-in and expiry time
+and an **opaque reference**: the first 128 bits of a labelled SHA-256 of
+Better Auth's session identifier. Never a token, session identifier, IP
+address, user agent, factor or recovery-code state, invitation token or hash,
+or the audit trail. DROMEX records no "last activity", so none is shown; an
+unrecorded fact reads "Not recorded".
+
+**The session rule (DEC-490 (2)).** `dromex_principal.sessions_revoked_at`
+(DROMEX migration `0011`) only moves forward, has no backfill, and is stamped
+from the API process's clock, as `credentials_changed_at` is (DEC-487), when
+the Owner disables, re-enables, or signs out an Admin everywhere. The
+ordinary gate (`gateIdentity`) refuses a session created before it, beside
+the MFA-completion and credential-change rules. The Owner recovery gate and
+the invitation setup gate do not need it: the Owner is never a target, and a
+pending identity cannot be disabled or signed out.
+
+**Disabling, step by step.** One DROMEX transaction checks the Owner, locks
+the target principal `FOR UPDATE`, refuses the Owner, an unknown account, a
+non-active account, or an invalid reason, counts the sessions the gate would
+admit, sets `status = 'disabled'` and the stamp, inserts the reason into
+`dromex_account_status_change`, and writes `admin_account_disabled` with the
+count, then commits. From that commit every gate refuses every session of the
+account, the session-creation hook refuses new ones (the principal is no
+longer active), password reset suppresses the address (DEC-487 (4)), and an
+invitation to it is refused as `account_exists` (DEC-444 (2)). Only then does
+Better Auth delete the session rows (below). Re-enabling is the same shape and
+stamps again, so a session created in the instant before the disable
+committed still cannot return; the Admin must sign in with password and TOTP.
+Re-enabling deletes nothing: every earlier session is already refused, and a
+deletion could remove a session the Admin legitimately began a moment later.
+Revoking every session stamps without changing the status, and is allowed on a
+disabled account too, which retries a cleanup that failed at disable time.
+
+**Better Auth's rows (DEC-490 (3)).** Better Auth 1.7.4's public endpoints
+revoke only the caller's own sessions; revoking another user's needs its admin
+plugin, which DROMEX excludes (DEC-422) and which would add schema, and
+DEC-431 forbids DROMEX SQL on its rows. The deletion therefore goes through
+the internal adapter Better Auth exposes on `auth.$context`, limited to
+`listSessions`, `deleteSession`, and `deleteUserSessions`, in
+`src/accounts/session-control.ts`. Boundary tests prove that it is the only
+module reaching `$context` or `internalAdapter`, that the server alone imports
+it, that it uses exactly those three operations and no SQL, and that it
+deletes only a session of the named user by Better Auth identifier, never a
+token supplied from outside. After a disable or a revoke-all, a deletion that fails or leaves rows is audited as
+`admin_account_session_cleanup_incomplete` (reason `cleanup_failed` or
+`sessions_remaining`) and is not reported to the Owner as a failed action,
+because the gate already refuses those sessions. A single-session revocation
+instead deletes the session while the account is locked and audits only once
+the deletion happened, so a failed deletion changes nothing and returns an
+error.
+
+**The reason (DEC-490 (4)).** Required for disable and re-enable: one line of
+3 to 500 characters once trimmed, measured in characters, with no C0 or C1
+control character and no bidirectional embedding, override, or isolate.
+`src/accounts/account-reason.ts` and a database check enforce the same rule.
+Arabic and mixed-direction text are accepted. It is stored in
+`dromex_account_status_change` (append-only by trigger: no update, delete, or
+truncate; foreign keys restricted; an account can never change its own
+status), shown to the Owner, and never written to the audit trail or a log.
+The confirmation tells the Owner never to include a password or code.
+
+**Audit (DEC-490 (5)).** Events `admin_account_disabled`,
+`admin_account_enabled` (each with the status-change reference and, for a
+disable, the count of sessions ended), `admin_account_sessions_revoked`
+(count), `admin_account_session_revoked` (count 1),
+`admin_account_session_cleanup_incomplete`, `admin_account_action_refused`
+(reason `forbidden`, `not_found`, `owner_protected`, `invalid_reason`,
+`account_not_active`, `account_not_disabled`, or `session_not_found`), and
+`owner_route_refused`. Events gain `target_user_id`, a restricted foreign key
+to the Better Auth user, so it can hold only a real user identifier, and
+`account_change_id`. The guard now records `owner_route_refused`, with the
+actor and address only, whenever an authenticated non-Owner reaches any
+`owner` route, including the invitation routes; a failure to record never
+admits. This closes the 4B1 limit that guard refusals were not audited.
+Requests without a usable session, and viewing, are not audited.
+
+**Screens.** `/owner/accounts` and `/owner/accounts/<id>` in the development
+preview: a ledger of Admin accounts and of invitations without an account,
+the existing invite form, and one account with its facts, sessions, and a
+separate Actions panel. Each state is a text pill with a drawn shape, never
+colour alone. Disabling, re-enabling, and each revocation go through a native
+modal dialog that names the person and the consequences, starts on the reason
+or on "Keep as is", closes on Escape, and returns focus to the control that
+opened it. Loading, empty, failed, signed-out, and not-Owner states are
+explicit. The page asks `/api/session` first and never calls an Owner route
+for a signed-out visitor or an Admin, but that is convenience only: the API is
+the boundary. **There is still no web sign-in screen**, so the page is
+reachable only with a session obtained another way; it is verified against a
+stubbed API, as the invitation and reset pages are.
+
+**Why no deletion.** Loads, reports, corrections, and payments reference a
+user by a stable identifier (DEC-427), and the principal and audit foreign
+keys are `RESTRICT`. Disabling removes all access while every historical
+record keeps its author, and re-enabling needs no re-creation. A deletion
+path would either break that history or need a tombstone design nobody has
+approved.
+
+**Known limits and residual risks of checkpoint 4E:**
+
+- **Internal-adapter dependency.** `auth.$context.internalAdapter` is typed
+  and exported by Better Auth for plugins but is not its documented public
+  server API. A Better Auth upgrade (DEC-431) must re-run the boundary and
+  integration tests; if the adapter changes, cleanup fails closed into the
+  audited `cleanup_incomplete` path and the gate still refuses the sessions.
+- **Clock.** The session rule compares the API clock with Better Auth's
+  session creation time, which comes from the same process. A host whose
+  clock steps backwards could briefly admit or refuse a session near the
+  boundary; production runs the API and database on one host.
+- **Single-session revocation** deletes before its audit row commits. If the
+  commit itself then failed, the session would be gone without its audit row.
+  That fails safe for access but leaves an audit gap.
+- **Lists are bounded:** 200 accounts, 200 invitation addresses, and 50
+  sessions per account, with no pagination.
+- **The Owner's own sessions** are not listed or managed here; Owner session
+  management and recovery remain the terminal and recovery flows (DEC-436,
+  DEC-437).
+- **A lost authenticator before activation** still has no recovery (OQ-168).
+  A disabled Admin who lost their authenticator has none either: re-enabling
+  restores sign-in with the existing factor only, and resetting an Admin's
+  factor is not designed.
+- **Fastify's default `414` body** for an over-long path parameter echoes the
+  caller's own path. That affects every parameterised route since 4B1, is
+  unchanged here, and is recorded for the hardening phase.
+- Behaviour under a least-privilege runtime database role is not verified;
+  that role is not provisioned. The append-only triggers stop application
+  defects, not the table owner.
+
+### Deliberately left to the implementation phase
+
+A recovery path for an invitee who lost the authenticator before activation
+(OQ-168). (Listing pending identities for the Owner was done in checkpoint
+4E, below.)
+(Whether design closure satisfies DEC-435 (6) is no longer open: it does
+not, and DEC-443 sets the gate above.)
+
+### Sources (accessed 2026-09-16)
+
+All **verified** against official documentation on that date unless marked.
+
+- OWASP: [Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html);
+  [Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html);
+  [Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html);
+  [Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html).
+- Resend: [pricing](https://resend.com/pricing) (Free: 3,000 a month, 100 a
+  day; Pro from $20 a month);
+  [API key permissions](https://resend.com/docs/api-reference/api-keys/create-api-key)
+  (`sending_access`, restrictable to one domain);
+  [idempotency keys](https://resend.com/docs/dashboard/emails/idempotency-keys)
+  (retained 24 hours);
+  [open and click tracking](https://resend.com/docs/dashboard/domains/tracking)
+  (disabled by default);
+  [sending regions](https://resend.com/docs/dashboard/domains/regions) and
+  [security](https://resend.com/security) (data stored in the United States;
+  30-day email and log retention; SOC 2 Type II; pre-signed DPA);
+  [domains](https://resend.com/docs/dashboard/domains/introduction) and
+  [domain verification troubleshooting](https://resend.com/docs/knowledge-base/what-if-my-domain-is-not-verifying);
+  [webhook verification](https://resend.com/docs/dashboard/webhooks/verify-webhooks-requests);
+  [rate limit](https://resend.com/docs/api-reference/rate-limit);
+  re-verified for checkpoint 4A on 2026-09-16:
+  [send email](https://resend.com/docs/api-reference/emails/send-email),
+  [API introduction](https://resend.com/docs/api-reference/introduction)
+  (required `User-Agent`), and
+  [errors](https://resend.com/docs/api-reference/errors).
+  **Not verified:** whether the Free plan's terms permit DROMEX's business
+  use.
+- Svix: [manual webhook verification](https://docs.svix.com/receiving/verifying-payloads/how-manual).
+- Postmark: [pricing](https://postmarkapp.com/pricing);
+  [API overview](https://postmarkapp.com/developer/api/overview);
+  [webhooks overview](https://postmarkapp.com/developer/webhooks/webhooks-overview)
+  (no HMAC signature verification);
+  [SMTP](https://postmarkapp.com/developer/user-guide/send-email-with-smtp);
+  [EU privacy](https://postmarkapp.com/eu-privacy) (US processing; 45-day
+  content retention);
+  [account approval](https://postmarkapp.com/support/article/1084-how-does-the-account-approval-process-work).
+- Amazon: [SES pricing](https://aws.amazon.com/ses/pricing/);
+  [SES sandbox and production access](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html);
+  [SES SMTP credentials](https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html);
+  [SNS signature verification](https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html).
+- Mailgun: [pricing](https://www.mailgun.com/pricing/);
+  [webhook security](https://documentation.mailgun.com/docs/mailgun/user-manual/webhooks/securing-webhooks).
+- Contabo: [server email sending limit](https://help.contabo.com/en/support/solutions/articles/103000280507-is-there-a-limit-to-how-many-emails-can-be-sent-from-my-server-)
+  (about 25 emails a minute).
+- Docker: [Compose secrets](https://docs.docker.com/compose/how-tos/use-secrets/)
+  (mounted as files under `/run/secrets/`; not described as encrypted
+  outside Swarm).
+- Better Auth: [email and password](https://www.better-auth.com/docs/authentication/email-password),
+  plus the installed 1.7.4 source listed above.
 
 ## 15. Future Android authentication and synchronization
 
@@ -836,12 +3149,12 @@ replicate that pairing.
 | Screen | Design intent |
 |---|---|
 | Sign-in | Cream page, navy header, two fields, one orange action. Identical response and timing for a wrong password and a non-existent account. `autocomplete` set for password managers. No sign-up link. |
-| First-time Owner setup | One-time bootstrap: set password, enrol MFA, acknowledge and store recovery codes. Not skippable; the route no longer exists afterward. |
-| Admin invitation | Owner creates the account and chooses a template; the invited user receives a single-use, short-lived link to set their own password. The Owner never sees or sets another person's password. |
+| First-time Owner setup | **Not a web screen** (DEC-434, superseding the earlier web design). The Owner is activated only through the local terminal command: name, email, hidden password with confirmation; the TOTP secret for manual entry and the `otpauth://` URI, with a scrollback warning and an instruction to enrol **two** authenticator devices; at most five TOTP attempts; a typed acknowledgement of two devices and two sealed code copies; the ten recovery codes shown once; a second typed acknowledgement; then a screen clear. There is no setup route before, during, or after. |
+| Admin invitation | Owner creates the account and chooses a template; the invited user receives a single-use link valid for 24 hours, sets their own password, and completes restricted web TOTP enrolment before any business access (DEC-440, §14A). The Owner never sees or sets another person's password and never sees a transferable invitation link. |
 | MFA enrolment | QR code plus the secret as selectable text; a verification field proving the authenticator works before enrolment completes. |
 | MFA verification | One six-digit field, `autocomplete="one-time-code"`; a quiet secondary link to use a recovery code instead. |
 | Recovery codes | Full-width monospace list; copy and print actions; a required "I have saved these codes" checkbox; shown once; regeneration states plainly that the old codes stop working immediately. |
-| Password recovery | Always the same message whether or not the address exists; single-use, short-lived, rate-limited link. |
+| Password recovery | Always the same message whether or not the address exists; single-use, rate-limited link valid for 30 minutes; after success, a calm notice that every device was signed out and that sign-in still needs the authenticator (DEC-441, DEC-442, §14A). |
 | Session expiration | A calm inline notice, not a modal; typed work is preserved and re-submitted after re-authentication wherever possible. |
 | Device and session management | One card per session: device, browser, IP, first/last seen; each carries a clearly separated "Revoke this session"; one "Sign out everywhere." |
 | Owner user management | Account cards: name, template, status, MFA state, last sign-in. |
@@ -856,6 +3169,13 @@ replicate that pairing.
 
 Tone: calm and trustworthy, no alarming iconography, no red unless
 genuinely destructive, no gradients or glass, no decorative animation.
+
+*Checkpoint 4E note:* the Owner's account and session screens implemented in
+4E (§14A) deliberately show no IP address, user agent, device detail, or
+last-seen time, on the Owner's 4E directive, and no template, MFA, or
+last-sign-in columns, because those facts are not recorded or not approved.
+The device-and-session and user-management rows above remain the fuller
+future design.
 
 ## 18. Accessibility requirements
 
@@ -891,7 +3211,8 @@ any implementation exists.
 | Login / logout | Correct credentials succeed; wrong password fails; non-existent account fails identically in body, status, and timing; logout destroys the server session | Real PostgreSQL |
 | MFA enrolment and challenge | Enrolment requires verification; a user without MFA reaches only enrolment routes; a valid code succeeds; a stale or replayed code fails; the ±1 period window behaves as documented | PostgreSQL + controlled time |
 | Recovery codes | Generated at enrolment; each works once; a reused code fails; regeneration invalidates the previous set; viewing requires a fresh session | PostgreSQL, controlled time |
-| Password reset | Single-use, short-lived link; identical response for known and unknown addresses; reset revokes other sessions | PostgreSQL + captured email |
+| Password reset | Single-use 30-minute link; identical response and measured timing for known, unknown, disabled, and rate-limited addresses; a new request supersedes older tokens; reset revokes all sessions and leaves MFA required (DEC-441; full plan in testing-and-production-readiness.md) | PostgreSQL + capture transport |
+| Admin invitation | Owner-only; 24-hour single-use link; resend supersedes; restricted enrolment before activation; all sessions revoked afterwards (DEC-440) | PostgreSQL + capture transport + real browser |
 | Session rotation and expiry | New session ID on authentication; expiry and `updateAge` extension behave correctly | Controlled time |
 | Session revocation | Revoke one leaves others alive; revoke-all kills every session; an Owner revoking another user's session takes effect on their very next request | PostgreSQL |
 | Account disabling | A disabled user's existing session is refused immediately; their name still renders on historical records | PostgreSQL |
@@ -952,6 +3273,10 @@ because they were solved above:
 - A fully compromised administrator computer defeats most controls in this
   document.
 - TOTP is phishable in real time; only a future WebAuthn phase closes this.
+- Someone who controls the Owner's mailbox can use password reset to change
+  the Owner's password and cause a nuisance lockout. TOTP still blocks
+  access; the password-changed notification and the audit make it visible
+  (DEC-441, §14A). Accepted.
 - A leaked backup is a total compromise of the business record.
 - The Owner-recovery break-glass procedure (§14) is, by necessity, an
   administrative bypass of MFA — its existence is a deliberate trade
