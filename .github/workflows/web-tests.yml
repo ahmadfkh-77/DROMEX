@@ -303,6 +303,49 @@ jobs:
         if: always()
         run: docker rm -f dromex-e2e-db > /dev/null 2>&1 || true
 
+      # Diagnostic only: prints each failed end-to-end test as an annotation with
+      # ONLY its title, status, duration and error class name. Never the error
+      # message, a stack, a request or response body, or any value. The JSON
+      # report stays in the runner's temp directory and is never uploaded.
+      - name: Explain the end-to-end failures (title, status, duration, error class only)
+        if: always() && steps.e2e.outcome != 'skipped'
+        continue-on-error: true
+        env:
+          E2E_REPORT: ${{ runner.temp }}/e2e-report.json
+        run: |
+          node --input-type=module - <<'NODE'
+          import { existsSync, readFileSync } from 'node:fs';
+          const path = process.env.E2E_REPORT ?? '';
+          if (path === '' || !existsSync(path)) {
+            console.log('::warning title=End-to-end report::No JSON report was written.');
+            process.exit(0);
+          }
+          const report = JSON.parse(readFileSync(path, 'utf8'));
+          const safeTitle = (value) => String(value ?? '').replace(/[^A-Za-z0-9 ,.()'/_-]/g, '?').slice(0, 160);
+          const errorClass = (error) => {
+            const match = /^\s*(?:\u001b\[[0-9;]*m)*([A-Za-z]{1,40}Error|Error)\b/.exec(String(error?.message ?? ''));
+            return match ? match[1] : 'unknown';
+          };
+          const stats = report.stats ?? {};
+          console.log(`::notice title=End-to-end statuses::expected ${stats.expected ?? '?'}, unexpected ${stats.unexpected ?? '?'}, flaky ${stats.flaky ?? '?'}, skipped ${stats.skipped ?? '?'}`);
+          const visit = (suite, trail) => {
+            const here = suite.title ? [...trail, suite.title] : trail;
+            for (const spec of suite.specs ?? []) {
+              for (const test of spec.tests ?? []) {
+                const last = (test.results ?? []).at(-1);
+                const status = test.status === 'expected' ? 'passed' : test.status;
+                if (status === 'passed') continue;
+                const duration = last?.duration ?? 0;
+                const cls = last?.error ? errorClass(last.error) : 'none';
+                console.log(`::error title=End-to-end ${safeTitle(status)}::${safeTitle(spec.title)} | status ${safeTitle(status)} | ${duration} ms | error class ${cls}`);
+              }
+            }
+            for (const child of suite.suites ?? []) visit(child, here);
+          };
+          for (const suite of report.suites ?? []) visit(suite, []);
+          for (const error of report.errors ?? []) console.log(`::error title=End-to-end run error::error class ${errorClass(error)}`);
+          NODE
+
       # Diagnostic only: prints the web unit, browser and end-to-end test counts as public
       # annotations and in the job summary. It never changes the job result.
       - name: Explain the web unit and browser runs (counts)

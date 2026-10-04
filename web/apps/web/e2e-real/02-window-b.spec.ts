@@ -30,7 +30,9 @@ const adminD = account('ADMIN_D');
 
 let replayMessage = '';
 
-test.beforeAll(async () => {
+// The wait is a test of its own, so its timeout is set in the test body and
+// covers the 62 seconds with margin. Serial mode skips the window if it fails.
+test('the sign-in limit window is allowed to reset', async () => {
   test.setTimeout(120_000);
   await quietForRateLimit();
 });

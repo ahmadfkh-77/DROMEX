@@ -111,7 +111,7 @@ describe('the end-to-end workflow and configuration', () => {
     expect(config).toMatch(/trace:\s*'off'/);
     expect(config).toMatch(/video:\s*'off'/);
     expect(config).toMatch(/screenshot:\s*'off'/);
-    expect(config).toMatch(/reporter:\s*\[\['line'\]\]/);
+    expect(config).toMatch(/reporter:\s*\[\['line'\], \['json', \{ outputFile:/);
   });
 
   it('masks each generated secret before it is written to the environment file', async () => {

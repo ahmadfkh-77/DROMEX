@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+
 import { defineConfig, devices } from '@playwright/test';
 
 /**
@@ -29,7 +31,10 @@ export default defineConfig({
   forbidOnly: true,
   // Two of the tests wait out a rate-limit window of 60 seconds.
   timeout: 120_000,
-  reporter: [['line']],
+  // The JSON report stays in the runner's temp directory (never uploaded); the
+  // workflow turns it into annotations carrying only titles, status, duration
+  // and error class names.
+  reporter: [['line'], ['json', { outputFile: join(process.env['RUNNER_TEMP'] ?? '.', 'e2e-report.json') }]],
   use: {
     ...devices['Desktop Chrome'],
     ...channel,

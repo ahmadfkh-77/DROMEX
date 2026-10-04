@@ -9,7 +9,11 @@ import { RATE_LIMITED_MESSAGE, TRUSTED_ORIGIN_HEADER, WEB_ORIGIN, newSession, qu
  * real one, unchanged. Nothing runs after this window.
  */
 
-test.beforeAll(async () => {
+test.describe.configure({ mode: 'serial' });
+
+// The wait is a test of its own, so its timeout is set in the test body and
+// covers the 62 seconds with margin.
+test('the sign-in limit window is allowed to reset', async () => {
   test.setTimeout(120_000);
   await quietForRateLimit();
 });
