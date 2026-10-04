@@ -4,6 +4,8 @@ import { AccountsPage } from './accounts/AccountsPage.tsx';
 import { InvitationPage } from './invitation/InvitationPage.tsx';
 import { ForgotPasswordPage } from './password-reset/ForgotPasswordPage.tsx';
 import { ResetPasswordPage } from './password-reset/ResetPasswordPage.tsx';
+import { AccountPage as SessionAccountPage } from './signin/AccountPage.tsx';
+import { SignInPage } from './signin/SignInPage.tsx';
 
 const STYLES = `
   :root {
@@ -107,10 +109,20 @@ const STYLES = `
     padding: 0.75rem 1rem;
     margin: 0 0 1rem;
   }
+  .alert p { margin: 0; }
+  .alert p + p { margin-top: 0.5rem; }
+  .wrap { overflow-wrap: anywhere; }
+  .form button.secondary { background: var(--surface); color: var(--structural-navy); border: 2px solid var(--structural-navy); }
+  .facts { display: grid; gap: 0.75rem; margin: 0; }
+  .facts div { min-width: 0; }
+  .facts dt { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--structural-navy); }
+  .facts dd { margin: 0; }
 `;
 
 /** The other paths the preview serves: invitation and password reset (DEC-442). */
 const PAGES: Record<string, ComponentType> = {
+  '/sign-in': SignInPage,
+  '/account': SessionAccountPage,
   '/invitation': InvitationPage,
   '/forgot-password': ForgotPasswordPage,
   '/reset-password': ResetPasswordPage,
@@ -163,7 +175,11 @@ export function App() {
           <section className="card">
             <h2>Sign-in</h2>
             <p>
-              No designed sign-in screen yet, and no real account exists.{' '}
+              Email, password, and a code from your authenticator app. No real account
+              exists yet.{' '}
+              <a className="link" href="/sign-in">
+                Sign in
+              </a>{' '}
               <a className="link" href="/forgot-password">
                 Forgot password?
               </a>
