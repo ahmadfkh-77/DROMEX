@@ -20,6 +20,10 @@ describes a rule, it cites the decision that established it.
 | [backup-and-recovery.md](backup-and-recovery.md) | Backup design, recovery objectives, restore verification | **Planned** (no backups exist) |
 | [testing-and-production-readiness.md](testing-and-production-readiness.md) | Test strategy, the isolated database test lifecycle, the production-readiness gate | **Partly implemented** (Phase 1 tests only; CI verification on GitHub Actions (phase CI-1, DEC-491)) |
 
+For what must be true before real Owner activation and production, the
+evidence status of each gate, and what only the Owner can do, see
+[production-gates.md](production-gates.md).
+
 ## Current state, stated plainly
 
 As of Phase 1 the web system is a **local development foundation only**.
