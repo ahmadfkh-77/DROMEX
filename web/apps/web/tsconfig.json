@@ -13,7 +13,9 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "e2e/**/*.ts",
+    "e2e-real/**/*.ts",
     "vite.config.ts",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "playwright.e2e.config.ts"
   ]
 }
