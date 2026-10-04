@@ -1613,9 +1613,15 @@ nothing sensitive is in the URL, page script, storage, page source or console.
 **Security-header gap, recorded plainly.** The API itself sets almost no
 security headers (`Cache-Control: no-store` on some routes only; no HSTS,
 `X-Content-Type-Options`, CSP, `Referrer-Policy` or frame protection). The run
-records which of them are present as a test annotation and asserts only what
-exists (JSON content type, no CORS allow-origin, no `X-Powered-By`). They are
-expected at the reverse proxy and are production gate B16, not started.
+records which of them the API itself sends as a test annotation, and asserts
+only what exists (JSON content type, no CORS allow-origin, no `X-Powered-By`),
+checked directly against the API on its own port. They are expected at the
+reverse proxy and are production gate B16, not started.
+
+Note: `vite preview`, which serves the built web app in these tests, adds CORS
+headers (`Access-Control-Allow-Origin`, `Vary: Origin`) of its own. It is a
+test-only server, never a production one, which is why header checks bypass it;
+real header behaviour belongs to the reverse proxy (gate B16).
 
 **What this still does not prove.** No real email, provider or domain; no
 production environment, TLS or `Secure` cookies behind real HTTPS; no
