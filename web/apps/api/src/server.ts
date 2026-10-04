@@ -145,7 +145,9 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
   commonPasswordBlocklistSize();
 
   // One pool serves readiness, Better Auth, and principal lookups alike.
-  const pool = createPool(options.databaseUrl);
+  const pool = createPool(options.databaseUrl, (errorCode) =>
+    app.log.error({ errorCode }, 'database pool reported an error; the failed connection was discarded'),
+  );
 
   let auth: ReturnType<typeof createAuth>;
   try {
