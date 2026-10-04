@@ -152,5 +152,70 @@ jobs:
       - name: API unit tests
         run: npm run test:unit --workspace @dromex/api
 
+      # The output is saved so the next step can explain a failure in the job
+      # annotations and summary. pipefail keeps the test command's own exit code.
       - name: API integration tests
-        run: npm run test:integration --workspace @dromex/api
+        id: integration
+        run: |
+          set -o pipefail
+          npm run test:integration --workspace @dromex/api 2>&1 | tee "$RUNNER_TEMP/integration.log"
+
+      # Diagnostic only (CI diagnostics branch): prints test counts, failed test
+      # names and any unhandled error as public annotations and a job summary,
+      # with connection strings and credential-shaped values redacted. It never
+      # changes the result of the job.
+      - name: Explain the integration run (counts, failed tests, unhandled errors)
+        if: always() && steps.integration.outcome != 'skipped'
+        continue-on-error: true
+        env:
+          LOG_PATH: ${{ runner.temp }}/integration.log
+          INTEGRATION_OUTCOME: ${{ steps.integration.outcome }}
+        run: |
+          node --input-type=module - <<'EOF'
+          // Explains an integration-test run in the job annotations and job summary.
+          // Reads the saved test output; never changes the result of the job.
+          import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+
+          const logPath = process.env.LOG_PATH ?? '';
+          const summaryPath = process.env.GITHUB_STEP_SUMMARY ?? '';
+          const outcome = process.env.INTEGRATION_OUTCOME ?? 'unknown';
+          const raw = logPath !== '' && existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
+          const text = raw.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '');
+          const lines = text.split('\n');
+
+          // The logs are public: connection strings and credential-shaped values never leave this step.
+          const redact = (value) =>
+            value
+              .replace(/postgres(?:ql)?:\/\/\S+/gi, 'postgres://[redacted]')
+              .replace(/\b(password|passwd|pwd|secret|token|cookie)\b\s*[=:]\s*\S+/gi, '$1=[redacted]')
+              .slice(0, 400);
+          const annotationText = (value) => value.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+          const first = (pattern) => lines.find((line) => pattern.test(line))?.trim();
+
+          const filesLine = first(/^\s*Test Files\s/);
+          const testsLine = first(/^\s*Tests\s/);
+          const failedTests = [...new Set(lines.filter((line) => /^\s*FAIL\s/.test(line)).map((line) => redact(line.trim())))];
+
+          const unhandledStart = lines.findIndex((line) => /Unhandled (Errors?|Rejections?)/.test(line));
+          const unhandled = unhandledStart < 0 ? [] : lines.slice(unhandledStart, unhandledStart + 40).map((line) => redact(line.trimEnd())).filter((line) => line.trim() !== '');
+          const connectionLines = [...new Set(lines.filter((line) => /57P01|terminating connection|Connection terminated|ECONNRESET/i.test(line)).map((line) => redact(line.trim())))].slice(0, 6);
+
+          const counts = [filesLine, testsLine].filter(Boolean).join(' | ') || 'no vitest summary line found in the output';
+          console.log(`::notice title=Integration test counts (${outcome})::${annotationText(redact(counts))}`);
+          for (const name of failedTests.slice(0, 8)) console.log(`::error title=Failed integration test::${annotationText(name)}`);
+          if (unhandled.length > 0) {
+            console.log(`::error title=Unhandled error during the integration run::${annotationText(unhandled.slice(0, 18).join('\n'))}`);
+          }
+          if (outcome === 'failure' && failedTests.length === 0) {
+            const why = unhandled.length > 0 ? 'unhandled error(s) were reported (see the other annotation)' : 'no failed test and no unhandled error were found in the output';
+            console.log(`::error title=Integration step failed with no failed test::${annotationText(why)}`);
+          }
+
+          if (summaryPath !== '') {
+            const out = ['## Integration test run', '', `- Step outcome: **${outcome}**`, `- ${counts}`, `- Failed tests: **${failedTests.length}**`, `- Unhandled-error block present: **${unhandled.length > 0 ? 'yes' : 'no'}**`, ''];
+            if (failedTests.length > 0) out.push('### Failed tests', '', ...failedTests.map((name) => `- \`${name}\``), '');
+            if (unhandled.length > 0) out.push('### Unhandled error output (first lines, redacted)', '', '```', ...unhandled, '```', '');
+            if (connectionLines.length > 0) out.push('### Connection-termination lines seen', '', '```', ...connectionLines, '```', '');
+            appendFileSync(summaryPath, out.join('\n') + '\n');
+          }
+          EOF
