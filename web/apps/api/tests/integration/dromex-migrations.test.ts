@@ -610,7 +610,7 @@ describe('DROMEX migration mechanism', () => {
     expect({ rows: await rows(), columns: await columns() }).toEqual(before);
     const index = await pool.query(`SELECT indexdef FROM pg_indexes WHERE tablename = 'dromex_rate_limit' AND indexname = 'dromex_rate_limit_last_request'`);
     expect(index.rows).toHaveLength(1);
-    expect(index.rows[0]!.indexdef).toMatch(/USING btree (last_request_ms)/);
+    expect(index.rows[0]!.indexdef).toContain('USING btree (last_request_ms)');
   });
 
   it('applies 0012 idempotently: running its SQL again changes nothing', async () => {
