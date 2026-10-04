@@ -1517,6 +1517,36 @@ Limits: the server's wiring to its logger is a one-line change and is not
 covered by its own test; a database that stays down is reported by `/ready`,
 not by this listener.
 
+## Web sign-in screen (SI-1a, 2026-10-04)
+
+Status: **implemented locally, verified against a stubbed API only.** The
+`/sign-in` page (password step, then the six-digit authenticator code) and a
+minimal `/account` page (name, email, the role the server states, sign out)
+live in `web/apps/web/src/signin/`. No API, database, migration, dependency,
+or session-configuration change (DEC-493 values untouched).
+
+| Behaviour | How it is decided |
+| --- | --- |
+| Failed sign-in | Every `401` shows one message; a `403` on sign-in only means this browser already has a full session, so it gets its own message and never differs by account |
+| Rate limit | Limits are keyed by client address and path, never by account, so a countdown from a valid `Retry-After` is shown; with no valid header no number is shown |
+| Wrong code | The server answers a wrong, missing, or expired code identically (`401 invalid_code`), so the UI stays on the code step with one message and a Start over button, and never restarts automatically |
+| Success | Shown only after `{authenticated: true}`; then a full navigation to `/account` |
+| Account page | A signed-out visit goes to `/sign-in`; a session that ends while open is shown as ended on the next focus; Sign out reports success only after the server confirms |
+| Storage | Nothing in the URL, `localStorage`, `sessionStorage`, IndexedDB, or the console; password and code live only in uncontrolled inputs and are cleared on submit and on error |
+| Text | Every string is in `src/signin/strings.ts`; layout was checked with long text and `dir="rtl"` |
+
+**Deviation from Owner decision D3:** the lost-authenticator link and any
+recovery wording are deliberately omitted, because no web recovery page
+exists yet. The Owner recovery screen is built with batch 4c (OQ-168's
+invitee case stays unbuilt).
+
+Tests: 21 Node unit tests (`npm run test:unit` in `web/apps/web`) and 27
+Playwright tests per viewport at 375, 768 and 1280 pixels, run locally on
+Windows against the already-installed Chromium with the API stubbed at the
+network layer; the full web suite (177 tests) passes. Real-browser CI against
+the real API (cookie flags, security headers, cross-site POST) is batch 4b and
+is not done. This screen satisfies no DEC-443 gate item.
+
 ## Planned tests: email, Admin invitations, and password reset
 
 Status: **planned design, now covered by checkpoints 4A to 4C (DEC-439

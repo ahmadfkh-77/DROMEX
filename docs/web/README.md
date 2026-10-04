@@ -65,8 +65,9 @@ What does **not** exist, and must not be assumed to exist:
   separate approval all remain,
 - any real account administration: Owner account and session management
   (checkpoint 4E, DEC-490) exists and is tested against disposable databases
-  and a stubbed browser API only; there is no web sign-in screen, no real
-  Admin or session to manage, and no permission model,
+  and a stubbed browser API only; the sign-in and account screens (SI-1a)
+  exist and are verified against a stubbed API only, with no real Admin or
+  session to manage, and no permission model,
 - any business table or business rule,
 - any Android synchronisation,
 - any deployment, any VPS configuration, and any production data.
