@@ -1396,6 +1396,53 @@ omits development dependencies.
 Sources, accessed 2026-10-04: the GitHub Advisory Database entries above
 (`https://api.github.com/advisories/<id>`) and the npm registry (`npm view`).
 
+## Recovery-code read boundary test (SEC-1a, 2026-10-04)
+
+Status: **implemented and CI-verified; test only, no runtime code changed.**
+`tests/unit/recovery-code-read-boundary.test.ts` (7 tests, no database)
+enforces the rule recorded in the architecture document: Better Auth's
+server-only `viewBackupCodes` checks no session of its own, so DROMEX calls it
+only from three listed wrappers, each with the user ID it was handed and each
+reached only with a server-derived user (the verified recovery session's
+Owner, the invited user whose TOTP-verified session matches the enrolment, or
+the Owner of a terminal run after the password check). The allowlists of
+callers, wrappers, and arguments are exact, so a new caller or a changed
+argument fails the test and needs a deliberate, reviewed update. A real server
+is also asked for `/api/auth/two-factor/view-backup-codes` and must answer 404.
+Ten deliberate rule-breaking changes (an unlisted caller, request input
+reaching a wrapper, computed property access, a missing password check, an
+HTTP module importing terminal recovery, a registered route, and others) were
+each applied alone to a disposable copy and all ten were caught.
+
+**Flaky-run finding.** One local run failed without explanation. Reproduced
+under CPU load (4 failures in 15 loaded runs, none in 20 plain runs), it was
+always Vitest's default **5-second per-test timeout**: each test re-read and
+re-scanned every source file, and re-parsed a file for every call it found.
+The fix was in the test only: each file is now read and parsed once, in a
+`beforeAll` step. No assertion changed, and no timeout or retry was added.
+After the fix, 55 of 55 runs passed (20 plain, 20 under CPU load, 15 alongside
+the full unit suite), the slowest scanning test under load was 283 ms, and
+all ten mutations were still caught.
+
+**CI evidence.** [Run 37166895810](https://github.com/ahmadfkh-77/DROMEX/actions/runs/37166895810)
+on `verify/sec-1a` (`b03ae8f`): every step passed, including the clock gate,
+typecheck, unit tests, and integration tests; exact test counts are in the run
+log.
+
+**Known limit, possible follow-up (not part of this change).** The three older
+unit tests that build a real server (`invitation-acceptance-boundary`,
+`owner-provisioning-boundary`, `password-reset-boundary`) rely on the same
+default 5-second limit and can occasionally time out on a slow Windows
+machine; one full local run timed out in all three (and in the new test) at
+once, and three immediate reruns passed.
+
+**Main has moved (2026-10-04).** `origin/main` advanced to `ef443f8` through
+the merge of Android pull request #2 (builds 23 to 28), whose Android
+decisions were renumbered to DEC-500 to DEC-505 to avoid a clash with the web
+decisions. Merging this branch into main will need the two shared files,
+`requirements/decisions.md` and `requirements/SRS.md`, reconciled; that is a
+separate, planned checkpoint and has not been started.
+
 ## Planned tests: email, Admin invitations, and password reset
 
 Status: **planned design, now covered by checkpoints 4A to 4C (DEC-439
