@@ -148,6 +148,35 @@ async function count(sql: string, values: unknown[] = []): Promise<number> {
   return rows[0]!.n;
 }
 
+/**
+ * The backend holding the provisioning advisory lock in this database, if any.
+ * pg_locks is cluster-wide, so it is filtered to this database, and the
+ * 64-bit key is rebuilt from its two 32-bit halves (classid is the high half,
+ * objid the low half).
+ */
+async function lockHolderPid(): Promise<number | null> {
+  const { rows } = await authPool.query<{ pid: number; classid: string; objid: string }>(
+    `SELECT pid, classid::text AS classid, objid::text AS objid FROM pg_locks
+      WHERE locktype = 'advisory' AND granted
+        AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+  );
+  const key = BigInt(OWNER_PROVISIONING_LOCK_KEY);
+  const holder = rows.find((row) => (BigInt(row.classid) << 32n) + BigInt(row.objid) === key);
+  return holder?.pid ?? null;
+}
+
+/** Terminates the lock holder's connection and waits until the server has released the lock. */
+async function terminateLockHolder(): Promise<void> {
+  const pid = await lockHolderPid();
+  expect(pid, 'the activation run must hold the provisioning lock at this point').not.toBeNull();
+  await authPool.query('SELECT pg_terminate_backend($1)', [pid]);
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if ((await lockHolderPid()) === null) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('The server did not release the lock after its connection was terminated.');
+}
+
 const users = () => count(`SELECT count(*)::int AS n FROM "user"`);
 const sessions = () => count(`SELECT count(*)::int AS n FROM "session"`);
 const principals = () => count(`SELECT count(*)::int AS n FROM dromex_principal`);
@@ -516,6 +545,52 @@ describe('Owner activation against PostgreSQL 18.6', () => {
             AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
       );
       expect(rows[0]!.n).toBe(0);
+    });
+
+    // SEC-1c. The lock is a session-level advisory lock on one checked-out
+    // connection. Terminating that connection while the operator is at a
+    // prompt must release the lock on the server, commit nothing, and leave a
+    // run that can be resumed. The unit counterpart
+    // (tests/unit/owner-provisioning-lock-loss.test.ts) records a known gap:
+    // the command attaches no error listener to that connection, so Node
+    // raises the loss as an uncaught exception. This test stands in for that
+    // missing listener so everything after the loss can still be asserted.
+    it('fails closed when the lock connection is lost mid-run: the server frees the lock, nothing is committed, and a rerun resumes (SEC-1c)', async () => {
+      dromexPool.on('connect', (client) => {
+        client.on('error', () => undefined);
+      });
+
+      const first = scriptedTerminal();
+      const presentEnrollment = first.terminal.presentEnrollment.bind(first.terminal);
+      first.terminal.presentEnrollment = async (material) => {
+        await presentEnrollment(material);
+        await terminateLockHolder();
+      };
+
+      expect((await refusal(provision({}, identity(), first.terminal))).code).toBe('failed');
+
+      // The run carried on to its last step and only the final transaction failed.
+      expect(first.record.events).toEqual(['enrollment', 'totp', 'devices', 'codes', 'codes-ack', 'clear']);
+      const userId = await userIdFor(OWNER_EMAIL);
+      expect(await owners()).toBe(0);
+      expect(await principals()).toBe(0);
+      expect(await sessions()).toBe(0);
+      expect(await lockHolderPid()).toBeNull();
+      expect(await intent()).toEqual([{ state: 'identity_created', email: OWNER_EMAIL, user_id: userId }]);
+
+      const second = scriptedTerminal({ knownSecret: first.secret() });
+      await expect(provision({}, identity(), second.terminal)).resolves.toEqual({ status: 'owner_created' });
+
+      expect(await owners()).toBe(1);
+      expect(await users()).toBe(1);
+      expect(await intent()).toEqual([]);
+      expect(await lockHolderPid()).toBeNull();
+      // No recovery code shown by the interrupted run stays valid.
+      const shownBefore = new Set(first.record.recoveryCodes[0]);
+      const shownNow = second.record.recoveryCodes[0]!;
+      expect(second.record.enrollments).toEqual([]);
+      expect(shownNow.filter((code) => shownBefore.has(code))).toEqual([]);
+      expect(await storedRecoveryCodes(userId)).toEqual(shownNow);
     });
   });
 
