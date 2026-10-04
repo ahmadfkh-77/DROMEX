@@ -1543,9 +1543,25 @@ invitee case stays unbuilt).
 Tests: 21 Node unit tests (`npm run test:unit` in `web/apps/web`) and 27
 Playwright tests per viewport at 375, 768 and 1280 pixels, run locally on
 Windows against the already-installed Chromium with the API stubbed at the
-network layer; the full web suite (177 tests) passes. Real-browser CI against
-the real API (cookie flags, security headers, cross-site POST) is batch 4b and
-is not done. This screen satisfies no DEC-443 gate item.
+network layer; the full web suite (177 tests) passes.
+
+**What CI now covers (batch 4b-1).** `web-tests.yml` also runs the web unit
+tests (`test:unit`) and the sign-in Playwright spec (all three viewports) in the
+Google Chrome that GitHub documents as preinstalled on the `ubuntu-24.04`
+runner image (Chrome 154.0.8037.57 in image 20260927.320.1; source:
+https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md,
+accessed 2026-10-04; channel use: https://playwright.dev/docs/browsers,
+accessed 2026-10-04). Nothing is downloaded and no dependency was added. The
+browser channel is set only in CI (`DROMEX_PLAYWRIGHT_CHANNEL`), and CI serves
+the built app with `vite preview` because the development server re-optimises
+its dependencies on a cold cache and reloads the page mid-test. A run that
+finds no tests fails its step.
+
+**What it does not cover.** The API is still stubbed at the network layer, so
+this is a browser test of the screen, not an end-to-end test against the real
+API: real cookie flags, security headers, a cross-site POST and a real
+sign-in remain unproven (batch 4b-2). This screen satisfies no DEC-443 gate
+item.
 
 ## Planned tests: email, Admin invitations, and password reset
 
