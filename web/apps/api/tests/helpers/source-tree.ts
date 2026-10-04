@@ -10,6 +10,9 @@ import { dirname, join, resolve, sep } from 'node:path';
  * file once, in parallel, and serves every later request from memory. It
  * changes no assertion: a file that was not scanned (for example an import
  * that resolves outside the tree) is still read from disk on demand, as before.
+ *
+ * Each test file builds its own tree, so nothing is shared between files or
+ * between Vitest workers.
  */
 export interface SourceTree {
   /** Every `.ts` file under `directory` (default: the whole tree), depth-first. */
