@@ -1563,6 +1563,66 @@ API: real cookie flags, security headers, a cross-site POST and a real
 sign-in remain unproven (batch 4b-2). This screen satisfies no DEC-443 gate
 item.
 
+## Real end-to-end sign-in tests (batch 4b-2, decision D5)
+
+Status: **written; counts as evidence only from a green `web-tests.yml` run on
+the feature-branch lineage.** They run only in CI and nowhere on the laptop
+(no Docker locally, DEC-491).
+
+What runs: a new CI step starts a disposable `postgres:18.6-trixie` container
+(random name `dromex_e2e_<16 hex>`, random password), seeds it with synthetic
+accounts, starts the **real API** (`node src/server.ts`, `DROMEX_ENVIRONMENT=test`,
+Secure cookies on) and the built web app (`vite preview`, `/api` proxied
+same-origin), and drives them in the Google Chrome preinstalled on the runner
+(`web/apps/web/e2e-real/`, `playwright.e2e.config.ts`). No browser download, no
+dependency, no new action, no artifact upload, no trace, video or screenshot.
+
+| Piece | Rule |
+| --- | --- |
+| Seed | `web/apps/api/tests/e2e-support/seed.ts`, under `tests/` only. A guard refuses unless it runs in GitHub Actions with the explicit `DROMEX_E2E=disposable-ci-database` flag, on a loopback host, not the development port, with a database named `dromex_e2e_<16 hex>` that is empty. It reuses the integration-test fixtures, never calls the Owner activation tooling, starts no server and adds no route. A unit test fails if any file under `src/` mentions it |
+| Secrets | Generated at run time, masked with `::add-mask::` before being written to the job environment file, never printed, never uploaded; test titles and assertions compare booleans, so a failure cannot echo a value |
+| Rate limit | Unchanged. The limit is 5 requests a minute to each of the sign-in and verify paths for the one CI client, and a window ends only after 60 quiet seconds. One worker, no retries, and three spaced windows (below) |
+
+| Window | Tests | Sign-in used (of 5) | Verify used (of 5) |
+| --- | --- | --- | --- |
+| A | Owner, Admin A, wrong password, unknown user, then the Owner disables Admin A | 4 | 2 |
+| quiet 62 s | | | |
+| B | disabled Admin B; Admin C (sign-out, then the same code replayed in the same 30-second step); Admin D wrong code; foreign and missing Origin (refused before the limiter) | 4 | 3 |
+| quiet 62 s | | | |
+| C (last, on purpose) | five priming requests, then the page's own request gets the real 429 | 6 | 0 |
+
+Every window except the deliberate 429 window leaves at least one request of
+spare room on each path.
+
+What they prove when green: the password step then the code step in a real
+browser against the real API; the `/account` page shows the role the server
+states; sign-out ends the session on the server (the old cookie then gets 401);
+a wrong password and an unknown user show the same message; a wrong code and a
+replayed code show the same message and stay on the code step; a disabled Admin
+cannot sign in and an already-open Admin session ends when the Owner disables
+the account; the real `Set-Cookie` is `__Secure-` prefixed, `HttpOnly`, `Secure`,
+`SameSite` Lax or Strict, `Path=/`, with no `Domain`, and Chrome stores it over
+plain `http` on loopback and sends it back (MDN says the `https` requirement is
+ignored for `Secure` set by localhost but states no such exception for the
+`__Secure-` prefix, so this is checked for real, not assumed:
+https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie,
+accessed 2026-10-04); a foreign or missing Origin on verify and sign-out gets
+403; the real 429 shows the generic rate-limited message with a countdown;
+nothing sensitive is in the URL, page script, storage, page source or console.
+
+**Security-header gap, recorded plainly.** The API itself sets almost no
+security headers (`Cache-Control: no-store` on some routes only; no HSTS,
+`X-Content-Type-Options`, CSP, `Referrer-Policy` or frame protection). The run
+records which of them are present as a test annotation and asserts only what
+exists (JSON content type, no CORS allow-origin, no `X-Powered-By`). They are
+expected at the reverse proxy and are production gate B16, not started.
+
+**What this still does not prove.** No real email, provider or domain; no
+production environment, TLS or `Secure` cookies behind real HTTPS; no
+reverse-proxy behaviour; no permissions model; no recovery screen; Owner
+activation stays disabled and satisfies no DEC-443 item. The accounts are
+synthetic and exist only in a throwaway database for the length of the job.
+
 ## Planned tests: email, Admin invitations, and password reset
 
 Status: **planned design, now covered by checkpoints 4A to 4C (DEC-439
