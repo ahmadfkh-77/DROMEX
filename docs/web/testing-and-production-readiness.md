@@ -1519,7 +1519,8 @@ not by this listener.
 
 ## Web sign-in screen (SI-1a, 2026-10-04)
 
-Status: **implemented locally, verified against a stubbed API only.** The
+Status: **implemented locally; verified against a stubbed API, and (batch 4b-2,
+below) in CI against the real API with synthetic accounts.** The
 `/sign-in` page (password step, then the six-digit authenticator code) and a
 minimal `/account` page (name, email, the role the server states, sign out)
 live in `web/apps/web/src/signin/`. No API, database, migration, dependency,
@@ -1557,17 +1558,23 @@ the built app with `vite preview` because the development server re-optimises
 its dependencies on a cold cache and reloads the page mid-test. A run that
 finds no tests fails its step.
 
-**What it does not cover.** The API is still stubbed at the network layer, so
-this is a browser test of the screen, not an end-to-end test against the real
-API: real cookie flags, security headers, a cross-site POST and a real
-sign-in remain unproven (batch 4b-2). This screen satisfies no DEC-443 gate
-item.
+**What the stubbed tests do not cover.** The API is stubbed at the network
+layer in these tests, so they are browser tests of the screen, not end-to-end
+tests against the real API. A stubbed-API browser test is not an end-to-end
+test. The real-API tests are the next section. This screen satisfies no
+DEC-443 gate item.
 
 ## Real end-to-end sign-in tests (batch 4b-2, decision D5)
 
-Status: **written; counts as evidence only from a green `web-tests.yml` run on
-the feature-branch lineage.** They run only in CI and nowhere on the laptop
-(no Docker locally, DEC-491).
+Status: **green in CI.** Verification run
+[37214080465](https://github.com/ahmadfkh-77/DROMEX/actions/runs/37214080465)
+(`verify/b4b2-e2e`, `3b943a2`) and feature-branch run
+[37217214641](https://github.com/ahmadfkh-77/DROMEX/actions/runs/37217214641)
+(same commit) each reported 24 end-to-end tests expected, 0 unexpected, 0
+flaky, 0 skipped, with 439 of 439 API integration tests, 21 of 21 web unit
+tests and 81 of 81 stubbed browser tests also passing. Two earlier runs
+(`d6f6a71`, `c888a9a`) failed while the tests were being corrected. The tests
+run only in CI and nowhere on the laptop (no Docker locally, DEC-491).
 
 What runs: a new CI step starts a disposable `postgres:18.6-trixie` container
 (random name `dromex_e2e_<16 hex>`, random password), seeds it with synthetic
@@ -1585,28 +1592,34 @@ dependency, no new action, no artifact upload, no trace, video or screenshot.
 
 | Window | Tests | Sign-in used (of 5) | Verify used (of 5) |
 | --- | --- | --- | --- |
-| A | Owner, Admin A, wrong password, unknown user, then the Owner disables Admin A | 4 | 2 |
+| A | Owner, Admin A, wrong password, unknown user, then the Owner disables Admin A (5 session tests, using the real route from inside the real page), plus 12 cookie and API-response checks that send no sign-in or verify request | 4 | 2 |
 | quiet 62 s | | | |
-| B | disabled Admin B; Admin C (sign-out, then the same code replayed in the same 30-second step); Admin D wrong code; foreign and missing Origin (refused before the limiter) | 4 | 3 |
+| B | the 62 s wait as its own test; disabled Admin B; Admin C (sign-out, then the same code replayed in the same 30-second step); Admin D wrong code; foreign and missing Origin (refused before the limiter) | 4 | 3 |
 | quiet 62 s | | | |
-| C (last, on purpose) | five priming requests, then the page's own request gets the real 429 | 6 | 0 |
+| C (last, on purpose) | the 62 s wait as its own test; five priming requests, then the page's own request gets the real 429 | 6 | 0 |
 
-Every window except the deliberate 429 window leaves at least one request of
-spare room on each path.
+That is 24 tests: 17 in window A (5 session tests and 12 checks), 5 in window B
+(the wait and 4 tests) and 2 in window C (the wait and the 429 test). Every
+window except the deliberate 429 window leaves at least one request of spare
+room on each path.
 
-What they prove when green: the password step then the code step in a real
+What they prove, as observed in the two green runs above: the password step then the code step in a real
 browser against the real API; the `/account` page shows the role the server
 states; sign-out ends the session on the server (the old cookie then gets 401);
 a wrong password and an unknown user show the same message; a wrong code and a
 replayed code show the same message and stay on the code step; a disabled Admin
 cannot sign in and an already-open Admin session ends when the Owner disables
 the account; the real `Set-Cookie` is `__Secure-` prefixed, `HttpOnly`, `Secure`,
-`SameSite` Lax or Strict, `Path=/`, with no `Domain`, and Chrome stores it over
-plain `http` on loopback and sends it back (MDN says the `https` requirement is
+`SameSite=Lax` (DEC-420), `Path=/`, with no `Domain` and an expiry within 12
+hours (DEC-493), each as its own check; and Chrome stored it over plain `http`
+on `127.0.0.1` and sent it back in CI (a reload stayed signed in) (MDN says the `https` requirement is
 ignored for `Secure` set by localhost but states no such exception for the
 `__Secure-` prefix, so this is checked for real, not assumed:
 https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie,
-accessed 2026-10-04); a foreign or missing Origin on verify and sign-out gets
+accessed 2026-10-04); the old session cookie returns 200 before sign-out and
+401 after, and the Admin session probe returns 200 before the Owner disables the
+account and 401 after (positive controls, so a 401 is not a probe that failed
+to send the cookie); a foreign or missing Origin on verify and sign-out gets
 403; the real 429 shows the generic rate-limited message with a countdown;
 nothing sensitive is in the URL, page script, storage, page source or console.
 
@@ -1623,11 +1636,15 @@ headers (`Access-Control-Allow-Origin`, `Vary: Origin`) of its own. It is a
 test-only server, never a production one, which is why header checks bypass it;
 real header behaviour belongs to the reverse proxy (gate B16).
 
-**What this still does not prove.** No real email, provider or domain; no
-production environment, TLS or `Secure` cookies behind real HTTPS; no
-reverse-proxy behaviour; no permissions model; no recovery screen; Owner
-activation stays disabled and satisfies no DEC-443 item. The accounts are
-synthetic and exist only in a throwaway database for the length of the job.
+**What CI proves, and what it does not.** It proves the sign-in and account
+screens and the real API sign-in path behave as described, in real Chrome,
+with synthetic accounts in a disposable database. It does **not** prove: any
+real email, provider or domain; any production environment; TLS or `Secure`
+cookies behind real HTTPS; reverse-proxy behaviour or baseline security headers
+(gate B16); a permissions model; a recovery screen. Owner activation stays
+disabled and this satisfies no DEC-443 item. The accounts are synthetic and exist
+only in a throwaway database for the length of the job. `vite preview` is a
+test-only server and its CORS headers are not production behaviour.
 
 ## Planned tests: email, Admin invitations, and password reset
 

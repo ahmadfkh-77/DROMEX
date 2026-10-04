@@ -66,7 +66,8 @@ What does **not** exist, and must not be assumed to exist:
 - any real account administration: Owner account and session management
   (checkpoint 4E, DEC-490) exists and is tested against disposable databases
   and a stubbed browser API only; the sign-in and account screens (SI-1a)
-  exist and are verified against a stubbed API only, with no real Admin or
+  exist and are verified against a stubbed API and, in CI, against the real API
+  with synthetic accounts in a disposable database (batch 4b-2), with no real Admin or
   session to manage, and no permission model,
 - any business table or business rule,
 - any Android synchronisation,
