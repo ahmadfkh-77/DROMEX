@@ -1084,7 +1084,9 @@ rather than any change to production code, which was already correct.
   `terminal-recovery-identity.ts`). Each passes a server-derived user ID —
   the verified session's user, the invited user after their TOTP-verified
   session matches, or the Owner resolved after the terminal password check —
-  never one taken from a request. No test yet enforces that rule.)*
+  never one taken from a request. `tests/unit/recovery-code-read-boundary.test.ts`
+  (SEC-1a) enforces that rule with exact allowlists of callers, wrappers, and
+  arguments, and confirms that no HTTP route exposes it.)*
 - `dromex_rate_limit` rows are still never pruned.
 - Timing equivalence of failures is not measured, and cookie attributes are
   verified through Fastify injection rather than a real browser.
