@@ -750,6 +750,30 @@ values on its next save.
 - **Known follow-up**: the workbook's supplier Total Billed still excludes supplier Open Balances (predates
   DEC-482, recorded in DEC-486 and the SRS).
 
+## Release — DROMEX 0.20.0, Android build 28 (2026-10-04)
+
+- **Branch**: `feature/android-receipts-diesel-batches`, from `feature/android-totals-documents-load-series`
+  (build 25). Not merged into `main`. Its decisions were renumbered DEC-500 to DEC-505 on 2026-10-04 (from
+  DEC-487 to DEC-492) so they no longer clash with the web branch, which uses DEC-487 to DEC-491.
+- **Scope**: receipt Load No. and centred contact details (DEC-504); diesel batches, FIFO allocation, dip
+  adjustments, overfill, Opening stock, outside station fills, the Fuel Batches tab, batch page, project
+  Equipment Fuel view, Diesel Batch Report PDF and workbook sheets (migration 50, DEC-505); the History and
+  Usage tabs in the day-card design with per-destination PDFs (first amendment); the Company Settings logo,
+  name and contacts on the report header (second amendment).
+- **Upgrade safety**: `tests/upgrade-from-build22-and-build25.test.ts` upgrades real build-22 (v47) and
+  build-25 (v49) databases and proves every existing row unchanged, fuel read identically, old receipts
+  reprinted unchanged and load numbering continued.
+- **Tests**: 137 files, 1,858 tests green; typecheck clean.
+- **EAS build**: `004bbcf9-3caf-4079-baf1-2df2194edc3b`, built from commit `605375d` with eas-cli 24.7.0;
+  profile `preview`, APK, account `drofk12`. Remote credentials reused unchanged
+  (`Using Keystore from configuration: Build Credentials wtQXwzktVi (default)`), so it installs in place.
+- **Artifact**: `output/DROMEX-0.20.0-build28.apk`, 83,923,714 bytes (~80 MB). SHA-256:
+  `52b9382ee592af96c87fcc1988dcec2e5744905b1cf14898b0f4b1b7c844bffa`. Ignored by `output/*.apk` and
+  untracked (DEC-396). Preview builds 26 (`c8a23985…`, SHA-256 `04ce9983…`) and 27 (`d651352c…`,
+  SHA-256 `871cb379…`) are kept beside it.
+- **Accepted.** The Owner installed build 28 in place and accepted it on 2026-10-04. Build 28 is now the
+  accepted internal artifact; build 22 stays the previous accepted installer; builds 23 to 27 are superseded.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {BusinessDocumentRepository} from '../../data/repositories/BusinessDocumentRepository';
+import {deriveInclusion,inclusionLabel,type DocumentLink} from '../../domain/businessDocuments';
+import {loadNumberLabel} from '../../domain/loadNumberSeries';
 import { ActivityIndicator, Alert, Animated, Image, LayoutAnimation, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { ProjectReportRepository } from '../../data/repositories/ProjectReportRepository';
@@ -32,7 +35,9 @@ import { colors } from '../theme';
 
 const HISTORY_PAGE=20;
 
-export function ReportsScreen({ repository,businessReportRepository,onBack,onOpenPdfSettings,initialBusinessFilters,initialProjectId,initialReportId,startNewReport=false }: { repository: ProjectReportRepository;businessReportRepository:BusinessReportRepository;onOpenPdfSettings:()=>void;onBack: () => void;initialBusinessFilters?:Partial<BusinessReportFilters>;initialProjectId?:string|null;initialReportId?:string|null;startNewReport?:boolean }) {
+export function ReportsScreen({ repository,businessReportRepository,onBack,onOpenPdfSettings,initialBusinessFilters,initialProjectId,initialReportId,startNewReport=false,documents }: { repository: ProjectReportRepository;businessReportRepository:BusinessReportRepository;onOpenPdfSettings:()=>void;onBack: () => void;initialBusinessFilters?:Partial<BusinessReportFilters>;initialProjectId?:string|null;initialReportId?:string|null;startNewReport?:boolean;
+  /** DEC-500. Shows each linked load's document status from the shared links (never printed on the report). */
+  documents?:BusinessDocumentRepository }) {
   const [setup, setSetup] = useState<ProjectReportSetup | null>(null);
   const [setupStatus, setSetupStatus] = useState<'loading' | 'error' | 'ready'>('loading');
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -43,6 +48,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
   const [reports, setReports] = useState<DailyProjectReport[]>([]);
   const [draft, setDraft] = useState<DailyProjectReportDraft | null>(null);
   const [linkedLoads, setLinkedLoads] = useState<LinkedProjectLoad[]>([]);
+  const [loadLinks, setLoadLinks] = useState<Record<string, DocumentLink[]>>({});
   const [linkedQuarryLoads,setLinkedQuarryLoads]=useState<LinkedQuarryLoad[]>([]);
   const [linkedFuelFills,setLinkedFuelFills]=useState<LinkedFuelFill[]>([]);
   const [linkedWasteDumps, setLinkedWasteDumps] = useState<LinkedWasteDump[]>([]);
@@ -102,6 +108,8 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
     else setLinkedLoads([]);
   }, [draft?.projectId, draft?.workDate, repository]);
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedQuarryLoads(draft.projectId,draft.workDate).then(setLinkedQuarryLoads);else setLinkedQuarryLoads([]);},[draft?.projectId,draft?.workDate,repository]);
+  // DEC-500. Document status of each linked load, read from the shared links; shown in the editor only.
+  useEffect(()=>{if(!documents)return;const keys=[...linkedLoads.map(load=>`company_load:${load.id}`),...linkedQuarryLoads.map(load=>`supplier_load:${load.id}`)];if(!keys.length){setLoadLinks({});return;}let active=true;documents.inclusionFor(keys).then(found=>{if(active)setLoadLinks(found);}).catch(()=>{});return()=>{active=false;};},[documents,linkedLoads,linkedQuarryLoads]);
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedFuelFills(draft.projectId,draft.workDate).then(setLinkedFuelFills);else setLinkedFuelFills([]);},[draft?.projectId,draft?.workDate,repository]);
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedWallWork(draft.projectId,draft.workDate).then(setLinkedWallWork);else setLinkedWallWork([]);},[draft?.projectId,draft?.workDate,repository]);
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedFoundationActivity(draft.projectId,draft.workDate).then(setLinkedFoundationActivity);else setLinkedFoundationActivity([]);},[draft?.projectId,draft?.workDate,repository]);
@@ -177,7 +185,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
 
   if (setupStatus === 'error') return <ScrollView contentContainerStyle={styles.content}><Header eyebrow="OPERATIONS" title="Reports" onBack={onBack}/><View style={styles.errorState}><Text style={styles.errorStateTitle}>Could not load reports</Text><Text style={styles.errorStateText}>{setupError}</Text><TouchableOpacity style={styles.retryButton} onPress={()=>void refreshSetup()} accessibilityRole="button"><Text style={styles.retryButtonText}>Retry</Text></TouchableOpacity></View></ScrollView>;
   if (!setup) return <ScrollView contentContainerStyle={styles.content}><Header eyebrow="OPERATIONS" title="Reports" onBack={onBack}/><View style={styles.centerState}><ActivityIndicator size="large" color={colors.brand}/><Text style={styles.helper}>Loading reports…</Text></View></ScrollView>;
-  if (draft && project) return <DailyReportEditor setup={setup} project={project} draft={draft} onOpenPdfSettings={onOpenPdfSettings} reports={reports} linkedLoads={linkedLoads} linkedQuarryLoads={linkedQuarryLoads} linkedFuelFills={linkedFuelFills} linkedWasteDumps={linkedWasteDumps} linkedWallWork={linkedWallWork} linkedFoundationActivity={linkedFoundationActivity} includeFoundationSection={includeFoundationSection} onToggleFoundationSection={value=>{setIncludeFoundationSection(value);void Storage.setItem(FOUNDATION_SECTION_PREFERENCE_KEY,serializeFoundationSectionPreference(value));}} busy={busy} error={error} reducedMotion={reducedMotion} onChange={setDraft} onSave={() => void save()} onBack={() => setDraft(null)} onOpenReport={editReport}/>;
+  if (draft && project) return <DailyReportEditor setup={setup} project={project} draft={draft} onOpenPdfSettings={onOpenPdfSettings} reports={reports} loadLinks={loadLinks} linkedLoads={linkedLoads} linkedQuarryLoads={linkedQuarryLoads} linkedFuelFills={linkedFuelFills} linkedWasteDumps={linkedWasteDumps} linkedWallWork={linkedWallWork} linkedFoundationActivity={linkedFoundationActivity} includeFoundationSection={includeFoundationSection} onToggleFoundationSection={value=>{setIncludeFoundationSection(value);void Storage.setItem(FOUNDATION_SECTION_PREFERENCE_KEY,serializeFoundationSectionPreference(value));}} busy={busy} error={error} reducedMotion={reducedMotion} onChange={setDraft} onSave={() => void save()} onBack={() => setDraft(null)} onOpenReport={editReport}/>;
   if (project) {
     const visibleReports=reports.slice(0,historyVisible);
     const remaining=reports.length-visibleReports.length;
@@ -289,7 +297,7 @@ function summarizePpe(safetyPeople:{name:string;type:SafetyParticipantType;label
   return {compliant,missing,notChecked,total:safetyPeople.length};
 }
 
-function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linkedQuarryLoads, linkedFuelFills, linkedWasteDumps, linkedWallWork, linkedFoundationActivity, includeFoundationSection, onToggleFoundationSection, busy, error, reducedMotion, onChange, onSave, onBack, onOpenReport, onOpenPdfSettings }: { onOpenPdfSettings:()=>void; linkedWallWork:LinkedWallWork[]; linkedFoundationActivity:LinkedFoundationActivity[]; includeFoundationSection:boolean; onToggleFoundationSection:(value:boolean)=>void; setup: ProjectReportSetup; project: ReportProject; draft: DailyProjectReportDraft; reports:DailyProjectReport[]; linkedLoads: LinkedProjectLoad[]; linkedQuarryLoads:LinkedQuarryLoad[]; linkedFuelFills:LinkedFuelFill[]; linkedWasteDumps: LinkedWasteDump[]; busy: boolean; error: string | null; reducedMotion:boolean; onChange: (draft: DailyProjectReportDraft) => void; onSave: () => void; onBack: () => void; onOpenReport:(report:DailyProjectReport)=>void }) {
+function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linkedLoads, linkedQuarryLoads, linkedFuelFills, linkedWasteDumps, linkedWallWork, linkedFoundationActivity, includeFoundationSection, onToggleFoundationSection, busy, error, reducedMotion, onChange, onSave, onBack, onOpenReport, onOpenPdfSettings }: { loadLinks?:Record<string,DocumentLink[]>; onOpenPdfSettings:()=>void; linkedWallWork:LinkedWallWork[]; linkedFoundationActivity:LinkedFoundationActivity[]; includeFoundationSection:boolean; onToggleFoundationSection:(value:boolean)=>void; setup: ProjectReportSetup; project: ReportProject; draft: DailyProjectReportDraft; reports:DailyProjectReport[]; linkedLoads: LinkedProjectLoad[]; linkedQuarryLoads:LinkedQuarryLoad[]; linkedFuelFills:LinkedFuelFill[]; linkedWasteDumps: LinkedWasteDump[]; busy: boolean; error: string | null; reducedMotion:boolean; onChange: (draft: DailyProjectReportDraft) => void; onSave: () => void; onBack: () => void; onOpenReport:(report:DailyProjectReport)=>void }) {
   const [materialItemId, setMaterialItemId] = useState(''); const [materialUnitId, setMaterialUnitId] = useState('');
   const [materialQuantity, setMaterialQuantity] = useState(''); const [materialMovement, setMaterialMovement] = useState<'used' | 'transported'>('used');
   const [mediaError,setMediaError]=useState<string|null>(null);
@@ -374,9 +382,9 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
       <LedgerSection number="05" title="Loads Delivered" badge={loadsCount?`${loadsCount} load${loadsCount===1?'':'s'}`:'No loads'} open={openSections.has('loads')} onToggle={()=>toggleSection('loads')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Automatically linked, read-only deliveries for this project and work date.</Text>
         <View style={styles.sourceGroupHeading}><View style={[styles.sourceDot,styles.sourceDotCompany]}/><Text style={styles.sourceGroupTitle}>DROMEX / Company Loads · {linkedLoads.length}</Text></View>
-        {linkedLoads.length ? linkedLoads.map((load) => <LoadRow key={load.id} source="company" name={load.itemName} quantity={load.quantity} unit={load.unitSymbol} reference={load.transactionNumber} driver={load.driverName} truck={load.truckPlate} total={load.finalTotalUsd}/>) : <Text style={styles.helper}>No matching receipt loads for this date.</Text>}
+        {linkedLoads.length ? linkedLoads.map((load) => <LoadRow key={load.id} source="company" name={load.itemName} quantity={load.quantity} unit={load.unitSymbol} reference={`${loadNumberLabel(load.loadNumber)} · Transaction ${load.transactionNumber}`} driver={load.driverName} truck={load.truckPlate} total={load.finalTotalUsd} status={loadLinks[`company_load:${load.id}`]?inclusionLabel(deriveInclusion(loadLinks[`company_load:${load.id}`]!)):undefined}/>) : <Text style={styles.helper}>No matching receipt loads for this date.</Text>}
         <View style={styles.sourceGroupHeading}><View style={[styles.sourceDot,styles.sourceDotSupplier]}/><Text style={styles.sourceGroupTitle}>Supplier Loads · {linkedQuarryLoads.length}</Text></View>
-        {linkedQuarryLoads.length?linkedQuarryLoads.map(load=><LoadRow key={load.id} source="supplier" name={load.itemName} quantity={load.quantity} unit={load.unitSymbol} reference={`${load.purchaseNumber} · ${load.supplierName}`} deliveryLabel={load.deliveryLabel} truck={load.truckPlate??undefined} time={new Date(load.confirmedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} ticket={load.supplierTicketNumber??undefined} notes={load.notes??undefined} total={load.finalTotalUsd}/>):<Text style={styles.helper}>No active supplier loads linked to this project and date.</Text>}
+        {linkedQuarryLoads.length?linkedQuarryLoads.map(load=><LoadRow key={load.id} status={loadLinks[`supplier_load:${load.id}`]?inclusionLabel(deriveInclusion(loadLinks[`supplier_load:${load.id}`]!)):undefined} source="supplier" name={load.itemName} quantity={load.quantity} unit={load.unitSymbol} reference={`${load.purchaseNumber} · ${load.supplierName}`} deliveryLabel={load.deliveryLabel} truck={load.truckPlate??undefined} time={new Date(load.confirmedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} ticket={load.supplierTicketNumber??undefined} notes={load.notes??undefined} total={load.finalTotalUsd}/>):<Text style={styles.helper}>No active supplier loads linked to this project and date.</Text>}
       </LedgerSection>
 
       <LedgerSection number="06" title="Fuel Used" badge={linkedFuelFills.length?`${linkedFuelFills.length} fill${linkedFuelFills.length===1?'':'s'}`:'No fills'} open={openSections.has('fuel')} onToggle={()=>toggleSection('fuel')} reducedMotion={reducedMotion}>
@@ -514,12 +522,13 @@ function DailyReportEditor({ setup, project, draft, reports, linkedLoads, linked
   );
 }
 
-function LoadRow({source,name,quantity,unit,reference,driver,truck,deliveryLabel,time,ticket,notes,total}:{source:'company'|'supplier';name:string;quantity:number;unit:string;reference:string;driver?:string;truck?:string;deliveryLabel?:string;time?:string;ticket?:string;notes?:string;total?:number|null}){
+function LoadRow({source,name,quantity,unit,reference,driver,truck,deliveryLabel,time,ticket,notes,total,status}:{source:'company'|'supplier';name:string;quantity:number;unit:string;reference:string;driver?:string;truck?:string;deliveryLabel?:string;time?:string;ticket?:string;notes?:string;total?:number|null;status?:string}){
   const accent=source==='company'?colors.brand:colors.navy;
   const showDriverTruck=source==='company'&&Boolean(driver&&truck);
   return <View style={[styles.loadRow,{borderLeftColor:accent}]}>
     <View style={styles.recordTop}><Text style={styles.recordName}>{name}</Text><Text style={styles.recordStrongValue}>{quantity}{' '}<Text style={styles.materialUnit}>{unit}</Text></Text></View>
     <Text style={styles.recordMeta}>{reference}{time?` · ${time}`:''}</Text>
+    {status?<Text style={styles.recordMeta}>Invoices & Bills: {status}</Text>:null}
     {source==='supplier'&&deliveryLabel?<Text style={styles.recordMeta}>{deliveryLabel==='Supplier Delivering'?`Supplier Delivering${truck?` · ${truck}`:''}`:`${deliveryLabel}${truck?` · ${truck}`:''}`}</Text>:null}
     {showDriverTruck?<Text style={styles.recordMeta}>{driver} · {truck}</Text>:null}
     {ticket?<Text style={styles.recordMeta}>Ticket {ticket}</Text>:null}

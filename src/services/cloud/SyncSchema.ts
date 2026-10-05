@@ -12,7 +12,7 @@ export const entityTable:Record<string,string>={category:'categories',catalogIte
  * DEC-479. Columns that never leave the device through the dormant cloud synchronisation, whatever
  * table they sit in: a Daily Report's supervisor sign-off carries saved signature strokes.
  */
-export const DEVICE_ONLY_COLUMNS:Record<string,readonly string[]>={daily_project_reports:['supervisor_signoffs_json']};
+export const DEVICE_ONLY_COLUMNS:Record<string,readonly string[]>={daily_project_reports:['supervisor_signoffs_json'],loads:['supplier_signature_json']};
 export function cloudSafeRow(table:string,row:Record<string,unknown>|null):Record<string,unknown>|null{if(!row)return row;const hidden=DEVICE_ONLY_COLUMNS[table];if(!hidden)return row;const copy={...row};for(const column of hidden)delete copy[column];return copy;}
 
 export const rankFor=(table:string)=>syncTables.find(value=>value.table===table)?.rank??999;

@@ -27,15 +27,22 @@ application. It records outgoing company loads, incoming supplier loads, project
 daily reports, equipment, fuel, waste, walls, pavement calculations, finances,
 documents, and backups.
 
-Current source release metadata is version `0.19.0`, Android version code `22`,
+Current source release metadata is version `0.20.0`, Android version code `28`,
 package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
-internal Android artifact is `output/DROMEX-0.19.0-build22.apk` when present
-(Projects list and project screens redesign, account payments, Apply unallocated
-payment, Open Balance cancellation and the Payments & Balances statement;
-migration 47, DEC-482 to DEC-486), installed in place and confirmed working on
-the Owner's phone; `output/DROMEX-0.17.0-build20.apk` is retained unchanged as
-the previous accepted installer. `output/DROMEX-0.18.0-build21.apk` (migration 46)
-was a preview that was never separately accepted and is superseded by build 22.
+internal Android artifact is `output/DROMEX-0.20.0-build28.apk` when present,
+installed in place and accepted by the Owner on 2026-10-04. Build 28 carries the
+0.20.0 work: Company Totals, Invoices & Bills, authorized signers and Company
+Load Number Series (migration 48, DEC-500), Totals and Loads History PDFs
+(DEC-501), Project Totals fuel and block-layout PDFs (DEC-502), the Delivery
+Authorization Supplier signature (migration 49, DEC-503), the receipt Load No.
+and centred contact details (DEC-504), and diesel batches, outside station
+fills, the History and Usage day cards, per-destination PDFs and the Company
+Settings header on the Diesel Batch Report (migration 50, DEC-505 and its two
+amendments). It is built from `feature/android-receipts-diesel-batches`, which
+is not yet merged into `main`. `output/DROMEX-0.19.0-build22.apk` (migration 47,
+DEC-482 to DEC-486) is retained unchanged as the previous accepted installer.
+Builds 23 to 27 were previews of the same work, superseded by build 28; build 21
+was a preview superseded by build 22.
 
 Release APKs are no longer committed to Git from build 14 onward (DEC-396):
 `output/*.apk` is ignored, so the signed artifact lives in `output/` on the

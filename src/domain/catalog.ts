@@ -19,6 +19,8 @@ export type CatalogItem = {
   defaultUnitId: string | null;
   defaultReceiptPriceUsd: number | null;
   usageAreas: UsageArea[];
+  /** DEC-500. The Company Load Number Series this item's loads use; null means the default series. */
+  loadNumberSeriesId?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -34,6 +36,8 @@ export type ItemDraft = {
   defaultUnitId?: string;
   defaultReceiptPriceUsd?: number | null;
   usageAreas: UsageArea[];
+  /** DEC-500. Omitted leaves the assignment unchanged; null or the default series means "use the default". */
+  loadNumberSeriesId?: string | null;
 };
 
 export type ValidationIssue = {

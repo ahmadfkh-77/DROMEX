@@ -8,8 +8,8 @@
  * tests/app-version.test.ts fails if these ever drift from `app.json`, so a release that bumps the
  * version without updating this file cannot pass the suite.
  */
-export const APP_VERSION='0.19.0';
-export const ANDROID_VERSION_CODE=22;
+export const APP_VERSION='0.20.0';
+export const ANDROID_VERSION_CODE=28;
 
-/** "v0.19.0 · build 22" -- the one place that formatting is decided. */
+/** "v0.20.0 · build 28" -- the one place that formatting is decided. */
 export const appVersionLabel=()=>`v${APP_VERSION} · build ${ANDROID_VERSION_CODE}`;

@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 
 import type {ConfirmedLoad} from '../src/domain/loads';
-import {buildLoadEscPos,labelValueLines,signatureRaster,wrapText} from '../src/services/escpos';
+import {buildLoadEscPos,centerLine,centeredLines,labelValueLines,signatureRaster,wrapText} from '../src/services/escpos';
 
 const load:ConfirmedLoad={
   quantityMethod:'direct',netWeightKg:null,convertedQuantity:25,billedQuantity:25,subtotalUsd:50,vatAmountUsd:5.5,finalTotalUsd:55.5,
@@ -62,5 +62,91 @@ describe('ESC/POS thermal output',()=>{
     expect(output).toContain('order');
     expect(output).toContain('Cancelled 8/26/2026');
     expect(output.indexOf('CANCELLED')).toBeLessThan(output.indexOf('RECEIPT'));
+  });
+});
+
+describe('centred company header',()=>{
+  const full:ConfirmedLoad={...load,companyAddress:'Hasbaya Main Road Near The Old Market Square',companyPhone:'+961 70 123 456',companyEmail:'info@dromex.example',companyTaxVatNumber:'123456-601'};
+  /** The text of the line that carries `text`, with the spaces in front of it and the character before them. */
+  const lineWith=(output:string,text:string)=>{
+    const at=output.indexOf(text);
+    if(at<0)throw new Error(`"${text}" was not printed`);
+    let start=at;while(start>0&&output[start-1]===' ')start--;
+    return {leading:at-start};
+  };
+
+  it('centres a line by padding it to the paper width',()=>{
+    expect(centerLine('abc',9)).toBe('   abc');
+    expect(centerLine('ab',9)).toBe('   ab');
+    expect(centerLine('abcdefghi',9)).toBe('abcdefghi');
+    expect(centerLine('too long for width',5)).toBe('too long for width');
+  });
+
+  it('wraps a long line and centres every wrapped line',()=>{
+    const lines=centeredLines('Main Road Hasbaya South Lebanon',16);
+    expect(lines).toEqual(['   Main Road',' Hasbaya South','    Lebanon']);
+    for(const line of lines)expect(line.length).toBeLessThanOrEqual(16);
+  });
+
+  it('prints address, phone, email and tax lines centred on 58 mm paper',()=>{
+    const output=buildLoadEscPos(full,'receipt','58').toString('utf8');
+    for(const text of ['+961 70 123 456','info@dromex.example','Tax/VAT: 123456-601']){
+      expect(lineWith(output,text).leading).toBe(Math.floor((32-text.length)/2));
+    }
+    expect(lineWith(output,'Hasbaya Main Road Near The Old').leading).toBe(Math.floor((32-'Hasbaya Main Road Near The Old'.length)/2));
+    expect(lineWith(output,'Market Square').leading).toBe(Math.floor((32-'Market Square'.length)/2));
+  });
+
+  it('prints them centred on 80 mm paper',()=>{
+    const output=buildLoadEscPos(full,'receipt','80').toString('utf8');
+    expect(lineWith(output,'+961 70 123 456').leading).toBe(Math.floor((48-'+961 70 123 456'.length)/2));
+    expect(lineWith(output,'Hasbaya Main Road Near The Old Market Square').leading).toBe(Math.floor((48-'Hasbaya Main Road Near The Old Market Square'.length)/2));
+  });
+
+  it('centres the company name at double size using half the paper width',()=>{
+    const output=buildLoadEscPos({...full,companyName:'DROMEX ASPHALT'},'receipt','58').toString('utf8');
+    expect(lineWith(output,'DROMEX ASPHALT').leading).toBe(Math.floor((16-'DROMEX ASPHALT'.length)/2));
+  });
+
+  it('centres the header of a delivery authorization too',()=>{
+    const output=buildLoadEscPos(full,'authorization','58').toString('utf8');
+    expect(lineWith(output,'+961 70 123 456').leading).toBe(Math.floor((32-'+961 70 123 456'.length)/2));
+  });
+});
+
+describe('Load No. on the printed document',()=>{
+  const numbered:ConfirmedLoad={...load,loadNumber:'ASP-00058',loadNumberSeriesName:'Asphalt'};
+
+  it('prints Load No. on the receipt directly above the transaction number',()=>{
+    const output=buildLoadEscPos(numbered,'receipt','58').toString('utf8');
+    expect(output).toContain('Load No.:');
+    expect(output).toContain('ASP-00058');
+    expect(output.indexOf('Load No.:')).toBeLessThan(output.indexOf('Transaction:'));
+    expect(output).toContain('20260825-A-00001');
+  });
+
+  it('prints Load No. on the delivery authorization too',()=>{
+    const output=buildLoadEscPos(numbered,'authorization','58').toString('utf8');
+    expect(output).toContain('Load No.:');
+    expect(output).toContain('ASP-00058');
+  });
+
+  it('prints Load No. in bold',()=>{
+    const output=buildLoadEscPos(numbered,'receipt','58');
+    const boldOn=Buffer.from([0x1b,0x45,0x01]),text=Buffer.from('Load No.:');
+    const at=output.indexOf(text);
+    expect(at).toBeGreaterThan(boldOn.length);
+    expect(output.subarray(at-boldOn.length,at).equals(boldOn)).toBe(true);
+  });
+
+  it('keeps a number issued by an earlier build exactly as issued',()=>{
+    const output=buildLoadEscPos({...load,loadNumber:'ASP-2026-001'},'receipt','58').toString('utf8');
+    expect(output).toContain('ASP-2026-001');
+  });
+
+  it('prints no Load No. line for a load that never had a number',()=>{
+    const legacy=buildLoadEscPos(load,'receipt','58').toString('utf8');
+    expect(legacy).not.toContain('Load No.');
+    expect(buildLoadEscPos({...load,loadNumber:null},'receipt','58').toString('utf8')).not.toContain('Load No.');
   });
 });

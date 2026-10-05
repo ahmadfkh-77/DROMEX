@@ -2,11 +2,11 @@ import {existsSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {describe,expect,it} from 'vitest';
 
-// Static contract checks for the Project Totals screen (DEC-481), following the established pattern:
-// no React Native renderer is available, so these pin structure, wording and the rule that the screen
-// performs no arithmetic of its own. Calculations are covered by project-totals-domain/-repository.
+// Static contract checks for the Project Totals screen (DEC-481, redesigned by DEC-500), following the
+// established pattern: no React Native renderer is available, so these pin structure, wording and the
+// rule that the screen performs no arithmetic of its own. Calculations are covered by the domain and
+// repository suites.
 const read=(path:string)=>existsSync(join(__dirname,'..',path))?readFileSync(join(__dirname,'..',path),'utf8'):'';
-const between=(source:string,start:string,end?:string)=>{const from=source.indexOf(start);if(from<0)return '';const to=end?source.indexOf(end,from+start.length):-1;return source.slice(from,to<0?undefined:to);};
 
 describe('Project Totals navigation',()=>{
   it('is a destination inside each project',()=>{
@@ -20,62 +20,53 @@ describe('Project Totals navigation',()=>{
 });
 
 describe('Project Totals screen',()=>{
+  // DEC-500: the project's materials use the shared Totals explorer (one summary band per level and one
+  // ruled list, not a card per item); the fuel and wall/foundation sections stay as DEC-481 defined them.
   const screen=read('src/ui/screens/ProjectTotalsScreen.tsx');
-  const itemRow=between(screen,'function ItemRow','function SourceRow');
+  const explorer=read('src/ui/components/totals/TotalsExplorer.tsx');
+  const parts=read('src/ui/components/totals/TotalsParts.tsx');
+  const presentation=read('src/ui/totalsPresentation.ts');
   it('computes nothing itself: every figure comes from the domain helpers',()=>{
-    for(const helper of ['buildItemLedger(','splitItemSources(','summarizeFuel(','summarizeConstruction(','describeTotalsRange(','totalsFilterChoices(','validateTotalsFilters(','countActiveTotalsFilters('])expect(screen).toContain(helper);
-    expect(screen).not.toMatch(/\.reduce\(/);
-    expect(screen).not.toMatch(/quantity\s*[+-]\s*[a-z]/i);
+    for(const helper of ['buildMaterialTree(','treeTotals(','unitDifferences(','countCompanyFilters('])expect(explorer).toContain(helper);
+    for(const helper of ['summarizeFuel(','summarizeConstruction('])expect(screen).toContain(helper);
+    for(const source of [screen,explorer,parts]){
+      expect(source).not.toMatch(/\.reduce\(/);
+      expect(source).not.toMatch(/quantity\s*[+-]\s*[a-z]/i);
+    }
   });
-  it('shows each item with its whole-project Delivered and Used totals as separate columns, per unit',()=>{
-    expect(itemRow).toContain('>Delivered<');
-    expect(itemRow).toContain('>Used<');
-    expect(itemRow).toMatch(/item\.units\.map\(/);
-    expect(screen).toContain('Not recorded');
-    expect(screen).toContain('Delivered minus recorded use');
-    expect(screen).toMatch(/not an inventory balance/i);
-    expect(screen).toMatch(/fontVariant:\['tabular-nums'\]/);
+  it('runs the project through the shared explorer with the project fixed, so a document is the same everywhere',()=>{
+    expect(screen).toContain("scope={{kind:'project',projectId:project.id,projectName:project.name}}");
+    expect(explorer).toContain("scope.kind==='project'?material.projects[0]");
   });
-  it('expands an item with + and collapses it with ×, labelled for assistive technology',()=>{
-    expect(itemRow).toContain("open?'×':'+'");
-    expect(itemRow).toContain('accessibilityState={{expanded:open}}');
-    expect(itemRow).toContain('`${open?\'Hide\':\'Show\'} suppliers for ${item.itemName}`');
-  });
-  it('lists suppliers, then the company\'s own deliveries, and opens a focused supplier view',()=>{
-    expect(itemRow).toContain('[...sources.suppliers,...(sources.company?[sources.company]:[])]');
-    expect(itemRow).toContain('company={supplier===sources.company}');
-    expect(screen).toMatch(/own loads/i);
-    const sheet=between(screen,'function SupplierSheet','function RecordsSheet');
-    expect(sheet).toContain('<FocusedSheet');
-    expect(sheet).toContain('listContributingRecords(');
-    expect(sheet).toContain('supplierKey:supplier.supplierKey');
-    expect(sheet).toContain('source:supplier.source');
-    expect(sheet).toMatch(/not recorded per supplier/i);
-  });
-  it('gives every item, fuel type and construction material its own bordered card',()=>{
-    expect(screen).toMatch(/ledger\.map\(item=><View key=\{item\.itemKey\} style=\{styles\.itemCard\}>/);
-    expect(screen).toMatch(/fuel\.map\(type=><View key=\{type\.fuelType\} style=\{styles\.itemCard\}>/);
-    expect(screen).toMatch(/construction\.map\(group=><View key=\{`\$\{group\.materialKey\}-\$\{group\.unitKey\}`\} style=\{styles\.itemCard\}>/);
-    expect(screen).toMatch(/itemCard:\{[^}]*borderWidth:1/);
+  it('shows Delivered and Used as separate labelled columns, per unit, with Not recorded where missing',()=>{
+    expect(parts).toContain('>Delivered<');
+    expect(parts).toContain('>Used<');
+    expect(presentation).toContain("'Not recorded'");
+    expect(explorer).toContain('Delivered minus recorded use');
+    expect(explorer).toMatch(/not an inventory balance/i);
+    expect(parts).toMatch(/fontVariant:\['tabular-nums'\]/);
   });
   it('tells Delivered and Used apart by a quiet tint as well as by their written labels',()=>{
-    expect(itemRow).toContain('styles.tileDelivered');
-    expect(itemRow).toContain('styles.tileUsed');
-    expect(screen).toMatch(/tileDelivered:\{backgroundColor:'#[0-9A-F]{6}'/);
-    expect(screen).toMatch(/tileUsed:\{backgroundColor:'#[0-9A-F]{6}'/);
+    expect(parts).toMatch(/deliveredCell:\{backgroundColor:'#[0-9A-F]{6}'/);
+    expect(parts).toMatch(/usedCell:\{backgroundColor:'#[0-9A-F]{6}'/);
   });
-  it('explains an item with nothing delivered instead of showing an empty list',()=>{
-    expect(itemRow).toContain('No deliveries recorded');
+  it('lists suppliers, then the company’s own deliveries, and never splits use by supplier',()=>{
+    expect(explorer).toContain('Suppliers first, then the company’s own loads, which are not a supplier.');
+    expect(explorer).toMatch(/Use is not recorded per supplier/);
   });
-  it('names the date range and the unit beside every total',()=>{
-    expect(screen).toContain('rangeLabel');
-    expect(screen).toMatch(/unitSymbol/);
+  it('replaces the wall of item cards with one ruled ledger per level',()=>{
+    expect(parts).toMatch(/ledger:\{[^}]*borderWidth:1/);
+    expect(parts).toContain('rowRule');
+    expect(screen).not.toContain('styles.itemCard');
   });
-  it('keeps date, item, supplier, unit and delivered/used filters behind one closed-by-default control',()=>{
-    for(const label of ['label="From"','label="To"','label="Item"','label="Supplier"','label="Unit"'])expect(screen).toContain(label);
-    expect(screen).toMatch(/<SegmentedChoice[^>]*mode="tabs"/);
-    expect(screen).toMatch(/\[filtersOpen,setFiltersOpen\]=useState\(false\)/);
-    expect(screen).toContain('accessibilityState={{expanded:filtersOpen}}');
+  it('names the period beside the totals',()=>{
+    expect(explorer).toContain('rangeLabel');
+    expect(explorer).toContain('Covering');
+  });
+  it('keeps the filters behind one closed-by-default control, including series and document status',()=>{
+    for(const label of ['label="From"','label="To"','label="Material / item"','label="Supplier"','label="Unit"','label="Company-load number series"','label="Document status"'])expect(explorer).toContain(label);
+    expect(explorer).toMatch(/\[filtersOpen,setFiltersOpen\]=useState\(false\)/);
+    expect(explorer).toContain('accessibilityState={{expanded:filtersOpen}}');
   });
   it('separates fuel types and construction sources and states why',()=>{
     expect(screen).toContain('Fuel used');
@@ -83,10 +74,11 @@ describe('Project Totals screen',()=>{
     expect(screen).toContain('constructionSourceLabels');
     expect(screen).toMatch(/never added together/i);
   });
-  it('drills down to contributing records and handles loading, error and empty states',()=>{
-    expect(screen).toContain('listContributingRecords(');
-    expect(screen).toContain('ActivityIndicator');
-    expect(screen).toContain('<EmptyState');
-    expect(screen).toContain('Try again');
+  it('drills down to original records and handles loading, error and empty states',()=>{
+    expect(explorer).toContain('listRecords(');
+    expect(explorer).toContain('listUsageRecords(');
+    expect(explorer).toContain('ActivityIndicator');
+    expect(explorer).toContain('<EmptyState');
+    expect(explorer).toContain('Try again');
   });
 });

@@ -32,6 +32,10 @@ import {
 } from '../../domain/people';
 import { resolveConsultingAgencySelectorOptions, type ConsultingAgencyOption } from '../../domain/profiles';
 import { SqliteProfileRepository } from './SqliteProfileRepository';
+import { issueLoadNumber } from './SqliteLoadNumberSeriesRepository';
+import { defaultDeliverySignature, deliverySignatureFor, recordSignerEvent } from './SqliteDocumentSignerRepository';
+import type { SignerDisplay, SignerSnapshot } from '../../domain/documentSigners';
+import { parseStoredSignature } from '../../domain/supervisors';
 
 type UnitRow = { id: string; name: string; symbol: string; is_active: number };
 type ConversionRow = {
@@ -81,6 +85,8 @@ type LoadRow = {
   status: 'Active' | 'Cancelled'; cancellation_reason: string | null; cancelled_at: string | null;
   correction_history_json: string | null;
   driver_profile_id: string | null; driver_role: TruckCrewRole | null;
+  load_number?: string | null; load_number_series_name?: string | null;
+  supplier_signature_json?: string | null;
 };
 
 function makeId(prefix: string): string {
@@ -122,6 +128,17 @@ function conversionFromRow(row: ConversionRow): ConversionOption {
 function safeCorrectionHistory(value: string | null): LoadCorrectionEntry[] {
   try { return JSON.parse(value || '[]') as LoadCorrectionEntry[]; } catch { return []; }
 }
+/** DEC-503. Reads a load's supplier-signature copy without ever throwing; anything unreadable is left off. */
+function parseSupplierSignature(json: string | null | undefined): SignerSnapshot | null {
+  if (!json) return null;
+  try {
+    const value = JSON.parse(json) as Partial<SignerSnapshot>;
+    if (!value || typeof value.name !== 'string' || (value.display !== 'name_only' && value.display !== 'name_with_signature')) return null;
+    const strokes = parseStoredSignature(JSON.stringify(value.signature ?? []));
+    if (strokes.damaged) return null;
+    return { signerId: String(value.signerId ?? ''), name: value.name, jobTitle: value.jobTitle ?? null, department: value.department ?? null, display: value.display, signature: strokes.strokes };
+  } catch { return null; }
+}
 function projectFromRow(row: ProjectRow): Project {
   return { id: row.id, customerId: row.customer_id, customerName: row.customer_name, name: row.name, location: row.location, status: row.status, notes: row.notes,startDate:row.start_date??row.created_at.slice(0,10),endDate:row.end_date??(row.status==='completed'?row.updated_at.slice(0,10):null),consultingAgencyId:row.consulting_agency_id };
 }
@@ -153,6 +170,8 @@ function loadFromRow(row: LoadRow): ConfirmedLoad {
     companyReceiptFooter: row.company_receipt_footer, companyLogoUri: row.company_logo_uri,
     status: row.status ?? 'Active', cancellationReason: row.cancellation_reason, cancelledAt: row.cancelled_at,
     correctionHistory: safeCorrectionHistory(row.correction_history_json),
+    loadNumber: row.load_number ?? null, loadNumberSeriesName: row.load_number_series_name ?? null,
+    supplierSignature: parseSupplierSignature(row.supplier_signature_json),
   };
 }
 
@@ -187,7 +206,8 @@ export class SqliteLoadRepository implements LoadRepository {
     const drivers: DriverProfile[] = crewRows.map(crewFromRow);
     const trucks: TruckProfile[] = truckRows.map((row) => ({ id: row.id, plate: row.plate, makeModel: row.make_model, capacityKg: row.capacity_kg, ownerName: row.owner_name, notes: row.notes, isActive: row.is_active === 1 }));
     const machines: MachineProfile[] = machineRows.map((row) => ({ id: row.id, name: row.name, machineType: row.machine_type, identifier: row.identifier, notes: row.notes, isActive: row.is_active === 1 }));
-    return { customers: customers.filter((value) => value.isActive), companySettings, units: unitRows.map(unitFromRow), conversions: conversionRows.map(conversionFromRow), projects: projectRows.map(projectFromRow), items, drivers, trucks, machines };
+    const deliverySignature = await defaultDeliverySignature(this.db);
+    return { customers: customers.filter((value) => value.isActive), companySettings, units: unitRows.map(unitFromRow), conversions: conversionRows.map(conversionFromRow), projects: projectRows.map(projectFromRow), items, drivers, trucks, machines, deliverySignature };
   }
 
   async createUnit(draft: UnitDraft): Promise<MeasurementUnit> {
@@ -491,11 +511,19 @@ export class SqliteLoadRepository implements LoadRepository {
         paymentStatus, clean(draft.notes), options.companySettings.companyName, options.companySettings.address,
         options.companySettings.phone, options.companySettings.email, options.companySettings.taxVatNumber, options.companySettings.receiptFooter, options.companySettings.logoUri,
         draft.quantityMethod, isDirect ? calculation.billedQuantity : null, isDirect ? directUnit!.id : null, isDirect ? directUnit!.name : null, isDirect ? directUnit!.symbol : null,enteredAt,crew.role);
+      // DEC-500. The Company Load number is generated in this same transaction, so the load and its number are saved together or not at all.
+      const issued = await issueLoadNumber(this.db, { loadId: id, itemId: item.id, recordDate: draft.recordDate, issuedAt: enteredAt });
+      // DEC-503. The default supplier signature is copied onto the load in the same transaction.
+      const supplierSignature = await defaultDeliverySignature(this.db);
+      if (supplierSignature) {
+        await this.db.runAsync('UPDATE loads SET supplier_signature_json = ? WHERE id = ?', JSON.stringify(supplierSignature), id);
+        await recordSignerEvent(this.db, supplierSignature.signerId, 'used', enteredAt, null, `Delivery Authorization ${transactionNumber}`);
+      }
       await this.db.runAsync('UPDATE device_state SET next_load_sequence = next_load_sequence + 1 WHERE id = ?', 'local');
       await this.db.runAsync('DELETE FROM load_drafts WHERE id = ?', 'current');
       await this.db.runAsync("DELETE FROM sync_outbox WHERE entity_type='loadDraft' AND entity_id='current'");
       await this.db.runAsync("INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES ('loadDraft','current','delete','{}',?)",confirmedAt);
-      await this.enqueue('load', id, { id, transactionNumber, confirmedAt,enteredAt });
+      await this.enqueue('load', id, { id, transactionNumber, confirmedAt,enteredAt, loadNumber: issued.loadNumber });
     });
     const row = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', id);
     if (!row) throw new Error('Confirmed load was not found.'); return loadFromRow(row);
@@ -515,6 +543,22 @@ export class SqliteLoadRepository implements LoadRepository {
     const updated = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', loadId);
     if (!updated) throw new Error('Updated load was not found.'); return loadFromRow(updated);
   }
+  /** DEC-503. Adds, replaces or removes the supplier signature a load's Delivery Authorization carries. */
+  async saveLoadSupplierSignature(loadId: string, selection: { signerId: string; display: SignerDisplay } | null): Promise<ConfirmedLoad> {
+    const row = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', loadId);
+    if (!row) throw new Error('Load was not found.');
+    if ((row.status ?? 'Active') === 'Cancelled') throw new Error('A cancelled load cannot be signed.');
+    const snapshot = selection ? await deliverySignatureFor(this.db, selection) : null;
+    const now = new Date().toISOString();
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync('UPDATE loads SET supplier_signature_json = ?, updated_at = ? WHERE id = ?', snapshot ? JSON.stringify(snapshot) : null, now, loadId);
+      if (snapshot) await recordSignerEvent(this.db, snapshot.signerId, 'used', now, null, `Delivery Authorization ${row.transaction_number}`);
+      await this.enqueue('loadSupplierSignature', loadId, { loadId, signerId: snapshot?.signerId ?? null, display: snapshot?.display ?? null, updatedAt: now });
+    });
+    const updated = await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id = ?', loadId);
+    if (!updated) throw new Error('Updated load was not found.'); return loadFromRow(updated);
+  }
+
   async correctLoad(loadId:string,draft:LoadCorrectionDraft):Promise<ConfirmedLoad>{
     const row=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!row)throw new Error('Load was not found.');
     if((row.status??'Active')==='Cancelled')throw new Error('A cancelled load cannot be corrected.');

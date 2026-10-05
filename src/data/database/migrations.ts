@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 47;
+export const DATABASE_VERSION = 50;
 
 type TableColumn = { name: string };
 
@@ -1712,6 +1712,269 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'payment_entries', 'account_payment_id', 'TEXT REFERENCES account_payments(id)');
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_payments_account_payment ON payment_entries(account_payment_id);');
     currentVersion = 47;
+  }
+
+  if (currentVersion === 47) {
+    // DEC-487. Company Load Number Series: one default LOAD series, optional custom series assigned per
+    // item, counters per prefix and year that only advance, and an immutable history of every issued
+    // number. Existing loads stay legacy loads with no number; nothing is backfilled.
+    const now = new Date().toISOString();
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS load_number_series (
+        id TEXT PRIMARY KEY NOT NULL,
+        prefix TEXT NOT NULL CHECK (length(prefix) BETWEEN 2 AND 5 AND prefix NOT GLOB '*[^A-Z]*'),
+        prefix_key TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK (is_default = 0 OR is_active = 1)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_load_number_series_default ON load_number_series(is_default) WHERE is_default = 1;
+      INSERT OR IGNORE INTO load_number_series (id, prefix, prefix_key, display_name, is_default, is_active, created_at, updated_at)
+        VALUES ('series_load', 'LOAD', 'LOAD', 'Company loads', 1, 1, '${now}', '${now}');
+      CREATE TABLE IF NOT EXISTS load_number_counters (
+        prefix_key TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        next_number INTEGER NOT NULL CHECK (next_number > 0),
+        PRIMARY KEY (prefix_key, year)
+      );
+    `);
+    await addColumnIfMissing(db, 'catalog_items', 'load_number_series_id', 'TEXT REFERENCES load_number_series(id)');
+    await addColumnIfMissing(db, 'loads', 'load_number', 'TEXT');
+    await addColumnIfMissing(db, 'loads', 'load_number_series_id', 'TEXT REFERENCES load_number_series(id)');
+    await addColumnIfMissing(db, 'loads', 'load_number_series_name', 'TEXT');
+    await db.execAsync(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_loads_load_number ON loads(load_number) WHERE load_number IS NOT NULL;
+      CREATE TRIGGER IF NOT EXISTS trg_loads_load_number_immutable BEFORE UPDATE OF load_number ON loads
+        WHEN OLD.load_number IS NOT NULL AND NEW.load_number IS NOT OLD.load_number
+        BEGIN SELECT RAISE(ABORT, 'A generated load number cannot change.'); END;
+      CREATE TABLE IF NOT EXISTS load_number_issues (
+        load_number TEXT PRIMARY KEY NOT NULL,
+        load_id TEXT NOT NULL UNIQUE REFERENCES loads(id),
+        series_id TEXT NOT NULL REFERENCES load_number_series(id),
+        prefix TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        sequence INTEGER NOT NULL CHECK (sequence > 0),
+        item_id TEXT,
+        issued_at TEXT NOT NULL,
+        UNIQUE (prefix, year, sequence)
+      );
+      CREATE TRIGGER IF NOT EXISTS trg_load_number_issues_no_update BEFORE UPDATE ON load_number_issues
+        BEGIN SELECT RAISE(ABORT, 'Issued load-number history cannot change.'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_load_number_issues_no_delete BEFORE DELETE ON load_number_issues
+        BEGIN SELECT RAISE(ABORT, 'Issued load-number history cannot be deleted.'); END;
+    `);
+    // DEC-487. Business documents (statements, invoices, bills) and the one shared document-to-record
+    // link table every screen derives inclusion status from. A record may sit in any number of drafts,
+    // but in at most one Issued document of the same kind.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS business_document_settings (
+        id TEXT PRIMARY KEY NOT NULL CHECK (id = 'documents'),
+        legal_name TEXT, trading_name TEXT, address TEXT, phone TEXT, email TEXT, website TEXT,
+        tax_registration_number TEXT, company_registration_number TEXT, currency_code TEXT,
+        bank_details TEXT, payment_terms TEXT, footer_note TEXT,
+        customer_invoice_prefix TEXT NOT NULL DEFAULT 'INV',
+        supplier_bill_prefix TEXT NOT NULL DEFAULT 'BILL',
+        customer_statement_prefix TEXT NOT NULL DEFAULT 'CST',
+        supplier_statement_prefix TEXT NOT NULL DEFAULT 'SST',
+        updated_at TEXT NOT NULL
+      );
+      INSERT OR IGNORE INTO business_document_settings (id, updated_at) VALUES ('documents', '${now}');
+      CREATE TABLE IF NOT EXISTS business_document_counters (
+        prefix_key TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        next_number INTEGER NOT NULL CHECK (next_number > 0),
+        PRIMARY KEY (prefix_key, year)
+      );
+      CREATE TABLE IF NOT EXISTS party_billing_contacts (
+        id TEXT PRIMARY KEY NOT NULL,
+        party_type TEXT NOT NULL CHECK (party_type IN ('customer', 'supplier')),
+        customer_id TEXT UNIQUE REFERENCES customers(id),
+        supplier_id TEXT UNIQUE REFERENCES suppliers(id),
+        billing_name TEXT, contact_person TEXT, address TEXT, phone TEXT, email TEXT,
+        tax_registration_number TEXT, company_registration_number TEXT, notes TEXT,
+        updated_at TEXT NOT NULL,
+        CHECK ((party_type = 'customer' AND customer_id IS NOT NULL AND supplier_id IS NULL) OR (party_type = 'supplier' AND supplier_id IS NOT NULL AND customer_id IS NULL))
+      );
+      CREATE TABLE IF NOT EXISTS document_signers (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL UNIQUE,
+        job_title TEXT,
+        department TEXT,
+        signature_json TEXT NOT NULL DEFAULT '[]',
+        signature_updated_at TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS document_signer_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        signer_id TEXT NOT NULL REFERENCES document_signers(id),
+        event TEXT NOT NULL CHECK (event IN ('created', 'updated', 'signature_changed', 'disabled', 'enabled', 'used')),
+        document_id TEXT,
+        details TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_document_signer_events_signer ON document_signer_events(signer_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS business_documents (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('customer_statement', 'customer_invoice', 'supplier_statement', 'supplier_bill')),
+        party_type TEXT NOT NULL CHECK (party_type IN ('customer', 'supplier')),
+        customer_id TEXT REFERENCES customers(id),
+        supplier_id TEXT REFERENCES suppliers(id),
+        party_name TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('Draft', 'Issued', 'Cancelled')),
+        draft_number TEXT NOT NULL UNIQUE,
+        document_number TEXT UNIQUE,
+        period_from TEXT,
+        period_to TEXT,
+        selection_method TEXT NOT NULL CHECK (selection_method IN ('date_range', 'manual', 'filtered')),
+        issue_date TEXT,
+        due_date TEXT,
+        reference TEXT,
+        notes TEXT,
+        issuer_json TEXT,
+        recipient_json TEXT,
+        terms_json TEXT,
+        signer_json TEXT,
+        totals_json TEXT,
+        logo_uri TEXT,
+        status_history_json TEXT NOT NULL DEFAULT '[]',
+        issued_at TEXT,
+        cancelled_at TEXT,
+        cancellation_reason TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK ((party_type = 'customer' AND customer_id IS NOT NULL AND supplier_id IS NULL AND kind IN ('customer_statement', 'customer_invoice'))
+          OR (party_type = 'supplier' AND supplier_id IS NOT NULL AND customer_id IS NULL AND kind IN ('supplier_statement', 'supplier_bill'))),
+        CHECK (status <> 'Issued' OR document_number IS NOT NULL)
+      );
+      CREATE INDEX IF NOT EXISTS idx_business_documents_customer ON business_documents(customer_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_business_documents_supplier ON business_documents(supplier_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_business_documents_status ON business_documents(status, issue_date DESC);
+      CREATE TABLE IF NOT EXISTS business_document_records (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL REFERENCES business_documents(id),
+        document_kind TEXT NOT NULL CHECK (document_kind IN ('customer_statement', 'customer_invoice', 'supplier_statement', 'supplier_bill')),
+        document_status TEXT NOT NULL CHECK (document_status IN ('Draft', 'Issued', 'Cancelled')),
+        issue_date TEXT,
+        record_type TEXT NOT NULL CHECK (record_type IN ('company_load', 'supplier_load')),
+        load_id TEXT REFERENCES loads(id),
+        supplier_load_id TEXT REFERENCES quarry_purchases(id),
+        record_key TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        UNIQUE (document_id, record_key),
+        CHECK ((record_type = 'company_load' AND load_id IS NOT NULL AND supplier_load_id IS NULL AND record_key = 'company_load:' || load_id)
+          OR (record_type = 'supplier_load' AND supplier_load_id IS NOT NULL AND load_id IS NULL AND record_key = 'supplier_load:' || supplier_load_id))
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_document_records_one_issued ON business_document_records(record_key, document_kind) WHERE document_status = 'Issued';
+      CREATE INDEX IF NOT EXISTS idx_document_records_record ON business_document_records(record_key, document_status);
+      CREATE INDEX IF NOT EXISTS idx_document_records_document ON business_document_records(document_id, position);
+    `);
+    currentVersion = 48;
+  }
+
+  if (currentVersion === 48) {
+    // DEC-490. The supplier's (Owner's) signature on the Delivery Authorization. Each load keeps its own
+    // copy of the signer, so a later change to the saved signer never alters a printed authorization.
+    // The default signer for new loads lives with the business document settings. Existing loads keep
+    // no supplier signature.
+    await addColumnIfMissing(db, 'loads', 'supplier_signature_json', 'TEXT');
+    await addColumnIfMissing(db, 'business_document_settings', 'delivery_signer_id', 'TEXT REFERENCES document_signers(id)');
+    await addColumnIfMissing(db, 'business_document_settings', 'delivery_signer_display', "TEXT CHECK (delivery_signer_display IS NULL OR delivery_signer_display IN ('name_only', 'name_with_signature'))");
+    currentVersion = 49;
+  }
+
+  if (currentVersion === 49) {
+    // DEC-492. Diesel batches and outside station fills. One batch per diesel delivery after tracking is
+    // started (plus one optional Opening stock batch), numbered DSL-YYYY-NNNNN from a counter that only
+    // advances. The FIFO allocation of fills to batches is derived and cached in fuel_batch_allocations,
+    // rebuilt from the active records; fuel_allocation_events keeps an append-only note of every change to
+    // an earlier fill's allocation. Nothing existing is rewritten: the new fuel_movements columns start
+    // empty (NULL source = a tank fill, as today) and no batch exists until the Owner starts tracking.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS fuel_stations (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL,
+        location TEXT,
+        notes TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_fuel_stations_active_name ON fuel_stations(name_key) WHERE is_active = 1;
+      CREATE TABLE IF NOT EXISTS fuel_batch_settings (
+        id TEXT PRIMARY KEY NOT NULL CHECK (id = 'batches'),
+        started_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS fuel_batch_counters (
+        year INTEGER PRIMARY KEY NOT NULL,
+        next_number INTEGER NOT NULL CHECK (next_number > 0)
+      );
+      CREATE TABLE IF NOT EXISTS fuel_batches (
+        id TEXT PRIMARY KEY NOT NULL,
+        batch_number TEXT NOT NULL UNIQUE,
+        year INTEGER NOT NULL,
+        sequence INTEGER NOT NULL CHECK (sequence > 0),
+        kind TEXT NOT NULL CHECK (kind IN ('delivery', 'opening')),
+        delivery_movement_id TEXT UNIQUE REFERENCES fuel_movements(id),
+        opening_basis TEXT CHECK (opening_basis IS NULL OR opening_basis IN ('dip', 'calculated')),
+        opening_gauge_movement_id TEXT REFERENCES fuel_movements(id),
+        arrived_at TEXT NOT NULL,
+        delivered_litres REAL NOT NULL CHECK (delivered_litres > 0),
+        price_per_litre_usd_cents INTEGER CHECK (price_per_litre_usd_cents IS NULL OR price_per_litre_usd_cents >= 0),
+        invoice_number TEXT,
+        supplier_id TEXT REFERENCES suppliers(id),
+        supplier_name TEXT,
+        status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled')),
+        cancellation_reason TEXT,
+        cancelled_at TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE (year, sequence),
+        CHECK ((kind = 'delivery' AND delivery_movement_id IS NOT NULL AND opening_basis IS NULL)
+          OR (kind = 'opening' AND delivery_movement_id IS NULL AND opening_basis IS NOT NULL))
+      );
+      CREATE INDEX IF NOT EXISTS idx_fuel_batches_arrival ON fuel_batches(arrived_at, batch_number);
+      CREATE TABLE IF NOT EXISTS fuel_batch_allocations (
+        movement_id TEXT NOT NULL REFERENCES fuel_movements(id),
+        batch_id TEXT REFERENCES fuel_batches(id),
+        kind TEXT NOT NULL CHECK (kind IN ('fill', 'cover', 'shortfall', 'adjustment')),
+        litres REAL NOT NULL,
+        position INTEGER NOT NULL,
+        calculated_litres REAL,
+        dip_litres REAL,
+        PRIMARY KEY (movement_id, position)
+      );
+      CREATE INDEX IF NOT EXISTS idx_fuel_batch_allocations_batch ON fuel_batch_allocations(batch_id);
+      CREATE TABLE IF NOT EXISTS fuel_allocation_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        movement_id TEXT NOT NULL,
+        caused_by_movement_id TEXT,
+        before_json TEXT NOT NULL,
+        after_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TRIGGER IF NOT EXISTS trg_fuel_allocation_events_no_update BEFORE UPDATE ON fuel_allocation_events
+        BEGIN SELECT RAISE(ABORT, 'Fuel allocation history cannot change.'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_fuel_allocation_events_no_delete BEFORE DELETE ON fuel_allocation_events
+        BEGIN SELECT RAISE(ABORT, 'Fuel allocation history cannot be deleted.'); END;
+    `);
+    await addColumnIfMissing(db, 'fuel_movements', 'fuel_source', "TEXT CHECK (fuel_source IS NULL OR fuel_source IN ('tank', 'station'))");
+    await addColumnIfMissing(db, 'fuel_movements', 'fuel_station_id', 'TEXT REFERENCES fuel_stations(id)');
+    await addColumnIfMissing(db, 'fuel_movements', 'fuel_station_name', 'TEXT');
+    await addColumnIfMissing(db, 'fuel_movements', 'batch_id', 'TEXT REFERENCES fuel_batches(id)');
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS idx_fuel_movements_station ON fuel_movements(fuel_station_id, confirmed_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_fuel_movements_batch ON fuel_movements(batch_id);
+    `);
+    currentVersion = 50;
   }
 
 
