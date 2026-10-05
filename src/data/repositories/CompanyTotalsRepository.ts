@@ -1,5 +1,5 @@
 import type {DocumentLink,InclusionState,RecordSnapshot} from '../../domain/businessDocuments';
-import type {CompanyLoadTotalRow,CompanyTotalsData,CompanyTotalsFilters} from '../../domain/companyTotals';
+import type {CompanyLoadTotalRow,CompanyTotalsData,CompanyTotalsFilters,CustomerChoice} from '../../domain/companyTotals';
 
 /** One original delivered record behind a total, with its status read from the shared links. */
 export type CompanyTotalsRecord = {
@@ -15,5 +15,7 @@ export interface CompanyTotalsRepository {
   listRecords(filters: CompanyTotalsFilters, limit?: number): Promise<CompanyTotalsRecord[]>;
   listUsageRecords(filters: CompanyTotalsFilters, movement?: 'used' | 'transported', limit?: number): Promise<UsageRecord[]>;
   getCompanyLoadTotals(filters: CompanyTotalsFilters): Promise<CompanyLoadTotalRow[]>;
+  /** Customers with Active company loads in the period, plus the always-present No customer / Internal choice. */
+  listCustomerChoices(filters: { fromDate: string; toDate: string; projectKey?: string }): Promise<CustomerChoice[]>;
   listCompanyLoads(filters: CompanyTotalsFilters, status?: 'active' | 'cancelled' | 'all', limit?: number): Promise<CompanyTotalsRecord[]>;
 }

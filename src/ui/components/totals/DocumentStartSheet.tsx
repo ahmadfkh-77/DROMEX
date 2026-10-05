@@ -3,7 +3,9 @@ import {ActivityIndicator,Pressable,StyleSheet,Text,View} from 'react-native';
 
 import type {BusinessDocumentRepository} from '../../../data/repositories/BusinessDocumentRepository';
 import {documentKindInfo,kindsForSide,type DocumentKind,type DocumentSide,type EligibleRecord,type EligibleRecordQuery,type SelectionMethod} from '../../../domain/businessDocuments';
-import {COMPANY_SUPPLIER_KEY,LEGACY_SERIES_KEY,NO_PROJECT_KEY,type CompanyTotalsFilters} from '../../../domain/companyTotals';
+import {LEGACY_SERIES_KEY,type CompanyTotalsFilters} from '../../../domain/companyTotals';
+import {queriesFor} from '../../../domain/documentStartQuery';
+export {queriesFor};
 import {candidateParties,type CandidateParty,type DocumentStart} from '../../documentFlow';
 import {colors} from '../../theme';
 import {formatDay} from '../../totalsPresentation';
@@ -21,18 +23,6 @@ const kindCopy:Record<DocumentKind,string>={
   supplier_statement:'Internal summary of what this supplier delivered. Legal and tax details may be left out.',
   supplier_bill:'Formal record of the supplier’s bill, with its number and billing details.',
 };
-
-/** The eligible-record queries a totals node maps to: one or both sides, narrowed like the node. */
-export function queriesFor(filters:CompanyTotalsFilters,presetKeys?:string[]):EligibleRecordQuery[]{
-  const base:Omit<EligibleRecordQuery,'side'>={fromDate:filters.fromDate||undefined,toDate:filters.toDate||undefined,itemKey:filters.itemKey||undefined,unitKey:filters.unitKey||undefined,inclusion:filters.inclusion,
-    projectId:filters.projectKey?(filters.projectKey===NO_PROJECT_KEY?'':filters.projectKey):undefined,recordKeys:presetKeys};
-  const customer:EligibleRecordQuery={...base,side:'customer',seriesId:filters.seriesId&&filters.seriesId!==LEGACY_SERIES_KEY?filters.seriesId:undefined};
-  const supplier:EligibleRecordQuery={...base,side:'supplier',partyId:filters.supplierKey.startsWith('id:')?filters.supplierKey.slice(3):undefined};
-  if(filters.view==='used')return [];
-  if(filters.supplierKey===COMPANY_SUPPLIER_KEY||filters.seriesId)return [customer];
-  if(filters.supplierKey)return [supplier];
-  return [customer,supplier];
-}
 
 /**
  * DEC-500 (3). Starts a document from a totals node or a manual selection: which records, addressed to

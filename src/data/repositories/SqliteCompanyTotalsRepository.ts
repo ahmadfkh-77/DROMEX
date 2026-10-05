@@ -2,11 +2,11 @@ import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {deriveInclusion,type DocumentLink,type InclusionFilter,type InclusionState,type RecordSnapshot} from '../../domain/businessDocuments';
 import {
-  COMPANY_SUPPLIER_KEY,COMPANY_SUPPLIER_LABEL,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,NO_PROJECT_KEY,NO_PROJECT_LABEL,
-  type CompanyDeliveryRow,type CompanyLoadTotalRow,type CompanyTotalsData,type CompanyTotalsFilters,type CompanyUsageRow,type InclusionCounts,
+  COMPANY_SUPPLIER_KEY,COMPANY_SUPPLIER_LABEL,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,NO_CUSTOMER_KEY,NO_CUSTOMER_LABEL,NO_PROJECT_KEY,NO_PROJECT_LABEL,
+  type CompanyDeliveryRow,type CompanyLoadTotalRow,type CustomerChoice,type CompanyTotalsData,type CompanyTotalsFilters,type CompanyUsageRow,type InclusionCounts,
 } from '../../domain/companyTotals';
 import type {CompanyTotalsRecord,CompanyTotalsRepository,UsageRecord} from './CompanyTotalsRepository';
-import {COMPANY_LOAD_RECORDS,SUPPLIER_LOAD_RECORDS,snapshotFromRow,type RecordRow} from './recordSnapshotSql';
+import {COMPANY_LOAD_RECORDS,customerMatchSql,SUPPLIER_LOAD_RECORDS,snapshotFromRow,type RecordRow} from './recordSnapshotSql';
 import {readDocumentLinks} from './SqliteBusinessDocumentRepository';
 
 type Row=Record<string,unknown>;
@@ -39,6 +39,15 @@ const inclusionSql:Record<Exclude<InclusionFilter,'all'>,string>={
   cancelled_history:"recs.inclusion_state = 'previously_cancelled'",
 };
 
+/**
+ * A customer filter narrows to company loads, since a Supplier Load is not delivered to a customer. Chosen customers are
+ * matched by the load's own customer id; NO_CUSTOMER_KEY matches the own company (the customer on the owner's own
+ * projects) and any load whose customer is no longer on file, so those loads stay reachable.
+ */
+function customerCondition(keys:readonly string[],params:unknown[]):string{
+  return `recs.record_type = 'company_load' AND ${customerMatchSql(keys,'recs.party_id',params)}`;
+}
+
 /** WHERE conditions shared by every delivered-record query. */
 function recordConditions(filters:Partial<CompanyTotalsFilters>,status:'active'|'cancelled'|'all'='active'):[string[],unknown[]]{
   const where:string[]=['recs.archived = 0'];const params:unknown[]=[];
@@ -51,6 +60,7 @@ function recordConditions(filters:Partial<CompanyTotalsFilters>,status:'active'|
   if(filters.projectKey){if(filters.projectKey===NO_PROJECT_KEY)where.push('recs.project_id IS NULL');else{where.push('recs.project_id = ?');params.push(filters.projectKey);}}
   if(filters.supplierKey){if(filters.supplierKey===COMPANY_SUPPLIER_KEY)where.push("recs.record_type = 'company_load'");else{where.push("recs.record_type = 'supplier_load' AND 'id:' || recs.party_id = ?");params.push(filters.supplierKey);}}
   if(filters.seriesId){where.push("recs.record_type = 'company_load'");if(filters.seriesId===LEGACY_SERIES_KEY)where.push('recs.load_number IS NULL');else{where.push('recs.series_id = ?');params.push(filters.seriesId);}}
+  if(filters.customerKeys?.length)where.push(customerCondition(filters.customerKeys,params));
   if(filters.inclusion&&filters.inclusion!=='all')where.push(inclusionSql[filters.inclusion]);
   return [where,params];
 }
@@ -73,6 +83,7 @@ export class SqliteCompanyTotalsRepository implements CompanyTotalsRepository{
     const deliveries=filters.view==='used'?[]:await this.deliveries(filters);
     const usageHiddenReason=filters.view==='delivered'?null
       :filters.supplierKey?'Use is not recorded per supplier, so it is hidden while a supplier is chosen.'
+      :filters.customerKeys?.length?'Use is not recorded per customer, so it is hidden while a customer is chosen.'
       :filters.seriesId?'Use records have no load number series, so they are hidden while a series is chosen.'
       :filters.inclusion!=='all'?'Use records are never put on documents, so they are hidden while a document status is chosen.'
       :null;
@@ -125,6 +136,28 @@ export class SqliteCompanyTotalsRepository implements CompanyTotalsRepository{
   }
 
   /** The original delivered records behind any node, newest last, with their status and history count. */
+  /**
+   * Customers with Active company loads in the covered period, for the customer filter. The own company and any load whose
+   * customer is no longer on file are one "No customer / Internal" choice, which is always listed so those loads stay reachable.
+   */
+  async listCustomerChoices(filters:{fromDate:string;toDate:string;projectKey?:string}):Promise<CustomerChoice[]>{
+    const [where,params]=recordConditions({fromDate:filters.fromDate,toDate:filters.toDate,projectKey:filters.projectKey??''});
+    const rows=await this.db.getAllAsync<Row>(`${RECORDS}
+      SELECT recs.party_id id, COALESCE(MAX(c.name), MAX(recs.party_name)) name, MAX(c.id IS NULL) orphan, COALESCE(MAX(c.is_own_company),0) own,
+        COUNT(*) load_count, COUNT(DISTINCT recs.project_id) project_count
+      FROM recs LEFT JOIN customers c ON c.id = recs.party_id
+      WHERE ${where.join(' AND ')} AND recs.record_type = 'company_load'
+      GROUP BY recs.party_id`,...params as never[]);
+    const choices:CustomerChoice[]=[];
+    const none:CustomerChoice={key:NO_CUSTOMER_KEY,name:NO_CUSTOMER_LABEL,loadCount:0,projectCount:0,isOwnCompany:true};
+    for(const row of rows){
+      if(Number(row.own)===1||Number(row.orphan)===1){none.loadCount+=Number(row.load_count);none.projectCount+=Number(row.project_count);continue;}
+      choices.push({key:text(row.id),name:text(row.name),loadCount:Number(row.load_count),projectCount:Number(row.project_count),isOwnCompany:false});
+    }
+    choices.sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base',numeric:true}));
+    return [...choices,none];
+  }
+
   async listRecords(filters:CompanyTotalsFilters,limit=500):Promise<CompanyTotalsRecord[]>{
     if(filters.view==='used')return [];
     return this.records(filters,'active',limit);

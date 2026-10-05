@@ -8,8 +8,8 @@ import type {ProfileRepository} from '../../../data/repositories/ProfileReposito
 import {exportAndShareTotals} from '../../../services/documentExport';
 import {inclusionFilterLabels,type InclusionFilter,type RecordSnapshot} from '../../../domain/businessDocuments';
 import {
-  buildMaterialTree,COMPANY_SUPPLIER_KEY,countCompanyFilters,treeTotals,unitDifferences,emptyCompanyTotalsFilters,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,NO_PROJECT_KEY,
-  type CompanyTotalsData,type CompanyTotalsFilters,type MaterialNode,type ProjectNode,type SupplierNode,type TotalsView,type UnitMeasures,
+  buildMaterialTree,COMPANY_SUPPLIER_KEY,countCompanyFilters,customerFilterLabel,customerFilterWorthShowing,treeTotals,unitDifferences,emptyCompanyTotalsFilters,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,NO_PROJECT_KEY,
+  type CompanyTotalsData,type CompanyTotalsFilters,type CustomerChoice,type MaterialNode,type ProjectNode,type SupplierNode,type TotalsView,type UnitMeasures,
 } from '../../../domain/companyTotals';
 import {describeTotalsRange,formatTotalQuantity,validateTotalsFilters,type ProjectFuelFill} from '../../../domain/projectTotals';
 import type {DocumentStart} from '../../documentFlow';
@@ -21,6 +21,7 @@ import {useReducedMotion} from '../ExpandableMenu';
 import {FocusedSheet,SheetActions} from '../FocusedSheet';
 import {SearchableSelect} from '../SearchableSelect';
 import {SegmentedChoice} from '../SegmentedChoice';
+import {CustomerFilter} from './CustomerFilter';
 import {DocumentStartSheet,type StartQuery} from './DocumentStartSheet';
 import {Ledger,LedgerRow,MeasureRow,QuietButton,RecordRow,SummaryBand,styles as parts} from './TotalsParts';
 
@@ -58,6 +59,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,loadFuelF
   const[data,setData]=useState<CompanyTotalsData|null>(null);
   const[choiceData,setChoiceData]=useState<CompanyTotalsData|null>(null);
   const[seriesChoices,setSeriesChoices]=useState<Choice[]>([]);
+  const[customerChoices,setCustomerChoices]=useState<CustomerChoice[]>([]);
   const[status,setStatus]=useState<'loading'|'error'|'ready'>('loading');
   const[error,setError]=useState<string|null>(null);
   const[attempt,setAttempt]=useState(0);
@@ -93,6 +95,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,loadFuelF
   useEffect(()=>{
     let active=true;
     totals.getCompanyTotals({...emptyCompanyTotalsFilters(),fromDate:filters.fromDate,toDate:filters.toDate,projectKey:fixedProject}).then(next=>{if(active)setChoiceData(next);}).catch(()=>{});
+    totals.listCustomerChoices({fromDate:filters.fromDate,toDate:filters.toDate,projectKey:fixedProject}).then(list=>{if(active)setCustomerChoices(list);}).catch(()=>{});
     series.listSeries().then(list=>{if(active)setSeriesChoices([...list.map(value=>({id:value.id,label:`${value.prefix} · ${value.displayName}${value.isActive?'':' (inactive)'}`})),{id:LEGACY_SERIES_KEY,label:LEGACY_SERIES_LABEL}]);}).catch(()=>{});
     return()=>{active=false;};
   },[totals,series,filters.fromDate,filters.toDate,fixedProject,refreshToken]);
@@ -141,6 +144,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,loadFuelF
       </View>
       <SearchableSelect label="Material / item" options={choices.items} selectedId={filters.itemKey} onSelect={itemKey=>set({itemKey})} placeholder="All items" allowClear/>
       {scope.kind==='company'?<SearchableSelect label="Project" options={choices.projects} selectedId={filters.projectKey} onSelect={projectKey=>set({projectKey})} placeholder="All projects" allowClear/>:null}
+      {customerFilterWorthShowing(scope.kind,customerChoices.filter(choice=>choice.loadCount>0).length)?<CustomerFilter choices={customerChoices} selected={filters.customerKeys} onChange={customerKeys=>set({customerKeys})} note="Supplier deliveries are hidden while a customer is chosen: they are not delivered to a customer."/>:null}
       <SearchableSelect label="Supplier" options={choices.suppliers} selectedId={filters.supplierKey} onSelect={supplierKey=>set({supplierKey})} placeholder="All suppliers and company loads" allowClear/>
       <SearchableSelect label="Unit" options={choices.units} selectedId={filters.unitKey} onSelect={unitKey=>set({unitKey})} placeholder="All units" allowClear/>
       <SearchableSelect label="Company-load number series" options={seriesChoices} selectedId={filters.seriesId} onSelect={seriesId=>set({seriesId})} placeholder="Any series" allowClear/>
@@ -169,6 +173,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,loadFuelF
         ...(filters.supplierKey&&!level.supplier?[`Supplier: ${label(choices.suppliers,filters.supplierKey)}`]:[]),
         ...(filters.unitKey?[`Unit: ${label(choices.units,filters.unitKey)}`]:[]),
         ...(filters.seriesId?[`Series: ${label(seriesChoices,filters.seriesId)}`]:[]),
+        ...(customerFilterLabel(filters.customerKeys,customerChoices)?[customerFilterLabel(filters.customerKeys,customerChoices)!]:[]),
         ...(filters.view!=='all'?[filters.view==='delivered'?'Delivered only':'Used only']:[]),
         ...(filters.inclusion!=='all'?[`Document status: ${inclusionFilterLabels[filters.inclusion]}`]:[])];
       const title=atRecords?'Loads History':scope.kind==='project'?'Project Totals':'Company Totals';
@@ -184,7 +189,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,loadFuelF
     <QuietButton label="Create document" onPress={()=>openStart()} hint="Choose records, who the document is for, and its type"/>
     {profiles?<QuietButton label={exporting?'Preparing PDF…':'Export PDF'} onPress={askExport} disabled={exporting} hint="Without prices or with recorded prices"/>:null}
   </>;
-  const usageNotice=data.usageHiddenReason?<Text style={styles.notice}>{data.usageHiddenReason}</Text>:null;
+  const usageNotice=data.usageHiddenReason||filters.customerKeys.length?<Text style={styles.notice}>{[filters.customerKeys.length?'Supplier deliveries are hidden while a customer is chosen: they are not delivered to a customer.':null,data.usageHiddenReason].filter(Boolean).join(' ')}</Text>:null;
   const usageLedger=(units:UnitMeasures[],base:CompanyTotalsFilters)=>{
     const lines=units.flatMap(unit=>[unit.used?{movement:'used' as const,unit,measure:unit.used}:null,unit.transported?{movement:'transported' as const,unit,measure:unit.transported}:null]).filter((value):value is NonNullable<typeof value>=>value!=null);
     if(!lines.length||filters.view==='delivered'||usageHidden)return null;

@@ -10,7 +10,7 @@ import {
 import {signerSnapshot,type SignerSnapshot} from '../../domain/documentSigners';
 import type {BusinessDocumentRepository} from './BusinessDocumentRepository';
 import {recordSignerEvent,signerFromRow} from './SqliteDocumentSignerRepository';
-import {COMPANY_LOAD_RECORDS,SUPPLIER_LOAD_RECORDS,snapshotFromRow,type RecordRow} from './recordSnapshotSql';
+import {COMPANY_LOAD_RECORDS,customerMatchSql,SUPPLIER_LOAD_RECORDS,snapshotFromRow,type RecordRow} from './recordSnapshotSql';
 
 type DocumentRow={
   id:string;kind:DocumentKind;party_type:DocumentSide;customer_id:string|null;supplier_id:string|null;party_name:string;status:DocumentStatus;draft_number:string;document_number:string|null;
@@ -138,6 +138,7 @@ export class SqliteBusinessDocumentRepository implements BusinessDocumentReposit
   async listEligibleRecords(query:EligibleRecordQuery):Promise<EligibleRecord[]>{
     const where:string[]=["record_status = 'Active'",'archived = 0'];const params:unknown[]=[];
     if(query.partyId){where.push('party_id = ?');params.push(query.partyId);}
+    if(query.customerKeys?.length&&query.side==='customer')where.push(customerMatchSql(query.customerKeys,'party_id',params));
     if(query.fromDate){where.push('record_day >= ?');params.push(query.fromDate);}
     if(query.toDate){where.push('record_day <= ?');params.push(query.toDate);}
     if(query.projectId!==undefined){if(query.projectId)where.push('project_id = ?'),params.push(query.projectId);else where.push('project_id IS NULL');}

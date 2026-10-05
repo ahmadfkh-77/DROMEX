@@ -22,6 +22,9 @@ export const NO_PROJECT_LABEL = 'No project — direct customer deliveries';
 export const COMPANY_SUPPLIER_KEY = 'company';
 export const COMPANY_SUPPLIER_LABEL = 'Company loads — own deliveries';
 export const LEGACY_SERIES_KEY = 'legacy';
+/** Customer filter: loads of the own company, the customer on the owner's own projects (DEC-006). Always offered, so those loads never disappear. */
+export const NO_CUSTOMER_KEY = '__no_customer__';
+export const NO_CUSTOMER_LABEL = 'No customer / Internal';
 export const LEGACY_SERIES_LABEL = 'Legacy loads — no generated load number';
 
 export type TotalsView = 'all' | 'delivered' | 'used';
@@ -35,8 +38,10 @@ export type CompanyTotalsFilters = {
   /** A series id, LEGACY_SERIES_KEY, or ''. Narrows to company loads. */
   seriesId: string;
   inclusion: InclusionFilter;
+  /** Customer ids and/or NO_CUSTOMER_KEY. Empty means every customer. A non-empty list narrows to company loads: a Supplier Load is not delivered to a customer. */
+  customerKeys: string[];
 };
-export const emptyCompanyTotalsFilters = (): CompanyTotalsFilters => ({ fromDate: '', toDate: '', itemKey: '', projectKey: '', supplierKey: '', unitKey: '', view: 'all', seriesId: '', inclusion: 'all' });
+export const emptyCompanyTotalsFilters = (): CompanyTotalsFilters => ({ fromDate: '', toDate: '', itemKey: '', projectKey: '', supplierKey: '', unitKey: '', view: 'all', seriesId: '', inclusion: 'all', customerKeys: [] });
 
 export type DeliverySource = 'supplier_delivery' | 'company_delivery';
 export type CompanyDeliveryRow = {
@@ -105,7 +110,7 @@ export function buildMaterialTree(data: CompanyTotalsData): MaterialNode[] {
 
 /** How many filters narrow the totals; a From/To range counts once. */
 export function countCompanyFilters(filters: CompanyTotalsFilters): number {
-  return [filters.fromDate || filters.toDate, filters.itemKey, filters.projectKey, filters.supplierKey, filters.unitKey, filters.view !== 'all', filters.seriesId, filters.inclusion !== 'all'].filter(Boolean).length;
+  return [filters.fromDate || filters.toDate, filters.itemKey, filters.projectKey, filters.supplierKey, filters.unitKey, filters.view !== 'all', filters.seriesId, filters.inclusion !== 'all', filters.customerKeys.length > 0].filter(Boolean).length;
 }
 
 // ---- Company Load Totals ------------------------------------------------------------------------
@@ -159,3 +164,25 @@ export function treeTotals(tree: readonly MaterialNode[]): { materialCount: numb
 export function unitDifferences(units: readonly UnitMeasures[]): { unitKey: string; unitSymbol: string; difference: number }[] {
   return units.filter((unit) => unit.delivered && unit.used).map((unit) => ({ unitKey: unit.unitKey, unitSymbol: unit.unitSymbol, difference: clean(unit.delivered!.quantity - unit.used!.quantity) }));
 }
+
+// ---- Customer filter ----------------------------------------------------------------------------
+
+/** One customer the filter can choose: how many Active company loads and projects they have in the covered period. */
+export type CustomerChoice = { key: string; name: string; loadCount: number; projectCount: number; isOwnCompany: boolean };
+
+/** Chosen customers written for a PDF filter line, in the order the choices are listed; an unknown key is skipped. */
+export function customerFilterLabel(keys: readonly string[], choices: readonly { key: string; name: string }[]): string | null {
+  if (!keys.length) return null;
+  const names = choices.filter((choice) => keys.includes(choice.key)).map((choice) => choice.name);
+  return names.length ? `Customers: ${names.join(', ')}` : null;
+}
+
+/** "All customers", the one name, or "<first> and N more", for the field that opens the customer list. */
+export function customerFilterSummary(keys: readonly string[], choices: readonly { key: string; name: string }[]): string {
+  const names = choices.filter((choice) => keys.includes(choice.key)).map((choice) => choice.name);
+  if (!names.length) return 'All customers';
+  return names.length === 1 ? names[0]! : `${names[0]} and ${names.length - 1} more`;
+}
+
+/** Whether a customer filter is worth showing: Project Totals has exactly one customer per project, so it needs two or more. */
+export const customerFilterWorthShowing = (scope: 'company' | 'project', choiceCount: number): boolean => scope === 'company' || choiceCount > 1;

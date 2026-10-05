@@ -1,4 +1,5 @@
 import type {DocumentRecordType,RecordSnapshot} from '../../domain/businessDocuments';
+import {NO_CUSTOMER_KEY} from '../../domain/companyTotals';
 
 /**
  * DEC-500. The one way company loads and Supplier Loads are read as document-eligible records, shared
@@ -52,4 +53,17 @@ export function snapshotFromRow(row:RecordRow):RecordSnapshot{
     unitPriceCents:cents(row.unit_price_cents),priceBasis:row.price_basis==='whole'?'whole':'per_unit',subtotalCents:cents(row.subtotal_cents),
     vatRateBasisPoints:cents(row.vat_rate_basis_points),vatCents:cents(row.vat_cents),totalCents:cents(row.total_cents),supplierReference:row.supplier_reference??null,
   };
+}
+
+/**
+ * The customer filter's WHERE condition on a column holding a company load's customer id, shared by Totals and by the
+ * document start list so both match the same loads. Ids match the load's own customer; NO_CUSTOMER_KEY matches the owner's own
+ * company (the customer on its own projects) and any load whose customer is no longer on file, so those loads stay reachable.
+ */
+export function customerMatchSql(keys:readonly string[],column:string,params:unknown[]):string{
+  const ids=keys.filter(key=>key!==NO_CUSTOMER_KEY);
+  const parts:string[]=[];
+  if(ids.length){parts.push(`${column} IN (${ids.map(()=>'?').join(',')})`);params.push(...ids);}
+  if(keys.includes(NO_CUSTOMER_KEY))parts.push(`(${column} IN (SELECT id FROM customers WHERE is_own_company = 1) OR ${column} NOT IN (SELECT id FROM customers))`);
+  return `(${parts.join(' OR ')||'0'})`;
 }

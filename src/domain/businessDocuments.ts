@@ -216,6 +216,8 @@ export type EligibleRecordQuery = {
   /** A project id, or '' for records with no project. */
   projectId?: string; itemKey?: string; unitKey?: string; seriesId?: string;
   recordKeys?: string[]; inclusion?: InclusionFilter; kind?: DocumentKind;
+  /** The Totals customer filter on the customer side: customer ids and/or the No customer / Internal key. */
+  customerKeys?: string[];
 };
 export type EligibleRecord = { key: string; snapshot: RecordSnapshot; seriesId: string | null; inclusion: InclusionState; links: DocumentLink[] };
 
