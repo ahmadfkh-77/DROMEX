@@ -6,7 +6,7 @@ summarises and points to the detailed records; it creates no decision and
 closes no open question. Where it disagrees with `requirements/decisions.md`,
 the decision wins.
 
-Written 2026-10-04 against `origin/web/phase2c-auth-foundation` at `8fbb023`.
+Written 2026-10-04 against `8fbb023`. Refreshed 2026-10-05 on `verify/batch6-reconcile`, at the merge commit `ce7aaac` (feature tip `3d93d52` plus `origin/main` `ef443f8`) and the docs commits after it. The rows whose evidence changed are B2 to B5 and B7; the other rows are unchanged.
 
 ## How to read the status column
 
@@ -47,12 +47,12 @@ separate: meeting this gate does not enable it.
 | # | Gate: what must be true | Source | Status | Evidence required to call it Met | Who acts |
 | --- | --- | --- | --- | --- | --- |
 | B1 | Terminal emergency Owner recovery rehearsed (lost authenticator via supported replacement or recovery code; last-resort reset only when supported recovery is impossible) | DEC-423, DEC-435, DEC-436, DEC-437 | Implemented locally, not production-proven (the command refuses every run; tested on disposable databases only) | A rehearsal against a disposable or test copy, then the Owner's separate approval to enable it for production, per DEC-437 (8). Production execution is Owner-only | Both |
-| B2 | OQ-168: an invited Admin who verified an authenticator and lost it before setup finished has a recovery path | [OQ-168](../../requirements/open-questions.md) | Not met (policy decided, DEC-494: the Owner resets an Admin's enrolment; the mechanism is not implemented, needs a migration and a new audited enrolment path, and the address still cannot be activated) | An Owner-approved mechanism, then an implementation with tests | Owner approves the mechanism; agent implements |
-| B3 | Session policy leftovers from OQ-160: `freshAge`, an absolute maximum session age, and a re-authentication window for sensitive Owner actions | OQ-160, DEC-493 | Not started (open; DEC-493 settled only `expiresIn` 12 h and `updateAge` 1 h, sliding, so 12 h bounds inactivity, not total age) | Owner chooses the closing wording; implementation and tests follow | Owner decides; agent implements |
-| B4 | Idle rate-limit rows (`dromex_rate_limit`) are pruned in small bounded steps without changing any rate-limit decision (SEC-1b) | DEC-492 (a **proposal**, not accepted) | Design only. DEC-492 and its code exist only on the unmerged verification branch `verify/overnight-sec-1b` (`b2b67f3`, `7b4f8b8`); neither is on the feature branch, and DEC-492 is not in this branch's `requirements/decisions.md` | Owner accepts or changes the retention, batch size and timing; code merged and CI-verified | Owner decides; agent implements |
-| B5 | CI security tooling adopted (secret, dependency, static analysis, container scanning) | OQ-165; options in section D | Not started. The workflow runs typecheck and tests only; "OQ-165 security tooling" is listed as not covered by CI. `npm audit` was run by hand for DS-1 (2026-10-04), not in CI | Owner decision; tool enabled; first clean result recorded | Owner decides; agent configures |
+| B2 | OQ-168: an invited Admin who verified an authenticator and lost it before setup finished has a recovery path | [OQ-168](../../requirements/open-questions.md) | Not met (policy DEC-494; mechanism chosen by DEC-496, Option A: one transaction resets the enrolment, the Admin sets a new password, at most one reset per Admin per 24 hours. Chosen, not built: no migration, no code, and the address still cannot be activated) | An implementation of DEC-496 with a forward-only migration (0012 is next) and migration, repository, authorisation and failure-path tests on GitHub Actions | Agent implements; Owner approves the batch |
+| B3 | Session policy leftovers from OQ-160: `freshAge`, an absolute maximum session age, and a re-authentication window for sensitive Owner actions | OQ-160, DEC-493 | Design only (DEC-493 settled `expiresIn` 12 h and `updateAge` 1 h, sliding, so 12 h bounds inactivity, not total age; DEC-497 decides a 10-minute re-authentication window for sensitive Owner actions, not implemented; `freshAge` and any absolute maximum remain undecided and DEC-493 keeps no cap) | Owner decides `freshAge` and the absolute maximum; the re-authentication window is implemented and tested | Owner decides; agent implements |
+| B4 | Idle rate-limit rows (`dromex_rate_limit`) are pruned in small bounded steps without changing any rate-limit decision (SEC-1b) | DEC-492 | Implemented locally, not production-proven (DEC-492 is in `requirements/decisions.md`; the pruning code and `rate-limit-prune.test.ts` are on the feature branch, no migration; the CI result for it is not recorded in this file) | The pruning observed running against a real database under production configuration | Agent |
+| B5 | CI security tooling adopted (secret, dependency, static analysis, container scanning) | OQ-165; options in section D | Design only (DEC-495 decides free GitHub security features only, nothing paid, container scanning deferred; not implemented, nothing switched on). The workflow runs typecheck and tests only. `npm audit` was run by hand for DS-1 (2026-10-04), not in CI | A separate batch adds the free tools; the Owner switches the GitHub settings on; the first clean result is recorded | Owner switches settings; agent configures |
 | B6 | Authorisation and permission model (template, per-user overrides, project scope, effective permissions, deny by default) proven | DEC-424, DEC-425, DEC-426, DEC-428, DEC-429 | Design only (route classification and default-deny exist; no permission model) | Tests of unauthorised access, Owner and Admin boundaries, per-user overrides, project scope, privilege escalation and IDOR, against real PostgreSQL | Agent |
-| B7 | Web sign-in screen and Owner and account-management screens designed and built | [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Implemented locally, not production-proven (SI-1a sign-in and minimal account screens; run in CI in a real Chrome against a stubbed API, and against the real API with synthetic accounts in a disposable database, 24 end-to-end tests green in runs 37214080465 and 37217214641; Chrome accepted the `__Secure-` cookie over http on 127.0.0.1 and every cookie flag check passed; no recovery screen; still no TLS, reverse proxy, security headers (B16), real email or production) | Observed in CI as described (not production evidence); still required: the same checks against the production host over HTTPS, and no auth value in `localStorage` or `sessionStorage` there | Agent |
+| B7 | Web sign-in screen and Owner and account-management screens designed and built | [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Implemented locally, not production-proven (SI-1a sign-in and minimal account screens; run in CI in a real Chrome against a stubbed API, and against the real API with synthetic accounts in a disposable database, 24 end-to-end tests green in runs 37214080465 and 37217214641; Chrome accepted the `__Secure-` cookie over http on 127.0.0.1 and every cookie flag check passed; the lost-authenticator and Owner recovery screens (batch 4c, DEC-494) now exist, with no CI result recorded for them in this file; still no TLS, reverse proxy, security headers (B16), real email or production) | Observed in CI as described (not production evidence); still required: the same checks against the production host over HTTPS, and no auth value in `localStorage` or `sessionStorage` there | Agent |
 | B8 | Audit trail hardened: least-privilege runtime role and grants provisioned | DEC-430 | Implemented locally, not production-proven (trigger rejects `UPDATE`, `DELETE`, `TRUNCATE`; runtime role and grant not provisioned). This is not a guarantee against a database administrator | Role and grants applied in production and tested | Both |
 | B9 | Business tables and business rules (migrated, reconciled, tested at realistic volume) | DEC-410, DEC-412, DEC-413; OQ-159 | Not started (no business table exists; OQ-159 open) | Reconciled record counts, identifiers, financial totals, payment statuses | Agent; Owner accepts |
 | B10 | Android authentication and synchronisation | DEC-407; OQ-162, OQ-163 | Not started (open questions; Android unchanged) | Tests for duplicates, interruption, concurrent edits, conflict rejection; Android verified unaffected | Agent; Owner decides OQ-162/163 |
@@ -113,25 +113,20 @@ before one is proposed.
 Consistent with the master plan; each step needs its own approval, and the
 order is a recommendation for the Owner to confirm.
 
-1. **Sign-in screen** (B7): the web sign-in, with real-browser header and
-   cookie checks.
-2. **SEC-1b v2** (B4): the Owner decides DEC-492's values (or changes them);
-   then the pruning is built and CI-verified. Session leftovers (B3) and OQ-168
-   (B2) can be decided at the same time.
+1. **Sign-in screen** (B7) and **SEC-1b v2** (B4): built locally on the feature branch; neither is production-proven.
+2. **Decisions recorded 2026-10-05** (DEC-495 to DEC-499): free GitHub security features (B5), the Admin enrolment reset mechanism (B2), the re-authentication window (B3).
 3. **Remaining gates:** CI security tooling (B5) after the Owner's OQ-165
    choice, authorisation (B6), audit grants (B8), then the Owner-only
    groundwork: provider account, domain records, mailbox, secrets (A2 to A4,
    B14), and deployment, backups, monitoring (B11 to B13).
-4. **Reconcile with `main`:** the web branch and `main` have diverged and the
-   merge is deliberately deferred until the web phase is done.
+4. **Reconcile with `main`:** done on `verify/batch6-reconcile` (merge commit `ce7aaac`), awaiting the Owner's approval to fast-forward the feature branch. The web code itself is unchanged by it.
 5. **Delivery and rehearsals** (A5, A6, B1) in production.
 6. **Owner activation last** (A7), only after every gate the Owner requires is
    Met with real evidence and only on the Owner's explicit approval.
 
 ## Sources
 
-DEC-406 to DEC-444, DEC-487 to DEC-491 and DEC-493 in
+DEC-406 to DEC-444 and DEC-487 to DEC-499 in
 `requirements/decisions.md`; OQ-158, OQ-159, OQ-160, OQ-162 to OQ-165 and
-OQ-168 in `requirements/open-questions.md`; DEC-492 on `verify/overnight-sec-1b`
-only; GitHub and npm documentation pages listed in the OQ-165 table, accessed
+OQ-168 in `requirements/open-questions.md`; GitHub and npm documentation pages listed in the OQ-165 table, accessed
 2026-10-04.

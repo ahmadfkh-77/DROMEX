@@ -276,8 +276,10 @@ modify the repository root `package.json`. Its documentation is in
 carries a per-document implementation-status table. Read that before making any
 change to the web system.
 
-Current state: a local development foundation only. There is no authentication,
-no business table, no shared domain package, no deployment, and no production
+Current state: a local development foundation only. A Phase 2C authentication
+foundation exists (sign-in, MFA, invitations, password reset, recovery, account
+management; disposable databases and CI only, Owner activation disabled). There
+is no business table, no shared domain package, no deployment, and no production
 data. Open questions **OQ-157** (authentication solution), **OQ-158** (whether
 real infrastructure meets the recovery objectives), and **OQ-159** (how domain
 rules are shared without a forked copy) gate the phases that follow.

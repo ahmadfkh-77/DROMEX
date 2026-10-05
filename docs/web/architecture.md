@@ -1,7 +1,7 @@
 # Web System Architecture
 
 Status: **partly implemented.** The service boundaries below are the approved
-target (DEC-406). Only the Phase 1 skeleton exists today.
+target (DEC-406). Today only the Phase 1 skeleton and the Phase 2C authentication foundation exist; see the status table in [README.md](README.md).
 
 ## How the web system relates to the existing product
 
@@ -106,8 +106,10 @@ poll a local endpoint would enlarge the image and its attack surface.
 
 ## What is deliberately absent
 
-Authentication, business tables, domain rules, and synchronisation are all out
-of scope for Phase 1 and are not stubbed, scaffolded, or half-built. Each has a
+Business tables, domain rules, and synchronisation are out of scope so far and
+are not stubbed, scaffolded, or half-built. (Authentication was absent in
+Phase 1 and has since been added in Phase 2C; see
+[authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md).) Each has a
 governing decision or open question that must close first: DEC-408 and OQ-157
 for accounts, DEC-409 for the read-only-first rollout, DEC-412 and DEC-413 for
 synchronisation, OQ-159 for domain rules.

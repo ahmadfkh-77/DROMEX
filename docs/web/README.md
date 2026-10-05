@@ -11,7 +11,7 @@ describes a rule, it cites the decision that established it.
 
 | Document | Covers | Implementation status |
 | --- | --- | --- |
-| [architecture.md](architecture.md) | Service boundaries, technology baseline, how the web system relates to the existing Android application | **Partly implemented** (Phase 1 skeleton only) |
+| [architecture.md](architecture.md) | Service boundaries, technology baseline, how the web system relates to the existing Android application | **Partly implemented** (Phase 1 skeleton plus the Phase 2C authentication foundation; no business table, synchronisation or deployment) |
 | [security-and-accounts.md](security-and-accounts.md) | Owner and Admin model, the private-application boundary, authorisation rules | **Partly implemented** (local development only: password-plus-TOTP sign-in, sign-out, sanitized session endpoint, active-principal and mandatory-MFA enforcement, Owner recovery-code sign-in with restricted authenticator replacement, and a security audit foundation; terminal Owner activation and terminal emergency Owner recovery tested on disposable databases only, both commands refuse every run, and no Owner exists; password reset (checkpoint 4C) and Owner account and session management (checkpoint 4E, DEC-490) on disposable databases only; no public registration or permission model) |
 | [authentication-and-authorization-architecture.md](authentication-and-authorization-architecture.md) | Selected authentication system and why, threat model, MFA and Owner-recovery design, permission-block architecture, API enforcement, testing strategy | **Partly implemented** (local development only: route classification, Argon2id hashing, Better Auth configuration and schema, the DROMEX principal and migrations, the sign-in, TOTP verification, sign-out, and session transport, mandatory MFA, TOTP replay protection, versioned secrets, recovery-code issuance, resumable terminal Owner activation whose command refuses every run, recovery-code sign-in with a restricted recovery state and supported authenticator replacement, the security audit foundation, and terminal emergency Owner recovery with the DEC-437 last-resort reset, whose command refuses every run, the email transport foundation (checkpoint 4A), Owner-managed Admin invitations (checkpoint 4B1), and restricted invitation acceptance with the `pending` lifecycle and a never-routed internal sign-up capability (checkpoint 4B2), and password reset with a DROMEX-owned fragment token, a never-routed internal password-write capability, the credential-change session rule, and the offline common-password blocklist (checkpoint 4C), and the running server's email configuration, disabled by default and failing closed on any partial configuration (checkpoint 4D), and Owner account and session management with the `sessions_revoked_at` rule, disable and re-enable with a reason, one and all-session revocation, and guard-level auditing of refused non-Owners (checkpoint 4E, DEC-490). No Owner, real invitation, Admin, or reset, Owner readiness enforcement, configured email provider, email sending, permissions, designed sign-in UI, or deployment) |
 | [postgresql-strategy.md](postgresql-strategy.md) | Schema approach, identifier preservation, roles, the PostgreSQL 18 volume rule | **Partly implemented** (development service only, no schema) |
@@ -26,13 +26,14 @@ evidence status of each gate, and what only the Owner can do, see
 
 ## Current state, stated plainly
 
-As of Phase 1 the web system is a **local development foundation only**.
+The web system is a **local development foundation only**: the Phase 1 skeleton plus the Phase 2C authentication foundation (local, never run against real accounts).
 
 What exists:
 
 - a self-contained `web/` npm workspace,
-- a minimal Fastify API exposing `/health` and `/ready`,
-- a minimal React and Vite development preview,
+- a Fastify API: `/health`, `/ready`, and the Phase 2C authentication, invitation, password-reset, recovery and account-management routes (disposable databases and CI only),
+- a React and Vite app with the sign-in, account, invitation, password-reset, lost-authenticator and Owner recovery screens, and real-browser tests run in CI,
+- background pruning of idle rate-limit rows (DEC-492),
 - a local PostgreSQL development service in Docker,
 - an isolated Testcontainers lifecycle for integration tests,
 - this documentation.
@@ -124,6 +125,11 @@ The Android application is unchanged and remains offline-first on local SQLite
 | DEC-492 | Idle `dromex_rate_limit` rows are pruned in the background after requests (24 hour retention, 100 rows, at most every 10 minutes per pool, skip-locked, 2 second timeout), never changing a decision; failures report one fixed code; no migration (an index was drafted and dropped) (confirmed, implemented locally, not production-proven) |
 | DEC-493 | Web sessions keep the values already in code: 12 hour lifetime and 1 hour refresh, a sliding window (so 12 hours bounds inactivity, not total age), cookie cache disabled, `freshAge` not configured; Better Auth's 7 day / 1 day defaults are not DROMEX policy; an absolute maximum age and a fresh-login window are deferred; OQ-160 stays open until the Owner decides its closing wording (confirmed) |
 | DEC-494 | OQ-168 resolved as policy: no self-service Admin recovery; the Owner resets an Admin's authenticator enrolment (mechanism not implemented: needs a migration and an Owner-approved design). The Owner's recovery-code path is reachable from the web UI through a static lost-authenticator page and a recovery screen over the existing routes (implemented locally, verified with a stubbed browser API only) (confirmed decision, partly implemented) |
+| DEC-495 | OQ-165 resolved as a decision: free GitHub security features only for now; nothing paid, no new third-party CI action; container scanning deferred; not implemented |
+| DEC-496 | OQ-168 mechanism chosen: Option A, the Owner resets an Admin's enrolment in one transaction, with a new password and at most one reset per 24 hours; chosen, not built |
+| DEC-497 | OQ-160 partly resolved: sensitive Owner actions need a re-authentication within 10 minutes; `freshAge` and any absolute maximum undecided; not implemented |
+| DEC-498 | OQ-159: run a docs-only spike before any business table; outcome not decided |
+| DEC-499 | OQ-163 resolved: late or conflicting Android records are held for Owner review, never silently rejected; not designed or implemented |
 
 Full detail for DEC-418 through DEC-437, and for DEC-439 through DEC-444 and
 DEC-487 to DEC-490 (§14A), is in
