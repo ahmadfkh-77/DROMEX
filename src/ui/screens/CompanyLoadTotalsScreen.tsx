@@ -7,6 +7,7 @@ import type {ProfileRepository} from '../../data/repositories/ProfileRepository'
 import type {RecordSnapshot} from '../../domain/businessDocuments';
 import {buildCompanyLoadTree,emptyCompanyTotalsFilters,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,type CompanyLoadGroupNode,type CompanyLoadTotalRow,type CompanyTotalsFilters,type UnitQuantity} from '../../domain/companyTotals';
 import {describeTotalsRange,formatTotalQuantity,validateTotalsFilters} from '../../domain/projectTotals';
+import {companyContactLine} from '../../domain/projectTotalsPdf';
 import {exportAndShareCompanyLoadTotals} from '../../services/documentExport';
 import {AppButton,AppPage,EmptyState,Feedback,PageHeader} from '../components/AppPrimitives';
 import {DatePickerField} from '../components/DatePickerField';
@@ -69,7 +70,7 @@ export function CompanyLoadTotalsScreen({totals,series,profiles,onBack,onOpenRec
       const labels=[describeTotalsRange(filters.fromDate,filters.toDate),groupBy==='series'?'Grouped by number series':'Grouped by item',status==='active'?'Active loads':status==='cancelled'?'Cancelled loads only':'Active and cancelled loads',
         ...(filters.itemKey?[`Item: ${choices.items.find(value=>value.id===filters.itemKey)?.label??''}`]:[]),...(filters.projectKey?[`Project: ${choices.projects.find(value=>value.id===filters.projectKey)?.label??''}`]:[]),
         ...(filters.unitKey?[`Unit: ${choices.units.find(value=>value.id===filters.unitKey)?.label??''}`]:[]),...(filters.seriesId?[`Series: ${seriesChoices.find(value=>value.id===filters.seriesId)?.label??''}`]:[])];
-      await exportAndShareCompanyLoadTotals({fileName:{projectName:filters.projectKey?choices.projects.find(value=>value.id===filters.projectKey)?.label??null:null,fromDate:filters.fromDate,toDate:filters.toDate},companyName:company.companyName,logoUri:company.logoUri,generatedAt:new Date().toISOString(),filters:labels,groupBy,groups:tree,loads:all});
+      await exportAndShareCompanyLoadTotals({fileName:{projectName:filters.projectKey?choices.projects.find(value=>value.id===filters.projectKey)?.label??null:null,fromDate:filters.fromDate,toDate:filters.toDate},companyName:company.companyName,contactLine:companyContactLine(company),logoUri:company.logoUri,generatedAt:new Date().toISOString(),filters:labels,groupBy,groups:tree,loads:all});
       setMessage('PDF ready to share.');
     }catch(cause){setError(cause instanceof Error?cause.message:'The PDF could not be created.');}finally{setBusy(false);}
   };

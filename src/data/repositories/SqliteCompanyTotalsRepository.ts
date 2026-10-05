@@ -175,6 +175,7 @@ export class SqliteCompanyTotalsRepository implements CompanyTotalsRepository{
     const rows=await this.db.getAllAsync<RecordRow>(`${RECORDS} SELECT recs.* FROM recs WHERE ${where.join(' AND ')} ORDER BY recs.recorded_at, recs.reference LIMIT ?`,...params as never[],limit);
     const links=await readDocumentLinks(this.db,rows.map(row=>row.record_key));
     return rows.map(row=>{const own:DocumentLink[]=links[row.record_key]??[];const inclusion:InclusionState=deriveInclusion(own);const snapshot:RecordSnapshot=snapshotFromRow(row);
-      return {key:row.record_key,snapshot,seriesId:row.series_id,status:row.record_status,cancellationReason:row.cancellation_reason??null,correctionCount:Number(row.correction_count??0),links:own,inclusion};});
+      return {key:row.record_key,snapshot,seriesId:row.series_id,status:row.record_status,cancellationReason:row.cancellation_reason??null,correctionCount:Number(row.correction_count??0),links:own,inclusion,
+        details:{destination:row.destination?.trim()||null,driverName:row.driver_name?.trim()||null,truckPlate:row.truck_plate?.trim()||null,deliveredBy:row.delivery_method??null}};});
   }
 }
