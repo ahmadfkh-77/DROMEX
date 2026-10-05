@@ -4,7 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 
 import type { AuthSettings } from '../auth/config.ts';
 import { checkNewPassword, type PasswordPolicyReason } from '../auth/password-policy.ts';
-import { createRateLimitStorage, type RateLimitRule } from '../auth/rate-limit-storage.ts';
+import { RATE_LIMIT_PRUNE_INTERVAL_MS, createRateLimitStorage, type RateLimitRule } from '../auth/rate-limit-storage.ts';
 import { securityEvent, type SecurityAudit, type SecurityAuditActor, type SecurityAuditEventType } from '../auth/security-audit.ts';
 import { isValidEmailAddress, type EmailSender } from '../email/message.ts';
 import type { EmailSendResult, EmailTransport } from '../email/result.ts';
@@ -173,7 +173,7 @@ export function createPasswordResetService(deps: PasswordResetDependencies): Pas
   const { pool, audit, delivery } = deps;
   if (typeof audit?.record !== 'function') throw new Error('Password reset requires the security audit.');
   const identity = deps.identity ?? createResetIdentity(deps.settings, pool);
-  const limits = createRateLimitStorage(pool);
+  const limits = createRateLimitStorage(pool, Date.now, { pruneIntervalMs: RATE_LIMIT_PRUNE_INTERVAL_MS });
   const queue: ResetQueue = createResetQueue({
     capacity: PASSWORD_RESET_POLICY.queueCapacity,
     ...(deps.schedule === undefined ? {} : { schedule: deps.schedule }),

@@ -115,7 +115,7 @@ Not verified, and still required before production:
 - No general DROMEX Fastify-level Origin policy exists yet for future
   state-changing DROMEX routes. Sign-in relies on Better Auth's Origin checks;
   sign-out has its own DROMEX Origin check.
-- Expired `dromex_rate_limit` rows are not pruned yet; rows accumulate per
+- Expired `dromex_rate_limit` rows are pruned in the background (DEC-492, implemented locally, not production-proven); a flood of distinct client addresses still grows the table within the retention period, which is a flood-defence matter. Rows accumulate per
   distinct client address and path.
 - MFA, real Owner provisioning, frontend authentication, permissions,
   deployment, and production readiness remain incomplete. *(Mandatory MFA was

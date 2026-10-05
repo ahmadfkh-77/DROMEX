@@ -1090,7 +1090,7 @@ rather than any change to production code, which was already correct.
   never one taken from a request. `tests/unit/recovery-code-read-boundary.test.ts`
   (SEC-1a) enforces that rule with exact allowlists of callers, wrappers, and
   arguments, and confirms that no HTTP route exposes it.)*
-- `dromex_rate_limit` rows are still never pruned.
+- `dromex_rate_limit` rows are pruned in the background (DEC-492), implemented locally and proven on disposable databases only; very large tables would need the index the decision defers.
 - Timing equivalence of failures is not measured, and cookie attributes are
   verified through Fastify injection rather than a real browser.
 - A lost provisioning lock connection during a Better Auth call (checkpoint
