@@ -12,6 +12,7 @@ import {
   type CompanyTotalsData,type CompanyTotalsFilters,type CustomerChoice,type MaterialNode,type ProjectNode,type SupplierNode,type TotalsView,type UnitMeasures,
 } from '../../../domain/companyTotals';
 import {describeTotalsRange,formatTotalQuantity,validateTotalsFilters,type ProjectFuelFill} from '../../../domain/projectTotals';
+import {companyContactLine,customerBox} from '../../../domain/projectTotalsPdf';
 import type {DocumentStart} from '../../documentFlow';
 import {colors} from '../../theme';
 import {formatDay} from '../../totalsPresentation';
@@ -25,7 +26,8 @@ import {CustomerFilter} from './CustomerFilter';
 import {DocumentStartSheet,type StartQuery} from './DocumentStartSheet';
 import {Ledger,LedgerRow,MeasureRow,QuietButton,RecordRow,SummaryBand,styles as parts} from './TotalsParts';
 
-export type ExplorerScope={kind:'company'}|{kind:'project';projectId:string;projectName:string};
+/** A project also carries what its Totals PDF header shows: its customer, location and status (read from the project, never recalculated). */
+export type ExplorerScope={kind:'company'}|{kind:'project';projectId:string;projectName:string;customerId?:string;customerName?:string;location?:string|null;status?:string};
 type Node={key:string;name:string};
 /** Where the explorer is: nothing chosen is the top level; a supplier (or "all records") is the records level. */
 export type ExplorerLevel={material?:Node;project?:Node;supplier?:Node};
@@ -165,7 +167,12 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,loadFuelF
     try{
       // On the records level the PDF is a Loads History: every load behind these totals, listed.
       const fuel=includeFuel&&fuelChoiceShown?await loadFuelFills!({fromDate:filters.fromDate,toDate:filters.toDate}):undefined;
-      const [current,company,history]=await Promise.all([totals.getCompanyTotals(nodeFilters),profiles.getCompanySettings(),atRecords?totals.listRecords(nodeFilters,5000):Promise.resolve(undefined)]);
+      // Project Totals (not on a records level): the customer and supplier boxes and every Active load behind the totals.
+      const projectScope=scope.kind==='project'&&!atRecords;
+      const [current,company,history,projectLoads,customers]=await Promise.all([totals.getCompanyTotals(nodeFilters),profiles.getCompanySettings(),atRecords?totals.listRecords(nodeFilters,5000):Promise.resolve(undefined),projectScope?totals.listRecords(nodeFilters,5000):Promise.resolve([] as CompanyTotalsRecord[]),projectScope?profiles.listCustomers():Promise.resolve([])]);
+      const contactLine=companyContactLine(company);
+      const found=scope.kind==='project'&&scope.customerId?customers.find(value=>value.id===scope.customerId):undefined;
+      const project=scope.kind==='project'&&projectScope?{name:scope.projectName,location:scope.location??null,status:scope.status??'Active',customer:customerBox(found?{name:found.name,isOwnCompany:found.isOwnCompany}:scope.customerName?{name:scope.customerName,isOwnCompany:false}:null),loads:projectLoads}:undefined;
       const label=(list:Choice[],id:string)=>list.find(value=>value.id===id)?.label??id;
       const labels=[rangeLabel,...trail.slice(1),
         ...(filters.itemKey&&!level.material?[`Item: ${label(choices.items,filters.itemKey)}`]:[]),
@@ -178,7 +185,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,loadFuelF
         ...(filters.inclusion!=='all'?[`Document status: ${inclusionFilterLabels[filters.inclusion]}`]:[])];
       const title=atRecords?'Loads History':scope.kind==='project'?'Project Totals':'Company Totals';
       const parts=[level.material?.name,scope.kind==='project'?scope.projectName:level.project?.name,level.supplier?.key?level.supplier.name:undefined];
-      await exportAndShareTotals({companyName:company.companyName,logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,fuel,data:current,records:history,issuedTo:issuedTo(level.supplier,history),
+      await exportAndShareTotals({companyName:company.companyName,logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,fuel,data:current,records:history,issuedTo:issuedTo(level.supplier,history),contactLine,project,
         fileName:{scopeName:parts.filter(Boolean).join(' ')||null,fromDate:filters.fromDate,toDate:filters.toDate}});
       setExportMessage({kind:'success',text:`${title} PDF ready to share, ${includePrices?'with recorded prices':'without prices'}.`});
     }catch(cause){setExportMessage({kind:'error',text:cause instanceof Error?cause.message:'The PDF could not be created.'});}

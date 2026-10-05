@@ -20,7 +20,8 @@ export const COMPANY_LOAD_RECORDS=`SELECT 'company_load' record_type, l.id recor
     l.confirmed_at recorded_at, l.entered_at, l.unit_price_usd_cents unit_price_cents, 'per_unit' price_basis,
     l.subtotal_usd_cents subtotal_cents, l.vat_rate_basis_points vat_rate_basis_points, l.vat_amount_usd_cents vat_cents, l.final_total_usd_cents total_cents,
     NULL supplier_reference, COALESCE(l.status,'Active') record_status, l.is_archived archived, date(l.confirmed_at,'localtime') record_day, l.payment_status,
-    l.cancellation_reason, ${historyCount('l.correction_history_json')} correction_count
+    l.cancellation_reason, ${historyCount('l.correction_history_json')} correction_count,
+    COALESCE(l.project_location, l.destination_address) destination, l.driver_name, l.truck_plate, NULL delivery_method
   FROM loads l LEFT JOIN conversion_options c ON c.id = l.conversion_id`;
 
 /** Supplier Loads (supplier side). */
@@ -31,7 +32,8 @@ export const SUPPLIER_LOAD_RECORDS=`SELECT 'supplier_load' record_type, q.id rec
     q.confirmed_at recorded_at, q.entered_at, q.unit_price_usd_cents unit_price_cents, COALESCE(q.price_basis,'per_unit') price_basis,
     q.subtotal_usd_cents subtotal_cents, q.vat_rate_basis_points vat_rate_basis_points, q.vat_amount_usd_cents vat_cents, q.final_total_usd_cents total_cents,
     q.supplier_ticket_number supplier_reference, COALESCE(q.status,'Active') record_status, 0 archived, date(q.confirmed_at,'localtime') record_day, q.payment_status,
-    q.cancellation_reason, ${historyCount('q.correction_history_json')} correction_count
+    q.cancellation_reason, ${historyCount('q.correction_history_json')} correction_count,
+    NULL destination, q.driver_name, q.truck_plate, COALESCE(q.delivery_method,'company') delivery_method
   FROM quarry_purchases q`;
 
 export type RecordRow={
@@ -40,6 +42,8 @@ export type RecordRow={
   recorded_at:string;entered_at:string|null;unit_price_cents:number|null;price_basis:'per_unit'|'whole';subtotal_cents:number|null;vat_rate_basis_points:number|null;vat_cents:number|null;total_cents:number|null;
   supplier_reference:string|null;record_status:'Active'|'Cancelled';archived:number;record_day:string;payment_status:string;
   cancellation_reason:string|null;correction_count:number;
+  /** Read-only detail for lists and PDFs; never part of an immutable document snapshot. */
+  destination?:string|null;driver_name?:string|null;truck_plate?:string|null;delivery_method?:'company'|'supplier'|null;
 };
 
 const round=(value:unknown)=>Math.round(Number(value??0)*1e6)/1e6;

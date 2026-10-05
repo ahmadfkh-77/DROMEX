@@ -35,7 +35,7 @@ describe('Project Totals screen',()=>{
     }
   });
   it('runs the project through the shared explorer with the project fixed, so a document is the same everywhere',()=>{
-    expect(screen).toContain("scope={{kind:'project',projectId:project.id,projectName:project.name}}");
+    expect(screen).toContain("scope={{kind:'project',projectId:project.id,projectName:project.name,customerId:project.customerId,customerName:project.customerName,location:project.location,status:project.status==='completed'?'Completed':'Active'}}");
     expect(explorer).toContain("scope.kind==='project'?material.projects[0]");
   });
   it('shows Delivered and Used as separate labelled columns, per unit, with Not recorded where missing',()=>{

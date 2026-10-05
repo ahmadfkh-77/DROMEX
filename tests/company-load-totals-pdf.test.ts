@@ -48,3 +48,12 @@ describe('Company Load Totals PDF',()=>{
     expect(html).toContain('break-after:avoid');
   });
 });
+
+describe('Company Settings header on the Company Load Totals PDF',()=>{
+  const input={companyName:'DROMEX Plant',logo:null,generatedAt:'2026-09-02T08:00:00',filters:['1 Aug 2026 – 31 Aug 2026'],groupBy:'series' as const,groups:[],loads:[]};
+  it('prints the contact line under the company name when one is saved, and nothing when not',()=>{
+    const withContact=buildCompanyLoadTotalsHtml({...input,contactLine:'Beirut · +961 1 234 567 · Tax/VAT: 1234567-001'});
+    expect(withContact).toContain('<div class="contact"><span dir="auto">Beirut · +961 1 234 567 · Tax/VAT: 1234567-001</span></div>');
+    expect(buildCompanyLoadTotalsHtml(input)).not.toContain('<div class="contact">');
+  });
+});
