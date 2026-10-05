@@ -87,3 +87,13 @@ describe('Load No. on the PDF receipt and authorization (DEC-504)',()=>{
     for(const text of ['Main Road, Hasbaya','+961 70 123 456','info@dromex.example','Tax/VAT: 123456-601'])expect(html).toContain(`<p>${text}</p>`);
   });
 });
+
+describe('comfortable row spacing on the PDF (Owner option B)',()=>{
+  it('uses open rows and rules on both paper widths',()=>{
+    for(const paper of ['58','80'] as const){
+      const html=buildLoadDocumentHtml(load,'receipt',paper);
+      expect(html).toContain('padding:2mm 0');
+      expect(html).toContain('.rule{border-top:1px solid #111;margin:4.5mm 0}');
+    }
+  });
+});
