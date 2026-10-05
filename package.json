@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "demo:backup": "node --experimental-strip-types scripts/generate-demo-backup.ts"
+    "demo:backup": "node --experimental-strip-types scripts/generate-demo-backup.ts",
+    "demo:customer-test": "node --experimental-strip-types scripts/generate-customer-test-backup.ts"
   },
   "dependencies": {
     "@noble/ciphers": "^1.3.0",
