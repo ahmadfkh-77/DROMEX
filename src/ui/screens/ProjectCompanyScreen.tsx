@@ -17,7 +17,8 @@ import {colors} from '../theme';
  * Settings › Company setups › Project Company. Chooses which EXISTING customer is the project owner and
  * adds header details to it. The link never renames, moves, merges or changes the customer or any record.
  */
-export function ProjectCompanyScreen({profiles,headers,signers,onBack}:{profiles:ProfileRepository;headers:CompanyHeaderRepository;signers:DocumentSignerRepository;onBack:()=>void}){
+export function ProjectCompanyScreen({profiles,headers,signers,onBack,initialCustomerId}:{profiles:ProfileRepository;headers:CompanyHeaderRepository;signers:DocumentSignerRepository;onBack:()=>void;
+  /** Opened from a customer's page: that customer starts selected. */initialCustomerId?:string|null}){
   const[status,setStatus]=useState<'loading'|'error'|'ready'>('loading');
   const[customers,setCustomers]=useState<Customer[]>([]);
   const[signerList,setSignerList]=useState<DocumentSigner[]>([]);
@@ -35,14 +36,17 @@ export function ProjectCompanyScreen({profiles,headers,signers,onBack}:{profiles
       if(!active)return;
       setCustomers(allCustomers);setSignerList(allSigners);setExisting(profile);
       if(profile){setCustomerId(profile.customerId);setLogoUri(profile.logoUri);setAddress(profile.address??'');setPhone(profile.phone??'');setEmail(profile.email??'');setTaxVatNumber(profile.taxVatNumber??'');setRegistrationNumber(profile.registrationNumber??'');setFooter(profile.receiptFooter??'');setSigner({signerId:profile.signerId,display:profile.signerDisplay});}
+      // DEC-507. With nothing saved yet, the Owner's own-company customer is the one to link (it receives the plant's materials).
+      if(!profile){const own=allCustomers.find(value=>value.isOwnCompany&&value.isActive);const first=initialCustomerId&&allCustomers.some(value=>value.id===initialCustomerId)?initialCustomerId:own?.id;if(first)setCustomerId(first);}
+      else if(initialCustomerId&&allCustomers.some(value=>value.id===initialCustomerId))setCustomerId(initialCustomerId);
       setStatus('ready');
     }).catch(()=>{if(active)setStatus('error');});
     return()=>{active=false;};
-  },[profiles,headers,signers]);
+  },[profiles,headers,signers,initialCustomerId]);
 
   const customerOptions=customers
-    .filter(value=>!value.isOwnCompany&&(value.isActive||value.id===customerId))
-    .map(value=>({id:value.id,label:value.name,detail:value.isActive?undefined:'Archived'}));
+    .filter(value=>value.isActive||value.id===customerId)
+    .map(value=>({id:value.id,label:value.isOwnCompany?`${value.name} (Own company)`:value.name,detail:value.isActive?undefined:'Archived'}));
   const state=projectCompanyState(existing);
 
   async function save(){
@@ -71,7 +75,7 @@ export function ProjectCompanyScreen({profiles,headers,signers,onBack}:{profiles
       {error?<Feedback kind="error">{error}</Feedback>:null}
       {saved?<Feedback kind="success">{saved}</Feedback>:null}
       {state==='customer_archived'?<Feedback kind="warning">The linked customer is archived. The header still prints from the saved details. Records are unaffected.</Feedback>:null}
-      <AppCard title="Which customer is it?" hint="The project owner is one of your existing customers. Choosing it only adds header details to that customer.">
+      <AppCard title="Which customer is it?" hint="The project owner is one of your existing customers, including your own company. Choosing it only adds header details to that customer.">
         <SearchableSelect label="Customer *" options={customerOptions} selectedId={customerId} onSelect={setCustomerId} placeholder={customerOptions.length?'Search and select a customer':'Create a customer first'}/>
         <Text style={styles.helper}>The link never renames, moves, merges or changes the customer, its loads, payments or projects. If the customer is renamed later, the header follows its new name.</Text>
       </AppCard>

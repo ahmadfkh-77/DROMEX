@@ -121,8 +121,15 @@ export class SqliteCompanyHeaderRepository implements CompanyHeaderRepository {
   }
 
   async getProjectHeaderDefault(projectId: string): Promise<HeaderCompanyKind> {
-    const row = await this.db.getFirstAsync<{ header_company: string | null }>('SELECT header_company FROM projects WHERE id = ?', projectId);
-    return headerKindOrDefault(row?.header_company);
+    const row = await this.db.getFirstAsync<{ header_company: string | null; customer_id: string | null }>('SELECT header_company, customer_id FROM projects WHERE id = ?', projectId);
+    if (row?.header_company) return headerKindOrDefault(row.header_company);
+    // DEC-507. No remembered choice: a project of the customer that is the Project Company starts on the Project Company header.
+    const company = row?.customer_id ? await this.getProjectCompany() : null;
+    if (company && row?.customer_id) {
+      const owner = await this.effectiveCustomer(row.customer_id);
+      if (owner && owner.id === company.customerId) return 'project';
+    }
+    return 'plant';
   }
 
   async setProjectHeaderDefault(projectId: string, kind: HeaderCompanyKind | null): Promise<void> {

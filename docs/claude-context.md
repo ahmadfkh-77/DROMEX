@@ -735,6 +735,32 @@ values on its next save.
 - **Accepted.** The Owner installed build 28 in place and accepted it on 2026-10-04. Build 28 is now the
   accepted internal artifact; build 22 stays the previous accepted installer; builds 23 to 27 are superseded.
 
+## Release — DROMEX 0.22.0, Android build 30 (2026-10-09)
+
+- **Branch**: `feature/android-receipts-history-pdfs` (pushed; not merged into `main`). Feature commit `0fb63c1`, release
+  commit `1874730` (`app.json` and `package.json` only: 0.21.0 to 0.22.0, version code 29 to 30).
+- **Scope (DEC-506)**: diesel batches carry a supplier, invoice number and optional price (Unpriced, never $0), with each
+  supplier's own Diesel deliveries block (litres only); Edit Batch with free supplier/invoice/price, a reason for litres
+  and date, litres never below what was used, and a visible Edit history; a Supplier filter and one date range for the
+  batch list, totals and PDF, plus an export panel with its own filters and new Excel columns; Supplier Loads use a
+  Destination (project, company site or unassigned) instead of Linked project, with site loads under the site's name and
+  never in a project's totals; Export PDF inside an opened supplier on the Supplier Loads page ("Totals" and the
+  supplier's name, every load listed with its number); Customize header (logo, name, details) on list PDFs. Migration 53
+  (additive): `quarry_purchases.destination_type`, `quarry_purchases.company_site_id`, `fuel_batches.correction_history_json`.
+- **Upgrade safety**: the build 22 and build 25 upgrade fixtures still show every existing row identical; a project-linked
+  Supplier Load written by an earlier build reads, totals and numbers exactly as before; backup then restore keeps batch
+  suppliers, edit history and load destinations.
+- **Tests**: 153 files, 2,057 tests green; typecheck clean. One earlier full run showed 7 failures that did not repeat in
+  three later runs; the cause was not found.
+- **EAS build**: `ce169ac9-f7f3-4225-b06e-7b5b2dc2ccf2`, built with eas-cli 24.7.0 from the working tree at `1874730`;
+  profile `preview`, APK, account `drofk12`. Remote credentials reused unchanged
+  (`Using Keystore from configuration: Build Credentials wtQXwzktVi (default)`), so it should install in place.
+- **Artifact**: `output/DROMEX-0.22.0-build30.apk`, 84,111,678 bytes (~80 MB). SHA-256:
+  `78f3b225dd6866c6c77c44503d7218b47d814965c913750bea2a7e5435733858`. Ignored by `output/*.apk` and untracked (DEC-396);
+  earlier installers in `output/` are untouched.
+- **Not yet accepted.** Physical-device review and an in-place install over build 29 are pending. The phone screens were
+  checked by the type checker and source tests only, not rendered on a device.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:

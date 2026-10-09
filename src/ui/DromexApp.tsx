@@ -127,6 +127,7 @@ export function DromexApp(){
   const[fuelProjectId,setFuelProjectId]=useState<string|null>(null);
   // DEC-505. The compact diesel figure on Home, refreshed whenever Home is shown.
   const[fuelBadge,setFuelBadge]=useState<string|null>(null);
+  useEffect(()=>{if(screen!=='customers')return;let live=true;void companyHeaderRepository.getProjectCompany().then(value=>{if(live)setProjectCompanyCustomerId(value?.customerId??null);}).catch(()=>{if(live)setProjectCompanyCustomerId(null);});return()=>{live=false;};},[screen,companyHeaderRepository]);
   useEffect(()=>{if(screen!=='home')return;let live=true;void fuelRepository.getBatchOverview().then(value=>{if(live)setFuelBadge(fuelHomeBadge(value));}).catch(()=>{if(live)setFuelBadge(null);});return()=>{live=false;};},[screen,fuelRepository]);
   const[dashboardRange,setDashboardRange]=useState<DashboardRange|null>(null);
   const[correctionLoadId,setCorrectionLoadId]=useState<string|null>(null);
@@ -135,6 +136,7 @@ export function DromexApp(){
   const[documentId,setDocumentId]=useState<string|null>(null);
   const[documentsParty,setDocumentsParty]=useState<DocumentParty|null>(null);
   const[customerFocusId,setCustomerFocusId]=useState<string|null>(null);
+  const[projectCompanyPick,setProjectCompanyPick]=useState<string|null>(null);const[projectCompanyCustomerId,setProjectCompanyCustomerId]=useState<string|null>(null);
   const[companyLevel,setCompanyLevel]=useState<ExplorerLevel>({});
   const[projectLevel,setProjectLevel]=useState<ExplorerLevel>({});
 
@@ -185,7 +187,7 @@ export function DromexApp(){
   else if(screen==='receiptSetup')content=<ReceiptSetupScreen repository={loadRepository} onBack={()=>goBack('moreHub')}/>;
   else if(screen==='directory')content=<PeopleEquipmentScreen repository={loadRepository} onOpenCustomDirectories={()=>navigate('customDirectories')} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='customDirectories')content=<CustomDirectoriesScreen repository={customDirectoryRepository} onBack={()=>goBack('directory')}/>;
-  else if(screen==='customers')content=<CustomersScreen repository={profileRepository} financialRepository={financialRepository} onBack={()=>goBack('recordsHub')} onOpenDocuments={customer=>openDocuments({side:'customer',partyId:customer.id,partyName:customer.name})} totals={companyTotalsRepository} onOpenRecord={openOriginalRecord} initialCustomerId={customerFocusId} onFocusCustomer={setCustomerFocusId}/>;
+  else if(screen==='customers')content=<CustomersScreen repository={profileRepository} financialRepository={financialRepository} onBack={()=>goBack('recordsHub')} onOpenDocuments={customer=>openDocuments({side:'customer',partyId:customer.id,partyName:customer.name})} totals={companyTotalsRepository} onOpenRecord={openOriginalRecord} initialCustomerId={customerFocusId} onFocusCustomer={setCustomerFocusId} projectCompanyCustomerId={projectCompanyCustomerId} onOpenProjectCompany={customerId=>{setProjectCompanyPick(customerId);navigate('projectCompany');}}/>;
   else if(screen==='catalog')content=<CatalogScreen repository={catalogRepository} seriesRepository={seriesRepository} onBack={()=>goBack('moreHub')}/>;
   else if(screen==='reports')content=<ReportsScreen documents={documentRepository} repository={projectReportRepository} businessReportRepository={businessReportRepository} onOpenPdfSettings={()=>navigate('pdfSettings')} initialBusinessFilters={dashboardRange?{fromDate:dashboardRange.fromDate,toDate:dashboardRange.toDate}:undefined} initialProjectId={searchTarget?.route==='reports'?searchTarget.projectId:activeProject?.id} initialReportId={searchTarget?.route==='reports'?searchTarget.id:null} startNewReport={entryIntent==='dailyReport'} onBack={()=>goBack('moreHub')}/>;
   else if(screen==='quarry')content=<QuarryPurchasesScreen repository={quarryRepository} fuel={fuelRepository} initialProjectId={activeProject?.id} startEntry={entryIntent==='quarry'} initialPurchaseId={searchTarget?.kind==='Supplier Load'||searchTarget?.kind==='Quarry Purchase'?searchTarget.id:null} onBack={()=>goBack('recordsHub')} onOpenDocuments={supplier=>openDocuments({side:'supplier',partyId:supplier.id,partyName:supplier.name})} documents={documentRepository} onOpenDocument={openDocument}/>;
@@ -199,7 +201,7 @@ export function DromexApp(){
   else if(screen==='quickText')content=<QuickTextScreen repository={quickTextRepository} initialProjectId={activeProject?.id} initialDocumentId={searchTarget?.route==='quickText'?searchTarget.id:null} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='companySetups')content=<CompanySetupsScreen profiles={profileRepository} headers={companyHeaderRepository} onBack={()=>goBack('moreHub')} onOpenPlant={()=>navigate('settings')} onOpenProject={()=>navigate('projectCompany')}/>;
   else if(screen==='settings')content=<SettingsScreen repository={profileRepository} headers={companyHeaderRepository} signers={signerRepository} onBack={()=>goBack('companySetups')}/>;
-  else if(screen==='projectCompany')content=<ProjectCompanyScreen profiles={profileRepository} headers={companyHeaderRepository} signers={signerRepository} onBack={()=>goBack('companySetups')}/>;
+  else if(screen==='projectCompany')content=<ProjectCompanyScreen profiles={profileRepository} headers={companyHeaderRepository} signers={signerRepository} initialCustomerId={projectCompanyPick} onBack={()=>{setProjectCompanyPick(null);goBack('companySetups');}}/>;
   else if(screen==='pdfSettings')content=<PdfSettingsScreen repository={profileRepository} onOpenSupervisors={()=>navigate('supervisors')} onBack={()=>goBack('moreHub')}/>;
   else if(screen==='supervisors')content=<SupervisorsScreen repository={supervisorRepository} onBack={()=>goBack('pdfSettings')}/>;
   else content=<ProjectsScreen repository={loadRepository} activityRepository={workspaceRepository} onBack={()=>goRoot('home')} onOpenProject={openProject}/>;

@@ -150,7 +150,8 @@ describe('the header company a PDF uses',()=>{
     await headers.saveProjectCompany(draft());
     await headers.setProjectHeaderDefault('road','project');
     expect(await headers.getProjectHeaderDefault('road')).toBe('project');
-    expect(await headers.getProjectHeaderDefault('other')).toBe('plant');
+    // DEC-507. 'other' is another project of the same customer, so with no remembered choice it starts on the Project Company too.
+    expect(await headers.getProjectHeaderDefault('other')).toBe('project');
     await headers.removeProjectCompany();
     expect(await headers.getProjectHeaderDefault('road')).toBe('plant');
     await expect(headers.setProjectHeaderDefault('missing','plant')).rejects.toThrow('project was not found');

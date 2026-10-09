@@ -132,7 +132,7 @@ describe('Daily Report PDF: Lift hierarchy',()=>{
 
   it('preserves every existing Daily Report section',()=>{
     const html=pdf([wall()]);
-    for(const heading of ['Wall construction that day','Work performed'])expect(html).toContain(heading);
+    for(const heading of ['<h2>Wall construction</h2>','Work performed'])expect(html).toContain(heading);
   });
 });
 

@@ -27,7 +27,7 @@ const wallSection=(html:string)=>html.slice(html.indexOf('<section class="wall-s
 describe('Daily Report PDF: Wall Construction section',()=>{
   it('groups every wall with its own heading, dimensions, and materials',()=>{
     const section=wallSection(pdf([wallB,wallA]));
-    expect(section).toContain('<h2>Wall construction that day</h2>');
+    expect(section).toContain('<h2>Wall construction</h2>');
     expect(section.match(/class="wall-block"/g)).toHaveLength(2);
     expect(section.indexOf('Boundary wall B')).toBeLessThan(section.indexOf('Retaining wall A'));
     expect(section).toContain('Stacked rock + mortar/concrete');
@@ -112,9 +112,9 @@ describe('Daily Report PDF: Wall Construction section',()=>{
     expect(html).toContain('DAILY PROJECT REPORT');
     expect(html).toContain('<div class="bi-ar" dir="rtl" lang="ar">وزارة الأشغال العامة</div>');
     expect(html).toContain('استشارات الأرز');
-    for(const heading of ['Loads delivered that day','Fuel used that day','Waste dumps completed that day','Site notes and follow-up','Photo evidence'])expect(html).toContain(heading);
-    expect(html.indexOf('Waste dumps completed that day')).toBeLessThan(html.indexOf('Wall construction that day'));
-    expect(html.indexOf('Wall construction that day')).toBeLessThan(html.indexOf('Site notes and follow-up'));
+    for(const heading of ['<h2>Loads delivered</h2>','<h2>Fuel used</h2>','<h2>Waste dumps completed</h2>','Site notes and follow-up','Photo evidence'])expect(html).toContain(heading);
+    expect(html.indexOf('<h2>Waste dumps completed</h2>')).toBeLessThan(html.indexOf('<h2>Wall construction</h2>'));
+    expect(html.indexOf('<h2>Wall construction</h2>')).toBeLessThan(html.indexOf('Site notes and follow-up'));
   });
 });
 

@@ -54,6 +54,8 @@ export function CustomersScreen({
   onOpenRecord,
   initialCustomerId,
   onFocusCustomer,
+  projectCompanyCustomerId,
+  onOpenProjectCompany,
 }: {
   repository: ProfileRepository;
   financialRepository: FinancialRepository;
@@ -66,6 +68,9 @@ export function CustomersScreen({
   /** The customer page to reopen after returning from a load, and a callback that reports which one is open. */
   initialCustomerId?: string | null;
   onFocusCustomer?: (customerId: string | null) => void;
+  /** DEC-507. The customer that is the Project Company, and the way to open its header setup for any customer. */
+  projectCompanyCustomerId?: string | null;
+  onOpenProjectCompany?: (customerId: string) => void;
 }) {
   const reducedMotion = useReducedMotion();
   const [loaded, setLoaded] = useState(false);
@@ -205,6 +210,7 @@ export function CustomersScreen({
               <Text style={styles.heroTitle} numberOfLines={2}>{selected.name}</Text>
               <View style={styles.pillRow}>
                 <View style={styles.typePill}><Text style={styles.typePillText}>{selected.isOwnCompany ? 'Own company' : selected.type === 'company' ? 'Company' : 'Individual'}</Text></View>
+                {projectCompanyCustomerId === selected.id ? <View style={styles.typePill}><Text style={styles.typePillText}>Project Company</Text></View> : null}
                 <View style={[styles.statusPill, selected.isActive ? styles.statusPillActive : styles.statusPillInactive]}>
                   <View style={[styles.statusDot, selected.isActive ? styles.statusDotActive : styles.statusDotInactive]} />
                   <Text style={[styles.statusPillText, selected.isActive ? styles.statusPillTextActive : styles.statusPillTextInactive]}>{selected.isActive ? 'Active' : 'Inactive'}</Text>
@@ -269,6 +275,18 @@ export function CustomersScreen({
             >
               <Text style={styles.financeButtonLabel}>Invoices & Bills</Text>
               <Text style={styles.financeButtonHint}>Invoices issued and customer statements →</Text>
+            </TouchableOpacity>
+          ) : null}
+          {onOpenProjectCompany && selected.isActive ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.financeButton}
+              onPress={() => onOpenProjectCompany(selected.id)}
+              accessibilityRole="button"
+              accessibilityLabel={projectCompanyCustomerId === selected.id ? `Edit Project Company details of ${selected.name}` : `Use ${selected.name} as the Project Company`}
+            >
+              <Text style={styles.financeButtonLabel}>{projectCompanyCustomerId === selected.id ? 'Edit Project Company details' : 'Use as Project Company'}</Text>
+              <Text style={styles.financeButtonHint}>{projectCompanyCustomerId === selected.id ? 'Logo, address, phone and email printed in the PDF header →' : 'Its logo, address and details head the PDFs of its projects →'}</Text>
             </TouchableOpacity>
           ) : null}
         </View>

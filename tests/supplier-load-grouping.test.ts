@@ -132,7 +132,7 @@ describe('Supplier Loads PDF physical-review regressions',()=>{
   });
   it('shows Unpriced, not a false $0.00, when a supplier or item has no priced load',()=>{
     const html=buildProjectReportHtmlWithWaste(base,project,[],[load(ASPHALT,A,5,TON,{finalTotalUsd:null})],[],[],company,null,[],true);
-    const supplierSection=html.slice(html.indexOf('<h3>Supplier Loads</h3>'),html.indexOf('Fuel used that day'));
+    const supplierSection=html.slice(html.indexOf('<h3>Supplier Loads</h3>'),html.indexOf('<h2>Fuel used</h2>'));
     expect(supplierSection).not.toContain('$0.00');
     expect(html).toContain('Supplier subtotal · Alpha Asphalt</td><td class="number">5 t</td><td class="number">Unpriced</td>');
   });

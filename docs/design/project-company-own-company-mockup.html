@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Own company as Project Company</title><link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --orange:#C84B31; --navy:#173F67; --ink:#14263A; --cream:#FFF8ED; --cream2:#F5F2EC;
+    --white:#FFFFFF; --line:#E4DED3; --muted:#6B7280; --grey:#8A8F98;
+    --amber:#9A6200; --amber-bg:#FFF4DC; --amber-line:#F1CF83;
+    --red:#B42318; --red-bg:#FDECEA; --red-line:#F3B4AE;
+    --green:#1E7B45;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:#E9E4DA; color:var(--ink);
+    font-family:"Noto Sans","Noto Sans Arabic",system-ui,sans-serif;
+    font-size:14px; line-height:1.4;
+  }
+  .num{font-variant-numeric:tabular-nums; white-space:nowrap; text-align:right}
+  bdi{unicode-bidi:isolate}
+
+  /* ---------- page chrome ---------- */
+  .top{max-width:1320px;margin:0 auto;padding:24px 16px 8px}
+  .top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}
+  .top p{margin:0;color:var(--muted);max-width:760px}
+  .tabs{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+  .tabs button{
+    min-height:44px;padding:0 18px;border-radius:999px;border:1px solid var(--navy);
+    background:var(--white);color:var(--navy);font:600 14px inherit;font-family:inherit;cursor:pointer
+  }
+  .tabs button[aria-pressed="true"]{background:var(--navy);color:var(--white)}
+  .stage{max-width:1320px;margin:0 auto;padding:16px;display:flex;gap:32px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+  [data-g][hidden]{display:none !important}
+  .paper{width:300px;max-width:100%;background:#fff;color:#111;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.6;padding:18px 16px 26px;box-shadow:0 10px 26px rgba(20,38,58,.16)}
+  .pc{text-align:center;overflow-wrap:anywhere}.pt{font-size:17px;font-weight:700;letter-spacing:.04em}.pt2{font-weight:700;font-size:14px}
+  .pr{display:flex;justify-content:space-between;gap:10px}.pr span:last-child{text-align:right;overflow-wrap:anywhere}
+  .pb{font-weight:700;font-size:14px}.phr{border-top:1px dashed #555;margin:8px 0}
+  .pctx{background:var(--navy);color:#FFF8ED;border-radius:16px;padding:14px 17px}
+  .pctx-k{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9D6E6}
+  .pctx-name{font-size:17px;font-weight:700;margin-top:4px;text-align:right;overflow-wrap:anywhere}
+  .pctx-sub{font-size:12px;color:#C9D6E6;margin-top:6px}
+  .ptot-big{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding-bottom:8px}
+  .ptot-big span{font-weight:600}
+  .ptot-big b{font-size:26px;font-weight:700;color:var(--navy)}
+  .ptot{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+  .ptot.cost{border-top:1.5px solid var(--ink);margin-top:2px;align-items:flex-start}
+  .ptot.cost small{display:block;color:var(--muted);font-size:12px;font-weight:500}
+  .pmeta{font-size:12px;color:var(--muted);margin-top:6px}
+  .tag-before{background:#F1F1F1;border:1px solid #D4D4D4;color:#555}
+  .split{font-size:12px;color:var(--ink);margin-top:4px;padding-left:8px;border-left:2px solid var(--navy)}
+  .phone-wrap{max-width:100%;min-width:0}
+  .caption{overflow-wrap:anywhere}
+  .fcard{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:16px 17px;display:flex;flex-direction:column}
+  .step{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);margin-bottom:10px}
+  .sn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--navy);color:#fff;font-size:12px;letter-spacing:0}
+  .flabel{font-size:13px;font-weight:600;margin:10px 0 5px}
+  .step + .flabel{margin-top:0}
+  .opt{font-weight:500;color:var(--muted);font-size:12px}
+  .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--cream2);border-radius:12px;padding:4px;gap:4px}
+  .seg.three{grid-template-columns:1fr 1fr 1fr}
+  .seg span{display:flex;align-items:center;justify-content:center;min-height:40px;border-radius:9px;font-weight:600;font-size:13px;color:var(--muted);text-align:center;padding:0 4px}
+  .seg span.on{background:var(--navy);color:#fff}
+  .select,.input{min-height:46px;border:1px solid #D6D0C4;border-radius:11px;background:#FFFDF9;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;overflow-wrap:anywhere}
+  .select b{font-weight:700}
+  .sel-sub{font-size:12px;color:var(--muted);margin-top:1px}
+  .chev{color:var(--navy);font-size:14px}
+  .input.ph{color:var(--muted)}
+  .num-in{font-weight:700;font-size:17px;font-variant-numeric:tabular-nums}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .link{font-size:13px;font-weight:700;color:var(--navy);margin-top:8px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .two .flabel{margin-top:0}
+  .preview{background:#EEF2F7;border:1px solid #C7D3E2;border-radius:16px;padding:14px 16px}
+  .preview.neutral{background:var(--cream2);border-color:var(--line)}
+  .pv-h{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);margin-bottom:6px}
+  .pv-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:7px 0;border-top:1px solid rgba(23,63,103,.12);font-size:13px}
+  .pv-row:first-of-type{border-top:0}
+  .pv-row small{color:var(--muted);font-size:12px}
+  .pv-row b{text-align:right}
+  .pv-row.total{font-weight:700;border-top:1.5px solid var(--navy)}
+  .tank{background:var(--navy);color:#FFF8ED;border-radius:16px;padding:16px 17px}
+  .tank-k{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9D6E6}
+  .tank-v{font-size:34px;font-weight:700;margin:2px 0 8px;font-variant-numeric:tabular-nums}
+  .tank-rows div{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid rgba(255,255,255,.18);font-size:13px}
+  .tank-foot{font-size:12px;color:#C9D6E6;margin-top:8px}
+  .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .filter-head,.group-head{display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 16px;border-radius:14px;font-weight:700;font-size:14px}
+  .filter-head{background:var(--orange);color:#fff}
+  .group-head{background:var(--navy);color:#fff;gap:10px}
+  .group-head small{display:block;font-weight:500;font-size:12px;color:#C9D6E6}
+  .group-head span:first-child{padding:8px 0}
+  .batch{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+  .batch-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .batch-no{font-size:17px;font-weight:700}
+  .batch-no.sm{font-size:15px}
+  .batch-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .batch-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+  .batch-figs div{display:flex;flex-direction:column;gap:2px}
+  .batch-figs span{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .batch-figs b{font-size:16px;text-align:left}
+  .batch-figs div:last-child b{color:var(--navy)}
+  .bar{height:6px;background:var(--cream2);border-radius:99px;margin-top:10px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--navy);border-radius:99px}
+  .batch-note{font-size:12px;color:var(--muted);margin-top:8px}
+  .amber-text{color:var(--amber) !important}
+  .closed-list{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:4px 16px;margin-top:-8px}
+  .closed-row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+  .closed-row:first-child{border-top:0}
+  .cr-main{min-width:0}
+  .cr-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+  .cr-fig{font-size:13px;font-weight:600;color:var(--muted)}
+  .tag-station{background:var(--cream2);border:1px solid var(--line);color:var(--ink)}
+  .station-note{padding:10px 17px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--cream)}
+  .group-head.open + .day{margin-top:-8px}
+  .caption{font:600 12px inherit;font-family:inherit;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+
+  /* ---------- phone ---------- */
+  .phone{
+    width:390px;max-width:100%;height:820px;background:var(--cream);border-radius:36px;
+    border:10px solid #1B1B1B;overflow:hidden;display:flex;flex-direction:column;
+    box-shadow:0 20px 50px rgba(20,38,58,.18)
+  }
+  .phone-scroll{overflow-y:auto;flex:1}
+  .ph-head{padding:18px 20px 12px}
+  .back{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:999px;background:var(--white);border:1px solid var(--line);font-weight:600;color:var(--navy);font-size:13px}
+  .eyebrow{margin:14px 0 2px;color:var(--orange);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .title{margin:0;font-size:26px;font-weight:700;color:var(--ink)}
+  .sub{margin:4px 0 0;color:var(--muted);font-size:13px}
+
+  .badge{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+  .b-inuse{background:var(--navy);color:var(--white)}
+  .b-wait{border:1.5px solid var(--navy);color:var(--navy)}
+  .b-closed{border:1.5px solid var(--grey);color:var(--grey)}
+
+  .summary{
+    position:sticky;top:0;z-index:2;background:var(--cream);padding:6px 20px 12px;
+    border-bottom:1px solid var(--line)
+  }
+  .sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .metric{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+  .metric .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .metric .v{font-size:20px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .metric.adj{background:var(--amber-bg);border-color:var(--amber-line)}
+  .metric.adj .v{color:var(--amber)}
+  .metric.rem{background:var(--navy);border-color:var(--navy)}
+  .metric.rem .k{color:#C9D6E6}.metric.rem .v{color:var(--white)}
+
+  .body{padding:14px 20px 42px;display:flex;flex-direction:column;gap:16px}
+  .card{background:var(--white);border-radius:16px;padding:16px 17px;border:1px solid var(--line)}
+  .card h3{margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px}
+  .kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600;text-align:right}
+
+  .dest-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+  .dest-row:first-of-type{border-top:0}
+  .dest-row .name{min-width:0;overflow-wrap:anywhere}
+  .dest-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin:12px 0 2px}
+  .dest-label:first-of-type{margin-top:0}
+
+  .section-title{margin:6px 0 -4px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--navy)}
+  .section-title span{color:var(--muted);font-weight:600;letter-spacing:0;text-transform:none}
+
+  .day{background:var(--white);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .day-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:12px 17px;background:var(--cream2);border-bottom:1px solid var(--line)}
+  .day-head .date{font-weight:700;font-size:15px}
+  .day-head .tot{font-size:13px;color:var(--muted)}
+  .day-head .tot b{color:var(--ink);font-size:15px}
+  .grp{padding:10px 17px 12px;border-top:1px solid var(--line)}
+  .grp:first-of-type{border-top:0}
+  .grp-type{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .grp-name{font-weight:700;margin:2px 0 6px;overflow-wrap:anywhere}
+  .fill{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px dashed var(--line)}
+  .fill:first-of-type{border-top:0}
+  .fill .who{min-width:0}
+  .fill .eq{font-weight:600;overflow-wrap:anywhere}
+  .fill .meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .fill .l{font-weight:700;font-size:15px}
+  .tag{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border-radius:6px;font-size:11px;font-weight:700}
+  .tag-tank{border:1px solid var(--navy);color:var(--navy)}
+  .grp-sub{display:flex;justify-content:space-between;padding-top:8px;margin-top:4px;border-top:1px solid var(--line);font-size:13px;font-weight:700}
+
+  .panel-amber{background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:14px;padding:12px 14px;font-size:13px}
+  .panel-amber .h{font-weight:700;color:var(--amber);margin-bottom:4px}
+  .panel-amber .row{display:flex;justify-content:space-between;gap:10px}
+
+  .btn{display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:14px;font-weight:700;font-size:15px}
+  .btn-primary{background:var(--orange);color:var(--white)}
+  .btn-secondary{background:var(--white);border:1.5px solid var(--navy);color:var(--navy)}
+  .btn-danger{background:var(--white);border:1.5px solid var(--red);color:var(--red)}
+  .danger-zone{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .danger-zone p{font-size:12px;color:var(--muted);margin:6px 0 0;text-align:center}
+
+  /* ---------- PDF (A4) ---------- */
+  .pdf-wrap{display:flex;flex-direction:column;gap:24px;align-items:center}
+  .a4{
+    width:794px;max-width:100%;min-height:1123px;background:#fff;color:#111;
+    padding:56px 56px 48px;box-shadow:0 10px 30px rgba(0,0,0,.15);position:relative;
+    display:flex;flex-direction:column;font-size:12px
+  }
+  .pdf-head{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid var(--navy);padding-bottom:12px}
+  .brand{font-weight:800;font-size:22px;letter-spacing:.08em;color:var(--navy)}
+  .brand small{display:block;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--orange);margin-top:2px}
+  .pdf-title{font-size:18px;font-weight:700;margin:0;text-align:right}
+  .pdf-title span{display:block;font-size:12px;font-weight:600;color:#444;margin-top:2px}
+  .pdf-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin:14px 0 4px;font-size:11.5px}
+  .pdf-meta div{display:flex;gap:8px}
+  .pdf-meta b{min-width:110px;color:#444;font-weight:600}
+  .pdf-note{font-size:11px;color:#555;margin:6px 0 0}
+
+  .pdf-sum{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #BFC5CC;margin:16px 0 6px}
+  .pdf-sum div{padding:9px 10px;border-left:1px solid #BFC5CC}
+  .pdf-sum div:first-child{border-left:0}
+  .pdf-sum .k{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#555}
+  .pdf-sum .v{font-size:17px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .pdf-sum .em{background:#EEF2F7}
+
+  .pdf-h2{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:var(--navy);padding:6px 10px;margin:18px 0 0}
+  .pdf-h3{font-size:12.5px;font-weight:700;padding:8px 10px 6px;border-bottom:1.5px solid var(--navy);overflow-wrap:anywhere;margin-top:6px}
+  .pdf-h3 .type{font-size:10px;font-weight:700;color:#555;letter-spacing:.06em;text-transform:uppercase;margin-right:6px}
+  table.pdf{width:100%;border-collapse:collapse;table-layout:fixed}
+  table.pdf thead th{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#444;text-align:left;padding:6px 8px;border-bottom:1px solid #999;background:#F4F5F7}
+  table.pdf td{padding:6px 8px;border-bottom:1px solid #E1E3E6;vertical-align:top;overflow-wrap:anywhere}
+  table.pdf .c-date{width:118px}.c-type{width:70px}.c-src{width:150px}.c-l{width:80px}
+  table.pdf th.c-l{text-align:right}
+  tr.daysub td{font-weight:700;background:#FAFAFA;border-bottom:1px solid #BFC5CC}
+  tr.grpsub td{font-weight:800;border-top:1.5px solid #333;border-bottom:0;padding-top:8px}
+  .pdf-foot{margin-top:auto;padding-top:16px;display:flex;justify-content:space-between;font-size:10px;color:#666;border-top:1px solid #DDD}
+  .repeat-note{font-size:10px;color:#666;font-style:italic;margin:2px 0 0}
+  .totals-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12.5px}
+  .totals-table td{padding:9px 10px;border-bottom:1px solid #E1E3E6}
+  .totals-table td:last-child{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .totals-table tr.strong td{border-top:2px solid #111;font-size:14px;font-weight:800}
+  .pdf-adj{border:1px solid #C9A248;background:#FFF8E6;padding:10px 12px;margin-top:14px;font-size:11.5px}
+  .pdf-adj b{display:block;margin-bottom:3px}
+
+  @media (max-width:860px){ .a4{padding:28px 20px} .pdf-sum{grid-template-columns:1fr 1fr} .pdf-sum div:nth-child(3){border-left:0} .pdf-meta{grid-template-columns:1fr} }
+  @media print{
+    body{background:#fff}
+    .top,.phone-wrap,.caption{display:none !important}
+    .stage .pdf-wrap[hidden]{display:block !important}
+    .stage{padding:0;display:block}
+    .stage .pdf-wrap{display:block !important}
+    .a4{box-shadow:none;width:auto;min-height:auto;padding:0;page-break-after:always}
+    @page{size:A4;margin:14mm}
+  }
+</style>
+</head><body>
+<style>
+  .phone{height:auto !important;min-height:600px}.phone-scroll{overflow:visible !important}
+  .band{max-width:1320px;margin:28px auto 0;padding:0 16px}
+  .band h2{margin:0;font-size:18px;color:var(--navy);border-bottom:2px solid var(--navy);padding-bottom:6px}
+  .band p{margin:6px 0 0;color:var(--muted);font-size:13px;max-width:900px}
+  .opt-card{border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px;background:#fff}
+  .opt-card.on{border-color:var(--navy);background:#EAF1F6}
+  .opt-card b{display:block;font-size:14px}.opt-card small{color:var(--muted);font-size:12px}
+  .badge-pc{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700;background:#EAF1F6;border:1px solid var(--navy);color:var(--navy);white-space:nowrap}
+  .badge-own{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700;background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber);white-space:nowrap}
+  .fbtn{display:block;background:var(--white);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .fbtn b{display:block;font-size:15px}.fbtn small{color:var(--muted);font-size:12.5px}
+  .fbtn.navy{background:var(--navy);border-color:var(--navy);color:#fff}.fbtn.navy small{color:#C9D6E6}
+  .crow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--white);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .note-box{background:#EEF2F7;border:1px solid #C7D3E2;border-radius:12px;padding:10px 12px;font-size:12.5px;margin-top:10px}
+</style>
+<div class="top">
+  <h1>Own company as the Project Company: proposed design</h1>
+  <p>Sample data only. Your own company is saved as a customer marked "own company". It is now offered in the Project Company setup, selected by default, and its projects' PDFs start with the Project Company header. The Plant Company (the supplier, from Company Settings) is unchanged and stays selectable. Existing saved setups, customers and records are never changed.</p>
+</div>
+
+<div class="band"><h2>1 · Settings › Company setups › Project Company</h2><p>CHANGED: the customer list now includes the own-company customer, labelled "(Own company)", and it is already selected when no Project Company has been saved yet. Only the header details need filling in.</p></div>
+<div class="stage">
+<div class="phone-wrap"><p class="caption">1a · Project Company setup, nothing saved yet</p>
+ <div class="phone"><div class="phone-scroll">
+  <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Company setups</p><h2 class="title">Project Company</h2></div>
+  <div class="body" style="padding-top:4px">
+   <div class="note-box">Used only when you choose Project Company as the header on a PDF.</div>
+   <div class="card"><h3>Which customer is it?</h3>
+    <p class="hint" style="margin:0 0 8px">The project owner is one of your existing customers, including your own company. Choosing it only adds header details to that customer.</p>
+    <div class="flabel">Customer *</div>
+    <div class="select"><span><b>Hashem Contracting</b><div class="sel-sub"><span class="badge-own">Own company</span></div></span><span class="chev">▾</span></div>
+    <p class="hint">Search list: <b>Hashem Contracting (Own company)</b>, Al Amal Contracting, Road Co …</p>
+    <p class="hint">The link never renames, moves, merges or changes the customer, its loads, payments or projects.</p></div>
+   <div class="card"><h3>Header details</h3>
+    <div class="flabel" style="margin-top:0">Logo</div><div class="select"><span class="ph">Choose a logo</span><span class="chev">▾</span></div>
+    <div class="flabel">Address</div><div class="input ph">Address</div>
+    <div class="two"><div><div class="flabel">Phone</div><div class="input ph">Phone</div></div><div><div class="flabel">Email</div><div class="input ph">Email</div></div></div>
+    <div class="flabel">Tax / VAT number</div><div class="input ph">Tax / VAT</div>
+    <div class="btn btn-primary" style="margin-top:14px">Save Project Company</div></div>
+  </div></div></div></div>
+
+<div class="phone-wrap"><p class="caption">1b · Customers › your own company (NEW button and badge)</p>
+ <div class="phone"><div class="phone-scroll">
+  <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Customers</p>
+   <div class="title-row"><h2 class="title">Hashem Contracting</h2></div>
+   <p class="sub"><span class="badge-own">Own company</span> <span class="badge-pc">Project Company</span></p></div>
+  <div class="body" style="padding-top:4px">
+   <div class="fbtn"><b>Open payments &amp; balances</b><small>Organized by project, direct purchases, and opening balances →</small></div>
+   <div class="fbtn"><b>Invoices &amp; Bills</b><small>Invoices issued and customer statements →</small></div>
+   <div class="fbtn navy"><b>Edit Project Company details</b><small>Logo, address, phone and email printed in the PDF header →</small></div>
+   <p class="hint">On a customer that is not yet the Project Company the button reads <b>Use as Project Company</b> and opens the setup with that customer already chosen. Only one customer is the Project Company at a time.</p>
+  </div></div></div></div>
+
+<div class="phone-wrap"><p class="caption">1c · Customers › another customer (not linked)</p>
+ <div class="phone"><div class="phone-scroll">
+  <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Customers</p><div class="title-row"><h2 class="title">Al Amal Contracting</h2></div></div>
+  <div class="body" style="padding-top:4px">
+   <div class="fbtn"><b>Open payments &amp; balances</b><small>Organized by project, direct purchases, and opening balances →</small></div>
+   <div class="fbtn"><b>Invoices &amp; Bills</b><small>Invoices issued and customer statements →</small></div>
+   <div class="fbtn"><b>Use as Project Company</b><small>Replaces Hashem Contracting as the Project Company header →</small></div>
+   <p class="hint">Changing the link only changes which header details print. Nothing about either customer's records changes, and the old details are kept in the setup you leave.</p>
+  </div></div></div></div>
+</div>
+
+<div class="band"><h2>2 · Export PDF for a project of that customer</h2><p>CHANGED: for a project whose customer is the Project Company, the Header company starts on <b>Project Company</b> instead of Plant Company. A choice you saved for the project ("use for every export in this project") still wins. You can always switch to the Plant Company, and Customize header still works.</p></div>
+<div class="stage">
+<div class="phone-wrap"><p class="caption">2 · Header company on an export</p>
+ <div class="phone"><div class="phone-scroll">
+  <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Export PDF</p><h2 class="title">Project Totals</h2><p class="sub">Project: Mountain Road · Customer: Hashem Contracting (own company)</p></div>
+  <div class="body" style="padding-top:4px"><div class="card">
+   <div class="flabel" style="margin-top:0">Prices</div><div class="seg"><span class="on">Without prices</span><span>With prices</span></div>
+   <h3 style="margin-top:14px">Header company</h3>
+   <p class="hint" style="margin:0 0 6px">Changes only the name, logo, contact details and signature in the PDF header.</p>
+   <div class="opt-card"><b>Plant Company</b><small>DROMEX Asphalt Co. · the supplier</small></div>
+   <div class="opt-card on"><b>Project Company</b><small>Hashem Contracting · selected for this project</small></div>
+   <label class="hint" style="display:block;margin-top:8px">☐ Use for every export in this project</label>
+   <div class="fbtn" style="margin-top:10px"><b>Customize header</b><small>Logo, name and details for this PDF only +</small></div>
+   <div class="btn btn-primary" style="margin-top:12px">Export PDF</div></div></div>
+ </div></div></div>
+<div class="phone-wrap"><p class="caption">Same export, a project of another customer</p>
+ <div class="phone"><div class="phone-scroll">
+  <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Export PDF</p><h2 class="title">Project Totals</h2><p class="sub">Project: Marjayoun Water Tank · Customer: Al Amal Contracting</p></div>
+  <div class="body" style="padding-top:4px"><div class="card">
+   <h3>Header company</h3>
+   <div class="opt-card on"><b>Plant Company</b><small>DROMEX Asphalt Co. · the supplier (as today)</small></div>
+   <div class="opt-card"><b>Project Company</b><small>Hashem Contracting</small></div>
+   <p class="hint">Only projects of the linked customer start on the Project Company.</p></div></div>
+ </div></div></div>
+</div>
+</body></html>
