@@ -5,14 +5,16 @@ import type {CompanyTotalsRecord,CompanyTotalsRepository} from '../../data/repos
 import type {LoadNumberSeriesRepository} from '../../data/repositories/LoadNumberSeriesRepository';
 import type {ProfileRepository} from '../../data/repositories/ProfileRepository';
 import type {RecordSnapshot} from '../../domain/businessDocuments';
-import {buildCompanyLoadTree,emptyCompanyTotalsFilters,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,type CompanyLoadGroupNode,type CompanyLoadTotalRow,type CompanyTotalsFilters,type UnitQuantity} from '../../domain/companyTotals';
+import {buildCompanyLoadTree,customerFilterLabel,emptyCompanyTotalsFilters,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,type CompanyLoadGroupNode,type CustomerChoice,type CompanyLoadTotalRow,type CompanyTotalsFilters,type UnitQuantity} from '../../domain/companyTotals';
 import {describeTotalsRange,formatTotalQuantity,validateTotalsFilters} from '../../domain/projectTotals';
+import {companyContactLine} from '../../domain/projectTotalsPdf';
 import {exportAndShareCompanyLoadTotals} from '../../services/documentExport';
 import {AppButton,AppPage,EmptyState,Feedback,PageHeader} from '../components/AppPrimitives';
 import {DatePickerField} from '../components/DatePickerField';
 import {useReducedMotion} from '../components/ExpandableMenu';
 import {SearchableSelect} from '../components/SearchableSelect';
 import {SegmentedChoice} from '../components/SegmentedChoice';
+import {CustomerFilter} from '../components/totals/CustomerFilter';
 import {Ledger,RecordRow,styles as parts} from '../components/totals/TotalsParts';
 import {colors} from '../theme';
 
@@ -34,6 +36,7 @@ export function CompanyLoadTotalsScreen({totals,series,profiles,onBack,onOpenRec
   const[filtersOpen,setFiltersOpen]=useState(false);
   const[rows,setRows]=useState<CompanyLoadTotalRow[]|null>(null);
   const[seriesChoices,setSeriesChoices]=useState<Choice[]>([]);
+  const[customerChoices,setCustomerChoices]=useState<CustomerChoice[]>([]);
   const[group,setGroup]=useState<CompanyLoadGroupNode|null>(null);
   const[project,setProject]=useState<{key:string;name:string}|null>(null);
   const[loads,setLoads]=useState<CompanyTotalsRecord[]|null>(null);
@@ -46,6 +49,7 @@ export function CompanyLoadTotalsScreen({totals,series,profiles,onBack,onOpenRec
     totals.getCompanyLoadTotals(filters).then(found=>{if(active)setRows(found);}).catch(cause=>{if(active)setError(cause instanceof Error?cause.message:'Totals could not be calculated.');});
     return()=>{active=false;};
   },[totals,filters]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{let active=true;totals.listCustomerChoices({fromDate:filters.fromDate,toDate:filters.toDate,projectKey:filters.projectKey}).then(list=>{if(active)setCustomerChoices(list);}).catch(()=>{});return()=>{active=false;};},[totals,filters.fromDate,filters.toDate,filters.projectKey]);
   useEffect(()=>{series.listSeries().then(list=>setSeriesChoices([...list.map(value=>({id:value.id,label:`${value.prefix} · ${value.displayName}`})),{id:LEGACY_SERIES_KEY,label:LEGACY_SERIES_LABEL}])).catch(()=>{});},[series]);
 
   const visibleRows=useMemo(()=>rows?.filter(row=>status==='all'||(status==='active'?row.status==='Active':row.status==='Cancelled'))??[],[rows,status]);
@@ -68,8 +72,8 @@ export function CompanyLoadTotalsScreen({totals,series,profiles,onBack,onOpenRec
       const [all,company]=await Promise.all([totals.listCompanyLoads(filters,status,5000),profiles.getCompanySettings()]);
       const labels=[describeTotalsRange(filters.fromDate,filters.toDate),groupBy==='series'?'Grouped by number series':'Grouped by item',status==='active'?'Active loads':status==='cancelled'?'Cancelled loads only':'Active and cancelled loads',
         ...(filters.itemKey?[`Item: ${choices.items.find(value=>value.id===filters.itemKey)?.label??''}`]:[]),...(filters.projectKey?[`Project: ${choices.projects.find(value=>value.id===filters.projectKey)?.label??''}`]:[]),
-        ...(filters.unitKey?[`Unit: ${choices.units.find(value=>value.id===filters.unitKey)?.label??''}`]:[]),...(filters.seriesId?[`Series: ${seriesChoices.find(value=>value.id===filters.seriesId)?.label??''}`]:[])];
-      await exportAndShareCompanyLoadTotals({fileName:{projectName:filters.projectKey?choices.projects.find(value=>value.id===filters.projectKey)?.label??null:null,fromDate:filters.fromDate,toDate:filters.toDate},companyName:company.companyName,logoUri:company.logoUri,generatedAt:new Date().toISOString(),filters:labels,groupBy,groups:tree,loads:all});
+        ...(filters.unitKey?[`Unit: ${choices.units.find(value=>value.id===filters.unitKey)?.label??''}`]:[]),...(filters.seriesId?[`Series: ${seriesChoices.find(value=>value.id===filters.seriesId)?.label??''}`]:[]),...(customerFilterLabel(filters.customerKeys,customerChoices)?[customerFilterLabel(filters.customerKeys,customerChoices)!]:[])];
+      await exportAndShareCompanyLoadTotals({fileName:{projectName:filters.projectKey?choices.projects.find(value=>value.id===filters.projectKey)?.label??null:null,fromDate:filters.fromDate,toDate:filters.toDate},companyName:company.companyName,contactLine:companyContactLine(company),logoUri:company.logoUri,generatedAt:new Date().toISOString(),filters:labels,groupBy,groups:tree,loads:all});
       setMessage('PDF ready to share.');
     }catch(cause){setError(cause instanceof Error?cause.message:'The PDF could not be created.');}finally{setBusy(false);}
   };
@@ -84,6 +88,7 @@ export function CompanyLoadTotalsScreen({totals,series,profiles,onBack,onOpenRec
       </Pressable>
       {filtersOpen?<View style={styles.panel}>
         <View style={styles.dates}><View style={styles.date}><DatePickerField label="From" value={filters.fromDate} onChange={fromDate=>set({fromDate})} allowClear placeholder="Any date"/></View><View style={styles.date}><DatePickerField label="To" value={filters.toDate} onChange={toDate=>set({toDate})} allowClear placeholder="Any date"/></View></View>
+        <CustomerFilter choices={customerChoices} selected={filters.customerKeys} onChange={customerKeys=>set({customerKeys})}/>
         <SearchableSelect label="Item" options={choices.items} selectedId={filters.itemKey} onSelect={itemKey=>set({itemKey})} placeholder="All items" allowClear/>
         <SearchableSelect label="Project" options={choices.projects} selectedId={filters.projectKey} onSelect={projectKey=>set({projectKey})} placeholder="All projects" allowClear/>
         <SearchableSelect label="Unit" options={choices.units} selectedId={filters.unitKey} onSelect={unitKey=>set({unitKey})} placeholder="All units" allowClear/>

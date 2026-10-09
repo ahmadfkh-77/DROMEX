@@ -11,6 +11,8 @@ export type DocumentViewData = {
   quantityMethod: 'weighbridge' | 'direct';
   companyName: string; companyAddress: string | null; companyPhone: string | null;
   companyEmail: string | null; companyTaxVatNumber: string | null; companyReceiptFooter: string | null;
+  /** DEC-504. The company load number; null or absent for a legacy load. On a draft it is the number the load will receive when confirmed. */
+  loadNumber?: string | null;
   transactionNumber: string; dateTime: string; customerName: string; projectName: string | null;
   destinationAddress: string | null; itemName: string; driverName: string;
   /** DEC-477. Role served on this load; absent or null on a pre-DEC-477 load, which reads Driver. */
@@ -47,6 +49,7 @@ export function LoadDocuments({ data, isDraft }: { data: DocumentViewData; isDra
         {data.companyTaxVatNumber ? <Text style={styles.contact}>Tax/VAT: {data.companyTaxVatNumber}</Text> : null}
         <View style={styles.rule} />
         <Text style={styles.documentTitle}>{tab === 'receipt' ? 'RECEIPT' : 'DELIVERY AUTHORIZATION'}</Text>
+        {data.loadNumber ? <View style={styles.loadNumberBand}><Line label="Load No." value={data.loadNumber} strong /></View> : null}
         <Line label="Transaction" value={missing(data.transactionNumber)} />
         <Line label="Date" value={data.dateTime ? new Date(data.dateTime).toLocaleString() : '—'} />
         <Line label="Customer" value={missing(data.customerName)} />
@@ -79,6 +82,6 @@ function Toggle({ label, selected, onPress }: { label: string; selected: boolean
 function Line({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) { return <View style={styles.line}><Text style={[styles.lineText, strong && styles.strong]}>{label}:</Text><Text style={[styles.value, strong && styles.strong]}>{value}</Text></View>; }
 const styles = StyleSheet.create({
   wrapper: { gap: 12 }, controls: { flexDirection: 'row', gap: 8 }, toggle: { flex: 1, borderWidth: 1, borderColor: colors.line, borderRadius: 9, padding: 9, alignItems: 'center', backgroundColor: colors.surface }, toggleSelected: { borderColor: colors.brand, backgroundColor: '#FBE9E4' }, toggleText: { color: colors.muted, fontSize: 12, fontWeight: '800' }, toggleTextSelected: { color: colors.brandDark },
-  paper: { width: '78%', alignSelf: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: colors.line, padding: 16, gap: 7 }, paperWide: { width: '100%', paddingHorizontal: 24 }, draft: { color: colors.warning, textAlign: 'center', fontWeight: '900', letterSpacing: 1 }, company: { color: '#111', textAlign: 'center', fontSize: 20, fontWeight: '900' }, contact: { color: '#333', textAlign: 'center', fontSize: 11 }, rule: { height: 1, backgroundColor: '#222', marginVertical: 5 }, documentTitle: { color: '#111', textAlign: 'center', fontSize: 14, fontWeight: '900', marginBottom: 4 }, line: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 }, lineText: { width: '43%', color: '#222', fontSize: 11, fontWeight: '700' }, value: { flex: 1, color: '#111', fontSize: 11 }, strong: { fontWeight: '900' }, footer: { color: '#333', textAlign: 'center', fontSize: 10 }, previewNote: { color: colors.muted, textAlign: 'center', fontSize: 12 },
+  paper: { width: '78%', alignSelf: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: colors.line, padding: 16, gap: 3 }, paperWide: { width: '100%', paddingHorizontal: 24 }, draft: { color: colors.warning, textAlign: 'center', fontWeight: '900', letterSpacing: 1 }, company: { color: '#111', textAlign: 'center', fontSize: 20, fontWeight: '900' }, contact: { color: '#333', textAlign: 'center', fontSize: 11 }, rule: { height: 1, backgroundColor: '#222', marginVertical: 9 }, loadNumberBand: { backgroundColor: '#FFF3D8', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4 }, documentTitle: { color: '#111', textAlign: 'center', fontSize: 14, fontWeight: '900', marginBottom: 4 }, line: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 4 }, lineText: { width: '43%', color: '#222', fontSize: 11, fontWeight: '700' }, value: { flex: 1, color: '#111', fontSize: 11 }, strong: { fontWeight: '900' }, footer: { color: '#333', textAlign: 'center', fontSize: 10 }, previewNote: { color: colors.muted, textAlign: 'center', fontSize: 12 },
   signature: { borderTopWidth: 1, borderTopColor: '#AAA', marginTop: 5 }, signatureLabel: { color: '#222', fontSize: 10, textAlign: 'center' }, byName: { color: '#222', fontSize: 11, fontStyle: 'italic', textAlign: 'center', paddingVertical: 10 },
 });

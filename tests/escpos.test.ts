@@ -150,3 +150,23 @@ describe('Load No. on the printed document',()=>{
     expect(buildLoadEscPos({...load,loadNumber:null},'receipt','58').toString('utf8')).not.toContain('Load No.');
   });
 });
+
+describe('comfortable row spacing (Owner option B)',()=>{
+  const lines=(kind:'receipt'|'authorization')=>buildLoadEscPos({...load,loadNumber:'ASP-00058'},kind,'58').toString('utf8').split('\n');
+
+  it('leaves one blank line after each row and never two in a row',()=>{
+    for(const kind of ['receipt','authorization'] as const){
+      const output=lines(kind);
+      const at=output.findIndex(line=>line.includes('Transaction:'));
+      expect(at).toBeGreaterThan(0);
+      expect(output[at+1]?.trim()).toBe('');
+      expect(output[at+2]?.trim()).not.toBe('');
+      output.slice(0,-1).forEach((line,index)=>{if(line.trim()==='')expect(output[index+1]?.trim(),`two blank lines after line ${index}`).not.toBe('');});
+    }
+  });
+
+  it('keeps the Load No. above the transaction number',()=>{
+    const output=lines('receipt').join('\n');
+    expect(output.indexOf('Load No.:')).toBeLessThan(output.indexOf('Transaction:'));
+  });
+});

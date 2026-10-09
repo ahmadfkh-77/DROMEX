@@ -129,6 +129,7 @@ export function DromexApp(){
   const[documentStart,setDocumentStart]=useState<DocumentStart|null>(null);
   const[documentId,setDocumentId]=useState<string|null>(null);
   const[documentsParty,setDocumentsParty]=useState<DocumentParty|null>(null);
+  const[customerFocusId,setCustomerFocusId]=useState<string|null>(null);
   const[companyLevel,setCompanyLevel]=useState<ExplorerLevel>({});
   const[projectLevel,setProjectLevel]=useState<ExplorerLevel>({});
 
@@ -143,7 +144,7 @@ export function DromexApp(){
   const startDocument=(start:DocumentStart)=>{setDocumentStart(start);navigate('documentReview');};
   const openDocument=(id:string)=>{setDocumentId(id);navigate('document');};
   const openDocuments=(party:DocumentParty|null)=>{setDocumentsParty(party);navigate('documents');};
-  const goRoot=(next:Screen)=>{setHistory([]);setDashboardRange(null);setSearchTarget(null);setEntryIntent(null);setScreen(next);};
+  const goRoot=(next:Screen)=>{setCustomerFocusId(null);setHistory([]);setDashboardRange(null);setSearchTarget(null);setEntryIntent(null);setScreen(next);};
   const goBack=(fallback:Screen='home')=>{const next=[...history];const destination=next.pop()??fallback;setHistory(next);setEntryIntent(null);setSearchTarget(null);setDashboardRange(null);setScreen(destination);};
   const openDashboardRoute=(next:Extract<Screen,'loads'|'reports'|'financials'>,range?:DashboardRange)=>{setDashboardRange(range??null);navigate(next);};
   const chooseActiveProject=(project:Project|null)=>{const active=project?.status==='active'?project:null;setActiveProject(active);if(active)void Storage.setItem(activeProjectKey,active.id);else void Storage.removeItem(activeProjectKey);};
@@ -179,7 +180,7 @@ export function DromexApp(){
   else if(screen==='receiptSetup')content=<ReceiptSetupScreen repository={loadRepository} onBack={()=>goBack('moreHub')}/>;
   else if(screen==='directory')content=<PeopleEquipmentScreen repository={loadRepository} onOpenCustomDirectories={()=>navigate('customDirectories')} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='customDirectories')content=<CustomDirectoriesScreen repository={customDirectoryRepository} onBack={()=>goBack('directory')}/>;
-  else if(screen==='customers')content=<CustomersScreen repository={profileRepository} financialRepository={financialRepository} onBack={()=>goBack('recordsHub')} onOpenDocuments={customer=>openDocuments({side:'customer',partyId:customer.id,partyName:customer.name})}/>;
+  else if(screen==='customers')content=<CustomersScreen repository={profileRepository} financialRepository={financialRepository} onBack={()=>goBack('recordsHub')} onOpenDocuments={customer=>openDocuments({side:'customer',partyId:customer.id,partyName:customer.name})} totals={companyTotalsRepository} onOpenRecord={openOriginalRecord} initialCustomerId={customerFocusId} onFocusCustomer={setCustomerFocusId}/>;
   else if(screen==='catalog')content=<CatalogScreen repository={catalogRepository} seriesRepository={seriesRepository} onBack={()=>goBack('moreHub')}/>;
   else if(screen==='reports')content=<ReportsScreen documents={documentRepository} repository={projectReportRepository} businessReportRepository={businessReportRepository} onOpenPdfSettings={()=>navigate('pdfSettings')} initialBusinessFilters={dashboardRange?{fromDate:dashboardRange.fromDate,toDate:dashboardRange.toDate}:undefined} initialProjectId={searchTarget?.route==='reports'?searchTarget.projectId:activeProject?.id} initialReportId={searchTarget?.route==='reports'?searchTarget.id:null} startNewReport={entryIntent==='dailyReport'} onBack={()=>goBack('moreHub')}/>;
   else if(screen==='quarry')content=<QuarryPurchasesScreen repository={quarryRepository} initialProjectId={activeProject?.id} startEntry={entryIntent==='quarry'} initialPurchaseId={searchTarget?.kind==='Supplier Load'||searchTarget?.kind==='Quarry Purchase'?searchTarget.id:null} onBack={()=>goBack('recordsHub')} onOpenDocuments={supplier=>openDocuments({side:'supplier',partyId:supplier.id,partyName:supplier.name})} documents={documentRepository} onOpenDocument={openDocument}/>;

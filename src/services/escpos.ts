@@ -12,13 +12,15 @@ const divider=(columns:number)=>'-'.repeat(columns);
 
 class EscPosDocument{
   private readonly parts:Buffer[]=[];
+  /** True while the last thing printed was a blank line, so spacing never stacks two of them. */
+  private blank=false;
   constructor(readonly paper:PaperWidth){this.parts.push(command(ESC,0x40),command(ESC,0x33,36));}
   align(value:0|1|2){this.parts.push(command(ESC,0x61,value));return this;}
   bold(value:boolean){this.parts.push(command(ESC,0x45,value?1:0));return this;}
   size(value:0|1){this.parts.push(command(GS,0x21,value?0x11:0));return this;}
-  line(value=''){this.parts.push(text(`${value}\n`));return this;}
+  line(value=''){if(value===''&&this.blank)return this;this.blank=value==='';this.parts.push(text(`${value}\n`));return this;}
   wrapped(value:string,columns=this.paper==='58'?32:48){for(const line of wrapText(value,columns))this.line(line);return this;}
-  raster(value:Buffer){this.parts.push(value);return this;}
+  raster(value:Buffer){this.blank=false;this.parts.push(value);return this;}
   finish(){this.parts.push(command(ESC,0x64,4));return Buffer.concat(this.parts);}
 }
 
@@ -65,6 +67,8 @@ function labelled(doc:EscPosDocument,label:string,value:unknown,strong=false){
   if(strong)doc.bold(true);
   for(const line of labelValueLines(label,value,doc.paper))doc.line(line);
   if(strong)doc.bold(false);
+  // Comfortable row spacing (Owner chose option B): one blank line after every row, never two in a row.
+  doc.line('');
 }
 
 // DEC-504. Every header line is centred in software (left-aligned on the printer, padded with spaces).

@@ -8,7 +8,7 @@ import {formatDay,formatRecordedAt,recordTitle} from '../domain/recordFormat';
  * its load count and per-unit totals, its projects, and every load. Cancelled loads are listed under
  * their own heading and never added to a total. Table headings repeat on every page.
  */
-export type CompanyLoadTotalsPdf={companyName:string;logo:string|null;generatedAt:string;filters:string[];groupBy:'series'|'item';groups:CompanyLoadGroupNode[];loads:CompanyTotalsRecord[]};
+export type CompanyLoadTotalsPdf={companyName:string;/** Company Settings address, phone, email and Tax/VAT under the name. */contactLine?:string|null;logo:string|null;generatedAt:string;filters:string[];groupBy:'series'|'item';groups:CompanyLoadGroupNode[];loads:CompanyTotalsRecord[]};
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]??character));
 const t=(value:unknown)=>`<span dir="auto">${e(value)}</span>`;
@@ -50,6 +50,7 @@ export function buildCompanyLoadTotalsHtml(input:CompanyLoadTotalsPdf):string{
     *{box-sizing:border-box}
     body{font-family:Arial,'Noto Naskh Arabic','Geeza Pro',sans-serif;color:#17212B;font-size:9pt;line-height:1.35}
     .head{display:flex;justify-content:space-between;align-items:flex-start;gap:6mm;border-bottom:2px solid #C84B31;padding-bottom:4mm;margin-bottom:4mm}
+    .contact{font-size:8pt;color:#444;margin-top:.5mm;overflow-wrap:anywhere}
     .logo{max-width:40mm;max-height:18mm;object-fit:contain;display:block;margin-bottom:1.5mm}
     h1{font-size:18pt;color:#173F67;margin:0;text-align:right}
     .filters{text-align:right;color:#5A6570;font-size:8.5pt;margin-top:1mm}
@@ -73,7 +74,7 @@ export function buildCompanyLoadTotalsHtml(input:CompanyLoadTotalsPdf):string{
     .note{color:#5A6570;font-size:8pt;margin-top:6mm}
     .meta{color:#4F5B66;margin:0 0 2mm}
   </style></head><body>
-    <div class="head"><div>${input.logo?`<img class="logo" src="${input.logo}" alt=""/>`:''}<b>${t(input.companyName)}</b></div>
+    <div class="head"><div>${input.logo?`<img class="logo" src="${input.logo}" alt=""/>`:''}<b>${t(input.companyName)}</b>${input.contactLine?`<div class="contact">${t(input.contactLine)}</div>`:''}</div>
       <div><h1>Company Load Totals</h1><div class="filters">${e(formatRecordedAt(input.generatedAt))}</div></div></div>
     <p class="meta">${input.filters.map(e).join(' · ')}</p>
     ${sections||'<p>No company loads match these filters.</p>'}

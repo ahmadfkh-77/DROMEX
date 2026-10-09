@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,7 +13,10 @@ import {
 
 import type { ProfileRepository } from '../../data/repositories/ProfileRepository';
 import type { FinancialRepository } from '../../data/repositories/FinancialRepository';
+import type { CompanyTotalsRepository } from '../../data/repositories/CompanyTotalsRepository';
+import type { RecordSnapshot } from '../../domain/businessDocuments';
 import type { FinancialOverview } from '../../domain/financials';
+import { CustomerDeliveries } from '../components/customers/CustomerDeliveries';
 import {
   findPotentialCustomerDuplicates,
   type Customer,
@@ -47,12 +50,22 @@ export function CustomersScreen({
   financialRepository,
   onBack,
   onOpenDocuments,
+  totals,
+  onOpenRecord,
+  initialCustomerId,
+  onFocusCustomer,
 }: {
   repository: ProfileRepository;
   financialRepository: FinancialRepository;
   onBack: () => void;
   /** DEC-500. Opens Invoices & Bills for one customer. */
   onOpenDocuments?: (customer: { id: string; name: string }) => void;
+  /** Customer Deliveries (what was delivered to this customer); omitted, the page shows no deliveries section. */
+  totals?: CompanyTotalsRepository;
+  onOpenRecord?: (record: RecordSnapshot) => void;
+  /** The customer page to reopen after returning from a load, and a callback that reports which one is open. */
+  initialCustomerId?: string | null;
+  onFocusCustomer?: (customerId: string | null) => void;
 }) {
   const reducedMotion = useReducedMotion();
   const [loaded, setLoaded] = useState(false);
@@ -61,6 +74,7 @@ export function CustomersScreen({
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<Customer | null>(null);
+  const pendingCustomerId = useRef(initialCustomerId ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [financials, setFinancials] = useState<FinancialOverview | null>(null);
@@ -71,13 +85,16 @@ export function CustomersScreen({
     const [next, nextFinancials] = await Promise.all([repository.listCustomers(), financialRepository.getOverview()]);
     setCustomers(next);
     setFinancials(nextFinancials);
-    setSelected((current) => next.find((customer) => customer.id === current?.id) ?? null);
+    setSelected((current) => next.find((customer) => customer.id === (current?.id ?? pendingCustomerId.current)) ?? null);
+    pendingCustomerId.current = null;
     setLoaded(true);
   }, [financialRepository, repository]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => { onFocusCustomer?.(selected?.id ?? null); }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const query = search.trim().toLocaleLowerCase('en-US');
   const byName = (a: Customer, b: Customer) => a.name.localeCompare(b.name);
@@ -219,6 +236,8 @@ export function CustomersScreen({
             </TouchableOpacity>
           ) : null}
         </View>
+
+        {totals && onOpenRecord ? <CustomerDeliveries customer={{ id: selected.id, name: selected.name }} totals={totals} profiles={repository} onOpenRecord={onOpenRecord} onOpenPayments={() => setShowCustomerFinancials(true)} /> : null}
 
         <Text style={styles.sectionTitle}>Customer balance</Text>
         <View style={styles.balanceGrid}>
