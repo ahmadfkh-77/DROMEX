@@ -233,10 +233,17 @@ export function previewTankFill(state: AllocationInput, fill: { litres: number; 
   };
 }
 
+/** DEC-506. One saved change to a batch: free details (supplier, invoice, price) or a reasoned correction. */
+export type BatchCorrectionChange = { field: string; originalValue: string | null; newValue: string | null };
+export type BatchCorrectionEntry = { correctedAt: string; kind: 'details' | 'correction'; reason: string; changes: BatchCorrectionChange[] };
 export type BatchDetail = BatchSummary & {
   kind: 'delivery' | 'opening';
   invoiceNumber: string | null;
+  supplierId?: string | null;
   supplierName: string | null;
+  /** The delivery's total with VAT as recorded; null when Unpriced and for an Opening stock batch (never a purchase). */
+  finalTotalUsd?: number | null;
+  history?: BatchCorrectionEntry[];
   openingBasis: 'dip' | 'calculated' | null;
   deliveryMovementId: string | null;
   openingGaugeMovementId: string | null;
@@ -261,6 +268,18 @@ export type DieselBatchOverview = {
   adjustments: AdjustmentDetail[];
   changes: AllocationChange[];
 };
+/** DEC-506. What the Edit Batch screen sends. Supplier, invoice and price are free; litres and date need a reason. */
+export type BatchEditDraft = { supplierId: string; invoiceNumber: string; pricePerLitreUsd: string; litres: string; recordDate: string; reason: string };
+
+/** The quantity of a batch can never go below what has already been used from it. */
+export function minimumBatchLitres(batch: Pick<BatchSummary, 'filledLitres'>): number {
+  return round3(batch.filledLitres);
+}
+export function batchLitresIssue(litres: number, batch: Pick<BatchSummary, 'filledLitres'>): string | null {
+  const minimum = minimumBatchLitres(batch);
+  if (litres < minimum - EPSILON) return `The quantity cannot be below the ${minimum.toLocaleString('en-US', { maximumFractionDigits: 3 })} L already used from this batch.`;
+  return null;
+}
 export type StartDieselBatchesDraft = { dipLitres: string; pricePerLitreUsd: string };
 export type TankFillPreviewDraft = { litres: string; batchId: string; recordDate: string };
 export type TankFillPreviewResult = FillPreview & { cost: FillCost };

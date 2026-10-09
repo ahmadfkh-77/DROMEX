@@ -30,7 +30,8 @@ const RECORDS=`WITH inc AS (
     FROM (${COMPANY_LOAD_RECORDS} UNION ALL ${SUPPLIER_LOAD_RECORDS}) x LEFT JOIN inc ON inc.record_key = x.record_key
   )`;
 const SUPPLIER_KEY="CASE WHEN recs.record_type = 'company_load' THEN 'company' ELSE 'id:' || recs.party_id END";
-const PROJECT_KEY=`COALESCE(recs.project_id, '${NO_PROJECT_KEY}')`;
+// DEC-506. A Supplier Load that went to a company site is grouped under the site's own key and name, never under a project.
+const PROJECT_KEY=`COALESCE(recs.project_id, CASE WHEN recs.site_id IS NOT NULL THEN 'site:' || recs.site_id END, '${NO_PROJECT_KEY}')`;
 
 const inclusionSql:Record<Exclude<InclusionFilter,'all'>,string>={
   not_included:"recs.inclusion_state IN ('not_included','previously_cancelled')",
@@ -57,7 +58,7 @@ function recordConditions(filters:Partial<CompanyTotalsFilters>,status:'active'|
   if(filters.toDate){where.push('recs.record_day <= ?');params.push(filters.toDate);}
   if(filters.itemKey){where.push('recs.item_key = ?');params.push(filters.itemKey);}
   if(filters.unitKey){where.push('recs.unit_key = ?');params.push(filters.unitKey);}
-  if(filters.projectKey){if(filters.projectKey===NO_PROJECT_KEY)where.push('recs.project_id IS NULL');else{where.push('recs.project_id = ?');params.push(filters.projectKey);}}
+  if(filters.projectKey){if(filters.projectKey===NO_PROJECT_KEY)where.push('recs.project_id IS NULL AND recs.site_id IS NULL');else if(filters.projectKey.startsWith('site:')){where.push('recs.site_id = ?');params.push(filters.projectKey.slice(5));}else{where.push('recs.project_id = ?');params.push(filters.projectKey);}}
   if(filters.supplierKey){if(filters.supplierKey===COMPANY_SUPPLIER_KEY)where.push("recs.record_type = 'company_load'");else{where.push("recs.record_type = 'supplier_load' AND 'id:' || recs.party_id = ?");params.push(filters.supplierKey);}}
   if(filters.seriesId){where.push("recs.record_type = 'company_load'");if(filters.seriesId===LEGACY_SERIES_KEY)where.push('recs.load_number IS NULL');else{where.push('recs.series_id = ?');params.push(filters.seriesId);}}
   if(filters.customerKeys?.length)where.push(customerCondition(filters.customerKeys,params));
@@ -107,14 +108,14 @@ export class SqliteCompanyTotalsRepository implements CompanyTotalsRepository{
       GROUP BY recs.record_type, recs.item_key, project_key, supplier_key, recs.unit_key`,...params as never[]);
     return rows.map(row=>{
       const company=row.record_type==='company_load';const projectKey=text(row.project_key);
-      return {source:company?'company_delivery':'supplier_delivery',itemKey:text(row.item_key),itemName:text(row.item_name),projectKey,projectName:projectKey===NO_PROJECT_KEY?NO_PROJECT_LABEL:text(row.project_name),
+      return {source:company?'company_delivery':'supplier_delivery',itemKey:text(row.item_key),itemName:text(row.item_name),projectKey,projectName:projectKey===NO_PROJECT_KEY?NO_PROJECT_LABEL:projectKey.startsWith('site:')?`${text(row.project_name)} (Site)`:text(row.project_name),
         supplierKey:text(row.supplier_key),supplierName:company?COMPANY_SUPPLIER_LABEL:text(row.supplier_name),unitKey:text(row.unit_key),unitSymbol:text(row.unit_symbol),
         quantity:number(row.quantity),recordCount:Number(row.record_count),valueCents:row.value_cents==null?null:Number(row.value_cents),pricedCount:Number(row.priced_count),inclusion:inclusionCounts(row)};
     });
   }
 
   private async usage(filters:CompanyTotalsFilters):Promise<CompanyUsageRow[]>{
-    if(filters.projectKey===NO_PROJECT_KEY)return [];
+    if(filters.projectKey===NO_PROJECT_KEY||filters.projectKey?.startsWith('site:'))return [];
     const where=["json_extract(m.value,'$.movement') IN ('used','transported')","json_type(m.value,'$.quantity') IN ('integer','real')"];const params:unknown[]=[];
     if(filters.view==='used')where.push("json_extract(m.value,'$.movement') = 'used'");
     if(filters.fromDate){where.push('r.work_date >= ?');params.push(filters.fromDate);}

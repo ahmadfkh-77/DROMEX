@@ -105,7 +105,7 @@ describe('Screen F · exporting the Diesel Batch Report',()=>{
     expect(screen).toContain('exportReport({batchId:openBatch.id},includePrices,company)');
     expect(screen).toContain('exportReport({projectId:lockedProjectId},includePrices,company)');
     expect(screen).toContain('onExport={exportReport}');
-    expect(panel).toContain('onExport({projectId:projectId||undefined,companySiteId:companySiteId||undefined,stationId:stationId||undefined,fromDate:fromDate||undefined,toDate:toDate||undefined},includePrices,company)');
+    expect(panel).toContain('onExport(filters??{supplierId:supplierId||undefined,projectId:projectId||undefined,companySiteId:companySiteId||undefined,stationId:stationId||undefined,fromDate:fromDate||undefined,toDate:toDate||undefined},includePrices,company)');
   });
   it('defaults to Without prices, as DEC-373 says',()=>{
     expect(exportPanel).toContain("useState<'without'|'with'>('without')");
@@ -114,7 +114,7 @@ describe('Screen F · exporting the Diesel Batch Report',()=>{
   });
   it('builds the report at the moment of export and refuses an empty one with a plain message',()=>{
     expect(screen).toContain('exportedAt:new Date().toISOString()');
-    expect(source('src/services/documentExport.ts')).toContain('No fills match these filters, so there is nothing to export.');
+    expect(source('src/services/documentExport.ts')).toContain('No fills or deliveries match these filters, so there is nothing to export.');
   });
 });
 

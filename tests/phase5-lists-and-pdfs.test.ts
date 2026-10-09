@@ -173,7 +173,7 @@ describe('the Header company picker is on every export that can have one',()=>{
     }
   });
   it('lets the shared Diesel export panel offer it for every Diesel report',()=>{
-    expect(read('src/ui/components/fuel/DieselPdfExportPanel.tsx')).toContain('useExportHeader(projectId)');
+    expect(read('src/ui/components/fuel/DieselPdfExportPanel.tsx')).toContain('useExportHeader(filters.projectId||projectId)');
   });
   it('defines the picker heading once',()=>{
     expect(sourceFiles('src/ui').filter(file=>read(file).includes('>Header company<')).map(file=>file.replace(/\\/g,'/'))).toEqual(['src/ui/components/HeaderCompanyPicker.tsx']);

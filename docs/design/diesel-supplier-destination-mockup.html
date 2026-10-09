@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Diesel supplier, batch editing and Supplier Load destination</title><link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --orange:#C84B31; --navy:#173F67; --ink:#14263A; --cream:#FFF8ED; --cream2:#F5F2EC;
+    --white:#FFFFFF; --line:#E4DED3; --muted:#6B7280; --grey:#8A8F98;
+    --amber:#9A6200; --amber-bg:#FFF4DC; --amber-line:#F1CF83;
+    --red:#B42318; --red-bg:#FDECEA; --red-line:#F3B4AE;
+    --green:#1E7B45;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:#E9E4DA; color:var(--ink);
+    font-family:"Noto Sans","Noto Sans Arabic",system-ui,sans-serif;
+    font-size:14px; line-height:1.4;
+  }
+  .num{font-variant-numeric:tabular-nums; white-space:nowrap; text-align:right}
+  bdi{unicode-bidi:isolate}
+
+  /* ---------- page chrome ---------- */
+  .top{max-width:1320px;margin:0 auto;padding:24px 16px 8px}
+  .top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}
+  .top p{margin:0;color:var(--muted);max-width:760px}
+  .tabs{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+  .tabs button{
+    min-height:44px;padding:0 18px;border-radius:999px;border:1px solid var(--navy);
+    background:var(--white);color:var(--navy);font:600 14px inherit;font-family:inherit;cursor:pointer
+  }
+  .tabs button[aria-pressed="true"]{background:var(--navy);color:var(--white)}
+  .stage{max-width:1320px;margin:0 auto;padding:16px;display:flex;gap:32px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+  [data-g][hidden]{display:none !important}
+  .paper{width:300px;max-width:100%;background:#fff;color:#111;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.6;padding:18px 16px 26px;box-shadow:0 10px 26px rgba(20,38,58,.16)}
+  .pc{text-align:center;overflow-wrap:anywhere}.pt{font-size:17px;font-weight:700;letter-spacing:.04em}.pt2{font-weight:700;font-size:14px}
+  .pr{display:flex;justify-content:space-between;gap:10px}.pr span:last-child{text-align:right;overflow-wrap:anywhere}
+  .pb{font-weight:700;font-size:14px}.phr{border-top:1px dashed #555;margin:8px 0}
+  .pctx{background:var(--navy);color:#FFF8ED;border-radius:16px;padding:14px 17px}
+  .pctx-k{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9D6E6}
+  .pctx-name{font-size:17px;font-weight:700;margin-top:4px;text-align:right;overflow-wrap:anywhere}
+  .pctx-sub{font-size:12px;color:#C9D6E6;margin-top:6px}
+  .ptot-big{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding-bottom:8px}
+  .ptot-big span{font-weight:600}
+  .ptot-big b{font-size:26px;font-weight:700;color:var(--navy)}
+  .ptot{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+  .ptot.cost{border-top:1.5px solid var(--ink);margin-top:2px;align-items:flex-start}
+  .ptot.cost small{display:block;color:var(--muted);font-size:12px;font-weight:500}
+  .pmeta{font-size:12px;color:var(--muted);margin-top:6px}
+  .tag-before{background:#F1F1F1;border:1px solid #D4D4D4;color:#555}
+  .split{font-size:12px;color:var(--ink);margin-top:4px;padding-left:8px;border-left:2px solid var(--navy)}
+  .phone-wrap{max-width:100%;min-width:0}
+  .caption{overflow-wrap:anywhere}
+  .fcard{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:16px 17px;display:flex;flex-direction:column}
+  .step{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);margin-bottom:10px}
+  .sn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--navy);color:#fff;font-size:12px;letter-spacing:0}
+  .flabel{font-size:13px;font-weight:600;margin:10px 0 5px}
+  .step + .flabel{margin-top:0}
+  .opt{font-weight:500;color:var(--muted);font-size:12px}
+  .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--cream2);border-radius:12px;padding:4px;gap:4px}
+  .seg.three{grid-template-columns:1fr 1fr 1fr}
+  .seg span{display:flex;align-items:center;justify-content:center;min-height:40px;border-radius:9px;font-weight:600;font-size:13px;color:var(--muted);text-align:center;padding:0 4px}
+  .seg span.on{background:var(--navy);color:#fff}
+  .select,.input{min-height:46px;border:1px solid #D6D0C4;border-radius:11px;background:#FFFDF9;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;overflow-wrap:anywhere}
+  .select b{font-weight:700}
+  .sel-sub{font-size:12px;color:var(--muted);margin-top:1px}
+  .chev{color:var(--navy);font-size:14px}
+  .input.ph{color:var(--muted)}
+  .num-in{font-weight:700;font-size:17px;font-variant-numeric:tabular-nums}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .link{font-size:13px;font-weight:700;color:var(--navy);margin-top:8px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .two .flabel{margin-top:0}
+  .preview{background:#EEF2F7;border:1px solid #C7D3E2;border-radius:16px;padding:14px 16px}
+  .preview.neutral{background:var(--cream2);border-color:var(--line)}
+  .pv-h{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);margin-bottom:6px}
+  .pv-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:7px 0;border-top:1px solid rgba(23,63,103,.12);font-size:13px}
+  .pv-row:first-of-type{border-top:0}
+  .pv-row small{color:var(--muted);font-size:12px}
+  .pv-row b{text-align:right}
+  .pv-row.total{font-weight:700;border-top:1.5px solid var(--navy)}
+  .tank{background:var(--navy);color:#FFF8ED;border-radius:16px;padding:16px 17px}
+  .tank-k{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9D6E6}
+  .tank-v{font-size:34px;font-weight:700;margin:2px 0 8px;font-variant-numeric:tabular-nums}
+  .tank-rows div{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid rgba(255,255,255,.18);font-size:13px}
+  .tank-foot{font-size:12px;color:#C9D6E6;margin-top:8px}
+  .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .filter-head,.group-head{display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 16px;border-radius:14px;font-weight:700;font-size:14px}
+  .filter-head{background:var(--orange);color:#fff}
+  .group-head{background:var(--navy);color:#fff;gap:10px}
+  .group-head small{display:block;font-weight:500;font-size:12px;color:#C9D6E6}
+  .group-head span:first-child{padding:8px 0}
+  .batch{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+  .batch-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .batch-no{font-size:17px;font-weight:700}
+  .batch-no.sm{font-size:15px}
+  .batch-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .batch-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+  .batch-figs div{display:flex;flex-direction:column;gap:2px}
+  .batch-figs span{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .batch-figs b{font-size:16px;text-align:left}
+  .batch-figs div:last-child b{color:var(--navy)}
+  .bar{height:6px;background:var(--cream2);border-radius:99px;margin-top:10px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--navy);border-radius:99px}
+  .batch-note{font-size:12px;color:var(--muted);margin-top:8px}
+  .amber-text{color:var(--amber) !important}
+  .closed-list{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:4px 16px;margin-top:-8px}
+  .closed-row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+  .closed-row:first-child{border-top:0}
+  .cr-main{min-width:0}
+  .cr-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+  .cr-fig{font-size:13px;font-weight:600;color:var(--muted)}
+  .tag-station{background:var(--cream2);border:1px solid var(--line);color:var(--ink)}
+  .station-note{padding:10px 17px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--cream)}
+  .group-head.open + .day{margin-top:-8px}
+  .caption{font:600 12px inherit;font-family:inherit;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+
+  /* ---------- phone ---------- */
+  .phone{
+    width:390px;max-width:100%;height:820px;background:var(--cream);border-radius:36px;
+    border:10px solid #1B1B1B;overflow:hidden;display:flex;flex-direction:column;
+    box-shadow:0 20px 50px rgba(20,38,58,.18)
+  }
+  .phone-scroll{overflow-y:auto;flex:1}
+  .ph-head{padding:18px 20px 12px}
+  .back{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:999px;background:var(--white);border:1px solid var(--line);font-weight:600;color:var(--navy);font-size:13px}
+  .eyebrow{margin:14px 0 2px;color:var(--orange);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .title{margin:0;font-size:26px;font-weight:700;color:var(--ink)}
+  .sub{margin:4px 0 0;color:var(--muted);font-size:13px}
+
+  .badge{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+  .b-inuse{background:var(--navy);color:var(--white)}
+  .b-wait{border:1.5px solid var(--navy);color:var(--navy)}
+  .b-closed{border:1.5px solid var(--grey);color:var(--grey)}
+
+  .summary{
+    position:sticky;top:0;z-index:2;background:var(--cream);padding:6px 20px 12px;
+    border-bottom:1px solid var(--line)
+  }
+  .sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .metric{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+  .metric .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .metric .v{font-size:20px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .metric.adj{background:var(--amber-bg);border-color:var(--amber-line)}
+  .metric.adj .v{color:var(--amber)}
+  .metric.rem{background:var(--navy);border-color:var(--navy)}
+  .metric.rem .k{color:#C9D6E6}.metric.rem .v{color:var(--white)}
+
+  .body{padding:14px 20px 42px;display:flex;flex-direction:column;gap:16px}
+  .card{background:var(--white);border-radius:16px;padding:16px 17px;border:1px solid var(--line)}
+  .card h3{margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px}
+  .kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600;text-align:right}
+
+  .dest-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+  .dest-row:first-of-type{border-top:0}
+  .dest-row .name{min-width:0;overflow-wrap:anywhere}
+  .dest-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin:12px 0 2px}
+  .dest-label:first-of-type{margin-top:0}
+
+  .section-title{margin:6px 0 -4px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--navy)}
+  .section-title span{color:var(--muted);font-weight:600;letter-spacing:0;text-transform:none}
+
+  .day{background:var(--white);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .day-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:12px 17px;background:var(--cream2);border-bottom:1px solid var(--line)}
+  .day-head .date{font-weight:700;font-size:15px}
+  .day-head .tot{font-size:13px;color:var(--muted)}
+  .day-head .tot b{color:var(--ink);font-size:15px}
+  .grp{padding:10px 17px 12px;border-top:1px solid var(--line)}
+  .grp:first-of-type{border-top:0}
+  .grp-type{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .grp-name{font-weight:700;margin:2px 0 6px;overflow-wrap:anywhere}
+  .fill{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px dashed var(--line)}
+  .fill:first-of-type{border-top:0}
+  .fill .who{min-width:0}
+  .fill .eq{font-weight:600;overflow-wrap:anywhere}
+  .fill .meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .fill .l{font-weight:700;font-size:15px}
+  .tag{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border-radius:6px;font-size:11px;font-weight:700}
+  .tag-tank{border:1px solid var(--navy);color:var(--navy)}
+  .grp-sub{display:flex;justify-content:space-between;padding-top:8px;margin-top:4px;border-top:1px solid var(--line);font-size:13px;font-weight:700}
+
+  .panel-amber{background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:14px;padding:12px 14px;font-size:13px}
+  .panel-amber .h{font-weight:700;color:var(--amber);margin-bottom:4px}
+  .panel-amber .row{display:flex;justify-content:space-between;gap:10px}
+
+  .btn{display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:14px;font-weight:700;font-size:15px}
+  .btn-primary{background:var(--orange);color:var(--white)}
+  .btn-secondary{background:var(--white);border:1.5px solid var(--navy);color:var(--navy)}
+  .btn-danger{background:var(--white);border:1.5px solid var(--red);color:var(--red)}
+  .danger-zone{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .danger-zone p{font-size:12px;color:var(--muted);margin:6px 0 0;text-align:center}
+
+  /* ---------- PDF (A4) ---------- */
+  .pdf-wrap{display:flex;flex-direction:column;gap:24px;align-items:center}
+  .a4{
+    width:794px;max-width:100%;min-height:1123px;background:#fff;color:#111;
+    padding:56px 56px 48px;box-shadow:0 10px 30px rgba(0,0,0,.15);position:relative;
+    display:flex;flex-direction:column;font-size:12px
+  }
+  .pdf-head{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid var(--navy);padding-bottom:12px}
+  .brand{font-weight:800;font-size:22px;letter-spacing:.08em;color:var(--navy)}
+  .brand small{display:block;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--orange);margin-top:2px}
+  .pdf-title{font-size:18px;font-weight:700;margin:0;text-align:right}
+  .pdf-title span{display:block;font-size:12px;font-weight:600;color:#444;margin-top:2px}
+  .pdf-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin:14px 0 4px;font-size:11.5px}
+  .pdf-meta div{display:flex;gap:8px}
+  .pdf-meta b{min-width:110px;color:#444;font-weight:600}
+  .pdf-note{font-size:11px;color:#555;margin:6px 0 0}
+
+  .pdf-sum{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #BFC5CC;margin:16px 0 6px}
+  .pdf-sum div{padding:9px 10px;border-left:1px solid #BFC5CC}
+  .pdf-sum div:first-child{border-left:0}
+  .pdf-sum .k{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#555}
+  .pdf-sum .v{font-size:17px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .pdf-sum .em{background:#EEF2F7}
+
+  .pdf-h2{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:var(--navy);padding:6px 10px;margin:18px 0 0}
+  .pdf-h3{font-size:12.5px;font-weight:700;padding:8px 10px 6px;border-bottom:1.5px solid var(--navy);overflow-wrap:anywhere;margin-top:6px}
+  .pdf-h3 .type{font-size:10px;font-weight:700;color:#555;letter-spacing:.06em;text-transform:uppercase;margin-right:6px}
+  table.pdf{width:100%;border-collapse:collapse;table-layout:fixed}
+  table.pdf thead th{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#444;text-align:left;padding:6px 8px;border-bottom:1px solid #999;background:#F4F5F7}
+  table.pdf td{padding:6px 8px;border-bottom:1px solid #E1E3E6;vertical-align:top;overflow-wrap:anywhere}
+  table.pdf .c-date{width:118px}.c-type{width:70px}.c-src{width:150px}.c-l{width:80px}
+  table.pdf th.c-l{text-align:right}
+  tr.daysub td{font-weight:700;background:#FAFAFA;border-bottom:1px solid #BFC5CC}
+  tr.grpsub td{font-weight:800;border-top:1.5px solid #333;border-bottom:0;padding-top:8px}
+  .pdf-foot{margin-top:auto;padding-top:16px;display:flex;justify-content:space-between;font-size:10px;color:#666;border-top:1px solid #DDD}
+  .repeat-note{font-size:10px;color:#666;font-style:italic;margin:2px 0 0}
+  .totals-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12.5px}
+  .totals-table td{padding:9px 10px;border-bottom:1px solid #E1E3E6}
+  .totals-table td:last-child{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .totals-table tr.strong td{border-top:2px solid #111;font-size:14px;font-weight:800}
+  .pdf-adj{border:1px solid #C9A248;background:#FFF8E6;padding:10px 12px;margin-top:14px;font-size:11.5px}
+  .pdf-adj b{display:block;margin-bottom:3px}
+
+  @media (max-width:860px){ .a4{padding:28px 20px} .pdf-sum{grid-template-columns:1fr 1fr} .pdf-sum div:nth-child(3){border-left:0} .pdf-meta{grid-template-columns:1fr} }
+  @media print{
+    body{background:#fff}
+    .top,.phone-wrap,.caption{display:none !important}
+    .stage .pdf-wrap[hidden]{display:block !important}
+    .stage{padding:0;display:block}
+    .stage .pdf-wrap{display:block !important}
+    .a4{box-shadow:none;width:auto;min-height:auto;padding:0;page-break-after:always}
+    @page{size:A4;margin:14mm}
+  }
+</style>
+</head><body>
+<style>
+  .tag-delivery{background:#EAF1F6;border:1px solid var(--navy);color:var(--navy)}
+  .tag-dip{background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber)}
+  .tag-cancel{border:1px solid var(--red);color:var(--red)}
+  .l-in{color:var(--navy)}
+  .fill.cancelled .eq,.fill.cancelled .l{text-decoration:line-through;color:var(--muted)}
+  .sumgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{min-height:36px;display:inline-flex;align-items:center;padding:0 12px;border-radius:999px;border:1px solid var(--navy);color:var(--navy);background:#fff;font-size:12px;font-weight:700}
+  .chip.clear{color:var(--orange);border-color:var(--orange)}
+  .tabs-strip{display:flex;gap:6px;overflow:hidden;padding:0 20px 8px}
+  .tab{min-height:36px;padding:0 12px;display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--line);font-size:12px;font-weight:700;color:var(--muted);background:#fff;white-space:nowrap}
+  .tab.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .dest-row.tap{cursor:pointer}
+  .dest-row .chev{color:var(--navy);font-weight:800;margin-left:8px}
+  .seg2{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--cream2);border-radius:12px;padding:4px}
+  .seg2 span{display:flex;align-items:center;justify-content:center;min-height:38px;border-radius:9px;font-weight:700;font-size:12px;color:var(--muted)}
+  .seg2 span.on{background:var(--navy);color:#fff}
+  .note{font-size:12px;color:var(--muted)}
+  .grp-type.inout{color:var(--navy)}
+</style>
+<style>
+  .phone{height:auto !important;min-height:600px}.phone-scroll{overflow:visible !important}.tabs-strip{flex-wrap:wrap;overflow:visible !important}.summary{position:static !important}
+  .band{max-width:1320px;margin:28px auto 0;padding:0 16px}
+  .band h2{margin:0;font-size:18px;color:var(--navy);border-bottom:2px solid var(--navy);padding-bottom:6px}
+  .band p{margin:6px 0 0;color:var(--muted);font-size:13px;max-width:900px}
+  .tag-supplier{background:#EAF1F6;border:1px solid var(--navy);color:var(--navy)}
+  .tag-unpriced{background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber)}
+  .tag-nosup{background:#F1F1F1;border:1px solid #D4D4D4;color:#555}
+  .tag-site{background:var(--cream2);border:1px solid var(--line);color:var(--ink)}
+  .tag-edit{background:#F4EAFB;border:1px solid #CDB2E3;color:#5B2A86}
+  .opt-card{border:1.5px solid var(--navy);border-radius:12px;padding:10px 12px;margin-top:8px;background:#fff}
+  .opt-card.on{background:#EAF1F6}
+  .opt-card b{display:block;font-size:14px}.opt-card small{color:var(--muted);font-size:12px}
+  .hist{border-left:3px solid #CDB2E3;padding:4px 0 4px 10px;margin-top:10px;font-size:12.5px}
+  .hist .when{font-weight:700}.hist .why{color:var(--muted);margin:2px 0}
+  .hist .chg{display:flex;justify-content:space-between;gap:10px;padding:2px 0}.hist .chg s{color:var(--muted)}
+  .sup-block{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
+  .sup-block .sb-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .sup-block .sb-h b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--navy)}
+  .sup-big{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+  .sup-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px dashed var(--line);font-size:13px}
+  .sup-row .m{font-size:12px;color:var(--muted);margin-top:2px}
+  .sum-sup{background:var(--white);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .sum-sup .hd{padding:12px 16px;background:var(--cream2);border-bottom:1px solid var(--line);font-weight:700}
+  .sum-sup .hd small{display:block;color:var(--muted);font-weight:500;font-size:12px}
+  .sum-sup .in{padding:0 16px 14px}
+  .mat{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:13px}
+  .mat:first-child{border-top:0}
+  .proj-h{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:10px;padding:9px 12px;background:#F2E3D2;border-left:4px solid var(--orange);font-weight:700;font-size:13px}
+  .proj-h.site{background:#E6EEF5;border-left-color:var(--navy)}
+  .proj-h .c{background:#fff;border:1px solid var(--line);border-radius:11px;padding:2px 8px;font-size:12px;color:var(--navy)}
+  .fh{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px}
+  .note-box{background:#EEF2F7;border:1px solid #C7D3E2;border-radius:12px;padding:10px 12px;font-size:12.5px;margin-top:10px}
+  .errbox{background:var(--red-bg);border:1px solid var(--red-line);color:var(--red);border-radius:12px;padding:10px 12px;font-size:12.5px;margin-top:8px}
+  .xl{border-collapse:collapse;font-size:11.5px;background:#fff;margin-top:8px}
+  .xl th{background:#173F67;color:#fff;padding:5px 8px;text-align:left;white-space:nowrap}
+  .xl td{border:1px solid #DDD;padding:4px 8px;white-space:nowrap}
+  .xl-wrap{max-width:100%;overflow:auto}
+</style>
+<div class="top">
+  <h1>Update batch 2 — Diesel supplier, batch editing, date range, and Supplier Load destination: proposed design</h1>
+  <p>Sample data only. Everything uses the existing DROMEX components: the Fuel Management tabs, day cards, SearchableSelect, DatePickerField, the collapsed orange filter card, navy group headers, the shared export panel and the A4 report style. Screens marked <b>NEW</b> or <b>CHANGED</b> are what would change; anything not shown stays exactly as it is.</p>
+</div>
+
+<!-- =================================================================== -->
+<div class="band"><h2>A · Diesel batch: supplier, invoice number and optional price</h2><p>Request 1 and 2. A batch is created by <b>Record Delivery</b> (the Purchase tab). The supplier picker is the same one already used for supplier loads. Price stays optional: empty saves the batch as <b>Unpriced</b>; the app never shows a $0 price. Only a priced purchase needs a supplier, because the amount is owed to that supplier (existing rule).</p></div>
+<div class="stage">
+
+<!-- A1 PURCHASE FORM -->
+<div class="phone-wrap">
+  <p class="caption">A1 · Purchase tab (CHANGED: wording only)</p>
+  <div class="phone"><div class="phone-scroll">
+    <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Daily operations · Fuel</p><h2 class="title">Fuel Management</h2></div>
+    <div class="tabs-strip"><span class="tab">Batches</span><span class="tab">History</span><span class="tab">Usage</span><span class="tab on">Purchase</span><span class="tab">Equipment Fill</span></div>
+    <div class="body" style="padding-top:4px">
+      <div class="card">
+        <h3>Record fuel purchase</h3>
+        <p class="hint" style="margin:0 0 8px">Every diesel purchase becomes a numbered batch (next: <b>DSL-2026-00007</b>). The litres count as delivered by the supplier you choose.</p>
+        <div class="flabel">Record date *</div><div class="select"><span>Fri 9 Oct 2026</span><span class="chev">▾</span></div>
+        <div class="flabel">Litres purchased *</div><div class="input num-in">5,000</div>
+        <div class="flabel">Supplier <span class="opt">· needed when a price is entered</span></div>
+        <div class="select"><span><b>Al-Nour Fuel Co.</b><div class="sel-sub">0 diesel batches this month</div></span><span class="chev">▾</span></div>
+        <div class="flabel">Invoice / ticket number <span class="opt">· optional</span></div><div class="input">INV-55821</div>
+        <div class="flabel">Price per litre (USD) <span class="opt">· optional</span></div><div class="input ph">Leave empty to save as Unpriced</div>
+        <p class="hint">Without a price the batch is saved as <b>Unpriced</b> and is left out of the supplier's diesel amount. You can add the price later by editing the batch.</p>
+        <div class="flabel">Notes <span class="opt">· optional</span></div><div class="input ph">Notes</div>
+        <div class="btn btn-primary" style="margin-top:14px">Save Fuel Purchase</div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- A2 BATCH PAGE -->
+<div class="phone-wrap">
+  <p class="caption">A2 · Batch page (CHANGED: Edit batch + Edit history)</p>
+  <div class="phone"><div class="phone-scroll">
+    <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Diesel batch</p>
+      <div class="title-row"><h2 class="title">DSL-2026-00006</h2><span class="badge b-inuse">Open · In use</span></div>
+      <p class="sub">Invoice INV-55790 · Arrived Wed 7 Oct 2026</p></div>
+    <div class="summary"><div class="sum-grid">
+      <div class="metric"><div class="k">Delivered</div><div class="v">5,000 L</div></div><div class="metric"><div class="k">Filled</div><div class="v">1,200 L</div></div>
+      <div class="metric adj"><div class="k">Adjustments</div><div class="v">0 L</div></div><div class="metric rem"><div class="k">Remaining</div><div class="v">3,800 L</div></div></div></div>
+    <div class="body">
+      <div class="btn btn-primary">Record Fill</div>
+      <div class="card"><h3>Batch details</h3>
+        <dl class="kv">
+          <dt>Supplier</dt><dd>Al-Nour Fuel Co.</dd>
+          <dt>Invoice number</dt><dd>INV-55790</dd>
+          <dt>Arrival date</dt><dd>Wed 7 Oct 2026</dd>
+          <dt>Price per litre</dt><dd>$1.12</dd>
+          <dt>Fuel type</dt><dd>Diesel</dd></dl>
+        <div class="btn btn-secondary" style="margin-top:14px">Edit Batch</div>
+      </div>
+      <div class="card"><h3>Edit history</h3>
+        <div class="hist"><div class="when">Thu 8 Oct 2026, 09:12 <span class="tag tag-edit">Details</span></div><div class="why">No reason needed for supplier, invoice or price</div>
+          <div class="chg"><span>Supplier</span><span><s>No supplier</s> → Al-Nour Fuel Co.</span></div>
+          <div class="chg"><span>Invoice number</span><span><s>not recorded</s> → INV-55790</span></div></div>
+        <div class="hist"><div class="when">Thu 8 Oct 2026, 09:20 <span class="tag tag-edit">Correction</span></div><div class="why">Reason: Delivery note said 5,000 L, not 4,800 L</div>
+          <div class="chg"><span>Litres</span><span><s>4,800 L</s> → 5,000 L</span></div></div>
+        <p class="hint">The original values are always kept. Nothing here can be deleted.</p>
+      </div>
+      <p class="section-title">Fills by day <span>· newest first</span></p>
+      <div class="day"><div class="day-head"><span class="date">Fri 9 Oct 2026</span><span class="tot"><b class="num">1,200 L</b></span></div>
+        <div class="grp"><div class="grp-type">PROJECT</div><div class="grp-name">Project X</div>
+          <div class="fill"><div class="who"><div class="eq">Excavator CAT 320</div><div class="meta"><span class="tag tag-tank">Tank · DSL-2026-00006</span><span>07:40</span></div></div><div class="l num">1,200 L</div></div></div></div>
+    </div>
+  </div></div>
+</div>
+
+<!-- A3 OLD BATCH -->
+<div class="phone-wrap">
+  <p class="caption">A3 · An older batch with no supplier (shows "No supplier", never blocks)</p>
+  <div class="phone"><div class="phone-scroll">
+    <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Diesel batch</p>
+      <div class="title-row"><h2 class="title">DSL-2026-00003</h2><span class="badge b-closed">Closed</span></div>
+      <p class="sub">Invoice not recorded · Arrived Tue 29 Sep 2026</p></div>
+    <div class="body">
+      <div class="card"><h3>Batch details</h3>
+        <dl class="kv">
+          <dt>Supplier</dt><dd><span class="tag tag-nosup">No supplier</span></dd>
+          <dt>Invoice number</dt><dd>Not recorded</dd>
+          <dt>Arrival date</dt><dd>Tue 29 Sep 2026</dd>
+          <dt>Price per litre</dt><dd><span class="tag tag-unpriced">Unpriced</span></dd>
+          <dt>Fuel type</dt><dd>Diesel</dd></dl>
+        <div class="btn btn-secondary" style="margin-top:14px">Edit Batch</div>
+        <p class="hint">Add the supplier and invoice number whenever you have them.</p>
+      </div>
+      <div class="card"><h3>Opening stock batch</h3>
+        <p class="hint" style="margin-top:0">An Opening stock batch (diesel already in the tank when batches started) can also get a supplier and invoice number for reference. It is not a purchase, so it never adds an amount to a supplier.</p>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- A4 EDIT FORM -->
+<div class="phone-wrap">
+  <p class="caption">A4 · Edit Batch (NEW screen)</p>
+  <div class="phone"><div class="phone-scroll">
+    <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Edit diesel batch</p><h2 class="title">DSL-2026-00006</h2></div>
+    <div class="body" style="padding-top:4px">
+      <div class="card">
+        <div class="step"><span class="sn">1</span>Supplier, invoice and price</div>
+        <p class="hint" style="margin:0 0 6px">These can be changed freely at any time. They never change the diesel in the tank.</p>
+        <div class="flabel">Supplier</div><div class="select"><span><b>Al-Nour Fuel Co.</b></span><span class="chev">▾</span></div>
+        <div class="flabel">Invoice / ticket number</div><div class="input">INV-55790</div>
+        <div class="flabel">Price per litre (USD)</div><div class="input">1.12</div>
+        <p class="hint">Clear the price to make the batch Unpriced. A priced batch needs a supplier. If payments are already recorded against this purchase it cannot be made Unpriced.</p>
+      </div>
+      <div class="card">
+        <div class="step"><span class="sn">2</span>Quantity and date <span class="opt" style="letter-spacing:0;text-transform:none">· needs a reason</span></div>
+        <div class="flabel">Litres delivered *</div><div class="input num-in">5,000</div>
+        <div class="hint">At least <b>1,200 L</b> — that much has already been used from this batch.</div>
+        <div class="flabel">Arrival date *</div><div class="select"><span>Wed 7 Oct 2026</span><span class="chev">▾</span></div>
+        <div class="flabel">Reason for changing quantity or date *</div><div class="input ph">Why is this being changed?</div>
+        <p class="hint">Required only if you change the litres or the date. The original and the new value are kept in the Edit history.</p>
+      </div>
+      <div class="errbox">Example error if 1,000 L is typed: The quantity cannot be below the 1,200 L already used from this batch.</div>
+      <div class="btn btn-primary">Save Changes</div>
+    </div>
+  </div></div>
+</div>
+</div>
+
+<!-- =================================================================== -->
+<div class="band"><h2>B · Batches tab: date range filter and exports</h2><p>Request 3. The Batches tab already has From / To date pickers; they are kept and made the single range for the list, every total and the PDF. The export panel names the range. With no dates, nothing changes: everything is exported. The range is applied to the batch's arrival date and to fills by their date. A <b>Supplier</b> filter is added next to Project, Company site and Station.</p></div>
+<div class="stage">
+<div class="phone-wrap">
+  <p class="caption">B1 · Batches tab with filters (CHANGED: Supplier filter, range line, totals line)</p>
+  <div class="phone"><div class="phone-scroll">
+    <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Daily operations · Fuel</p><h2 class="title">Fuel Management</h2></div>
+    <div class="tabs-strip"><span class="tab on">Batches</span><span class="tab">History</span><span class="tab">Usage</span><span class="tab">Purchase</span></div>
+    <div class="body" style="padding-top:4px">
+      <div class="tank"><div class="tank-k">Diesel in tank</div><div class="tank-v">3,800 L</div>
+        <div class="tank-rows"><div><span>DSL-2026-00006</span><span>3,800 L left</span></div></div>
+        <div class="tank-foot">1 open batch · Last dip Tue 6 Oct</div></div>
+      <div class="filter-head"><span>Filter fuel records · 3 filters on</span><span>−</span></div>
+      <div class="card" style="background:var(--cream2)">
+        <div class="flabel" style="margin-top:0">Search batch or invoice number</div><div class="input ph">DSL-2026-00004 or 55821</div>
+        <div class="flabel">Supplier <span class="opt">· NEW</span></div><div class="select"><span><b>Al-Nour Fuel Co.</b></span><span class="chev">▾</span></div>
+        <div class="flabel">Project</div><div class="select"><span class="ph">All projects</span><span class="chev">▾</span></div>
+        <div class="two"><div><div class="flabel">From date</div><div class="select"><span>1 Sep 2026</span><span class="chev">▾</span></div></div><div><div class="flabel">To date</div><div class="select"><span>30 Sep 2026</span><span class="chev">▾</span></div></div></div>
+        <div class="note-box"><b>Range 1 Sep 2026 – 30 Sep 2026.</b> Batches, fills, totals and the PDF below cover only these dates. Clear both dates to include everything.</div>
+        <div class="flabel">Prices in the PDF</div><div class="seg"><span class="on">Without prices</span><span>With prices</span></div>
+        <div class="btn btn-secondary" style="margin-top:12px">Export PDF</div>
+        <p class="hint">A Diesel Batch Report of the fills and batches that match the supplier, project, site, station and dates chosen above (1 Sep – 30 Sep 2026). To export one batch, open it.</p>
+      </div>
+      <div class="chips"><span class="chip">Supplier: Al-Nour Fuel Co. ×</span><span class="chip">From 1 Sep 2026 ×</span><span class="chip">To 30 Sep 2026 ×</span><span class="chip clear">Clear all</span></div>
+      <p class="section-title">Closed batches <span>· in range</span></p>
+      <div class="batch"><div class="batch-top"><div><div class="batch-no">DSL-2026-00004</div><div class="batch-sub">Al-Nour Fuel Co. · Invoice 55821 · Arrived Tue 22 Sep</div></div><span class="badge b-closed">Closed</span></div>
+        <div class="batch-figs"><div><span>Delivered</span><b>3,000 L</b></div><div><span>Filled</span><b>3,000 L</b></div><div><span>Remaining</span><b>0 L</b></div></div></div>
+      <div class="note-box">In this range: <b>2 batches · 5,500 L delivered · 5,500 L filled</b> for Al-Nour Fuel Co.</div>
+    </div>
+  </div></div>
+</div>
+</div>
+
+<!-- =================================================================== -->
+<div class="band"><h2>C · Supplier Loads screen: Diesel deliveries per supplier, and destinations</h2><p>Requests 1 and 4. In the supplier's Delivery Summary, material totals stay as they are (tons and m³). Diesel is a <b>separate block</b>: litres are never added to tons or m³. Material loads that went to a site appear under the <b>site's name</b>, next to project names; site loads never count toward any project.</p></div>
+<div class="stage">
+
+<div class="phone-wrap">
+  <p class="caption">C1 · Delivery summary for a supplier (CHANGED)</p>
+  <div class="phone"><div class="phone-scroll">
+    <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Supplier loads</p><h2 class="title">Supplier Loads</h2></div>
+    <div class="body" style="padding-top:4px">
+      <div class="group-head"><span>Delivered material totals<small>Every active confirmed delivery</small></span><span>1 ▴</span></div>
+      <div class="sum-sup"><div class="hd">Al-Nour Fuel Co.<small>5 deliveries · 1 material total</small></div>
+        <div class="in">
+          <div class="mat"><span><b>Base course</b></span><span class="num"><b>100 t</b> · 5 deliveries</span></div>
+          <div class="proj-h"><span>Project X</span><span class="c">3</span></div>
+          <div class="mat"><span>Base course</span><span class="num">60 t</span></div>
+          <div class="proj-h site"><span>Yard B <span class="tag tag-site">Site</span></span><span class="c">2</span></div>
+          <div class="mat"><span>Base course</span><span class="num">40 t</span></div>
+          <p class="hint">Breakdown: Project X 60 t, Yard B 40 t. Yard B is a company site, so it never counts toward any project's totals.</p>
+
+          <div class="sup-block">
+            <div class="sb-h"><b>Diesel deliveries</b><span class="hint" style="margin:0">separate from materials</span></div>
+            <div class="sup-big" style="margin-top:4px">8,500 L</div>
+            <div class="hint" style="margin-top:0">3 batches · amount of priced batches <b>$9,520.00</b> (incl. VAT) · <span class="tag tag-unpriced">1 unpriced batch</span></div>
+            <div class="sup-row"><div><b>Wed 7 Oct 2026</b> · DSL-2026-00006<div class="m">Invoice INV-55790 · $1.12 / L</div></div><div class="num"><b>5,000 L</b></div></div>
+            <div class="sup-row"><div><b>Tue 22 Sep 2026</b> · DSL-2026-00004<div class="m">Invoice 55821 · $1.10 / L</div></div><div class="num"><b>3,000 L</b></div></div>
+            <div class="sup-row"><div><b>Fri 4 Sep 2026</b> · DSL-2026-00002<div class="m">Invoice not recorded · <span class="tag tag-unpriced">Unpriced</span></div></div><div class="num"><b>500 L</b></div></div>
+          </div>
+        </div></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="phone-wrap">
+  <p class="caption">C2 · Add Supplier Load, step 1 (CHANGED: Destination replaces Linked project)</p>
+  <div class="phone"><div class="phone-scroll">
+    <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Supplier loads</p><h2 class="title">Add Supplier Load</h2></div>
+    <div class="body" style="padding-top:4px">
+      <div class="card">
+        <div class="step"><span class="sn">1</span>Supplier and destination</div>
+        <div class="flabel">Record date *</div><div class="select"><span>Fri 9 Oct 2026</span><span class="chev">▾</span></div>
+        <div class="flabel">Supplier *</div><div class="select"><span><b>Al-Nour Fuel Co.</b></span><span class="chev">▾</span></div>
+        <div class="flabel">Destination *</div>
+        <div class="opt-card"><b>Project</b><small>Material delivered to a construction project</small></div>
+        <div class="opt-card on"><b>Company Site</b><small>Material delivered to a saved company location, such as the plant or yard</small></div>
+        <div class="opt-card"><b>Unassigned</b><small>Where the material went was not recorded</small></div>
+        <div class="flabel">Select company site *</div><div class="select"><span><b>Yard B</b></span><span class="chev">▾</span></div>
+        <div class="link">Manage company sites</div>
+        <p class="hint">This is the same Destination control as Equipment Fill. Choosing a type clears the other choice, so a hidden project or site is never saved. A project still has to be active and the date must fall inside its dates.</p>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<div class="phone-wrap">
+  <p class="caption">C3 · Supplier load detail and correction (CHANGED)</p>
+  <div class="phone"><div class="phone-scroll">
+    <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Supplier load</p><h2 class="title">SUP-20261009-A1-00031</h2></div>
+    <div class="body" style="padding-top:4px">
+      <div class="card"><h3>Load details</h3>
+        <dl class="kv"><dt>Supplier</dt><dd>Al-Nour Fuel Co.</dd><dt>Destination</dt><dd>Company Site: Yard B</dd><dt>Item</dt><dd>Base course</dd><dt>Quantity</dt><dd>20 t</dd></dl>
+        <p class="hint">An older load linked to a project reads <b>Destination · Project: Project X</b>. Nothing is moved, renamed or recalculated.</p></div>
+      <div class="card"><h3>Full correction and audit</h3>
+        <p class="hint" style="margin:0 0 6px">Everything on this load can be corrected. Only the reference number and the original confirmation time stay fixed. Untouched fields keep their values.</p>
+        <div class="flabel" style="margin-top:0">Record date *</div><div class="select"><span>Fri 9 Oct 2026</span><span class="chev">▾</span></div>
+        <div class="flabel">Supplier *</div><div class="select"><span><b>Al-Nour Fuel Co.</b></span><span class="chev">▾</span></div>
+        <div class="flabel">Destination *</div>
+        <div class="opt-card"><b>Project</b><small>Material delivered to a construction project</small></div>
+        <div class="opt-card on"><b>Company Site</b><small>Material delivered to a saved company location</small></div>
+        <div class="opt-card"><b>Unassigned</b><small>Where the material went was not recorded</small></div>
+        <div class="flabel">Select company site *</div><div class="select"><span><b>Yard B</b></span><span class="chev">▾</span></div>
+        <div class="flabel">Item *</div><div class="select"><span>Base course</span><span class="chev">▾</span></div>
+        <div class="two"><div><div class="flabel">Unit *</div><div class="select"><span>t</span><span class="chev">▾</span></div></div><div><div class="flabel">Quantity *</div><div class="input">20</div></div></div>
+        <div class="flabel">Delivery</div><div class="seg"><span class="on">Our Driver</span><span>Supplier Delivering</span></div>
+        <div class="flabel">Driver / truck</div><div class="select"><span>Hassan K. · 72-118</span><span class="chev">▾</span></div>
+        <div class="flabel">Supplier ticket number</div><div class="input ph">Ticket</div>
+        <div class="flabel">Price basis</div><div class="seg"><span class="on">Per Unit</span><span>As a Whole</span></div>
+        <div class="flabel">Price</div><div class="input ph">Leave empty for Unpriced</div>
+        <div class="flabel">VAT</div><div class="seg three"><span class="on">Company</span><span>None</span><span>Custom</span></div>
+        <div class="flabel">Notes</div><div class="input ph">Notes</div>
+        <div class="hint">Every change, including a new destination, is saved in this load's history with the previous and new value and your reason.</div>
+        <div class="flabel">Correction reason *</div><div class="input ph">Reason</div>
+        <div class="btn btn-primary" style="margin-top:12px">Save Correction</div></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="phone-wrap">
+  <p class="caption">C4 · Purchase history grouping and search (CHANGED)</p>
+  <div class="phone"><div class="phone-scroll">
+    <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Supplier loads</p><h2 class="title">Purchase history</h2></div>
+    <div class="body" style="padding-top:4px">
+      <div class="group-head"><span>Al-Nour Fuel Co.<small>2 destinations · 5 loads</small></span><span>▴</span></div>
+      <div class="sum-sup"><div class="in" style="padding-top:8px">
+        <div class="proj-h"><span>Project X</span><span class="c">3</span></div>
+        <div class="sup-row"><div><b>SUP-20261001-A1-00027</b><div class="m">Base course · 20 t</div></div><div class="num">$1,240.00</div></div>
+        <div class="proj-h site"><span>Yard B <span class="tag tag-site">Company Site</span></span><span class="c">2</span></div>
+        <div class="sup-row"><div><b>SUP-20261009-A1-00031</b><div class="m">Base course · 20 t · Destination: Company Site: Yard B</div></div><div class="num"><span class="tag tag-unpriced">Unpriced</span></div></div>
+      </div></div>
+      <p class="hint">Search also finds the site name. The group heading line now says "destinations" instead of "linked projects".</p>
+    </div>
+  </div></div>
+</div>
+</div>
+
+<!-- =================================================================== -->
+<div class="band"><h2>E · Supplier Loads → Purchase history → open a supplier: NEW Export PDF</h2><p>Today, opening a supplier shows its projects but offers no export (only Invoices &amp; Bills and Edit supplier information). Add <b>Export PDF</b> there: it exports everything delivered by that supplier, grouped by project or site. The sheet lets you choose materials, destination, dates and the header (logo, name, details). The PDF reads <b>Totals</b> with the <b>supplier's name in bold</b> and lists every load with its number and prefix.</p></div>
+<div class="stage">
+<div class="phone-wrap"><p class="caption">E1 · Supplier opened in Purchase history (CHANGED: Export PDF button)</p>
+ <div class="phone"><div class="phone-scroll">
+  <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Supplier loads</p><h2 class="title">Purchase history</h2></div>
+  <div class="body" style="padding-top:4px">
+   <div class="group-head"><span>SUPPLIER<br><b style="font-size:16px">Al-Nour Fuel Co.</b><small>2 destinations · 5 purchases</small></span><span>5 ▴</span></div>
+   <div class="btn btn-secondary">Invoices &amp; Bills — bills received and supplier statements</div>
+   <div class="btn btn-primary">Export PDF — what I received from this supplier</div>
+   <div class="btn btn-secondary">Edit supplier information</div>
+   <div class="proj-h"><span>Project X</span><span class="c">3</span></div>
+   <div class="proj-h site"><span>Yard B <span class="tag tag-site">Site</span></span><span class="c">2</span></div>
+  </div></div></div></div>
+
+<div class="phone-wrap"><p class="caption">E2 · Export PDF sheet for this supplier (NEW)</p>
+ <div class="phone"><div class="phone-scroll">
+  <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Export PDF</p><h2 class="title">Al-Nour Fuel Co.</h2></div>
+  <div class="body" style="padding-top:4px"><div class="card">
+    <div class="flabel" style="margin-top:0">Prices</div><div class="seg"><span class="on">Without prices</span><span>With prices</span></div>
+    <div class="flabel">Projects and sites</div>
+    <div class="opt-card on"><b>☑ Project X</b><small>3 deliveries</small></div><div class="opt-card on"><b>☑ Yard B (Site)</b><small>2 deliveries</small></div>
+    <div class="flabel">Materials</div>
+    <div class="opt-card on"><b>☑ Base course</b><small>100 t · 5 deliveries</small></div><div class="opt-card on"><b>☑ Sand</b><small>12 m³ · 1 delivery</small></div>
+    <div class="two"><div><div class="flabel">From date</div><div class="select"><span class="ph">Any</span><span class="chev">▾</span></div></div><div><div class="flabel">To date</div><div class="select"><span class="ph">Any</span><span class="chev">▾</span></div></div></div>
+    <div class="flabel">Header on the PDF</div>
+    <div class="opt-card on"><b>Company</b><small>Plant Company</small></div>
+    <div class="flabel">Logo</div><div class="select"><span>Company logo</span><span class="chev">▾</span></div>
+    <div class="flabel">Name</div><div class="select"><span>DROMEX Construction</span><span class="chev">▾</span></div>
+    <div class="flabel">Details to print</div><div class="chips"><span class="chip">☑ Address</span><span class="chip">☑ Phone</span><span class="chip">☑ Email</span><span class="chip">☐ Tax / VAT no.</span></div>
+    <div class="btn btn-primary" style="margin-top:12px">Export PDF</div></div></div>
+ </div></div></div>
+</div>
+<div class="stage"><div class="pdf-wrap"><div class="a4" style="min-height:0">
+  <div class="pdf-head"><div><div class="brand">DROMEX<small>Address · Phone · Email</small></div></div><div><p class="pdf-title">Totals<span><b style="font-size:15px;color:#111">Al-Nour Fuel Co.</b></span><span>Fri 9 Oct 2026, 10:30</span></p></div></div>
+  <div class="pdf-meta"><div><b>Dates</b>All dates</div><div><b>Destinations</b>Project X, Yard B (Site)</div><div><b>Materials</b>All</div><div><b>Prices</b>Excluded</div></div>
+  <div class="pdf-h2">PROJECT X · 60 t · 3 deliveries</div>
+  <table class="pdf"><thead><tr><th>Load</th><th>Date and time</th><th>Material</th><th>Driver · truck</th><th class="c-l">Qty</th><th>Status</th></tr></thead><tbody>
+   <tr><td>SUP-20260903-A1-00012</td><td>3 Sep 2026 · 08:15</td><td>Base course</td><td>Hassan K. · 72-118</td><td class="num">20 t</td><td>Active</td></tr>
+   <tr><td>SUP-20260917-A1-00019</td><td>17 Sep 2026 · 09:40</td><td>Base course</td><td>Supplier Delivering</td><td class="num">20 t</td><td>Active</td></tr>
+   <tr><td>SUP-20260905-A1-00014</td><td>5 Sep 2026 · 11:20</td><td>Sand</td><td>Supplier Delivering</td><td class="num">12 m³</td><td>Active</td></tr></tbody></table>
+  <div class="pdf-h2">YARD B (SITE) · 40 t · 2 deliveries</div>
+  <table class="pdf"><tbody>
+   <tr><td>SUP-20260929-A1-00024</td><td>29 Sep 2026 · 14:05</td><td>Base course</td><td>Hassan K. · 72-118</td><td class="num">20 t</td><td>Active</td></tr>
+   <tr><td>SUP-20261009-A1-00031</td><td>9 Oct 2026 · 07:50</td><td>Base course</td><td>Hassan K. · 72-118</td><td class="num">20 t</td><td>Active</td></tr></tbody></table>
+  <p class="pdf-note">Totals per material at the end (units never mixed). Site loads sit under the site's name and never count toward a project. Blanks read "Not recorded"; cancelled loads are left out; no prices unless "With prices". Diesel delivered by this supplier prints as its own litres section.</p>
+</div></div></div>
+<div class="band"><h2>D0 · Export PDF panel with its own filters</h2><p>The export panel now carries its own filters, pre-filled from the screen it was opened on and changeable before exporting. The PDF states every filter used.</p></div>
+<div class="stage"><div class="phone-wrap">
+  <p class="caption">D0 · Export PDF panel (CHANGED: filters inside the panel)</p>
+  <div class="phone"><div class="phone-scroll">
+    <div class="ph-head"><span class="back">‹ Back</span><p class="eyebrow">Daily operations · Fuel</p><h2 class="title">Export PDF</h2></div>
+    <div class="body" style="padding-top:4px">
+      <div class="card"><h3>Diesel Batch Report</h3>
+        <div class="flabel" style="margin-top:0">Supplier</div><div class="select"><span><b>Al-Nour Fuel Co.</b></span><span class="chev">▾</span></div>
+        <div class="flabel">Batch</div><div class="select"><span class="ph">All batches</span><span class="chev">▾</span></div>
+        <div class="flabel">Batch status</div><div class="seg2"><span class="on">All</span><span>Open</span><span>Closed</span><span>Cancelled</span></div>
+        <div class="flabel">Project</div><div class="select"><span class="ph">All projects</span><span class="chev">▾</span></div>
+        <div class="flabel">Company site</div><div class="select"><span>Yard B</span><span class="chev">▾</span></div>
+        <div class="flabel">Station</div><div class="select"><span class="ph">All stations</span><span class="chev">▾</span></div>
+        <div class="flabel">Source</div><div class="seg three"><span class="on">All</span><span>From tank</span><span>Stations</span></div>
+        <div class="two"><div><div class="flabel">From date</div><div class="select"><span>1 Sep 2026</span><span class="chev">▾</span></div></div><div><div class="flabel">To date</div><div class="select"><span>30 Sep 2026</span><span class="chev">▾</span></div></div></div>
+        <div class="flabel">Prices in the PDF</div><div class="seg"><span class="on">Without prices</span><span>With prices</span></div>
+        <div class="note-box">Will export: Al-Nour Fuel Co. · Yard B · 1 Sep – 30 Sep 2026 · without prices.<br>These filters apply only to this export; the screen's own filters are not changed.</div>
+        <div class="btn btn-secondary" style="margin-top:12px">Export PDF</div>
+      </div>
+      <div class="card"><h3>Loads History / Totals PDF</h3>
+        <p class="hint" style="margin:0">The same panel there gains Supplier, Destination (project or site), Item and date filters, pre-filled from the Totals screen, plus the existing Without / With prices choice.</p></div>
+    </div>
+  </div></div></div></div>
+
+<div class="band"><h2>D · PDFs and Excel</h2><p>Only the parts that change are shown; every other part of these documents stays as built.</p></div>
+<div class="stage"><div class="pdf-wrap">
+
+<div class="a4" style="min-height:0">
+  <div class="pdf-head"><div><div class="brand">DROMEX<small>Construction &amp; Plant Management</small></div></div><div><p class="pdf-title">Diesel Batch Report<span>Al-Nour Fuel Co. · 1 Sep 2026 – 30 Sep 2026</span></p></div></div>
+  <div class="pdf-meta"><div><b>Batch</b>All batches</div><div><b>Exported</b>Fri 9 Oct 2026, 10:30</div><div><b>Supplier</b>Al-Nour Fuel Co.</div><div><b>Date range</b>1 Sep 2026 – 30 Sep 2026</div><div><b>Project filter</b>All projects</div><div><b>Prices</b>Included</div></div>
+  <p class="pdf-note">CHANGED · Metadata gains a <b>Supplier</b> line; the existing "Date range" line is kept and is also repeated in the title area and the file name (Diesel-Batch-Report-2026-09-01-to-2026-09-30.pdf). With no range it reads "All dates".</p>
+  <div class="pdf-h2">SUPPLIER DIESEL DELIVERIES</div>
+  <table class="pdf"><thead><tr><th>Date</th><th>Batch</th><th>Invoice</th><th class="c-l">Litres</th><th class="c-l">Price / L</th><th class="c-l">Amount</th></tr></thead><tbody>
+    <tr><td>Tue 22 Sep 2026</td><td>DSL-2026-00004</td><td>55821</td><td class="num">3,000 L</td><td class="num">$1.10</td><td class="num">$3,696.00</td></tr>
+    <tr><td>Fri 4 Sep 2026</td><td>DSL-2026-00002</td><td>not recorded</td><td class="num">500 L</td><td class="num">Unpriced</td><td class="num">Unpriced</td></tr>
+    <tr class="grpsub"><td colspan="3">Supplier total · 2 batches</td><td class="num">3,500 L</td><td></td><td class="num">$3,696.00</td></tr></tbody></table>
+  <p class="pdf-note">Amount covers priced batches only (incl. VAT as recorded). 1 unpriced batch is not included. Without prices, the price and amount columns are left out.</p>
+</div>
+
+<div class="a4" style="min-height:0">
+  <div class="pdf-head"><div><div class="brand">DROMEX<small>Construction &amp; Plant Management</small></div></div><div><p class="pdf-title">Loads History<span>Issued to: Al-Nour Fuel Co.</span></p></div></div>
+  <div class="pdf-h2">DELIVERED — BY PROJECT OR SITE AND SUPPLIER</div>
+  <table class="pdf"><thead><tr><th>Project or site · supplier</th><th class="c-l">Unit</th><th class="c-l">Quantity</th></tr></thead><tbody>
+    <tr class="daysub"><td colspan="3">Project X</td></tr><tr><td>&nbsp;&nbsp;Al-Nour Fuel Co.</td><td class="num">t</td><td class="num">60</td></tr>
+    <tr class="daysub"><td colspan="3">Yard B (Site)</td></tr><tr><td>&nbsp;&nbsp;Al-Nour Fuel Co.</td><td class="num">t</td><td class="num">40</td></tr></tbody></table>
+  <p class="pdf-note">CHANGED · A site load is listed under the site's name and tagged "(Site)". It is never part of a project's totals. The loads list shows a Destination column ("Project X", "Yard B (Site)", "Unassigned") in place of the project column; the "Show project / Hide project" switch is renamed "Show destination / Hide destination". Company Totals, the Project Totals PDF and the supplier Excel sheets follow the same rule.</p>
+</div>
+
+<div>
+  <p class="caption">Excel (CHANGED columns only)</p>
+  <div class="xl-wrap"><table class="xl"><thead><tr><th>Supplier Reference</th><th>Supplier</th><th>Destination Type</th><th>Destination</th><th>Project ID</th><th>Company Site ID</th><th>Item</th><th>Quantity</th></tr></thead><tbody>
+    <tr><td>SUP-20261001-A1-00027</td><td>Al-Nour Fuel Co.</td><td>Project</td><td>Project X</td><td>project_17</td><td></td><td>Base course</td><td>20</td></tr>
+    <tr><td>SUP-20261009-A1-00031</td><td>Al-Nour Fuel Co.</td><td>Company Site</td><td>Yard B</td><td></td><td>company_site_3</td><td>Base course</td><td>20</td></tr></tbody></table></div>
+  <p class="hint">The existing Project and Project ID columns stay, so current filters and any sheet built on them keep working; Destination Type, Destination and Company Site ID are added. The "Diesel Batches" sheet gains Supplier ID and Priced columns, and the Supplier Summary sheet gains Diesel Litres, Diesel Amount and Unpriced Diesel Batches (diesel is never added into the material quantities).</p>
+</div>
+</div></div>
+</body></html>

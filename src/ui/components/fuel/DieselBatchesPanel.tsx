@@ -12,9 +12,9 @@ import {DatePickerField} from '../DatePickerField';
 import {SearchableSelect} from '../SearchableSelect';
 import {SegmentedChoice} from '../SegmentedChoice';
 import {BatchStatusBadge,FuelDayCard,GroupHeader,SectionTitle} from './FuelBatchParts';
-import {DieselPdfExportPanel} from './DieselPdfExportPanel';
+import {DieselPdfExportPanel,type DieselExportFilter} from './DieselPdfExportPanel';
 
-export type DieselExportFilter={batchId?:string;projectId?:string;companySiteId?:string;stationId?:string;unassigned?:boolean;fromDate?:string;toDate?:string};
+export type {DieselExportFilter};
 
 /**
  * DEC-505, Screen A of the approved design: the tank, the open batches oldest first, then closed batches,
@@ -40,11 +40,11 @@ const RECENT_DAYS=10;
 
 export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKnownBalance,lastDipAt,onRecordFill,onRecordDelivery,onOpenBatch,onOpenHistory,onStart,onExport}:Props){
   const[open,setOpen]=useState<Set<string>>(new Set());
-  const[projectId,setProjectId]=useState(''),[companySiteId,setCompanySiteId]=useState(''),[stationId,setStationId]=useState(''),[source,setSource]=useState<Source>('all'),[status,setStatus]=useState<Status>('all'),[fromDate,setFromDate]=useState(''),[toDate,setToDate]=useState(''),[search,setSearch]=useState('');
+  const[supplierId,setSupplierId]=useState(''),[projectId,setProjectId]=useState(''),[companySiteId,setCompanySiteId]=useState(''),[stationId,setStationId]=useState(''),[source,setSource]=useState<Source>('all'),[status,setStatus]=useState<Status>('all'),[fromDate,setFromDate]=useState(''),[toDate,setToDate]=useState(''),[search,setSearch]=useState('');
   const toggle=(key:string)=>setOpen(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});
 
   const rows=useMemo(()=>buildFillRows(movements,overview),[movements,overview]);
-  const filter:BatchListFilter={status:status==='all'?undefined:status,projectId:projectId||undefined,companySiteId:companySiteId||undefined,fromDate:fromDate||undefined,toDate:toDate||undefined,search:search||undefined};
+  const filter:BatchListFilter={supplierId:supplierId||undefined,status:status==='all'?undefined:status,projectId:projectId||undefined,companySiteId:companySiteId||undefined,fromDate:fromDate||undefined,toDate:toDate||undefined,search:search||undefined};
   const batches=filterBatchList(overview.batches,rows,filter);
   const openBatches=batches.filter(batch=>batch.status==='in_use'||batch.status==='waiting');
   const closedBatches=batches.filter(batch=>batch.status==='closed'||batch.status==='cancelled').reverse();
@@ -57,6 +57,7 @@ export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKn
   const showTank=source!=='station',showStation=source!=='tank';
 
   const chips:[string,()=>void][]=[];
+  if(supplierId)chips.push([`Supplier: ${setup.suppliers.find(supplier=>supplier.id===supplierId)?.name??'Selected supplier'}`,()=>setSupplierId('')]);
   if(projectId)chips.push([`Project: ${setup.projects.find(project=>project.id===projectId)?.name??'Selected project'}`,()=>setProjectId('')]);
   if(companySiteId)chips.push([`Site: ${setup.companySites.find(site=>site.id===companySiteId)?.name??'Selected site'}`,()=>setCompanySiteId('')]);
   if(stationId)chips.push([`Station: ${stationName??'Selected station'}`,()=>setStationId('')]);
@@ -65,7 +66,8 @@ export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKn
   if(fromDate)chips.push([`From ${fuelDayLabel(fromDate)}`,()=>setFromDate('')]);
   if(toDate)chips.push([`To ${fuelDayLabel(toDate)}`,()=>setToDate('')]);
   if(search.trim())chips.push([`Search: ${search.trim()}`,()=>setSearch('')]);
-  const clearAll=()=>{setProjectId('');setCompanySiteId('');setStationId('');setSource('all');setStatus('all');setFromDate('');setToDate('');setSearch('');};
+  const clearAll=()=>{setSupplierId('');setProjectId('');setCompanySiteId('');setStationId('');setSource('all');setStatus('all');setFromDate('');setToDate('');setSearch('');};
+  const rangeText=fromDate||toDate?`Range ${fromDate?fuelDayLabel(fromDate):'the start'} – ${toDate?fuelDayLabel(toDate):'today'}.`:null;
   const litres=(list:typeof rows)=>formatLitres(list.reduce((sum,row)=>sum+row.litres,0));
 
   if(!overview.started)return <StartBatchesCard ledgerBalance={ledgerBalance} hasKnownBalance={hasKnownBalance} onStart={onStart}/>;
@@ -88,16 +90,21 @@ export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKn
       <AppField label="Search batch or invoice number" value={search} onChangeText={setSearch} placeholder="DSL-2026-00004 or 55821"/>
       <SegmentedChoice label="Source" options={[{id:'all',label:'All'},{id:'tank',label:'From tank'},{id:'station',label:'Stations'}]} selectedId={source} onSelect={setSource} mode="tabs"/>
       <SegmentedChoice label="Batch status" options={[{id:'all',label:'All'},{id:'open',label:'Open'},{id:'closed',label:'Closed'},{id:'cancelled',label:'Cancelled'}]} selectedId={status} onSelect={setStatus} mode="tabs"/>
+      <SearchableSelect label="Supplier" options={setup.suppliers.map(supplier=>({id:supplier.id,label:supplier.name,detail:supplier.detail}))} selectedId={supplierId} onSelect={setSupplierId} placeholder="All suppliers" allowClear/>
       <SearchableSelect label="Project" options={setup.projects.map(project=>({id:project.id,label:project.name,detail:project.detail}))} selectedId={projectId} onSelect={setProjectId} placeholder="All projects" allowClear/>
       <SearchableSelect label="Company site" options={setup.companySites.map(site=>({id:site.id,label:site.name,detail:site.isActive?undefined:'Inactive'}))} selectedId={companySiteId} onSelect={setCompanySiteId} placeholder="All company sites" allowClear/>
       <SearchableSelect label="Station" options={setup.fuelStations.map(station=>({id:station.id,label:station.name,detail:station.isActive?station.location??undefined:'Inactive'}))} selectedId={stationId} onSelect={setStationId} placeholder="All stations" allowClear/>
       <View style={styles.pair}><View style={styles.flex}><DatePickerField label="From date" value={fromDate} onChange={setFromDate} allowClear/></View><View style={styles.flex}><DatePickerField label="To date" value={toDate} onChange={setToDate} minDate={fromDate||undefined} allowClear/></View></View>
-      <DieselPdfExportPanel label="Export PDF" scope="A Diesel Batch Report of the fills that match the project, company site, station and dates chosen above. To export one batch, open it." projectId={projectId||null} onExport={(includePrices,company)=>onExport({projectId:projectId||undefined,companySiteId:companySiteId||undefined,stationId:stationId||undefined,fromDate:fromDate||undefined,toDate:toDate||undefined},includePrices,company)}/>
+      {rangeText?<Text style={styles.rangeNote}>{rangeText} Batches, fills, totals and the PDF below cover only these dates. Clear both dates to include everything.</Text>:null}
+      <DieselPdfExportPanel label="Export PDF" scope={`A Diesel Batch Report of the batches and fills that match the filters below${rangeText?' (the dates above are used)':''}. They start from the filters chosen above and can be changed here. To export one batch, open it.`} projectId={projectId||null} setup={setup} batches={overview.batches}
+        initial={{supplierId,status,projectId,companySiteId,stationId,source,fromDate,toDate}} onExport={(includePrices,company,filters)=>onExport(filters??{supplierId:supplierId||undefined,projectId:projectId||undefined,companySiteId:companySiteId||undefined,stationId:stationId||undefined,fromDate:fromDate||undefined,toDate:toDate||undefined},includePrices,company)}/>
     </CollapsibleFilterCard>
     {chips.length?<View style={styles.chips}>
       {chips.map(([label,remove])=><TouchableOpacity key={label} style={styles.chip} onPress={remove} accessibilityRole="button" accessibilityLabel={`Remove filter ${label}`}><Text style={styles.chipText}>{label}  ×</Text></TouchableOpacity>)}
       <TouchableOpacity style={styles.chip} onPress={clearAll} accessibilityRole="button"><Text style={[styles.chipText,styles.clear]}>Clear all</Text></TouchableOpacity>
     </View>:null}
+
+    {supplierId||fromDate||toDate?<Text style={styles.rangeNote}>In these filters: {batches.filter(batch=>batch.status!=='cancelled').length} batch{batches.filter(batch=>batch.status!=='cancelled').length===1?'':'es'} · {formatLitres(batches.filter(batch=>batch.status!=='cancelled').reduce((sum,batch)=>sum+batch.deliveredLitres,0))} delivered · {formatLitres(batches.filter(batch=>batch.status!=='cancelled').reduce((sum,batch)=>sum+batch.filledLitres,0))} filled</Text>:null}
 
     {showTank?<>
       <SectionTitle title="Open batches" detail={`${openBatches.length} · oldest first`}/>
@@ -108,7 +115,7 @@ export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKn
       {open.has('closed')?(closedBatches.length?<View style={styles.list}>{closedBatches.map(batch=><TouchableOpacity key={batch.id} style={styles.closedRow} onPress={()=>onOpenBatch(batch)} accessibilityRole="button" accessibilityLabel={`${batch.batchNumber}, ${batch.status}`}>
         <View style={styles.flex}>
           <Text style={styles.closedNumber}>{batch.batchNumber}{batch.kind==='opening'?' · Opening stock':''}</Text>
-          <Text style={[styles.sub,batch.openingBasis==='calculated'&&styles.amber]}>{batch.openingBasis==='calculated'?'Calculated (no dip reading)':`Invoice ${batch.invoiceNumber??'not recorded'}`} · Arrived {fuelDayLabel(localDateKey(batch.arrivedAt))}</Text>
+          <Text style={[styles.sub,batch.openingBasis==='calculated'&&styles.amber]}>{batch.openingBasis==='calculated'?'Calculated (no dip reading)':`${batch.supplierName??'No supplier'} · Invoice ${batch.invoiceNumber??'not recorded'}`} · Arrived {fuelDayLabel(localDateKey(batch.arrivedAt))}</Text>
         </View>
         <View style={styles.closedSide}><BatchStatusBadge status={batch.status}/><Text style={styles.sub}>{formatLitres(batch.deliveredLitres)}</Text></View>
       </TouchableOpacity>)}</View>:<EmptyState title="No closed batches" body="A batch closes by itself when its last litre is used."/>):null}
@@ -141,7 +148,7 @@ function BatchCard({batch,firstOpen,onPress}:{batch:BatchDetail;firstOpen:BatchD
   const note=batch.adjustmentLitres!==0?`Includes ${formatLitres(batch.adjustmentLitres)} dip adjustment`:batch.status==='waiting'&&firstOpen?`Starts after ${firstOpen.batchNumber} is used up`:null;
   return <TouchableOpacity style={styles.batch} onPress={onPress} accessibilityRole="button" accessibilityLabel={`${batch.batchNumber}, ${batch.status==='in_use'?'open, in use':'open, waiting'}, ${formatLitres(batch.remainingLitres)} remaining`}>
     <View style={styles.batchTop}>
-      <View style={styles.flex}><Text style={styles.batchNumber}>{batch.batchNumber}{batch.kind==='opening'?' · Opening stock':''}</Text><Text style={styles.sub}>{batch.kind==='opening'?(batch.openingBasis==='calculated'?'Calculated (no dip reading)':'From a dip reading'):`Invoice ${batch.invoiceNumber??'not recorded'}`} · Arrived {fuelDayLabel(localDateKey(batch.arrivedAt))}</Text></View>
+      <View style={styles.flex}><Text style={styles.batchNumber}>{batch.batchNumber}{batch.kind==='opening'?' · Opening stock':''}</Text><Text style={styles.sub}>{batch.kind==='opening'?(batch.openingBasis==='calculated'?'Calculated (no dip reading)':'From a dip reading'):`${batch.supplierName??'No supplier'} · Invoice ${batch.invoiceNumber??'not recorded'}`} · Arrived {fuelDayLabel(localDateKey(batch.arrivedAt))}</Text></View>
       <BatchStatusBadge status={batch.status}/>
     </View>
     <View style={styles.figures}>
@@ -191,6 +198,7 @@ const styles=StyleSheet.create({
   chips:{flexDirection:'row',flexWrap:'wrap',gap:8},
   chip:{minHeight:40,justifyContent:'center',paddingHorizontal:12,borderRadius:999,borderWidth:1,borderColor:colors.navy,backgroundColor:colors.surface},
   chipText:{color:colors.navy,fontSize:12,fontWeight:'800'},
+  rangeNote:{backgroundColor:'#EEF2F7',borderWidth:1,borderColor:'#C7D3E2',borderRadius:12,padding:10,color:colors.ink,fontSize:12.5,lineHeight:18},
   clear:{color:colors.brand},
   batch:{backgroundColor:colors.surface,borderRadius:radius.lg,padding:16,gap:10,borderWidth:1,borderColor:'#E8DED0'},
   batchTop:{flexDirection:'row',alignItems:'flex-start',gap:10},

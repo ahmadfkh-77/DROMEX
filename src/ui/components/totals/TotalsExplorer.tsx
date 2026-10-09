@@ -6,7 +6,8 @@ import type {CompanyTotalsRecord,CompanyTotalsRepository,UsageRecord} from '../.
 import type {LoadNumberSeriesRepository} from '../../../data/repositories/LoadNumberSeriesRepository';
 import type {CompanyHeaderRepository} from '../../../data/repositories/CompanyHeaderRepository';
 import type {ProfileRepository} from '../../../data/repositories/ProfileRepository';
-import type {HeaderCompanyKind} from '../../../domain/companyHeaders';
+import {customizedListHeader,defaultHeaderCustomization,type HeaderCompanyKind,type HeaderCustomization} from '../../../domain/companyHeaders';
+import {HeaderCustomizer} from '../HeaderCustomizer';
 import {HeaderCompanyPicker} from '../HeaderCompanyPicker';
 import {exportAndShareTotals} from '../../../services/documentExport';
 import {inclusionFilterLabels,type InclusionFilter,type RecordSnapshot} from '../../../domain/businessDocuments';
@@ -78,6 +79,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
   const[exporting,setExporting]=useState(false);
   const[exportOpen,setExportOpen]=useState(false);
   const[headerKind,setHeaderKind]=useState<HeaderCompanyKind>('plant');
+  const[headerCustom,setHeaderCustom]=useState<HeaderCustomization>(defaultHeaderCustomization);
   const[rememberHeader,setRememberHeader]=useState(false);
   const[exportPrices,setExportPrices]=useState<'without'|'with'>('without');
   const[exportProject,setExportProject]=useState<'show'|'hide'>('show');
@@ -179,7 +181,8 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
       const [current,company,history,projectLoads,customers]=await Promise.all([totals.getCompanyTotals(nodeFilters),profiles.getCompanySettings(),atRecords?totals.listRecords(nodeFilters,5000):Promise.resolve(undefined),projectScope?totals.listRecords(nodeFilters,5000):Promise.resolve([] as CompanyTotalsRecord[]),projectScope?profiles.listCustomers():Promise.resolve([])]);
       // Phase 1. The chosen Header company changes only the name, logo and contact line; every figure stays as calculated.
       const header=headers?await headers.resolveHeader(headerKind):null;
-      const contactLine=companyContactLine(header??company);
+      const printed=header?customizedListHeader(header,headerCustom):null;
+      const contactLine=printed?printed.contactLine:companyContactLine(company);
       if(headers&&rememberHeader&&scope.kind==='project'&&!atRecords)await headers.setProjectHeaderDefault(scope.projectId,header?.kind??'plant');
       const found=scope.kind==='project'&&scope.customerId?customers.find(value=>value.id===scope.customerId):undefined;
       const project=scope.kind==='project'&&projectScope?{name:scope.projectName,location:scope.location??null,status:scope.status??'Active',customer:customerBox(found?{name:found.name,isOwnCompany:found.isOwnCompany}:scope.customerName?{name:scope.customerName,isOwnCompany:false}:null),loads:projectLoads}:undefined;
@@ -195,7 +198,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
         ...(filters.inclusion!=='all'?[`Document status: ${inclusionFilterLabels[filters.inclusion]}`]:[])];
       const title=atRecords?'Loads History':scope.kind==='project'?'Project Totals':'Company Totals';
       const parts=[level.material?.name,scope.kind==='project'?scope.projectName:level.project?.name,level.supplier?.key?level.supplier.name:undefined];
-      await exportAndShareTotals({companyName:header?.name||company.companyName,logoUri:header?header.logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,fuel,data:current,records:history,issuedTo:issuedTo(level.supplier,history),contactLine,project,
+      await exportAndShareTotals({companyName:printed?.companyName||company.companyName,logoUri:printed?printed.logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,fuel,data:current,records:history,issuedTo:issuedTo(level.supplier,history),contactLine,project,
         fileName:{scopeName:parts.filter(Boolean).join(' ')||null,fromDate:filters.fromDate,toDate:filters.toDate}});
       setExportMessage({kind:'success',text:`${title} PDF ready to share, ${includePrices?'with recorded prices':'without prices'}.`});
     }catch(cause){setExportMessage({kind:'error',text:cause instanceof Error?cause.message:'The PDF could not be created.'});}
@@ -287,6 +290,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
       {fuelChoiceShown?<SegmentedChoice label="Fuel" options={[{id:'leave',label:'Leave out'},{id:'include',label:'Include fuel list'}]} selectedId={exportFuel} onSelect={setExportFuel}/>:null}
       {fuelChoiceShown&&exportFuel==='include'?<Text style={styles.helper}>Adds fuel per type and equipment and every fill in the Covering dates. Prices and cost appear only with prices.</Text>:null}
       {headers?<HeaderCompanyPicker headers={headers} value={headerKind} onChange={setHeaderKind} remember={scope.kind==='project'&&!atRecords?{checked:rememberHeader,onChange:setRememberHeader}:undefined} onOpenSetups={onOpenCompanySetups?()=>{setExportOpen(false);onOpenCompanySetups();}:undefined}/>:null}
+      {headers?<HeaderCustomizer value={headerCustom} onChange={setHeaderCustom}/>:null}
       {atRecords?<SegmentedChoice label="Project column" options={[{id:'show',label:'Show project'},{id:'hide',label:'Hide project'}]} selectedId={exportProject} onSelect={setExportProject}/>:null}
     </FocusedSheet>
     <DocumentStartSheet visible={!!start} documents={documents} query={start} onClose={()=>setStart(null)} onStart={value=>{setStart(null);setSelecting(false);setSelected(new Set());onCreateDocument(value);}}/>

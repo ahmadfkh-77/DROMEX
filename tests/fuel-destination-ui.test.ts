@@ -21,7 +21,7 @@ describe('Fuel Destination UI contract',()=>{
     // The fill form moved into FuelFillForm (DEC-505); the screen keeps the correction form.
     expect(screen.match(/<FuelDestinationFields/g)?.length).toBe(1);
     expect(source('src/ui/components/fuel/FuelFillForm.tsx').match(/<FuelDestinationFields/g)?.length).toBe(1);
-    expect(destination).toContain('label="Fuel destination *"');
+    expect(destination).toContain('"Fuel destination *"');
     expect(destination).toContain('label="Select project *"');
     expect(destination).toContain('label="Select company site *"');
   });

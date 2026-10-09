@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 52;
+export const DATABASE_VERSION = 53;
 
 type TableColumn = { name: string };
 
@@ -2031,6 +2031,18 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
         BEGIN SELECT RAISE(ABORT, 'Saved originals of a load cannot be deleted.'); END;
     `);
     currentVersion = 52;
+  }
+
+  if (currentVersion === 52) {
+    // DEC-506. A Supplier Load goes to a Destination (project, company site or unassigned), like a fuel fill, and
+    // a diesel batch keeps its own correction history (the Opening stock batch has no delivery row to hold one).
+    // Purely additive: destination_type stays NULL on every existing load, which means "derive it from
+    // project_id" (a project when linked, otherwise unassigned), so no existing record is rewritten.
+    await addColumnIfMissing(db, 'quarry_purchases', 'destination_type', "TEXT CHECK (destination_type IS NULL OR destination_type IN ('project', 'company_site', 'unassigned'))");
+    await addColumnIfMissing(db, 'quarry_purchases', 'company_site_id', 'TEXT REFERENCES company_sites(id)');
+    await addColumnIfMissing(db, 'fuel_batches', 'correction_history_json', "TEXT NOT NULL DEFAULT '[]'");
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_quarry_purchases_site ON quarry_purchases(company_site_id, confirmed_at DESC)');
+    currentVersion = 53;
   }
 
 

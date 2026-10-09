@@ -20,10 +20,11 @@ type Props={
   onBack:()=>void;
   onRecordFill:(batch:BatchDetail)=>void;
   onCancel:(batch:BatchDetail,reason:string)=>Promise<void>;
+  onEdit?:(batch:BatchDetail)=>void;
   exportAction?:React.ReactNode;
 };
 
-export function DieselBatchPage({batch,overview,movements,onBack,onRecordFill,onCancel,exportAction}:Props){
+export function DieselBatchPage({batch,overview,movements,onBack,onRecordFill,onCancel,onEdit,exportAction}:Props){
   const[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
   const rows=useMemo(()=>buildFillRows(movements,overview,{batchId:batch.id}),[batch.id,movements,overview]);
   const days=groupFillsByDay(rows,{byDestination:true});
@@ -61,12 +62,24 @@ export function DieselBatchPage({batch,overview,movements,onBack,onRecordFill,on
 
     <View style={styles.card}>
       <SectionTitle title="Batch details"/>
-      <Detail label="Supplier" value={batch.supplierName??'Not recorded'}/>
+      <Detail label="Supplier" value={batch.supplierName??'No supplier'} muted={!batch.supplierName}/>
       <Detail label="Invoice number" value={batch.invoiceNumber??'Not recorded'}/>
       <Detail label="Arrival date" value={fuelDayLabel(localDateKey(batch.arrivedAt))}/>
-      <Detail label="Price per litre" value={batch.pricePerLitreUsd==null?'Unpriced':formatMoney(batch.pricePerLitreUsd)}/>
+      <Detail label="Price per litre" value={batch.pricePerLitreUsd==null?'Unpriced':formatMoney(batch.pricePerLitreUsd)} muted={batch.pricePerLitreUsd==null}/>
       <Detail label="Fuel type" value="Diesel"/>
+      {onEdit&&batch.status!=='cancelled'?<AppButton label="Edit Batch" tone="secondary" onPress={()=>onEdit(batch)}/>:null}
+      {!batch.supplierName&&batch.status!=='cancelled'?<Text style={styles.sub}>Add the supplier and invoice number whenever you have them.</Text>:null}
     </View>
+
+    {batch.history&&batch.history.length?<View style={styles.card}>
+      <SectionTitle title="Edit history"/>
+      {batch.history.map(entry=><View key={entry.correctedAt+entry.reason} style={styles.historyItem}>
+        <Text style={styles.historyWhen}>{fuelDayLabel(localDateKey(entry.correctedAt))} · {entry.kind==='details'?'Details':'Correction'}</Text>
+        <Text style={styles.sub}>{entry.kind==='details'?'No reason needed for supplier, invoice or price':`Reason: ${entry.reason}`}</Text>
+        {entry.changes.map(change=><View key={change.field} style={styles.detail}><Text style={styles.detailLabel}>{change.field}</Text><Text style={styles.detailValue}>{change.originalValue??'not recorded'} → {change.newValue??'not recorded'}</Text></View>)}
+      </View>)}
+      <Text style={styles.sub}>The original values are always kept. Nothing here can be deleted.</Text>
+    </View>:null}
 
     <View style={styles.card}>
       <SectionTitle title="Totals by destination"/>
@@ -101,8 +114,8 @@ function Tile({label,value,tone='white'}:{label:string;value:string;tone?:'white
   </View>;
 }
 
-function Detail({label,value,strong=false}:{label:string;value:string;strong?:boolean}){
-  return <View style={styles.detail}><Text style={styles.detailLabel}>{label}</Text><Text style={[styles.detailValue,strong&&styles.detailStrong]}>{value}</Text></View>;
+function Detail({label,value,strong=false,muted=false}:{label:string;value:string;strong?:boolean;muted?:boolean}){
+  return <View style={styles.detail}><Text style={styles.detailLabel}>{label}</Text><Text style={[styles.detailValue,strong&&styles.detailStrong,muted&&styles.detailMuted]}>{value}</Text></View>;
 }
 
 const styles=StyleSheet.create({
@@ -131,6 +144,9 @@ const styles=StyleSheet.create({
   detailLabel:{color:colors.muted,fontSize:13},
   detailValue:{color:colors.ink,fontSize:13,fontWeight:'700',textAlign:'right',flexShrink:1},
   detailStrong:{fontWeight:'900'},
+  detailMuted:{color:colors.warning},
+  historyItem:{borderLeftWidth:3,borderLeftColor:'#CDB2E3',paddingLeft:10,gap:4},
+  historyWhen:{color:colors.ink,fontSize:13,fontWeight:'800'},
   destGroup:{gap:2},
   destLabel:{color:colors.muted,fontSize:11,fontWeight:'900',letterSpacing:.8,marginTop:4},
   destRow:{flexDirection:'row',justifyContent:'space-between',gap:12,paddingVertical:7,borderTopWidth:1,borderTopColor:'#EFEAE1'},

@@ -158,7 +158,7 @@ const dictionary: WorkbookRow[] = [
   { Sheet: 'Payments', Purpose: 'One row per payment event, including retained cancelled events.' },
   { Sheet: 'Opening Balances', Purpose: 'Carried-forward receivable and payable records from paper history.' },
   { Sheet: 'Supplier Loads', Purpose: 'One row per external supplier load, including cancelled record status.' },
-  { Sheet: 'Supplier Summary', Purpose: 'One row per supplier across quarry and priced fuel delivery balances.' },
+  { Sheet: 'Supplier Summary', Purpose: 'One row per supplier across quarry and priced fuel delivery balances, with the diesel litres delivered, the diesel amount of priced batches and the number of unpriced diesel batches (litres are never added to material quantities).' },
   { Sheet: 'Fuel Movements', Purpose: 'Chronological single-tank gauge, delivery, and equipment-fill ledger.' },
   { Sheet: 'Equipment Totals', Purpose: 'Active equipment-fill litres grouped by saved equipment.' },
   { Sheet: 'Diesel Batches', Purpose: 'One row per diesel batch (DSL-YYYY-NNNNN): delivered, filled, adjustment and remaining litres, price, status. Filtered by arrival date. Fuel rows name their batch portions in Batch Portions.' },

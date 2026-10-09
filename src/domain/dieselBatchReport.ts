@@ -2,21 +2,29 @@ import {localDateKey,type FuelMovement} from './fuel';
 import {batchStatusLabels,type BatchDetail,type DieselBatchOverview} from './fuelBatches';
 import {buildFillRows,fuelDayLabel,groupFillsByDay,type DayFillRow} from './fuelBatchViews';
 import {costSummaryLabel,formatLitres,formatMoney} from './fuelFillForm';
+import {supplierDieselDeliveries} from './supplierDiesel';
 
 /**
  * DEC-505, Screen F. The content of the Diesel Batch Report PDF for a batch, project, site, station or
  * date range: computed here so it can be tested, then printed by the template. Gasoline is not part of
  * a diesel report; records from before batches and outside station fills keep their own source label.
  */
-export type DieselReportFilter={batchId?:string;projectId?:string;companySiteId?:string;stationId?:string;/** Only fills with no destination. */unassigned?:boolean;fromDate?:string;toDate?:string;includePrices:boolean};
+export type DieselReportFilter={batchId?:string;projectId?:string;companySiteId?:string;stationId?:string;/** Only fills with no destination. */unassigned?:boolean;fromDate?:string;toDate?:string;
+  /** DEC-506. One supplier's batches, the batch status, and where the fuel came from. */supplierId?:string;status?:'open'|'closed'|'cancelled';source?:'tank'|'station';includePrices:boolean};
 type Named={id:string;name:string};
-export type DieselReportInput={movements:FuelMovement[];overview:DieselBatchOverview;names:{projects:Named[];companySites:Named[];stations:Named[]};filter:DieselReportFilter;exportedAt:string};
+export type DieselReportInput={movements:FuelMovement[];overview:DieselBatchOverview;names:{projects:Named[];companySites:Named[];stations:Named[];suppliers?:Named[]};filter:DieselReportFilter;exportedAt:string};
 
 export type DieselReportRow={date:string;equipment:string;type:string;source:string;litres:string;price?:string;cost?:string};
 export type DieselReportDay={label:string;total:number;totalText:string;rows:DieselReportRow[]};
 export type DieselReportDestination={name:string;typeLabel:string;total:number;totalText:string;totalLabel:string;days:DieselReportDay[]};
 export type DieselReportSection={title:'PROJECTS'|'COMPANY SITES'|'UNASSIGNED';destinations:DieselReportDestination[]};
+export type DieselReportSupplierRow={date:string;batchNumber:string;invoice:string;litres:string;price?:string;amount?:string};
+/** DEC-506. One supplier's delivered diesel, litres only: never added to any material quantity. */
+export type DieselReportSupplier={name:string;rows:DieselReportSupplierRow[];totalLitres:string;batchCount:number;amount?:string;unpricedNote:string|null;cancelledNote:string|null};
 export type DieselBatchReport={
+  supplier?:DieselReportSupplier|null;
+  /** The date range used, in words, or 'All dates'. */
+  rangeLabel?:string;
   scopeLabel:string;
   metadata:{label:string;value:string}[];
   summary:{deliveredLitres:number;filledLitres:number;adjustmentLitres:number;remainingLitres:number;filteredNote:string|null};
@@ -37,18 +45,23 @@ export function buildDieselBatchReport({movements,overview,names,filter,exported
   const byId=new Map(movements.map(movement=>[movement.id,movement]));
   const scoped=filter.batchId?overview.batches.find(batch=>batch.id===filter.batchId):undefined;
   const allRows=buildFillRows(movements.filter(movement=>movement.fuelType!=='gasoline'),overview,filter.batchId?{batchId:filter.batchId}:{});
+  const batchFilterOn=Boolean(filter.supplierId||filter.status);
+  const allowedBatches=new Set(overview.batches.filter(batch=>(!filter.supplierId||batch.supplierId===filter.supplierId)&&(!filter.status||(filter.status==='open'?batch.status==='in_use'||batch.status==='waiting':batch.status===filter.status))).map(batch=>batch.id));
+  const arrivedInRange=(batch:BatchDetail)=>(!filter.fromDate||localDateKey(batch.arrivedAt)>=filter.fromDate)&&(!filter.toDate||localDateKey(batch.arrivedAt)<=filter.toDate);
   const rows=allRows.filter(row=>
     (!filter.projectId||(row.destinationType==='project'&&row.destinationId===filter.projectId))&&
     (!filter.companySiteId||(row.destinationType==='company_site'&&row.destinationId===filter.companySiteId))&&
     (!filter.stationId||row.stationId===filter.stationId)&&
     (!filter.unassigned||row.destinationType==='unassigned')&&
+    (!batchFilterOn||row.batchIds.some(id=>allowedBatches.has(id)))&&
+    (!filter.source||(filter.source==='station')===(row.source.kind==='station'))&&
     (!filter.fromDate||row.day>=filter.fromDate)&&(!filter.toDate||row.day<=filter.toDate));
   const destinationFilter=Boolean(filter.projectId||filter.companySiteId||filter.stationId||filter.unassigned);
 
   // The batches the report is about: the one batch, or those that supplied the fills shown and, with only
   // a date filter, those that arrived inside the dates.
   const supplying=new Set(rows.flatMap(row=>row.batchIds));
-  const batches:BatchDetail[]=scoped?[scoped]:overview.batches.filter(batch=>supplying.has(batch.id)||(!destinationFilter&&(filter.fromDate||filter.toDate)&&(!filter.fromDate||localDateKey(batch.arrivedAt)>=filter.fromDate)&&(!filter.toDate||localDateKey(batch.arrivedAt)<=filter.toDate))||(!destinationFilter&&!filter.fromDate&&!filter.toDate));
+  const batches:BatchDetail[]=scoped?[scoped]:overview.batches.filter(batch=>supplying.has(batch.id)||(!destinationFilter&&(!batchFilterOn||allowedBatches.has(batch.id))&&arrivedInRange(batch)));
   const counted=batches.filter(batch=>batch.status!=='cancelled');
   const filled=round(rows.reduce((sum,row)=>sum+row.litres,0));
 
@@ -82,18 +95,28 @@ export function buildDieselBatchReport({movements,overview,names,filter,exported
   const nameOf=(list:Named[],id?:string)=>id?list.find(item=>item.id===id)?.name??'Selected':undefined;
   const dateRange=filter.fromDate||filter.toDate?`${filter.fromDate?fuelDayLabel(filter.fromDate):'The start'} – ${filter.toDate?fuelDayLabel(filter.toDate):'Today'}`:'All dates';
   const exported=`${fuelDayLabel(localDateKey(exportedAt))}, ${clock(exportedAt)}`;
-  const scopeLabel=scoped?`${scoped.batchNumber} · Invoice ${scoped.invoiceNumber??'not recorded'}`:destinationFilter?'Batches that supplied the filtered fills':filter.fromDate||filter.toDate?'Batches and fills in the date range':'All batches';
+  const supplierName=filter.supplierId?(names.suppliers??[]).find(item=>item.id===filter.supplierId)?.name??overview.batches.find(batch=>batch.supplierId===filter.supplierId)?.supplierName??'Selected supplier':null;
+  const supplierSummary=filter.supplierId?supplierDieselDeliveries(overview.batches.filter(batch=>!filter.status||(filter.status==='open'?batch.status==='in_use'||batch.status==='waiting':batch.status===filter.status)||batch.status==='cancelled'),filter.supplierId,{fromDate:filter.fromDate,toDate:filter.toDate}):null;
+  const supplier:DieselReportSupplier|null=supplierSummary&&supplierName?{
+    name:supplierName,totalLitres:formatLitres(supplierSummary.totalLitres),batchCount:supplierSummary.batchCount,unpricedNote:supplierSummary.unpricedNote,
+    cancelledNote:supplierSummary.cancelledCount?`${supplierSummary.cancelledCount} cancelled batch${supplierSummary.cancelledCount===1?'':'es'} not counted`:null,
+    amount:filter.includePrices?(supplierSummary.pricedAmountUsd==null?'Unpriced':formatMoney(supplierSummary.pricedAmountUsd)):undefined,
+    rows:supplierSummary.rows.map(row=>{const base:DieselReportSupplierRow={date:fuelDayLabel(row.day),batchNumber:row.batchNumber,invoice:row.invoiceNumber??'not recorded',litres:formatLitres(row.litres)};return filter.includePrices?{...base,price:row.pricePerLitreUsd==null?'Unpriced':formatMoney(row.pricePerLitreUsd),amount:row.totalUsd==null?'Unpriced':formatMoney(row.totalUsd)}:base;}),
+  }:null;
+  const scopeLabel0=scoped?`${scoped.batchNumber} · Invoice ${scoped.invoiceNumber??'not recorded'}`:destinationFilter?'Batches that supplied the filtered fills':filter.fromDate||filter.toDate?'Batches and fills in the date range':'All batches';
+  const scopeLabel=supplierName&&!scoped?`Supplier diesel deliveries · ${supplierName}${filter.fromDate||filter.toDate?` · ${dateRange}`:''}`:filter.fromDate||filter.toDate?`${scopeLabel0} · ${dateRange}`:scopeLabel0;
   const fileName=scoped?`Diesel-Batch-Report-${scoped.batchNumber}.pdf`:filter.fromDate||filter.toDate?`Diesel-Batch-Report-${filter.fromDate??'start'}-to-${filter.toDate??localDateKey(exportedAt)}.pdf`:`Diesel-Batch-Report-${localDateKey(exportedAt)}.pdf`;
 
   const destinationTotals=sections.flatMap(section=>section.destinations.map(destination=>({label:`${destination.name} (${destination.typeLabel==='PROJECT'?'Project':destination.typeLabel==='SITE'?'Site':'Unassigned'})`,litres:destination.totalText})));
   if(destinationTotals.length)destinationTotals.push({label:'Total filled',litres:formatLitres(filled)});
 
   return {
+    supplier,rangeLabel:dateRange,
     scopeLabel,
     metadata:[
       {label:'Batch',value:scoped?scoped.batchNumber:'All batches'},{label:'Exported',value:exported},
       {label:'Project filter',value:filter.unassigned?'Unassigned only':nameOf(names.projects,filter.projectId)??'All projects'},{label:'Site filter',value:filter.unassigned?'Unassigned only':nameOf(names.companySites,filter.companySiteId)??'All sites'},
-      {label:'Station filter',value:nameOf(names.stations,filter.stationId)??'All stations'},{label:'Date range',value:dateRange},{label:'Prices',value:filter.includePrices?'Included':'Excluded'},
+      {label:'Station filter',value:nameOf(names.stations,filter.stationId)??'All stations'},{label:'Supplier',value:supplierName??'All suppliers'},{label:'Date range',value:dateRange},{label:'Prices',value:filter.includePrices?'Included':'Excluded'},
     ],
     summary:{
       deliveredLitres:round(counted.reduce((sum,batch)=>sum+batch.deliveredLitres,0)),filledLitres:filled,

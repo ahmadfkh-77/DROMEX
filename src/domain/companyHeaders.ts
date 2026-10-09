@@ -116,6 +116,19 @@ export function applyHeaderCompany(record: ConfirmedLoad, header: HeaderCompany)
  * Phase 5. What every list and report PDF needs from the chosen Header company: the name, the logo and the one
  * contact line printed under the name. It changes nothing in a record.
  */
+/**
+ * DEC-506. What the person chose to print in one PDF's header: the logo on or off, a name to print instead, and which
+ * contact details to include. The defaults print the header company exactly as saved.
+ */
+export type HeaderCustomization = { showLogo: boolean; name: string; address: boolean; phone: boolean; email: boolean; taxVatNumber: boolean };
+export const defaultHeaderCustomization: HeaderCustomization = { showLogo: true, name: '', address: true, phone: true, email: true, taxVatNumber: true };
+export function customizedListHeader(header: HeaderCompany, custom: HeaderCustomization): { companyName: string; logoUri: string | null; contactLine: string | null } {
+  return {
+    companyName: custom.name.trim() || header.name,
+    logoUri: custom.showLogo ? header.logoUri : null,
+    contactLine: companyContactLine({ address: custom.address ? header.address : null, phone: custom.phone ? header.phone : null, email: custom.email ? header.email : null, taxVatNumber: custom.taxVatNumber ? header.taxVatNumber : null }),
+  };
+}
 export function listHeaderFrom(header: HeaderCompany): { companyName: string; logoUri: string | null; contactLine: string | null } {
   return { companyName: header.name, logoUri: header.logoUri, contactLine: companyContactLine({ address: header.address, phone: header.phone, email: header.email, taxVatNumber: header.taxVatNumber }) };
 }

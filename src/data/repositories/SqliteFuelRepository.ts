@@ -1,7 +1,7 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 import {applyFuelLedger,calculateFuelDelivery,calculateFuelFillCost,companySiteKey,describeFuelDestination,localDateKey,normalizeCompanySiteName,resolveFuelDestination,validateFuelPrice,validateGaugeLitres,validatePositiveLitres,type CompanySite,type FuelDestinationType,type FuelDeliveryDraft,type FuelFillDraft,type FuelGaugeDraft,type FuelMovement,type FuelOverview,type FuelPriceDraft,type FuelPriceRecord,type FuelSetup,type FuelType,type FuelCorrectionEntry,type FuelCorrectionChange,type FuelFillCorrectionDraft,type FuelDeliveryCorrectionDraft,type FuelSource,type FuelStation,type FuelStationDraft} from '../../domain/fuel';
-import type {BatchDetail,StartDieselBatchesDraft,TankFillPreviewDraft,TankFillPreviewResult,DieselBatchOverview} from '../../domain/fuelBatches';
-import {assertDeliveryDateAllowsBatch,batchTrackingStart,cancelBatchOfDelivery,cancelOpeningBatch,createDeliveryBatch,findBatch,loadAllocationInput,loadBatchOverview,previewFromState,recalculateDieselBatches,startTracking,syncBatchWithDelivery} from './dieselBatches';
+import {batchLitresIssue,type BatchCorrectionChange,type BatchEditDraft,type BatchDetail,type StartDieselBatchesDraft,TankFillPreviewDraft,TankFillPreviewResult,DieselBatchOverview} from '../../domain/fuelBatches';
+import {appendBatchHistory,updateOpeningBatchDetails,assertDeliveryDateAllowsBatch,batchTrackingStart,cancelBatchOfDelivery,cancelOpeningBatch,createDeliveryBatch,findBatch,loadAllocationInput,loadBatchOverview,previewFromState,recalculateDieselBatches,startTracking,syncBatchWithDelivery} from './dieselBatches';
 import type {FuelRepository} from './FuelRepository';
 type Row={id:string;movement_type:'gauge'|'delivery'|'fill';fuel_type:FuelType|null;correction_history_json:string|null;confirmed_at:string;litres:number;previous_balance_litres:number|null;difference_litres:number|null;supplier_id:string|null;supplier_name:string|null;equipment_type:'machine'|'truck';equipment_id:string|null;truck_profile_id:string|null;equipment_name:string|null;project_id:string|null;project_name:string|null;destination_type?:FuelDestinationType|null;company_site_id?:string|null;company_site_name?:string|null;company_site_is_active?:number|null;fuel_source?:'tank'|'station'|null;fuel_station_id?:string|null;fuel_station_name?:string|null;batch_id?:string|null;ticket_number:string|null;odometer_reading:string|null;reason:string|null;notes:string|null;fuel_price_history_id:string|null;price_per_litre_usd_cents:number|null;price_override_reason:string|null;consumption_cost_usd_cents:number|null;subtotal_usd_cents:number|null;vat_rate_basis_points:number|null;vat_amount_usd_cents:number|null;final_total_usd_cents:number|null;payment_status:string;status:'Active'|'Cancelled';cancellation_reason:string|null;cancelled_at:string|null};
 type PriceRow={id:string;fuel_type:FuelType|null;price_per_litre_usd_cents:number;effective_at:string;changed_by:string;reason:string|null;created_at:string};
@@ -148,7 +148,7 @@ async correctFill(movementId:string,draft:FuelFillCorrectionDraft):Promise<FuelM
   return (await this.getOverview()).movements.find(v=>v.id===movementId)!;
 }
 
-async correctDelivery(movementId:string,draft:FuelDeliveryCorrectionDraft):Promise<FuelMovement>{
+async correctDelivery(movementId:string,draft:FuelDeliveryCorrectionDraft,options:{preserveTime?:boolean;extra?:()=>Promise<void>}={}):Promise<FuelMovement>{
   const row=await this.loadCorrectable(movementId,'delivery');
   const setup=await this.getSetup(),litres=validatePositiveLitres(draft.litres);
   const supplier=draft.supplierId?setup.suppliers.find(v=>v.id===draft.supplierId)??null:null;
@@ -157,7 +157,8 @@ async correctDelivery(movementId:string,draft:FuelDeliveryCorrectionDraft):Promi
   if(values.finalTotalUsd!=null&&!supplier)throw new Error('Select a supplier for a priced fuel purchase.');
   const paidCents=await this.activePaymentCents(movementId);
   if(values.finalTotalUsd==null&&paidCents>0)throw new Error('This delivery has active payments and cannot be corrected to Unpriced. Cancel its payments first.');
-  const confirmedAt=timestampForDate(draft.recordDate);
+  // DEC-506. An edit that leaves the date alone keeps the delivery's own time, so its place in the FIFO order never moves.
+  const confirmedAt=options.preserveTime?row.confirmed_at:timestampForDate(draft.recordDate);
   await assertDeliveryDateAllowsBatch(this.db,movementId,confirmedAt);
   const changes:FuelCorrectionChange[]=[],note=this.changeRecorder(changes);
   note('Litres',String(row.litres),String(litres));
@@ -177,6 +178,7 @@ async correctDelivery(movementId:string,draft:FuelDeliveryCorrectionDraft):Promi
       values.pricePerLitreUsd==null?null:cents(values.pricePerLitreUsd),values.subtotalUsd==null?null:cents(values.subtotalUsd),
       values.finalTotalUsd==null?null:Math.round(setup.vatRatePercent*100),values.vatAmountUsd==null?null:cents(values.vatAmountUsd),totalCents,status,history,movementId);
     await syncBatchWithDelivery(this.db,{movementId,confirmedAt,litres,priceCents:values.pricePerLitreUsd==null?null:cents(values.pricePerLitreUsd),invoiceNumber:clean(draft.ticketNumber),supplierId:supplier?.id??null,supplierName:supplier?.name??null});
+    await options.extra?.();
     await recalculateDieselBatches(this.db,movementId);
     await this.enqueue('fuelMovement',movementId,{id:movementId,corrected:true});
   });
@@ -215,6 +217,47 @@ async startDieselBatches(draft:StartDieselBatchesDraft):Promise<BatchDetail|null
     await this.enqueue('fuelBatch',batchId??'tracking',{startedAt,openingBatchId:batchId,openingLitres:litres,basis});
   });
   return batchId?(await this.getBatchOverview()).batches.find(v=>v.id===batchId)??null:null;
+}
+/**
+ * DEC-506. Edit a saved batch. Supplier, invoice number and price are free (they never change stock). Litres and the
+ * arrival date need a reason, and the litres can never go below what has already been used from the batch. Every
+ * change is kept, with the original value, in the batch's history.
+ */
+async editBatch(batchId:string,draft:BatchEditDraft):Promise<BatchDetail>{
+  const batch=await findBatch(this.db,batchId);
+  if(!batch)throw new Error('The diesel batch was not found.');
+  if(batch.status==='Cancelled')throw new Error('A cancelled batch cannot be edited.');
+  const detail=(await loadBatchOverview(this.db))?.batches.find(value=>value.id===batchId);
+  if(!detail)throw new Error('Diesel batch tracking has not started.');
+  const setup=await this.getSetup();
+  const supplier=draft.supplierId?(setup.suppliers.find(value=>value.id===draft.supplierId)??(draft.supplierId===batch.supplier_id?{id:batch.supplier_id,name:batch.supplier_name??'Supplier'}:null)):null;
+  if(draft.supplierId&&!supplier)throw new Error('Select a valid supplier or clear the supplier field.');
+  const price=validateFuelPrice(draft.pricePerLitreUsd),invoice=clean(draft.invoiceNumber),reason=draft.reason.trim();
+  const litres=draft.litres.trim()?validatePositiveLitres(draft.litres):batch.delivered_litres,day=draft.recordDate||localDateKey(batch.arrived_at);
+  const litresChanged=Math.round(litres*1000)!==Math.round(batch.delivered_litres*1000),dateChanged=day!==localDateKey(batch.arrived_at);
+  if(batch.kind==='opening'&&(litresChanged||dateChanged))throw new Error('The quantity and date of Opening stock come from the dip reading. Record a new dip reading to change them.');
+  if((litresChanged||dateChanged)&&!reason)throw new Error('A reason is required to change the quantity or the arrival date.');
+  if(litresChanged){const issue=batchLitresIssue(litres,detail);if(issue)throw new Error(issue);}
+  const changes:BatchCorrectionChange[]=[],note=this.changeRecorder(changes);
+  note('Supplier',batch.supplier_name,supplier?.name??null);
+  note('Invoice number',batch.invoice_number,invoice);
+  note('Price per litre',batch.price_per_litre_usd_cents==null?null:String(batch.price_per_litre_usd_cents/100),price==null?null:String(price));
+  note('Litres',String(batch.delivered_litres),String(litres));
+  note('Arrival date',localDateKey(batch.arrived_at),day);
+  if(!changes.length)throw new Error('No information was changed.');
+  const entry={correctedAt:new Date().toISOString(),kind:(litresChanged||dateChanged?'correction':'details') as 'correction'|'details',reason:litresChanged||dateChanged?reason:(reason||'Supplier, invoice or price updated'),changes};
+  if(batch.kind==='delivery'){
+    const movementId=batch.delivery_movement_id!,row=await this.loadCorrectable(movementId,'delivery');
+    await this.correctDelivery(movementId,{recordDate:day,litres:String(litres),supplierId:supplier?.id??'',ticketNumber:invoice??'',pricePerLitreUsd:draft.pricePerLitreUsd,notes:row.notes??'',correctionReason:entry.reason},{preserveTime:!dateChanged,extra:()=>appendBatchHistory(this.db,batchId,entry)});
+  }else{
+    await this.db.withTransactionAsync(async()=>{
+      await updateOpeningBatchDetails(this.db,batchId,{supplierId:supplier?.id??null,supplierName:supplier?.name??null,invoiceNumber:invoice,priceCents:price==null?null:cents(price)});
+      await appendBatchHistory(this.db,batchId,entry);
+      await recalculateDieselBatches(this.db,null);
+      await this.enqueue('fuelBatch',batchId,{id:batchId,edited:true,changes});
+    });
+  }
+  return (await this.getBatchOverview()).batches.find(value=>value.id===batchId)!;
 }
 async cancelBatch(batchId:string,reason:string):Promise<void>{
   const value=reason.trim();

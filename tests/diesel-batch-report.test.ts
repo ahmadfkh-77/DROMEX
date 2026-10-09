@@ -39,7 +39,7 @@ describe('a single batch',()=>{
     expect(single.metadata).toEqual([
       {label:'Batch',value:'DSL-2026-00004'},{label:'Exported',value:'Sat 3 Oct 2026, 18:42'},
       {label:'Project filter',value:'All projects'},{label:'Site filter',value:'All sites'},
-      {label:'Station filter',value:'All stations'},{label:'Date range',value:'All dates'},{label:'Prices',value:'Excluded'},
+      {label:'Station filter',value:'All stations'},{label:'Supplier',value:'All suppliers'},{label:'Date range',value:'All dates'},{label:'Prices',value:'Excluded'},
     ]);
   });
   it('summarises delivered, filled, adjustments and remaining',()=>{

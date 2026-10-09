@@ -136,7 +136,7 @@ export function fuelHomeBadge(overview:DieselBatchOverview):string|null{
   return `${formatLitres(overview.tankLitres)} in tank · ${tail}`;
 }
 
-export type BatchListFilter={status?:'open'|'closed'|'cancelled';projectId?:string;companySiteId?:string;fromDate?:string;toDate?:string;search?:string};
+export type BatchListFilter={status?:'open'|'closed'|'cancelled';supplierId?:string;projectId?:string;companySiteId?:string;fromDate?:string;toDate?:string;search?:string};
 
 /** Filters the batch list. A project or site keeps the batches that supplied it; dates are the arrival date. */
 export function filterBatchList(batches:BatchDetail[],rows:DayFillRow[],filter:BatchListFilter):BatchDetail[]{
@@ -146,12 +146,13 @@ export function filterBatchList(batches:BatchDetail[],rows:DayFillRow[],filter:B
     if(filter.status==='open'&&batch.status!=='in_use'&&batch.status!=='waiting')return false;
     if(filter.status==='closed'&&batch.status!=='closed')return false;
     if(filter.status==='cancelled'&&batch.status!=='cancelled')return false;
+    if(filter.supplierId&&batch.supplierId!==filter.supplierId)return false;
     const arrived=localDateKey(batch.arrivedAt);
     if(filter.fromDate&&arrived<filter.fromDate)return false;
     if(filter.toDate&&arrived>filter.toDate)return false;
     if(filter.projectId&&!supplied(batch.id,'project',filter.projectId))return false;
     if(filter.companySiteId&&!supplied(batch.id,'company_site',filter.companySiteId))return false;
-    if(query&&!`${batch.batchNumber} ${batch.invoiceNumber??''}`.toLocaleLowerCase('en-US').includes(query))return false;
+    if(query&&!`${batch.batchNumber} ${batch.invoiceNumber??''} ${batch.supplierName??''}`.toLocaleLowerCase('en-US').includes(query))return false;
     return true;
   });
 }

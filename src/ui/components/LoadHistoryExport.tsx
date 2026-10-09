@@ -2,7 +2,8 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import {StyleSheet,Text,View} from 'react-native';
 
 import type {CompanyHeaderRepository} from '../../data/repositories/CompanyHeaderRepository';
-import {listHeaderFrom,type HeaderCompanyKind} from '../../domain/companyHeaders';
+import {customizedListHeader,defaultHeaderCustomization,type HeaderCompanyKind,type HeaderCustomization} from '../../domain/companyHeaders';
+import {HeaderCustomizer} from './HeaderCustomizer';
 import {exportableLoads,loadHistoryFileName,loadHistoryRows,loadHistorySummary,loadHistoryUnitTotals,singleProjectId,type LoadHistoryFilters} from '../../domain/loadHistoryPdf';
 import type {ConfirmedLoad} from '../../domain/loads';
 import {exportAndShareLoadHistory} from '../../services/documentExport';
@@ -19,6 +20,7 @@ import {HeaderCompanyPicker} from './HeaderCompanyPicker';
 export function LoadHistoryExport({headers,loads,filters,onOpenCompanySetups}:{headers:CompanyHeaderRepository;loads:ConfirmedLoad[];filters:LoadHistoryFilters;onOpenCompanySetups?:()=>void}){
   const[open,setOpen]=useState(false);
   const[kind,setKind]=useState<HeaderCompanyKind>('plant');
+  const[custom,setCustom]=useState<HeaderCustomization>(defaultHeaderCustomization);
   const[remember,setRemember]=useState(false);
   const[busy,setBusy]=useState(false);
   const[message,setMessage]=useState<{kind:'success'|'error';text:string}|null>(null);
@@ -38,7 +40,7 @@ export function LoadHistoryExport({headers,loads,filters,onOpenCompanySetups}:{h
     try{
       const header=await headers.resolveHeader(kind);
       if(remember&&projectId)await headers.setProjectHeaderDefault(projectId,header.kind);
-      const list=listHeaderFrom(header);
+      const list=customizedListHeader(header,custom);
       const generatedAt=new Date().toISOString();
       await exportAndShareLoadHistory({companyName:list.companyName,logoUri:list.logoUri,contactLine:list.contactLine,generatedAt,summary,rows:loadHistoryRows(exportable),totals:loadHistoryUnitTotals(exportable).map(value=>value),fileName:loadHistoryFileName(filters,generatedAt)});
       if(mounted.current){setMessage({kind:'success',text:`Load History PDF ready to share: ${exportable.length} load${exportable.length===1?'':'s'}.`});setOpen(false);}
@@ -60,6 +62,7 @@ export function LoadHistoryExport({headers,loads,filters,onOpenCompanySetups}:{h
         <Text style={styles.summaryLine}>Loads listed: <Text style={styles.summaryValue}>{summary.listed}</Text></Text>
       </View>
       <HeaderCompanyPicker headers={headers} value={kind} onChange={setKind} remember={projectId?{checked:remember,onChange:setRemember}:undefined} onOpenSetups={onOpenCompanySetups?()=>{setOpen(false);onOpenCompanySetups();}:undefined}/>
+      <HeaderCustomizer value={custom} onChange={setCustom}/>
       {message?.kind==='error'?<Feedback kind="error">{message.text}</Feedback>:null}
     </FocusedSheet>
   </View>;

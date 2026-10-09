@@ -1,7 +1,8 @@
 import {createContext,useContext,useEffect,useState,type ReactNode} from 'react';
 
 import type {CompanyHeaderRepository} from '../../data/repositories/CompanyHeaderRepository';
-import {listHeaderFrom,type HeaderCompany,type HeaderCompanyKind} from '../../domain/companyHeaders';
+import {customizedListHeader,defaultHeaderCustomization,type HeaderCompany,type HeaderCompanyKind,type HeaderCustomization} from '../../domain/companyHeaders';
+import {HeaderCustomizer} from './HeaderCustomizer';
 import {HeaderCompanyPicker} from './HeaderCompanyPicker';
 
 /**
@@ -25,6 +26,7 @@ export function useExportHeader(projectId?:string|null):{picker:ReactNode;resolv
   const context=useContext(HeaderCompaniesContext);
   const[kind,setKind]=useState<HeaderCompanyKind>('plant');
   const[remember,setRemember]=useState(false);
+  const[custom,setCustom]=useState<HeaderCustomization>(defaultHeaderCustomization);
   const headers=context?.headers;
   useEffect(()=>{
     if(!headers||!projectId)return;
@@ -32,12 +34,12 @@ export function useExportHeader(projectId?:string|null):{picker:ReactNode;resolv
     headers.getProjectHeaderDefault(projectId).then(stored=>{if(active)setKind(stored);}).catch(()=>undefined);
     return()=>{active=false;};
   },[headers,projectId]);
-  const picker=context?<HeaderCompanyPicker headers={context.headers} value={kind} onChange={setKind} remember={projectId?{checked:remember,onChange:setRemember}:undefined} onOpenSetups={context.openSetups}/>:null;
+  const picker=context?<><HeaderCompanyPicker headers={context.headers} value={kind} onChange={setKind} remember={projectId?{checked:remember,onChange:setRemember}:undefined} onOpenSetups={context.openSetups}/><HeaderCustomizer value={custom} onChange={setCustom}/></>:null;
   const resolve=async()=>{
     if(!headers)return null;
     const header=await headers.resolveHeader(kind);
     if(remember&&projectId)await headers.setProjectHeaderDefault(projectId,header.kind);
-    return {header,list:listHeaderFrom(header)};
+    return {header,list:customizedListHeader(header,custom)};
   };
   return {picker,resolve};
 }

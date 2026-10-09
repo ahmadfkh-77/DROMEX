@@ -1,15 +1,16 @@
 import type { DriverProfile, Project, TruckProfile } from './loads';
+import type { CompanySite, FuelDestinationType } from './fuel';
 
 export type Supplier = { id: string; name: string; phone: string | null; email: string | null; address: string | null; taxVatNumber: string | null; notes: string | null; isActive: boolean };
 export type SupplierDraft = { name: string; phone?: string; email?: string; address?: string; taxVatNumber?: string; notes?: string };
 export type SupplierUnit = { id: string; name: string; symbol: string };
 export type QuarryItem = { id: string; name: string; internalCode: string | null; categoryName: string; defaultUnitId?: string | null };
-export type QuarrySetup = { suppliers: Supplier[]; projects: Project[]; items: QuarryItem[]; units: SupplierUnit[]; drivers: DriverProfile[]; trucks: TruckProfile[]; vatRatePercent: number };
+export type QuarrySetup = { suppliers: Supplier[]; projects: Project[]; items: QuarryItem[]; units: SupplierUnit[]; drivers: DriverProfile[]; trucks: TruckProfile[]; vatRatePercent: number; companySites?: CompanySite[] };
 export type QuarryDeliveryMethod = 'company' | 'supplier';
 export type SupplierPriceBasis = 'per_unit' | 'whole';
 export type SupplierVatMode = 'company' | 'none' | 'custom';
 export type QuarryPurchaseDraft = {
-  recordDate:string; supplierId: string; projectId: string; itemId: string; unitId: string; quantityCubicMetres: string;
+  recordDate:string; supplierId: string; projectId: string; destinationType?: FuelDestinationType; companySiteId?: string; itemId: string; unitId: string; quantityCubicMetres: string;
   deliveryMethod: QuarryDeliveryMethod; driverId: string; truckId: string; supplierTruckPlate: string;
   supplierTicketNumber: string; priceBasis: SupplierPriceBasis; unitPriceUsd: string; vatMode: SupplierVatMode;
   customVatRatePercent: string; vatInclusive: boolean; notes: string; photos: string[];
@@ -20,7 +21,7 @@ export type SupplierCorrectionChange = { field: string; originalValue: string | 
 export type SupplierCorrectionEntry = { correctedAt: string; correctedBy: string; reason: string; changes: SupplierCorrectionChange[] };
 export type QuarryPurchase = {
   id: string; purchaseNumber: string; confirmedAt: string; supplierId:string; supplierName: string;
-  projectId:string|null; projectName:string|null; itemId:string; itemName: string; itemCode: string | null;
+  projectId:string|null; projectName:string|null; destinationType?:FuelDestinationType; companySiteId?:string|null; companySiteName?:string|null; itemId:string; itemName: string; itemCode: string | null;
   categoryName: string; unitId:string; unitName:string; unitSymbol:string; quantityCubicMetres: number;
   deliveryMethod:QuarryDeliveryMethod; driverId:string; driverName: string; truckId:string; truckPlate: string;
   supplierTicketNumber: string | null; priceBasis:SupplierPriceBasis; unitPriceUsd: number | null;
@@ -30,15 +31,40 @@ export type QuarryPurchase = {
   notes: string | null; photos: string[]; status:'Active'|'Cancelled'; cancellationReason:string|null;
   cancelledAt:string|null; correctionHistory:SupplierCorrectionEntry[]; updatedAt:string;
 };
-export type QuarryProjectGroup={id:string|null;name:string;purchases:QuarryPurchase[]};
+export type QuarryProjectGroup={id:string|null;name:string;purchases:QuarryPurchase[];destinationType?:FuelDestinationType;companySiteId?:string|null};
 export type QuarrySupplierGroup={id:string;name:string;purchases:QuarryPurchase[];projectGroups:QuarryProjectGroup[]};
 export type QuarryDailyCounter={key:string;sourcePurchaseId:string;supplierName:string;projectName:string|null;itemName:string;unitId:string;unitSymbol:string;deliveryMethod:QuarryDeliveryMethod;driverName:string;truckPlate:string;tripCount:number;totalQuantityCubicMetres:number;defaultQuantityCubicMetres:number;lastConfirmedAt:string};
 
 export type SupplierMaterialTotal={itemId:string;itemName:string;categoryName:string;unitId:string;unitSymbol:string;quantity:number;deliveries:number;firstDeliveryAt:string;lastDeliveryAt:string};
-export type SupplierDeliveryGroup={projectId:string|null;projectName:string;deliveries:number;materials:SupplierMaterialTotal[]};
+/** `projectId` is null for a site or unassigned group; a site group carries `companySiteId` and its name in `projectName`. */
+export type SupplierDeliveryGroup={projectId:string|null;projectName:string;deliveries:number;materials:SupplierMaterialTotal[];destinationType?:FuelDestinationType;companySiteId?:string|null};
 export type SupplierDeliverySummary={supplierId:string;supplierName:string;deliveries:number;cancelledDeliveries:number;projectGroups:SupplierDeliveryGroup[];materialTotals:SupplierMaterialTotal[]};
 
 export const unassignedDeliveriesLabel='Unassigned Deliveries';
+export type PurchaseDestination={type:FuelDestinationType;projectId:string|null;companySiteId:string|null;key:string};
+/**
+ * DEC-506. Where a supplier load went. A load saved before destinations existed has no destination_type: it is a
+ * project load when it has a project and unassigned otherwise, so every earlier record reads exactly as it did.
+ * A site load never has a project, so no project total can include it.
+ */
+export function purchaseDestination(purchase:Pick<QuarryPurchase,'projectId'|'destinationType'|'companySiteId'>):PurchaseDestination{
+  const type=purchase.destinationType??(purchase.projectId?'project':'unassigned');
+  if(type==='project'&&purchase.projectId)return{type,projectId:purchase.projectId,companySiteId:null,key:purchase.projectId};
+  if(type==='company_site'&&purchase.companySiteId)return{type,projectId:null,companySiteId:purchase.companySiteId,key:'site:'+purchase.companySiteId};
+  return{type:'unassigned',projectId:null,companySiteId:null,key:'__unassigned__'};
+}
+type DestinationNames=Pick<QuarryPurchase,'projectId'|'projectName'|'destinationType'|'companySiteId'|'companySiteName'>;
+export function purchaseDestinationLabel(purchase:DestinationNames):string{
+  const destination=purchaseDestination(purchase);
+  if(destination.type==='project')return 'Project: '+(purchase.projectName??'Historical project');
+  if(destination.type==='company_site')return 'Company Site: '+(purchase.companySiteName??'Unknown company site');
+  return 'Unassigned';
+}
+/** Short name of the place a load went, as a group heading ("Project X", "Yard B"); null when unassigned. */
+export function purchaseDestinationName(purchase:DestinationNames):string|null{
+  const destination=purchaseDestination(purchase);
+  return destination.type==='project'?(purchase.projectName??'Historical project'):destination.type==='company_site'?(purchase.companySiteName??'Unknown company site'):null;
+}
 // Quantities are decimals in the record's own unit. Summing floats directly produces artefacts such
 // as 13.999999999999998, so every accumulated total is settled to six decimals — the most precision
 // any quantity input accepts.
@@ -60,33 +86,34 @@ const sortMaterials=(materials:SupplierMaterialTotal[])=>materials.map(material=
 // Headings in this summary are directory headings, so they show the supplier's and project's
 // CURRENT name. Each purchase stores the name it was confirmed under, and that snapshot stays
 // untouched on the record itself — it is only the rollup heading that follows a later rename.
-export function summarizeSupplierDeliveries(purchases:QuarryPurchase[],current?:{suppliers?:{id:string;name:string}[];projects?:{id:string;name:string}[]}):SupplierDeliverySummary[]{
+export function summarizeSupplierDeliveries(purchases:QuarryPurchase[],current?:{suppliers?:{id:string;name:string}[];projects?:{id:string;name:string}[];companySites?:{id:string;name:string}[]}):SupplierDeliverySummary[]{
   const currentSupplierNames=new Map((current?.suppliers??[]).map(value=>[value.id,value.name]));
   const currentProjectNames=new Map((current?.projects??[]).map(value=>[value.id,value.name]));
   const supplierName=(purchase:QuarryPurchase)=>currentSupplierNames.get(purchase.supplierId)??purchase.supplierName;
-  const projectName=(purchase:QuarryPurchase)=>purchase.projectId?(currentProjectNames.get(purchase.projectId)??purchase.projectName??'Historical project'):unassignedDeliveriesLabel;
+  const currentSiteNames=new Map((current?.companySites??[]).map(value=>[value.id,value.name]));
+  const projectName=(purchase:QuarryPurchase)=>{const destination=purchaseDestination(purchase);return destination.type==='project'?(currentProjectNames.get(destination.projectId!)??purchase.projectName??'Historical project'):destination.type==='company_site'?(currentSiteNames.get(destination.companySiteId!)??purchase.companySiteName??'Unknown company site'):unassignedDeliveriesLabel;};
   return summarize(purchases,supplierName,projectName);
 }
 
 function summarize(purchases:QuarryPurchase[],supplierName:(p:QuarryPurchase)=>string,projectName:(p:QuarryPurchase)=>string):SupplierDeliverySummary[]{
-  const suppliers=new Map<string,{id:string;name:string;deliveries:number;cancelled:number;projects:Map<string,{projectId:string|null;projectName:string;deliveries:number;materials:Map<string,SupplierMaterialTotal>}>;materials:Map<string,SupplierMaterialTotal>}>();
+  const suppliers=new Map<string,{id:string;name:string;deliveries:number;cancelled:number;projects:Map<string,{projectId:string|null;projectName:string;destinationType:FuelDestinationType;companySiteId:string|null;deliveries:number;materials:Map<string,SupplierMaterialTotal>}>;materials:Map<string,SupplierMaterialTotal>}>();
   for(const purchase of purchases){
     let supplier=suppliers.get(purchase.supplierId);
     if(!supplier){supplier={id:purchase.supplierId,name:supplierName(purchase),deliveries:0,cancelled:0,projects:new Map(),materials:new Map()};suppliers.set(purchase.supplierId,supplier);}
     if(purchase.status!=='Active'){supplier.cancelled+=1;continue;}
     supplier.deliveries+=1;
     accumulate(supplier.materials,purchase);
-    const projectKey=purchase.projectId??'__unassigned__';
+    const destination=purchaseDestination(purchase),projectKey=destination.key;
     let project=supplier.projects.get(projectKey);
-    if(!project){project={projectId:purchase.projectId,projectName:projectName(purchase),deliveries:0,materials:new Map()};supplier.projects.set(projectKey,project);}
+    if(!project){project={projectId:destination.projectId,projectName:projectName(purchase),destinationType:destination.type,companySiteId:destination.companySiteId,deliveries:0,materials:new Map()};supplier.projects.set(projectKey,project);}
     project.deliveries+=1;
     accumulate(project.materials,purchase);
   }
   return [...suppliers.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(supplier=>({
     supplierId:supplier.id,supplierName:supplier.name,deliveries:supplier.deliveries,cancelledDeliveries:supplier.cancelled,
     projectGroups:[...supplier.projects.values()]
-      .sort((a,b)=>a.projectId===null?1:b.projectId===null?-1:a.projectName.localeCompare(b.projectName))
-      .map(project=>({projectId:project.projectId,projectName:project.projectName,deliveries:project.deliveries,materials:sortMaterials([...project.materials.values()])})),
+      .sort((a,b)=>a.destinationType==='unassigned'?1:b.destinationType==='unassigned'?-1:a.projectName.localeCompare(b.projectName))
+      .map(project=>({projectId:project.projectId,projectName:project.projectName,destinationType:project.destinationType,companySiteId:project.companySiteId,deliveries:project.deliveries,materials:sortMaterials([...project.materials.values()])})),
     materialTotals:sortMaterials([...supplier.materials.values()]),
   }));
 }
@@ -123,8 +150,10 @@ export function calculateQuarryPurchase(draft: QuarryPurchaseDraft, companyVatRa
 export function validateQuarryPurchase(draft: QuarryPurchaseDraft, setup: QuarrySetup): string[] {
   const issues: string[] = [];
   if (!setup.suppliers.some((value) => value.id === draft.supplierId)) issues.push('Select a supplier.');
-  const project=setup.projects.find((value)=>value.id===draft.projectId);
-  if (draft.projectId && !project) issues.push('Select a valid project or clear the project field.');
+  const destinationType=draft.destinationType??(draft.projectId?'project':'unassigned');
+  const project=destinationType==='project'?setup.projects.find((value)=>value.id===draft.projectId):undefined;
+  if (destinationType==='project'&&!project) issues.push(draft.projectId?'Select a valid project. Only active projects can receive supplier loads.':'Select a project for this destination.');
+  if (destinationType==='company_site'&&!(setup.companySites??[]).some((value)=>value.id===draft.companySiteId&&value.isActive)) issues.push('Select an active company site for this destination.');
   if(!/^\d{4}-\d{2}-\d{2}$/.test(draft.recordDate)||draft.recordDate>localQuarryDate())issues.push('Record date must be today or a valid past date.');
   else if(project&&((project.startDate&&draft.recordDate<project.startDate)||(project.endDate&&draft.recordDate>project.endDate)))issues.push('The record date must be within the selected project dates.');
   if (!setup.items.some((value) => value.id === draft.itemId)) issues.push('Select an item enabled for suppliers.');
@@ -148,11 +177,11 @@ export function groupQuarryPurchases(purchases:QuarryPurchase[]):QuarrySupplierG
     let supplier=suppliers.get(purchase.supplierId);
     if(!supplier){supplier={id:purchase.supplierId,name:purchase.supplierName,purchases:[],projects:new Map()};suppliers.set(purchase.supplierId,supplier);}
     supplier.purchases.push(purchase);
-    const projectKey=purchase.projectId??'__unlinked__';let project=supplier.projects.get(projectKey);
-    if(!project){project={id:purchase.projectId,name:purchase.projectName??'No project linked',purchases:[]};supplier.projects.set(projectKey,project);}
+    const destination=purchaseDestination(purchase),projectKey=destination.type==='unassigned'?'__unlinked__':destination.key;let project=supplier.projects.get(projectKey);
+    if(!project){project={id:destination.projectId,name:purchaseDestinationName(purchase)??'No project linked',purchases:[],destinationType:destination.type,companySiteId:destination.companySiteId};supplier.projects.set(projectKey,project);}
     project.purchases.push(purchase);
   }
-  return [...suppliers.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(supplier=>({id:supplier.id,name:supplier.name,purchases:supplier.purchases,projectGroups:[...supplier.projects.values()].sort((a,b)=>a.id===null?1:b.id===null?-1:a.name.localeCompare(b.name))}));
+  return [...suppliers.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(supplier=>({id:supplier.id,name:supplier.name,purchases:supplier.purchases,projectGroups:[...supplier.projects.values()].sort((a,b)=>a.destinationType==='unassigned'?1:b.destinationType==='unassigned'?-1:a.name.localeCompare(b.name))}));
 }
 
 export function quarryDailyCounters(purchases:QuarryPurchase[],workDate:string):QuarryDailyCounter[]{
@@ -160,9 +189,9 @@ export function quarryDailyCounters(purchases:QuarryPurchase[],workDate:string):
   for(const purchase of purchases){
     if(purchase.status!=='Active'||localDate(purchase.confirmedAt)!==workDate)continue;
     const transportKey=purchase.deliveryMethod==='supplier'?`supplier:${purchase.truckPlate.trim().toLocaleLowerCase('en-US')}`:`company:${purchase.driverId}:${purchase.truckId}`;
-    const key=[purchase.projectId??'',purchase.supplierId,purchase.itemId,purchase.unitId,transportKey].join('|');
+    const key=[purchaseDestination(purchase).key==='__unassigned__'?'':purchaseDestination(purchase).key,purchase.supplierId,purchase.itemId,purchase.unitId,transportKey].join('|');
     const current=counters.get(key);
-    if(!current){counters.set(key,{key,sourcePurchaseId:purchase.id,supplierName:purchase.supplierName,projectName:purchase.projectName,itemName:purchase.itemName,unitId:purchase.unitId,unitSymbol:purchase.unitSymbol,deliveryMethod:purchase.deliveryMethod,driverName:purchase.driverName,truckPlate:purchase.truckPlate,tripCount:1,totalQuantityCubicMetres:purchase.quantityCubicMetres,defaultQuantityCubicMetres:purchase.quantityCubicMetres,lastConfirmedAt:purchase.confirmedAt});continue;}
+    if(!current){counters.set(key,{key,sourcePurchaseId:purchase.id,supplierName:purchase.supplierName,projectName:purchaseDestinationName(purchase),itemName:purchase.itemName,unitId:purchase.unitId,unitSymbol:purchase.unitSymbol,deliveryMethod:purchase.deliveryMethod,driverName:purchase.driverName,truckPlate:purchase.truckPlate,tripCount:1,totalQuantityCubicMetres:purchase.quantityCubicMetres,defaultQuantityCubicMetres:purchase.quantityCubicMetres,lastConfirmedAt:purchase.confirmedAt});continue;}
     current.tripCount+=1;current.totalQuantityCubicMetres+=purchase.quantityCubicMetres;
     if(purchase.confirmedAt>current.lastConfirmedAt){current.sourcePurchaseId=purchase.id;current.defaultQuantityCubicMetres=purchase.quantityCubicMetres;current.lastConfirmedAt=purchase.confirmedAt;}
   }

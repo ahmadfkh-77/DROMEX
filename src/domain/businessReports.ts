@@ -58,6 +58,6 @@ export function filterBusinessReportData(data:BusinessReportData,filters:Busines
   ];
   // DEC-505. Batches follow the date filter by the day they arrived.
   const arrivedIn=(row:WorkbookRow)=>{const day=String(row['Arrived At']??'').slice(0,10);return(!filters.fromDate||!day||day>=filters.fromDate)&&(!filters.toDate||!day||day<=filters.toDate);};
-  const dieselBatches=data.dieselBatches?.filter(arrivedIn);
+  const dieselBatches=data.dieselBatches?.filter(row=>arrivedIn(row)&&matches(row['Supplier ID'],filters.supplierId));
   return{...data,dieselBatches,loads,quarryPurchases,fuelMovements,equipmentTotals,projectFuelTotals,projects,dailyReports,materials,payments,openingBalances,customers,suppliers,activeFilters};
 }

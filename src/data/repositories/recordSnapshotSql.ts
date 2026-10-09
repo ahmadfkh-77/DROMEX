@@ -17,7 +17,7 @@ export const LOAD_UNIT_SQL="CASE WHEN l.quantity_method = 'direct' AND COALESCE(
 export const COMPANY_LOAD_RECORDS=`SELECT 'company_load' record_type, l.id record_id, 'company_load:' || l.id record_key, l.transaction_number reference,
     l.load_number, l.load_number_series_name, l.load_number_series_id series_id,
     ${keyOf('l.item_id','l.item_name')} item_key, l.item_name, COALESCE(${LOAD_UNIT_SQL}, 'symbol:' || l.output_unit_symbol) unit_key, l.output_unit_symbol unit_symbol,
-    l.billed_quantity quantity, l.project_id, l.project_name, l.customer_id party_id, l.customer_name party_name,
+    l.billed_quantity quantity, l.project_id, l.project_name, NULL site_id, l.customer_id party_id, l.customer_name party_name,
     l.confirmed_at recorded_at, l.entered_at, l.unit_price_usd_cents unit_price_cents, 'per_unit' price_basis,
     l.subtotal_usd_cents subtotal_cents, l.vat_rate_basis_points vat_rate_basis_points, l.vat_amount_usd_cents vat_cents, l.final_total_usd_cents total_cents,
     NULL supplier_reference, COALESCE(l.status,'Active') record_status, l.is_archived archived, date(l.confirmed_at,'localtime') record_day, l.payment_status,
@@ -29,7 +29,9 @@ export const COMPANY_LOAD_RECORDS=`SELECT 'company_load' record_type, l.id recor
 export const SUPPLIER_LOAD_RECORDS=`SELECT 'supplier_load' record_type, q.id record_id, 'supplier_load:' || q.id record_key, q.purchase_number reference,
     NULL load_number, NULL load_number_series_name, NULL series_id,
     ${keyOf('q.item_id','q.item_name')} item_key, q.item_name, COALESCE(q.unit_id, 'symbol:' || COALESCE(q.unit_symbol,'m³')) unit_key, COALESCE(q.unit_symbol,'m³') unit_symbol,
-    q.quantity_cubic_metres quantity, q.project_id, q.project_name, q.supplier_id party_id, q.supplier_name party_name,
+    q.quantity_cubic_metres quantity, q.project_id,
+    CASE WHEN q.destination_type = 'company_site' THEN (SELECT cs.name FROM company_sites cs WHERE cs.id = q.company_site_id) ELSE q.project_name END project_name,
+    CASE WHEN q.destination_type = 'company_site' THEN q.company_site_id END site_id, q.supplier_id party_id, q.supplier_name party_name,
     q.confirmed_at recorded_at, q.entered_at, q.unit_price_usd_cents unit_price_cents, COALESCE(q.price_basis,'per_unit') price_basis,
     q.subtotal_usd_cents subtotal_cents, q.vat_rate_basis_points vat_rate_basis_points, q.vat_amount_usd_cents vat_cents, q.final_total_usd_cents total_cents,
     q.supplier_ticket_number supplier_reference, COALESCE(q.status,'Active') record_status, 0 archived, date(q.confirmed_at,'localtime') record_day, q.payment_status,
@@ -40,7 +42,7 @@ export const SUPPLIER_LOAD_RECORDS=`SELECT 'supplier_load' record_type, q.id rec
 
 export type RecordRow={
   record_type:DocumentRecordType;record_id:string;record_key:string;reference:string;load_number:string|null;load_number_series_name:string|null;series_id:string|null;
-  item_key:string;item_name:string;unit_key:string;unit_symbol:string;quantity:number;project_id:string|null;project_name:string|null;party_id:string;party_name:string;
+  item_key:string;item_name:string;unit_key:string;unit_symbol:string;quantity:number;project_id:string|null;project_name:string|null;site_id?:string|null;party_id:string;party_name:string;
   recorded_at:string;entered_at:string|null;unit_price_cents:number|null;price_basis:'per_unit'|'whole';subtotal_cents:number|null;vat_rate_basis_points:number|null;vat_cents:number|null;total_cents:number|null;
   supplier_reference:string|null;record_status:'Active'|'Cancelled';archived:number;record_day:string;payment_status:string;
   cancellation_reason:string|null;correction_count:number;

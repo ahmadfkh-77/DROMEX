@@ -3,7 +3,7 @@ import type {SQLiteDatabase} from 'expo-sqlite';
 import {localDateKey} from '../../domain/fuel';
 import {
   allocateDieselBatches,fillCost,formatBatchNumber,previewTankFill,
-  type AllocationChange,type AllocationInput,type AllocationNoteLine,type AllocationResult,type BatchDetail,type BatchInput,type DieselBatchOverview,type FillBatchInfo,type TankFillPreviewResult,
+  type AllocationChange,type AllocationInput,type AllocationNoteLine,type AllocationResult,type BatchCorrectionEntry,type BatchDetail,type BatchInput,type DieselBatchOverview,type FillBatchInfo,type TankFillPreviewResult,
 } from '../../domain/fuelBatches';
 
 /**
@@ -14,8 +14,9 @@ import {
 type BatchRow={
   id:string;batch_number:string;year:number;sequence:number;kind:'delivery'|'opening';delivery_movement_id:string|null;opening_basis:'dip'|'calculated'|null;
   opening_gauge_movement_id:string|null;arrived_at:string;delivered_litres:number;price_per_litre_usd_cents:number|null;invoice_number:string|null;
-  supplier_id:string|null;supplier_name:string|null;status:'Active'|'Cancelled';cancellation_reason:string|null;cancelled_at:string|null;created_at:string;
+  supplier_id:string|null;supplier_name:string|null;status:'Active'|'Cancelled';cancellation_reason:string|null;cancelled_at:string|null;created_at:string;correction_history_json?:string|null;
 };
+const parseHistory=(value:string|null|undefined):BatchCorrectionEntry[]=>{try{const parsed=JSON.parse(value??'[]');return Array.isArray(parsed)?parsed as BatchCorrectionEntry[]:[];}catch{return [];}};
 type FillRow={id:string;confirmed_at:string;litres:number;batch_id:string|null;price_per_litre_usd_cents:number|null;consumption_cost_usd_cents:number|null};
 type GaugeRow={id:string;confirmed_at:string;litres:number};
 type CachedLineRow={movement_id:string;kind:string;litres:number;batch_number:string|null};
@@ -107,9 +108,9 @@ export async function recalculateDieselBatches(db:SQLiteDatabase,causedByMovemen
   }
 }
 
-const toDetail=(row:BatchRow,summary:AllocationResult['batches'][number]):BatchDetail=>({
+const toDetail=(row:BatchRow,summary:AllocationResult['batches'][number],totals:Map<string,number|null>):BatchDetail=>({
   ...summary,
-  kind:row.kind,invoiceNumber:row.invoice_number,supplierName:row.supplier_name,openingBasis:row.opening_basis,deliveryMovementId:row.delivery_movement_id,
+  kind:row.kind,invoiceNumber:row.invoice_number,supplierId:row.supplier_id,supplierName:row.supplier_name,finalTotalUsd:row.delivery_movement_id?(totals.get(row.delivery_movement_id)??null):null,history:parseHistory(row.correction_history_json),openingBasis:row.opening_basis,deliveryMovementId:row.delivery_movement_id,
   openingGaugeMovementId:row.opening_gauge_movement_id,cancellationReason:row.cancellation_reason,cancelledAt:row.cancelled_at,
 });
 
@@ -121,11 +122,13 @@ export async function loadBatchOverview(db:SQLiteDatabase):Promise<DieselBatchOv
   const rows=new Map(state.batchRows.map(row=>[row.id,row]));
   const fills:Record<string,FillBatchInfo>={};
   for(const [fillId,allocation] of Object.entries(result.fills))fills[fillId]={...allocation,cost:fillCost(allocation,result.batches)};
+  const totalRows=await db.getAllAsync<{id:string;final_total_usd_cents:number|null}>("SELECT id,final_total_usd_cents FROM fuel_movements WHERE movement_type = 'delivery'");
+  const totals=new Map(totalRows.map(row=>[row.id,row.final_total_usd_cents==null?null:row.final_total_usd_cents/100]));
   const events=await db.getAllAsync<EventRow>('SELECT * FROM fuel_allocation_events ORDER BY id');
   const changes:AllocationChange[]=events.map(event=>({id:event.id,movementId:event.movement_id,causedByMovementId:event.caused_by_movement_id,before:JSON.parse(event.before_json),after:JSON.parse(event.after_json),createdAt:event.created_at}));
   return {
     started:true,startedAt:state.startedAt,tankLitres:result.tankLitres,overfillAlert:result.overfillAlert,outstandingShortfallLitres:result.outstandingShortfallLitres,
-    batches:result.batches.map(summary=>toDetail(rows.get(summary.id)!,summary)),
+    batches:result.batches.map(summary=>toDetail(rows.get(summary.id)!,summary,totals)),
     fills,
     adjustments:result.adjustments.map(adjustment=>({...adjustment,batchNumber:rows.get(adjustment.batchId)?.batch_number??''})),
     changes,
@@ -176,6 +179,17 @@ export async function startTracking(db:SQLiteDatabase,input:{startedAt:string;li
   await db.runAsync(`INSERT INTO fuel_batches (id,batch_number,year,sequence,kind,opening_basis,opening_gauge_movement_id,arrived_at,delivered_litres,price_per_litre_usd_cents,created_at)
     VALUES (?,?,?,?,'opening',?,?,?,?,?,?)`,id,number.batchNumber,number.year,number.sequence,input.basis,input.gaugeMovementId,input.startedAt,roundLitres(input.litres),input.priceCents,new Date().toISOString());
   return id;
+}
+
+/** DEC-506. Appends one entry to a batch's own history, which every batch keeps (an Opening stock batch has no delivery row). */
+export async function appendBatchHistory(db:SQLiteDatabase,batchId:string,entry:BatchCorrectionEntry):Promise<void>{
+  const row=await db.getFirstAsync<{correction_history_json:string|null}>('SELECT correction_history_json FROM fuel_batches WHERE id = ?',batchId);
+  await db.runAsync('UPDATE fuel_batches SET correction_history_json = ? WHERE id = ?',JSON.stringify([...parseHistory(row?.correction_history_json),entry]),batchId);
+}
+
+/** Supplier, invoice and price of an Opening stock batch, which has no delivery to hold them. */
+export async function updateOpeningBatchDetails(db:SQLiteDatabase,batchId:string,details:{supplierId:string|null;supplierName:string|null;invoiceNumber:string|null;priceCents:number|null}):Promise<void>{
+  await db.runAsync('UPDATE fuel_batches SET supplier_id = ?, supplier_name = ?, invoice_number = ?, price_per_litre_usd_cents = ? WHERE id = ?',details.supplierId,details.supplierName,details.invoiceNumber,details.priceCents,batchId);
 }
 
 export async function cancelOpeningBatch(db:SQLiteDatabase,batchId:string,reason:string,cancelledAt:string):Promise<void>{
