@@ -42,7 +42,8 @@ function matchUnit(key:string,idExpression:string,symbolExpression:string):[stri
   return [`${idExpression} = ?`,[key]];
 }
 
-const LOAD_UNIT="CASE WHEN l.quantity_method = 'direct' THEN l.direct_unit_id ELSE c.output_unit_id END";
+// Phase 2. A direct load that used a conversion is counted in the conversion's output unit, like a weighbridge load.
+const LOAD_UNIT="CASE WHEN l.quantity_method = 'direct' AND COALESCE(l.conversion_rule,'Entered directly') = 'Entered directly' THEN l.direct_unit_id ELSE c.output_unit_id END";
 const MATERIALS="json_each(CASE WHEN json_valid(r.materials_json) AND json_type(r.materials_json) = 'array' THEN r.materials_json ELSE '[]' END)";
 const MATERIAL_OK="json_extract(m.value,'$.movement') IN ('used','transported') AND json_type(m.value,'$.quantity') IN ('integer','real')";
 

@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import {
   calculateLoad,
   emptyLoadDraft,
+  ENTERED_DIRECTLY,
   type ConfirmedLoad,
   type ConversionDraft,
   type ConversionOption,
@@ -33,7 +34,8 @@ import {
 import { resolveConsultingAgencySelectorOptions, type ConsultingAgencyOption } from '../../domain/profiles';
 import { SqliteProfileRepository } from './SqliteProfileRepository';
 import { issueLoadNumber } from './SqliteLoadNumberSeriesRepository';
-import { defaultDeliverySignature, deliverySignatureFor, recordSignerEvent } from './SqliteDocumentSignerRepository';
+import { deliverySignatureFor, recordSignerEvent } from './SqliteDocumentSignerRepository';
+import { supplierSignatureForNewLoad } from './SqliteCompanyHeaderRepository';
 import type { SignerDisplay, SignerSnapshot } from '../../domain/documentSigners';
 import { parseStoredSignature } from '../../domain/supervisors';
 
@@ -144,6 +146,7 @@ function projectFromRow(row: ProjectRow): Project {
 }
 function loadFromRow(row: LoadRow): ConfirmedLoad {
   const quantityMethod = row.quantity_method ?? 'weighbridge';
+  const directConverted = quantityMethod === 'direct' && (row.conversion_rule ?? ENTERED_DIRECTLY) !== ENTERED_DIRECTLY;
   return {
     quantityMethod,
     id: row.id, transactionNumber: row.transaction_number, confirmedAt: row.confirmed_at,
@@ -154,8 +157,9 @@ function loadFromRow(row: LoadRow): ConfirmedLoad {
     emptyWeightKg: quantityMethod === 'weighbridge' ? row.empty_weight_kg : null,
     fullWeightKg: quantityMethod === 'weighbridge' ? row.full_weight_kg : null,
     netWeightKg: quantityMethod === 'weighbridge' ? row.net_weight_kg : null,
-    conversionName: quantityMethod === 'weighbridge' ? row.conversion_name : null,
-    conversionRule: quantityMethod === 'weighbridge' ? row.conversion_rule : null,
+    // Phase 2. A direct load shows its conversion only when one was used; a plain direct load keeps these empty, as before.
+    conversionName: quantityMethod === 'weighbridge' || directConverted ? row.conversion_name : null,
+    conversionRule: quantityMethod === 'weighbridge' || directConverted ? row.conversion_rule : null,
     directQuantity: row.direct_quantity, directUnitName: row.direct_unit_name, directUnitSymbol: row.direct_unit_symbol,
     outputUnitSymbol: row.output_unit_symbol, convertedQuantity: row.converted_quantity,
     billedQuantity: row.billed_quantity, unitPriceUsd: row.unit_price_usd_cents == null ? null : row.unit_price_usd_cents / 100,
@@ -206,8 +210,9 @@ export class SqliteLoadRepository implements LoadRepository {
     const drivers: DriverProfile[] = crewRows.map(crewFromRow);
     const trucks: TruckProfile[] = truckRows.map((row) => ({ id: row.id, plate: row.plate, makeModel: row.make_model, capacityKg: row.capacity_kg, ownerName: row.owner_name, notes: row.notes, isActive: row.is_active === 1 }));
     const machines: MachineProfile[] = machineRows.map((row) => ({ id: row.id, name: row.name, machineType: row.machine_type, identifier: row.identifier, notes: row.notes, isActive: row.is_active === 1 }));
-    const deliverySignature = await defaultDeliverySignature(this.db);
-    return { customers: customers.filter((value) => value.isActive), companySettings, units: unitRows.map(unitFromRow), conversions: conversionRows.map(conversionFromRow), projects: projectRows.map(projectFromRow), items, drivers, trucks, machines, deliverySignature };
+    // Phase 2. The Plant Company's default signer signs new loads; the Delivery Authorization default signer is the fallback.
+    const supplier = await supplierSignatureForNewLoad(this.db);
+    return { customers: customers.filter((value) => value.isActive), companySettings, units: unitRows.map(unitFromRow), conversions: conversionRows.map(conversionFromRow), projects: projectRows.map(projectFromRow), items, drivers, trucks, machines, deliverySignature: supplier.signature, supplierSignatureNote: supplier.note };
   }
 
   async createUnit(draft: UnitDraft): Promise<MeasurementUnit> {
@@ -475,7 +480,10 @@ export class SqliteLoadRepository implements LoadRepository {
     if (draft.quantityMethod === 'weighbridge' && !conversion) throw new Error('The selected conversion is unavailable.');
     // DEC-477. The person's name and role are snapshotted from the directory as they are now, so a
     // draft saved before a rename or role change still confirms with what is true at confirmation.
-    const crew = options.drivers.find((value) => value.id === draft.driverId)!;
+    // Phase 2. A driver or truck may be typed for this load only: no saved person or truck is created or linked.
+    const crew = draft.driverId ? options.drivers.find((value) => value.id === draft.driverId) : undefined;
+    const driverName = crew?.name ?? clean(draft.driverName) ?? '';
+    const enteredQuantity = draft.quantityMethod === 'direct' ? Number(draft.directQuantity.trim().replace(',', '.')) : null;
     const enteredAt=new Date().toISOString();const now=new Date(),[year=0,month=0,day=0]=draft.recordDate.split('-').map(Number);const confirmedAt=new Date(year,month-1,day,now.getHours(),now.getMinutes(),now.getSeconds(),now.getMilliseconds()).toISOString(); const id = makeId('load');
     let transactionNumber = '';
     await this.db.withTransactionAsync(async () => {
@@ -486,6 +494,8 @@ export class SqliteLoadRepository implements LoadRepository {
       const price = draft.unitPriceUsd.trim() ? Number(draft.unitPriceUsd.replace(',', '.')) : null;
       const paymentStatus: ConfirmedLoad['paymentStatus'] = price == null ? 'Unpriced' : price === 0 ? 'No Payment Due' : 'Unpaid';
       const isDirect = draft.quantityMethod === 'direct';
+      // Phase 2. A direct load keeps the entered quantity and unit; with a conversion it is billed in the output unit.
+      const directConverted = isDirect && !!conversion;
       const retainedRow = conversion ? null : await this.db.getFirstAsync<ConversionRow>(`SELECT c.*, iu.name input_unit_name, iu.symbol input_unit_symbol,
         ou.name output_unit_name, ou.symbol output_unit_symbol FROM conversion_options c
         JOIN measurement_units iu ON iu.id=c.input_unit_id JOIN measurement_units ou ON ou.id=c.output_unit_id WHERE c.id=?`, 'conversion_kg_ton');
@@ -501,20 +511,25 @@ export class SqliteLoadRepository implements LoadRepository {
         VALUES (${Array.from({length:48},()=>'?').join(', ')})`,
         id, transactionNumber, confirmedAt, customer.id, customer.name, project?.id ?? null, project?.name ?? null,
         project?.location ?? null, clean(draft.destinationAddress), item.id, item.name, item.internalCode, item.categoryName,
-        crew.name, draft.truckPlate.trim().toUpperCase(), crew.id, draft.truckId, !isDirect && draft.requestedQuantityKg.trim() ? Number(draft.requestedQuantityKg) : null,
+        driverName, draft.truckPlate.trim().toUpperCase(), crew?.id ?? null, draft.truckId || null, !isDirect && draft.requestedQuantityKg.trim() ? Number(draft.requestedQuantityKg) : null,
         isDirect ? 0 : Number(draft.emptyWeightKg), isDirect ? 1 : Number(draft.fullWeightKg), isDirect ? 1 : calculation.netWeightKg,
-        retainedConversion.id, isDirect ? 'Direct quantity' : retainedConversion.name,
-        isDirect ? 'Entered directly' : `${retainedConversion.inputQuantity} ${retainedConversion.inputUnitSymbol} = ${retainedConversion.outputQuantity} ${retainedConversion.outputUnitSymbol}`,
-        isDirect ? directUnit!.symbol : retainedConversion.outputUnitSymbol, calculation.convertedQuantity, calculation.billedQuantity, price == null ? null : Math.round(price * 100),
+        retainedConversion.id, isDirect && !directConverted ? 'Direct quantity' : retainedConversion.name,
+        isDirect && !directConverted ? ENTERED_DIRECTLY : `${retainedConversion.inputQuantity} ${retainedConversion.inputUnitSymbol} = ${retainedConversion.outputQuantity} ${retainedConversion.outputUnitSymbol}`,
+        isDirect && !directConverted ? directUnit!.symbol : retainedConversion.outputUnitSymbol, calculation.convertedQuantity, calculation.billedQuantity, price == null ? null : Math.round(price * 100),
         calculation.subtotalUsd == null ? null : Math.round(calculation.subtotalUsd * 100), price == null ? null : Math.round(options.companySettings.vatRatePercent * 100),
         calculation.vatAmountUsd == null ? null : Math.round(calculation.vatAmountUsd * 100), calculation.finalTotalUsd == null ? null : Math.round(calculation.finalTotalUsd * 100),
         paymentStatus, clean(draft.notes), options.companySettings.companyName, options.companySettings.address,
         options.companySettings.phone, options.companySettings.email, options.companySettings.taxVatNumber, options.companySettings.receiptFooter, options.companySettings.logoUri,
-        draft.quantityMethod, isDirect ? calculation.billedQuantity : null, isDirect ? directUnit!.id : null, isDirect ? directUnit!.name : null, isDirect ? directUnit!.symbol : null,enteredAt,crew.role);
+        draft.quantityMethod, isDirect ? enteredQuantity : null, isDirect ? directUnit!.id : null, isDirect ? directUnit!.name : null, isDirect ? directUnit!.symbol : null,enteredAt,crew?.role ?? null);
+      // Phase 2. The driver's signature, drawn while making the receipt, is saved with the load in the same transaction.
+      if (draft.driverSignaturePaths.length) {
+        await this.db.runAsync("UPDATE loads SET signature_json = ?, signature_status = 'Signed' WHERE id = ?", JSON.stringify(draft.driverSignaturePaths), id);
+        await this.enqueue('loadSignature', id, { loadId: id, signaturePaths: draft.driverSignaturePaths, signatureStatus: 'Signed' });
+      }
       // DEC-500. The Company Load number is generated in this same transaction, so the load and its number are saved together or not at all.
       const issued = await issueLoadNumber(this.db, { loadId: id, itemId: item.id, recordDate: draft.recordDate, issuedAt: enteredAt });
       // DEC-503. The default supplier signature is copied onto the load in the same transaction.
-      const supplierSignature = await defaultDeliverySignature(this.db);
+      const supplierSignature = (await supplierSignatureForNewLoad(this.db)).signature;
       if (supplierSignature) {
         await this.db.runAsync('UPDATE loads SET supplier_signature_json = ? WHERE id = ?', JSON.stringify(supplierSignature), id);
         await recordSignerEvent(this.db, supplierSignature.signerId, 'used', enteredAt, null, `Delivery Authorization ${transactionNumber}`);
@@ -576,7 +591,10 @@ export class SqliteLoadRepository implements LoadRepository {
     if(!isDirect&&requested!=null&&!Number.isInteger(requested))throw new Error('Requested quantity must be a whole kilogram value.');
     const priceText=draft.unitPriceUsd.trim().replace(',','.');if(priceText&&!/^\d+(\.\d{1,2})?$/.test(priceText))throw new Error('Unit price must be zero or more with no more than two decimals.');const price=priceText?Number(priceText):null;
     let net:number;let converted:number;let billed:number;
-    if(isDirect){net=1;converted=direct;billed=direct;}else{const conversion=await this.db.getFirstAsync<{input_quantity:number;output_quantity:number;decimal_places:number}>('SELECT input_quantity,output_quantity,decimal_places FROM conversion_options WHERE id=?',row.conversion_id);if(!conversion)throw new Error('The retained conversion is unavailable.');net=(full as number)-(empty as number);converted=net/conversion.input_quantity*conversion.output_quantity;const factor=10**conversion.decimal_places;billed=Math.round((converted+Number.EPSILON)*factor)/factor;}
+    if(isDirect&&(row.conversion_rule??ENTERED_DIRECTLY)!==ENTERED_DIRECTLY){
+      // Phase 2. A direct load that used a conversion keeps it: the corrected entered quantity is converted with the retained rule.
+      const conversion=await this.db.getFirstAsync<{input_quantity:number;output_quantity:number;decimal_places:number}>('SELECT input_quantity,output_quantity,decimal_places FROM conversion_options WHERE id=?',row.conversion_id);if(!conversion)throw new Error('The retained conversion is unavailable.');net=1;converted=direct/conversion.input_quantity*conversion.output_quantity;const factor=10**conversion.decimal_places;billed=Math.round((converted+Number.EPSILON)*factor)/factor;
+    }else if(isDirect){net=1;converted=direct;billed=direct;}else{const conversion=await this.db.getFirstAsync<{input_quantity:number;output_quantity:number;decimal_places:number}>('SELECT input_quantity,output_quantity,decimal_places FROM conversion_options WHERE id=?',row.conversion_id);if(!conversion)throw new Error('The retained conversion is unavailable.');net=(full as number)-(empty as number);converted=net/conversion.input_quantity*conversion.output_quantity;const factor=10**conversion.decimal_places;billed=Math.round((converted+Number.EPSILON)*factor)/factor;}
     const subtotal=price==null?null:Math.round(billed*price*100);const vat=price==null?null:Math.round((subtotal??0)*(row.vat_rate_basis_points??0)/10000);const total=subtotal==null?null:subtotal+(vat??0);
     const paid=await this.activePaymentCents(loadId);
     if(total==null&&paid>0)throw new Error('A load with active payments cannot be corrected to Unpriced.');
@@ -606,7 +624,7 @@ export class SqliteLoadRepository implements LoadRepository {
     const history=[...safeCorrectionHistory(row.correction_history_json),{correctedAt:now,correctedBy:'Admin',reason,changes}];
     const crewChanged=crew.id!==(row.driver_profile_id??'');
     await this.db.withTransactionAsync(async()=>{
-      await this.db.runAsync('UPDATE loads SET requested_quantity_kg=?,empty_weight_kg=?,full_weight_kg=?,net_weight_kg=?,direct_quantity=?,converted_quantity=?,billed_quantity=?,unit_price_usd_cents=?,subtotal_usd_cents=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,destination_address=?,notes=?,correction_history_json=?,updated_at=? WHERE id=?',requested,empty,full,net,isDirect?billed:null,converted,billed,price==null?null:Math.round(price*100),subtotal,vat,total,paymentStatusValue,clean(draft.destinationAddress),clean(draft.notes),JSON.stringify(history),now,loadId);
+      await this.db.runAsync('UPDATE loads SET requested_quantity_kg=?,empty_weight_kg=?,full_weight_kg=?,net_weight_kg=?,direct_quantity=?,converted_quantity=?,billed_quantity=?,unit_price_usd_cents=?,subtotal_usd_cents=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,destination_address=?,notes=?,correction_history_json=?,updated_at=? WHERE id=?',requested,empty,full,net,isDirect?direct:null,converted,billed,price==null?null:Math.round(price*100),subtotal,vat,total,paymentStatusValue,clean(draft.destinationAddress),clean(draft.notes),JSON.stringify(history),now,loadId);
       if(crewChanged)await this.db.runAsync('UPDATE loads SET driver_profile_id=?,driver_name=?,driver_role=? WHERE id=?',crew.id,crew.name,crew.role,loadId);
       await this.enqueue('load',loadId,{id:loadId,correctedAt:now,reason,changes,paymentStatus:paymentStatusValue,updatedAt:now});
     });

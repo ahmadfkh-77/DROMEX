@@ -12,7 +12,7 @@ import {
 } from '../../domain/companyHeaders';
 import {signerSnapshot, type SignerDisplay, type SignerSnapshot} from '../../domain/documentSigners';
 import type {CompanyHeaderRepository} from './CompanyHeaderRepository';
-import {signerFromRow} from './SqliteDocumentSignerRepository';
+import {defaultDeliverySignature, signerFromRow} from './SqliteDocumentSignerRepository';
 
 type SignerRowInput = Parameters<typeof signerFromRow>[0];
 type ProfileRow = {
@@ -28,6 +28,29 @@ type PlantRow = {
 };
 
 const clean = (value: string): string | null => value.trim().replace(/\s+/g, ' ') || null;
+
+/** The signature copy a header carries, or null when the signer was disabled or removed since. A cleared drawing falls back to Name only. */
+async function signerCopy(db: SQLiteDatabase, signerId: string, display: SignerDisplay): Promise<SignerSnapshot | null> {
+  const row = await db.getFirstAsync<SignerRowInput & { is_active: number }>('SELECT * FROM document_signers WHERE id = ?', signerId);
+  if (!row || row.is_active !== 1) return null;
+  const signer = signerFromRow(row);
+  return signerSnapshot(signer, display === 'name_with_signature' && signer.signature.length ? 'name_with_signature' : 'name_only');
+}
+
+/**
+ * Phase 2. The supplier signature a NEW load carries: the Plant Company's default signer (Company setups),
+ * otherwise the Delivery Authorization default signer. `note` explains a Plant Company signer that cannot sign.
+ */
+export async function supplierSignatureForNewLoad(db: SQLiteDatabase): Promise<{ signature: SignerSnapshot | null; note: string | null }> {
+  const plant = await db.getFirstAsync<{ header_signer_id: string | null; header_signer_display: SignerDisplay | null }>("SELECT header_signer_id, header_signer_display FROM company_settings WHERE id = 'company'");
+  let note: string | null = null;
+  if (plant?.header_signer_id) {
+    const copy = await signerCopy(db, plant.header_signer_id, plant.header_signer_display ?? 'name_only');
+    if (copy) return { signature: copy, note: null };
+    note = 'The Plant Company signer is disabled or missing, so it cannot sign.';
+  }
+  return { signature: await defaultDeliverySignature(db), note };
+}
 
 export class SqliteCompanyHeaderRepository implements CompanyHeaderRepository {
   constructor(private readonly db: SQLiteDatabase) {}
@@ -149,13 +172,7 @@ export class SqliteCompanyHeaderRepository implements CompanyHeaderRepository {
     signerSnapshot(signerFromRow(row), display);
   }
 
-  /** The signature copy a header carries, or null when the signer was disabled or removed since. A cleared drawing falls back to Name only. */
-  private async signerFor(signerId: string, display: SignerDisplay): Promise<SignerSnapshot | null> {
-    const row = await this.db.getFirstAsync<SignerRowInput>('SELECT * FROM document_signers WHERE id = ?', signerId);
-    if (!row || row.is_active !== 1) return null;
-    const signer = signerFromRow(row);
-    return signerSnapshot(signer, display === 'name_with_signature' && signer.signature.length ? 'name_with_signature' : 'name_only');
-  }
+  private signerFor(signerId: string, display: SignerDisplay): Promise<SignerSnapshot | null> { return signerCopy(this.db, signerId, display); }
 
   private async enqueue(entityType: string, entityId: string, payload: unknown): Promise<void> {
     await this.db.runAsync("INSERT INTO sync_outbox (entity_type, entity_id, operation, payload_json, created_at) VALUES (?, ?, 'upsert', ?, ?)",

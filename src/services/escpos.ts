@@ -1,7 +1,7 @@
 import {Buffer} from 'buffer';
 import {truckCrewRoleLabel} from '../domain/people';
 
-import type {ConfirmedLoad} from '../domain/loads';
+import {directConversionLines,type ConfirmedLoad} from '../domain/loads';
 import type {QuickTextDocument} from '../domain/quickText';
 import type {LoadDocumentKind,PaperWidth} from './documentTemplates';
 
@@ -103,6 +103,8 @@ export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper
   labelled(doc,'Item',record.itemName);
   if(kind==='receipt'){
     doc.line('').line(divider(columns));
+    const conversion=directConversionLines(record);
+    if(conversion){labelled(doc,'Entered',conversion.entered);labelled(doc,'Conversion',conversion.rule);}
     labelled(doc,'Quantity',`${record.billedQuantity.toFixed(3)} ${record.outputUnitSymbol}`);
     labelled(doc,'Unit price',record.unitPriceUsd==null?'Unpriced':`$${record.unitPriceUsd.toFixed(2)}`);
     if(record.unitPriceUsd!=null){
@@ -127,7 +129,7 @@ export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper
       labelled(doc,'Full weight',`${record.fullWeightKg} kg`);
       labelled(doc,'Net weight',`${record.netWeightKg} kg`,true);
       labelled(doc,'Converted quantity',`${record.billedQuantity.toFixed(3)} ${record.outputUnitSymbol}`);
-    }else labelled(doc,'Quantity',`${record.billedQuantity.toFixed(3)} ${record.outputUnitSymbol}`,true);
+    }else{const conversion=directConversionLines(record);if(conversion)labelled(doc,'Entered',conversion.entered);labelled(doc,'Quantity',`${record.billedQuantity.toFixed(3)} ${record.outputUnitSymbol}`,true);}
     if(record.signaturePaths.length){
       doc.line('').line(divider(columns)).line('').align(1).raster(signatureRaster(record.signaturePaths,paper)).wrapped(`${crewRole} signature: ${record.driverName}`).align(0);
     }else labelled(doc,`${crewRole} signature`,'Unsigned');

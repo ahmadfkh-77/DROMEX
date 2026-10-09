@@ -59,10 +59,14 @@ describe('load confirmation validation', () => {
     expect(validateLoadDraft({ ...validDraft, customerId: 'own' }, options)).toContain('An own-company load requires a project.');
   });
 
-  it('requires saved driver and truck selections rather than free text alone', () => {
-    const issues = validateLoadDraft({ ...validDraft, driverId: '', truckId: '' }, baseOptions);
-    expect(issues).toContain('Select a saved driver or operator.');
-    expect(issues).toContain('Select a saved truck.');
+  it('lets a driver and truck be typed for one load, but never an unknown saved one', () => {
+    expect(validateLoadDraft({ ...validDraft, driverId: '', truckId: '', driverName: 'Walid Khoury', truckPlate: 'B 884211' }, baseOptions)).toEqual([]);
+    const missing = validateLoadDraft({ ...validDraft, driverId: '', truckId: '', driverName: ' ', truckPlate: '' }, baseOptions);
+    expect(missing).toContain('Driver or operator name is required.');
+    expect(missing).toContain('Truck plate is required.');
+    const unknown = validateLoadDraft({ ...validDraft, driverId: 'gone', truckId: 'gone' }, baseOptions);
+    expect(unknown).toContain('Select a saved driver or operator.');
+    expect(unknown).toContain('Select a saved truck.');
   });
   it('rejects prices with more than two decimals or scientific notation',()=>{
     expect(validateLoadDraft({...validDraft,unitPriceUsd:'10.999'},baseOptions)).toContain('Unit price must be zero or more with no more than two decimals.');

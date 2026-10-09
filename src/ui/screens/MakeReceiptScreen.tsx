@@ -6,20 +6,24 @@ import { Alert, Animated, LayoutAnimation, ScrollView, StyleSheet, Text, Touchab
 
 import type { LoadRepository } from '../../data/repositories/LoadRepository';
 import { truckCrewRoleLabel, type TruckCrewRole } from '../../domain/people';
-import { calculateLoad, createAnotherItemDraft, emptyLoadDraft, formatUsd, type ConfirmedLoad, type LoadDraft, type LoadSetupOptions, validateLoadDraft } from '../../domain/loads';
+import { calculateLoad, createAnotherItemDraft, directConversionLines, emptyLoadDraft, formatUsd, type ConfirmedLoad, type LoadDraft, type LoadSetupOptions, validateLoadDraft } from '../../domain/loads';
 import { printLoadBluetooth } from '../../services/bluetoothPrinter';
 import { AppButton, AppCard, AppField, Feedback, MetricCard, PageHeader } from '../components/AppPrimitives';
 import { LoadDocuments, type DocumentViewData } from '../components/LoadDocuments';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { SignaturePad } from '../components/SignaturePad';
+import Svg, { Path } from 'react-native-svg';
 import { SegmentedChoice } from '../components/SegmentedChoice';
 import { GroupedSearchableSelect } from '../components/GroupedSearchableSelect';
 import { DatePickerField, todayIso } from '../components/DatePickerField';
 import { useReducedMotion } from '../components/ExpandableMenu';
 import { colors } from '../theme';
 
-export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId, seriesRepository }: { repository: LoadRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null;
+export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId, seriesRepository, onOpenCompanySetups }: { repository: LoadRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null;
   /** DEC-500. Previews the Company Load number this load will receive. */
-  seriesRepository?: LoadNumberSeriesRepository }) {
+  seriesRepository?: LoadNumberSeriesRepository;
+  /** Phase 2. Opens Company setups when no supplier signer is saved. */
+  onOpenCompanySetups?: () => void }) {
   const [options, setOptions] = useState<LoadSetupOptions | null>(null);
   const [draft, setDraft] = useState<LoadDraft>(emptyLoadDraft);
   // DEC-477. Narrows the Driver / Operator list; the selected person always stays listed so a filter change never hides the current choice.
@@ -34,6 +38,18 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   const crewOptions = crew
     .filter((value) => crewFilter === 'all' || value.role === crewFilter || value.id === draft.driverId)
     .map((value) => ({ id: value.id, label: value.name, detail: [truckCrewRoleLabel(value.role), value.phone, value.licenseNumber ? `Licence ${value.licenseNumber}` : null].filter(Boolean).join(' · ') }));
+  // Phase 2. A driver or truck can be picked from the saved lists or typed for this load only (never saved to the lists).
+  const [driverMode, setDriverMode] = useState<'saved' | 'typed'>('saved');
+  const [truckMode, setTruckMode] = useState<'saved' | 'typed'>('saved');
+  const [typedDriver, setTypedDriver] = useState('');
+  const [typedPlate, setTypedPlate] = useState('');
+  const [signatureMode, setSignatureMode] = useState<'draw' | 'name'>('draw');
+  const [signing, setSigning] = useState(false);
+  function setEntryModes(next: LoadDraft) {
+    setDriverMode(!next.driverId && next.driverName.trim() ? 'typed' : 'saved'); setTypedDriver(next.driverId ? '' : next.driverName);
+    setTruckMode(!next.truckId && next.truckPlate.trim() ? 'typed' : 'saved'); setTypedPlate(next.truckId ? '' : next.truckPlate);
+    setSignatureMode('draw');
+  }
   const [lastConfirmedDraft, setLastConfirmedDraft] = useState<LoadDraft | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [setupStatus, setSetupStatus] = useState<'loading' | 'error' | 'ready'>('loading');
@@ -46,7 +62,7 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   const [confirmed, setConfirmed] = useState<ConfirmedLoad | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const reducedMotion = useReducedMotion();
-  const entrance = useState(() => Array.from({ length: 4 }, () => new Animated.Value(0)))[0];
+  const entrance = useState(() => Array.from({ length: 5 }, () => new Animated.Value(0)))[0];
   const calculationMotion = useState(() => new Animated.Value(1))[0];
   const mountedRef = useRef(true);
   const saveRevisionRef = useRef(0);
@@ -58,7 +74,7 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
       if (!mountedRef.current) return;
       let next = saved ?? emptyLoadDraft;
       if (initialProjectId && !next.projectId) { const selected = nextOptions.projects.find((project) => project.id === initialProjectId); if (selected) next = { ...next, projectId: selected.id, customerId: selected.customerId, destinationAddress: '' }; }
-      setOptions(nextOptions); setDraft(next); setLoaded(true); setSetupStatus('ready');
+      setOptions(nextOptions); setDraft(next); setEntryModes(next); setLoaded(true); setSetupStatus('ready');
     }).catch((cause) => {
       if (!mountedRef.current) return;
       setSetupError(cause instanceof Error ? cause.message : 'Could not load the receipt workflow.'); setSetupStatus('error');
@@ -90,13 +106,15 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
 
   const conversion = options?.conversions.find((value) => value.id === draft.conversionId);
   const directUnit = options?.units.find((value) => value.id === draft.directUnitId);
+  // Phase 2. Only conversions that start from the entered unit can apply to a direct quantity.
+  const directConversions = (options?.conversions ?? []).filter((value) => value.inputUnitId === draft.directUnitId);
   const itemGroups = useMemo(() => { const grouped = new Map<string, LoadSetupOptions['items']>(); for (const value of options?.items ?? []) grouped.set(value.categoryName, [...(grouped.get(value.categoryName) ?? []), value]); return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([categoryName, values]) => ({ id: categoryName, label: categoryName, options: values.sort((a, b) => a.name.localeCompare(b.name)).map((value) => ({ id: value.id, label: value.name, detail: value.internalCode ?? undefined })) })); }, [options?.items]);
   const calculation = useMemo(() => calculateLoad(draft, conversion, options?.companySettings.vatRatePercent ?? 0), [conversion, draft, options?.companySettings.vatRatePercent]);
   useEffect(() => { if (!loaded) return; if (reducedMotion) { calculationMotion.setValue(1); return; } calculationMotion.setValue(.96); const animation = Animated.spring(calculationMotion, { toValue: 1, speed: 24, bounciness: 2, useNativeDriver: true }); animation.start(); return () => animation.stop(); }, [calculation.billedQuantity, calculation.finalTotalUsd, calculation.netWeightKg, calculationMotion, loaded, reducedMotion]);
 
   const customer = options?.customers.find((value) => value.id === draft.customerId); const item = options?.items.find((value) => value.id === draft.itemId);
   const project = options?.projects.find((value) => value.id === draft.projectId);
-  const destinationComplete = Boolean(customer && (project || (!customer.isOwnCompany && draft.destinationAddress.trim()))); const directComplete = /^\d+(?:[.,]\d{1,6})?$/.test(draft.directQuantity) && Number(draft.directQuantity.replace(',', '.')) > 0 && Boolean(draft.directUnitId); const weighedComplete = /^\d+$/.test(draft.emptyWeightKg) && /^\d+$/.test(draft.fullWeightKg) && Number(draft.fullWeightKg) > Number(draft.emptyWeightKg); const loadComplete = Boolean(item && draft.driverId && draft.truckId && (draft.quantityMethod === 'direct' ? directComplete : weighedComplete)); const valueComplete = draft.quantityMethod === 'direct' || Boolean(draft.conversionId); const currentStage = !destinationComplete ? 1 : !loadComplete ? 2 : !valueComplete ? 3 : 4;
+  const destinationComplete = Boolean(customer && (project || (!customer.isOwnCompany && draft.destinationAddress.trim()))); const directComplete = /^\d+(?:[.,]\d{1,6})?$/.test(draft.directQuantity) && Number(draft.directQuantity.replace(',', '.')) > 0 && Boolean(draft.directUnitId); const weighedComplete = /^\d+$/.test(draft.emptyWeightKg) && /^\d+$/.test(draft.fullWeightKg) && Number(draft.fullWeightKg) > Number(draft.emptyWeightKg); const loadComplete = Boolean(item && draft.driverName.trim() && draft.truckPlate.trim() && (draft.quantityMethod === 'direct' ? directComplete : weighedComplete)); const valueComplete = draft.quantityMethod === 'direct' || Boolean(draft.conversionId); const currentStage = !destinationComplete ? 1 : !loadComplete ? 2 : !valueComplete ? 3 : 4;
   const destinationIssues = issues.filter((issue) => /customer|project|destination/i.test(issue)); const loadIssues = issues.filter((issue) => /item|driver|truck|weight|quantity/i.test(issue)); const valueIssues = issues.filter((issue) => /conversion|price/i.test(issue)); const otherIssues = issues.filter((issue) => ![...destinationIssues, ...loadIssues, ...valueIssues].includes(issue));
 
   function update<K extends keyof LoadDraft>(key: K, value: LoadDraft[K]) { setDraft((current) => ({ ...current, [key]: value })); setIssues([]); }
@@ -105,7 +123,14 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   function selectItem(id: string) { const selected = options?.items.find((value) => value.id === id); setDraft((current) => ({ ...current, itemId: id, directUnitId: current.directUnitId || selected?.defaultUnitId || '', unitPriceUsd: selected?.defaultPriceUsd == null ? current.unitPriceUsd : String(selected.defaultPriceUsd) })); }
   function selectDriver(id: string) { const selected = options?.drivers.find((value) => value.id === id); setDraft((current) => ({ ...current, driverId: id, driverName: selected?.name ?? '' })); }
   function selectTruck(id: string) { const selected = options?.trucks.find((value) => value.id === id); setDraft((current) => ({ ...current, truckId: id, truckPlate: selected?.plate ?? '' })); }
-  function selectQuantityMethod(quantityMethod: LoadDraft['quantityMethod']) { animateLayout(); setDraft((current) => ({ ...current, quantityMethod })); setIssues([]); }
+  // Phase 2. A conversion only applies to a direct quantity when it starts from the entered unit, so a stale choice is dropped.
+  function selectQuantityMethod(quantityMethod: LoadDraft['quantityMethod']) { animateLayout(); setDraft((current) => { const keeps = quantityMethod === 'weighbridge' || options?.conversions.some((value) => value.id === current.conversionId && value.inputUnitId === current.directUnitId); return { ...current, quantityMethod, conversionId: keeps ? current.conversionId : '' }; }); setIssues([]); }
+  function selectDirectUnit(id: string) { setDraft((current) => ({ ...current, directUnitId: id, conversionId: options?.conversions.some((value) => value.id === current.conversionId && value.inputUnitId === id) ? current.conversionId : '' })); setIssues([]); }
+  function switchDriverMode(mode: 'saved' | 'typed') { if (mode === driverMode) return; animateLayout(); setDriverMode(mode); setDraft((current) => ({ ...current, driverId: '', driverName: mode === 'typed' ? typedDriver : '' })); setIssues([]); }
+  function switchTruckMode(mode: 'saved' | 'typed') { if (mode === truckMode) return; animateLayout(); setTruckMode(mode); setDraft((current) => ({ ...current, truckId: '', truckPlate: mode === 'typed' ? typedPlate : '' })); setIssues([]); }
+  function typeDriver(value: string) { setTypedDriver(value); setDraft((current) => ({ ...current, driverId: '', driverName: value })); setIssues([]); }
+  function typePlate(value: string) { setTypedPlate(value); setDraft((current) => ({ ...current, truckId: '', truckPlate: value })); setIssues([]); }
+  function chooseSignatureMode(mode: 'draw' | 'name') { if (mode === signatureMode) return; animateLayout(); setSignatureMode(mode); if (mode === 'name') setDraft((current) => ({ ...current, driverSignaturePaths: [] })); }
 
   async function doConfirm() {
     if (!options) return; const nextIssues = validateLoadDraft(draft, options); setIssues(nextIssues); if (nextIssues.length) return;
@@ -125,7 +150,7 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
 
   return (
     <View style={styles.screen}>
-      <Animated.ScrollView style={styles.screen} contentContainerStyle={[styles.content, styles.contentWithFooter]} keyboardShouldPersistTaps="handled">
+      <Animated.ScrollView style={styles.screen} scrollEnabled={!signing} contentContainerStyle={[styles.content, styles.contentWithFooter]} keyboardShouldPersistTaps="handled">
         <Animated.View style={motion(0)}>
           <PageHeader eyebrow="NEW OUTGOING LOAD" title="Make Receipt" onBack={onBack} />
           <View style={styles.workflowHero}>
@@ -155,11 +180,11 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
         </Animated.View>
 
         {error ? <Feedback kind="error">{error}</Feedback> : null}
-        {(!options.customers.length || !options.items.length || !options.units.length || (draft.quantityMethod === 'weighbridge' && !options.conversions.length) || !options.drivers.length || !options.trucks.length) ? (
+        {(!options.customers.length || !options.items.length || !options.units.length || (draft.quantityMethod === 'weighbridge' && !options.conversions.length)) ? (
           <View style={styles.warning}>
             <Text style={styles.warningEyebrow}>ACTION NEEDED</Text>
             <Text style={styles.warningTitle}>Setup required</Text>
-            <Text style={styles.helper}>Create a customer, load-enabled item, a saved Driver or Operator, and a saved truck. Units and the kg-to-ton conversion are already seeded.</Text>
+            <Text style={styles.helper}>Create a customer and a load-enabled item. Drivers and trucks can be saved in People & Equipment or simply typed on each load. Units and the kg-to-ton conversion are already seeded.</Text>
             <TouchableOpacity onPress={onOpenDirectory} accessibilityRole="button" accessibilityLabel="Open People and Equipment" hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}><Text style={styles.link}>Open People & Equipment</Text></TouchableOpacity>
           </View>
         ) : null}
@@ -185,9 +210,27 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
             </View>
             <GroupedSearchableSelect label="Load-enabled item *" groups={itemGroups} selectedId={draft.itemId} onSelect={selectItem} placeholder="Choose category, then item" />
             {/* DEC-477. Drivers and Operators can both drive a truck. The filter only narrows the list; choosing an Operator never changes their directory role. */}
-            <SegmentedChoice mode="tabs" options={crewFilterOptions} selectedId={crewFilter} onSelect={setCrewFilter} />
-            <SearchableSelect label="Driver / Operator *" options={crewOptions} selectedId={draft.driverId} onSelect={selectDriver} placeholder="Choose the person driving" />
-            <SearchableSelect label="Truck *" options={options.trucks.map((value) => ({ id: value.id, label: value.plate, detail: [value.makeModel, value.ownerName].filter(Boolean).join(' · ') }))} selectedId={draft.truckId} onSelect={selectTruck} />
+            <SegmentedChoice label="Driver / Operator *" options={[{ id: 'saved' as const, label: 'Saved person' }, { id: 'typed' as const, label: 'Type a name' }]} selectedId={driverMode} onSelect={switchDriverMode} />
+            {driverMode === 'saved' ? (
+              <>
+                <SegmentedChoice mode="tabs" options={crewFilterOptions} selectedId={crewFilter} onSelect={setCrewFilter} />
+                <SearchableSelect label="Saved driver or operator" options={crewOptions} selectedId={draft.driverId} onSelect={selectDriver} placeholder={crew.length ? 'Choose the person driving' : 'No saved drivers yet. Type a name instead.'} />
+              </>
+            ) : (
+              <>
+                <AppField label="Driver name *" value={typedDriver} onChangeText={typeDriver} autoCapitalize="words" />
+                <View style={styles.notSavedRow}><Text style={styles.notSavedChip}>NOT SAVED</Text><Text style={[styles.helper, styles.flex]}>Used on this load only. It is not added to People.</Text></View>
+              </>
+            )}
+            <SegmentedChoice label="Truck *" options={[{ id: 'saved' as const, label: 'Saved truck' }, { id: 'typed' as const, label: 'Type a plate' }]} selectedId={truckMode} onSelect={switchTruckMode} />
+            {truckMode === 'saved' ? (
+              <SearchableSelect label="Saved truck" options={options.trucks.map((value) => ({ id: value.id, label: value.plate, detail: [value.makeModel, value.ownerName].filter(Boolean).join(' · ') }))} selectedId={draft.truckId} onSelect={selectTruck} placeholder={options.trucks.length ? 'Choose the truck' : 'No saved trucks yet. Type a plate instead.'} />
+            ) : (
+              <>
+                <AppField label="Truck plate *" value={typedPlate} onChangeText={typePlate} autoCapitalize="characters" />
+                <View style={styles.notSavedRow}><Text style={styles.notSavedChip}>NOT SAVED</Text><Text style={[styles.helper, styles.flex]}>Used on this load only. It is not added to Trucks.</Text></View>
+              </>
+            )}
             {draft.quantityMethod === 'weighbridge' ? (
               <>
                 <AppField label="Requested quantity (kg, optional)" value={draft.requestedQuantityKg} onChangeText={(value) => update('requestedQuantityKg', value)} keyboardType="number-pad" />
@@ -197,8 +240,8 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
             ) : (
               <>
                 <AppField label="Quantity *" value={draft.directQuantity} onChangeText={(value) => update('directQuantity', value)} keyboardType="decimal-pad" />
-                <SearchableSelect label="Unit *" options={options.units.map((value) => ({ id: value.id, label: value.name, detail: value.symbol }))} selectedId={draft.directUnitId} onSelect={(id) => update('directUnitId', id)} placeholder="Piece, metre, bundle, or another unit" />
-                <Animated.View style={{ transform: [{ scale: calculationMotion }] }}><View style={styles.metricRow}><MetricCard label="Receipt quantity" value={calculation.billedQuantity == null ? '—' : `${calculation.billedQuantity} ${directUnit?.symbol ?? ''}`} result /></View></Animated.View>
+                <SearchableSelect label="Unit *" options={options.units.map((value) => ({ id: value.id, label: value.name, detail: value.symbol }))} selectedId={draft.directUnitId} onSelect={selectDirectUnit} placeholder="Piece, metre, bundle, or another unit" />
+                <Animated.View style={{ transform: [{ scale: calculationMotion }] }}><View style={styles.metricRow}><MetricCard label={conversion ? 'Quantity entered' : 'Receipt quantity'} value={calculation.billedQuantity == null ? '—' : conversion ? `${draft.directQuantity.trim().replace(',', '.')} ${directUnit?.symbol ?? ''}` : `${calculation.billedQuantity} ${directUnit?.symbol ?? ''}`} result /></View></Animated.View>
               </>
             )}
             <IssueList issues={loadIssues} />
@@ -206,14 +249,21 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
         </Animated.View>
 
         <Animated.View style={motion(3)}>
-          <ReceiptSection number="03" title={draft.quantityMethod === 'direct' ? 'Unit price' : 'Conversion and price'} hint={draft.quantityMethod === 'direct' ? 'Calculate the optional price from the entered unit quantity.' : 'Convert the verified weight and calculate the optional sale value.'}>
+          <ReceiptSection number="03" title="Conversion and price" hint={draft.quantityMethod === 'direct' ? 'Optionally convert the entered quantity, then calculate the optional sale value.' : 'Convert the verified weight and calculate the optional sale value.'}>
             {draft.quantityMethod === 'weighbridge' ? (
               <>
                 <SearchableSelect label="Conversion *" options={options.conversions.map((value) => ({ id: value.id, label: value.name, detail: `${value.inputQuantity} ${value.inputUnitSymbol} = ${value.outputQuantity} ${value.outputUnitSymbol}` }))} selectedId={draft.conversionId} onSelect={(id) => update('conversionId', id)} />
                 {conversion ? <Text style={styles.helper}>{conversion.inputQuantity} {conversion.inputUnitSymbol} = {conversion.outputQuantity} {conversion.outputUnitSymbol} · result: {calculation.billedQuantity == null ? '—' : calculation.billedQuantity.toFixed(conversion.decimalPlaces)} {conversion.outputUnitSymbol}</Text> : null}
               </>
-            ) : <Text style={styles.directSummary}>{calculation.billedQuantity ?? '—'} {directUnit?.symbol ?? ''} · entered directly, no scale conversion</Text>}
-            <AppField label={`Price per ${draft.quantityMethod === 'direct' ? (directUnit?.symbol || 'unit') : 'converted unit'} USD (optional)`} value={draft.unitPriceUsd} onChangeText={(value) => update('unitPriceUsd', value)} keyboardType="decimal-pad" />
+            ) : (
+              <>
+                <SearchableSelect label="Conversion (optional)" options={directConversions.map((value) => ({ id: value.id, label: value.name, detail: `${value.inputQuantity} ${value.inputUnitSymbol} = ${value.outputQuantity} ${value.outputUnitSymbol}` }))} selectedId={draft.conversionId} onSelect={(id) => update('conversionId', id)} allowClear placeholder="No conversion (use the quantity as entered)" />
+                {draft.directUnitId && !directConversions.length ? <Text style={styles.helper}>No conversion starts from {directUnit?.symbol ?? 'this unit'}. The quantity is used as entered. Add one in Units &amp; Conversions.</Text> : null}
+                {conversion ? <Text style={styles.helper}>{conversion.inputQuantity} {conversion.inputUnitSymbol} = {conversion.outputQuantity} {conversion.outputUnitSymbol}</Text> : <Text style={styles.directSummary}>{calculation.billedQuantity ?? '—'} {directUnit?.symbol ?? ''} · entered directly, no conversion</Text>}
+                {conversion ? <Animated.View style={{ transform: [{ scale: calculationMotion }] }}><View style={styles.metricRow}><MetricCard label="Converted quantity, used for the price" value={calculation.billedQuantity == null ? '—' : `${calculation.billedQuantity.toFixed(conversion.decimalPlaces)} ${conversion.outputUnitSymbol}`} result /></View></Animated.View> : null}
+              </>
+            )}
+            <AppField label={`Price per ${draft.quantityMethod === 'direct' ? (conversion ? `converted unit (${conversion.outputUnitSymbol})` : (directUnit?.symbol || 'unit')) : 'converted unit'} USD (optional)`} value={draft.unitPriceUsd} onChangeText={(value) => update('unitPriceUsd', value)} keyboardType="decimal-pad" />
             <Animated.View style={{ transform: [{ scale: calculationMotion }] }}>
               <View style={styles.metricRow}>
                 <MetricCard label="Subtotal" value={formatUsd(calculation.subtotalUsd)} />
@@ -223,6 +273,34 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
             </Animated.View>
             <AppField label="Notes" value={draft.notes} onChangeText={(value) => update('notes', value)} multiline />
             <IssueList issues={valueIssues} />
+          </ReceiptSection>
+        </Animated.View>
+
+        <Animated.View style={motion(4)}>
+          <ReceiptSection number="04" title="Signatures" hint="Signed here, so nothing is left to do in Load History.">
+            <Text style={styles.methodLabel}>SUPPLIER</Text>
+            {options.deliverySignature ? (
+              <View style={styles.sigCard}>
+                {options.deliverySignature.display === 'name_with_signature' && options.deliverySignature.signature.length ? <View style={styles.sigPreview} accessibilityLabel={`Saved signature of ${options.deliverySignature.name}`}><Svg width="100%" height="100%" viewBox="0 0 320 140" preserveAspectRatio="xMidYMid meet">{options.deliverySignature.signature.map((path, index) => <Path key={`${index}-${path.length}`} d={path} fill="none" stroke="#111" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />)}</Svg></View> : null}
+                <Text style={styles.sigName}>{[options.deliverySignature.name, options.deliverySignature.jobTitle].filter(Boolean).join(' · ')}</Text>
+                <Text style={styles.autoChip}>AUTO-SIGNED</Text>
+                <Text style={styles.helper}>Auto-signed from the saved company signature{options.deliverySignature.display === 'name_only' ? ' (name only)' : ''}. Change it in Company setups.</Text>
+              </View>
+            ) : (
+              <View style={styles.sigEmpty}>
+                <Text style={styles.sigName}>No supplier signature</Text>
+                <Text style={styles.helper}>{options.supplierSignatureNote ?? 'No default signer is set, so the supplier line is left off the Delivery Authorization.'}</Text>
+                {onOpenCompanySetups ? <AppButton label="Open Company setups" tone="secondary" onPress={onOpenCompanySetups} /> : null}
+              </View>
+            )}
+            <Text style={styles.methodLabel}>DRIVER</Text>
+            <SegmentedChoice options={[{ id: 'draw' as const, label: 'Draw signature' }, { id: 'name' as const, label: 'Name only' }]} selectedId={signatureMode} onSelect={chooseSignatureMode} />
+            {signatureMode === 'draw' ? (
+              <>
+                <SignaturePad value={draft.driverSignaturePaths} onChange={(paths) => update('driverSignaturePaths', paths)} onSigningChange={setSigning} />
+                <Text style={styles.helper}>Page scrolling pauses while you sign. The signature prints on the Delivery Authorization. Leaving the pad empty is allowed.</Text>
+              </>
+            ) : <Text style={styles.directSummary}>No drawn signature. The load is saved Unsigned and the driver can sign later in Load History.</Text>}
           </ReceiptSection>
         </Animated.View>
 
@@ -270,7 +348,7 @@ function ConfirmedView({ record, busy, error, message, canRepeatDelivery, onBack
         <Text style={styles.confirmedKicker}>CONFIRMED OFFLINE</Text>
         <Text style={styles.confirmedNumber}>{loadNumberLabel(record.loadNumber)}</Text>
         <Text style={styles.confirmedHint}>Load number{record.loadNumberSeriesName?` · ${record.loadNumberSeriesName} series`:''} · Transaction {record.transactionNumber} (Receipt and Delivery Authorization)</Text>
-        <Text style={styles.confirmedHint}>The permanent record is saved even if printing fails. Print the Receipt now; add the driver's signature in Load History before printing the Delivery Authorization.</Text>
+        <Text style={styles.confirmedHint}>The permanent record is saved even if printing fails. {record.signaturePaths.length ? 'The driver signed while the receipt was made.' : "Add the driver's signature in Load History before printing the Delivery Authorization."}</Text>
       </View>
       {error ? <Feedback kind="error">{error}</Feedback> : null}
       {message ? <Feedback kind="success">{message}</Feedback> : null}
@@ -319,15 +397,18 @@ function FinalReviewSummary({ options, draft, calculation }: { options: LoadSetu
   const item = options.items.find((value) => value.id === draft.itemId);
   const unit = options.units.find((value) => value.id === draft.directUnitId);
   const conversion = options.conversions.find((value) => value.id === draft.conversionId);
-  const quantitySymbol = draft.quantityMethod === 'direct' ? (unit?.symbol ?? '') : (conversion?.outputUnitSymbol ?? '');
+  const quantitySymbol = draft.quantityMethod === 'direct' && !conversion ? (unit?.symbol ?? '') : (conversion?.outputUnitSymbol ?? '');
   return (
     <AppCard title="Everything correct?" hint="Confirming assigns the permanent transaction number. The record cannot return to Draft.">
       <SummaryRow label="Customer" value={customer?.name ?? '—'} />
       <SummaryRow label="Project / destination" value={project?.name ?? (draft.destinationAddress.trim() || '—')} />
       <SummaryRow label="Item" value={item?.name ?? '—'} />
       <SummaryRow label={`${truckCrewRoleLabel(options.drivers.find((value) => value.id === draft.driverId)?.role)} / truck`} value={`${draft.driverName || '—'} · ${draft.truckPlate || '—'}`} />
-      <SummaryRow label="Quantity" value={calculation.billedQuantity == null ? '—' : `${calculation.billedQuantity} ${quantitySymbol}`} />
+      {!draft.driverId || !draft.truckId ? <SummaryRow label="Not saved" value={`${[!draft.driverId ? 'Driver name' : null, !draft.truckId ? 'truck plate' : null].filter(Boolean).join(' and ')} used on this load only`} /> : null}
+      <SummaryRow label="Quantity" value={calculation.billedQuantity == null ? '—' : draft.quantityMethod === 'direct' && conversion ? `${draft.directQuantity.trim().replace(',', '.')} ${unit?.symbol ?? ''} → ${calculation.billedQuantity} ${conversion.outputUnitSymbol}` : `${calculation.billedQuantity} ${quantitySymbol}`} />
       <SummaryRow label="Price" value={draft.unitPriceUsd.trim() ? formatUsd(calculation.finalTotalUsd) : 'Unpriced'} strong />
+      <SummaryRow label="Supplier signature" value={options.deliverySignature ? `${options.deliverySignature.name} (auto)` : 'None'} />
+      <SummaryRow label="Driver signature" value={draft.driverSignaturePaths.length ? 'Drawn' : 'Not signed (name only)'} />
     </AppCard>
   );
 }
@@ -345,10 +426,12 @@ function ProgressMarker({ number, done, current }: { number: number; done: boole
 function MethodChoice({ title, hint, selected, onPress }: { title: string; hint: string; selected: boolean; onPress: () => void }) { return <TouchableOpacity activeOpacity={.72} onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${title}. ${hint}`} style={[styles.methodChoice, selected && styles.methodChoiceSelected]}><Text style={[styles.methodTitle, selected && styles.methodTitleSelected]}>{title}</Text><Text style={[styles.methodHint, selected && styles.methodHintSelected]}>{hint}</Text></TouchableOpacity>; }
 function IssueList({ issues }: { issues: string[] }) { if (!issues.length) return null; return <Feedback kind="error">{issues.map((issue) => `• ${issue}`).join('\n')}</Feedback>; }
 
-function draftDocument(options: LoadSetupOptions, draft: LoadDraft, calculation: ReturnType<typeof calculateLoad>, loadNumber: string | null = null): DocumentViewData { const customer = options.customers.find((v) => v.id === draft.customerId); const project = options.projects.find((v) => v.id === draft.projectId); const item = options.items.find((v) => v.id === draft.itemId); const conversion = options.conversions.find((v) => v.id === draft.conversionId); const unit = options.units.find(v => v.id === draft.directUnitId); const direct = draft.quantityMethod === 'direct'; return { quantityMethod: draft.quantityMethod, companyName: options.companySettings.companyName, companyAddress: options.companySettings.address, companyPhone: options.companySettings.phone, companyEmail: options.companySettings.email, companyTaxVatNumber: options.companySettings.taxVatNumber, companyReceiptFooter: options.companySettings.receiptFooter, loadNumber, transactionNumber: '', dateTime: new Date(`${draft.recordDate}T12:00:00`).toISOString(), customerName: customer?.name ?? '', projectName: project?.name ?? null, destinationAddress: project?.location ?? (draft.destinationAddress.trim() || null), itemName: item?.name ?? '', driverName: draft.driverName.trim(), driverRole: options.drivers.find((v) => v.id === draft.driverId)?.role ?? null, truckPlate: draft.truckPlate.trim(), requestedQuantityKg: !direct && draft.requestedQuantityKg ? Number(draft.requestedQuantityKg) : null, emptyWeightKg: !direct && draft.emptyWeightKg ? Number(draft.emptyWeightKg) : null, fullWeightKg: !direct && draft.fullWeightKg ? Number(draft.fullWeightKg) : null, netWeightKg: calculation.netWeightKg, convertedQuantity: calculation.billedQuantity, outputUnitSymbol: direct ? (unit?.symbol ?? null) : (conversion?.outputUnitSymbol ?? null), unitPriceUsd: draft.unitPriceUsd.trim() ? Number(draft.unitPriceUsd.replace(',', '.')) : null, subtotalUsd: calculation.subtotalUsd, vatRatePercent: draft.unitPriceUsd.trim() ? options.companySettings.vatRatePercent : null, vatAmountUsd: calculation.vatAmountUsd, finalTotalUsd: calculation.finalTotalUsd, signaturePaths: [], supplierSignature: options.deliverySignature ?? null }; }
-export function confirmedDocument(record: ConfirmedLoad): DocumentViewData { return { quantityMethod: record.quantityMethod, companyName: record.companyName, companyAddress: record.companyAddress, companyPhone: record.companyPhone, companyEmail: record.companyEmail, companyTaxVatNumber: record.companyTaxVatNumber, companyReceiptFooter: record.companyReceiptFooter, loadNumber: record.loadNumber ?? null, transactionNumber: record.transactionNumber, dateTime: record.confirmedAt, customerName: record.customerName, projectName: record.projectName, destinationAddress: record.projectLocation ?? record.destinationAddress, itemName: record.itemName, driverName: record.driverName, driverRole: record.driverRole ?? null, truckPlate: record.truckPlate, requestedQuantityKg: record.requestedQuantityKg, emptyWeightKg: record.emptyWeightKg, fullWeightKg: record.fullWeightKg, netWeightKg: record.netWeightKg, convertedQuantity: record.billedQuantity, outputUnitSymbol: record.outputUnitSymbol, unitPriceUsd: record.unitPriceUsd, subtotalUsd: record.subtotalUsd, vatRatePercent: record.vatRatePercent, vatAmountUsd: record.vatAmountUsd, finalTotalUsd: record.finalTotalUsd, signaturePaths: record.signaturePaths, supplierSignature: record.supplierSignature ?? null }; }
+function draftDocument(options: LoadSetupOptions, draft: LoadDraft, calculation: ReturnType<typeof calculateLoad>, loadNumber: string | null = null): DocumentViewData { const customer = options.customers.find((v) => v.id === draft.customerId); const project = options.projects.find((v) => v.id === draft.projectId); const item = options.items.find((v) => v.id === draft.itemId); const conversion = options.conversions.find((v) => v.id === draft.conversionId); const unit = options.units.find(v => v.id === draft.directUnitId); const direct = draft.quantityMethod === 'direct'; return { quantityMethod: draft.quantityMethod, companyName: options.companySettings.companyName, companyAddress: options.companySettings.address, companyPhone: options.companySettings.phone, companyEmail: options.companySettings.email, companyTaxVatNumber: options.companySettings.taxVatNumber, companyReceiptFooter: options.companySettings.receiptFooter, loadNumber, transactionNumber: '', dateTime: new Date(`${draft.recordDate}T12:00:00`).toISOString(), customerName: customer?.name ?? '', projectName: project?.name ?? null, destinationAddress: project?.location ?? (draft.destinationAddress.trim() || null), itemName: item?.name ?? '', driverName: draft.driverName.trim(), driverRole: options.drivers.find((v) => v.id === draft.driverId)?.role ?? null, truckPlate: draft.truckPlate.trim(), requestedQuantityKg: !direct && draft.requestedQuantityKg ? Number(draft.requestedQuantityKg) : null, emptyWeightKg: !direct && draft.emptyWeightKg ? Number(draft.emptyWeightKg) : null, fullWeightKg: !direct && draft.fullWeightKg ? Number(draft.fullWeightKg) : null, netWeightKg: calculation.netWeightKg, convertedQuantity: calculation.billedQuantity, outputUnitSymbol: direct && !conversion ? (unit?.symbol ?? null) : (conversion?.outputUnitSymbol ?? null), unitPriceUsd: draft.unitPriceUsd.trim() ? Number(draft.unitPriceUsd.replace(',', '.')) : null, subtotalUsd: calculation.subtotalUsd, vatRatePercent: draft.unitPriceUsd.trim() ? options.companySettings.vatRatePercent : null, vatAmountUsd: calculation.vatAmountUsd, finalTotalUsd: calculation.finalTotalUsd, signaturePaths: draft.driverSignaturePaths, supplierSignature: options.deliverySignature ?? null, enteredQuantity: direct && conversion ? `${draft.directQuantity.trim().replace(',', '.')} ${unit?.symbol ?? ''}`.trim() : null, conversionRule: direct && conversion ? `${conversion.inputQuantity} ${conversion.inputUnitSymbol} = ${conversion.outputQuantity} ${conversion.outputUnitSymbol}` : null }; }
+export function confirmedDocument(record: ConfirmedLoad): DocumentViewData { return { quantityMethod: record.quantityMethod, companyName: record.companyName, companyAddress: record.companyAddress, companyPhone: record.companyPhone, companyEmail: record.companyEmail, companyTaxVatNumber: record.companyTaxVatNumber, companyReceiptFooter: record.companyReceiptFooter, loadNumber: record.loadNumber ?? null, transactionNumber: record.transactionNumber, dateTime: record.confirmedAt, customerName: record.customerName, projectName: record.projectName, destinationAddress: record.projectLocation ?? record.destinationAddress, itemName: record.itemName, driverName: record.driverName, driverRole: record.driverRole ?? null, truckPlate: record.truckPlate, requestedQuantityKg: record.requestedQuantityKg, emptyWeightKg: record.emptyWeightKg, fullWeightKg: record.fullWeightKg, netWeightKg: record.netWeightKg, convertedQuantity: record.billedQuantity, outputUnitSymbol: record.outputUnitSymbol, unitPriceUsd: record.unitPriceUsd, subtotalUsd: record.subtotalUsd, vatRatePercent: record.vatRatePercent, vatAmountUsd: record.vatAmountUsd, finalTotalUsd: record.finalTotalUsd, signaturePaths: record.signaturePaths, supplierSignature: record.supplierSignature ?? null, enteredQuantity: directConversionLines(record)?.entered ?? null, conversionRule: directConversionLines(record)?.rule ?? null }; }
 
-const styles = StyleSheet.create({ loadNumberPreview: { backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: '#C9D7E6', padding: 14, gap: 3 }, loadNumberLabel: { color: colors.navy, fontSize: 12, fontWeight: '700' }, loadNumberValue: { color: colors.ink, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] }, loadNumberHint: { color: '#4F5B66', fontSize: 13, lineHeight: 18 },
+const styles = StyleSheet.create({ notSavedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, notSavedChip: { color: colors.warning, backgroundColor: '#FFF3D8', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', fontSize: 10, fontWeight: '900', letterSpacing: .6 },
+  sigCard: { borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 12, gap: 6, backgroundColor: '#FCFBF8' }, sigPreview: { height: 64, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: '#FFF' }, sigName: { color: colors.ink, fontSize: 14, fontWeight: '900' }, autoChip: { alignSelf: 'flex-start', color: colors.success, backgroundColor: '#E5F3EC', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', fontSize: 10, fontWeight: '900', letterSpacing: .6 }, sigEmpty: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, borderRadius: 12, padding: 14, gap: 8, backgroundColor: colors.surface },
+  loadNumberPreview: { backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: '#C9D7E6', padding: 14, gap: 3 }, loadNumberLabel: { color: colors.navy, fontSize: 12, fontWeight: '700' }, loadNumberValue: { color: colors.ink, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] }, loadNumberHint: { color: '#4F5B66', fontSize: 13, lineHeight: 18 },
   screen: { flex: 1 }, content: { padding: 20, paddingBottom: 42, gap: 16 }, contentWithFooter: { paddingBottom: 125 }, flex: { flex: 1, minWidth: 0 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 60 }, loadingMark: { width: 46, height: 46, borderRadius: 23, textAlign: 'center', textAlignVertical: 'center', overflow: 'hidden', backgroundColor: colors.navy, color: '#FFF', fontSize: 24, fontWeight: '900' },
   helper: { color: colors.muted, fontSize: 13, lineHeight: 19 },

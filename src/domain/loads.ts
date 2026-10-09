@@ -82,6 +82,8 @@ export type LoadSetupOptions = {
   companySettings: CompanySettings;
   /** DEC-503. The default signer a new load will carry on its Delivery Authorization, for preview. */
   deliverySignature?: SignerSnapshot | null;
+  /** Phase 2. Why no supplier signature will print, when the Plant Company signer is set but cannot sign; null otherwise. */
+  supplierSignatureNote?: string | null;
 };
 
 export type UnitDraft = { name: string; symbol: string };
@@ -119,12 +121,14 @@ export type LoadDraft = {
   directUnitId: string;
   unitPriceUsd: string;
   notes: string;
+  /** Phase 2. The driver's drawn signature, captured while making the receipt. Empty = unsigned (name only). */
+  driverSignaturePaths: string[];
 };
 
 export const emptyLoadDraft: LoadDraft = {
   recordDate:localLoadDate(),customerId: '', projectId: '', destinationAddress: '', itemId: '', driverId: '', truckId: '', driverName: '',
   truckPlate: '', quantityMethod: 'weighbridge', requestedQuantityKg: '', emptyWeightKg: '', fullWeightKg: '',
-  conversionId: '', directQuantity: '', directUnitId: '', unitPriceUsd: '', notes: '',
+  conversionId: '', directQuantity: '', directUnitId: '', unitPriceUsd: '', notes: '', driverSignaturePaths: [],
 };
 
 function localLoadDate(date=new Date()){return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
@@ -187,6 +191,7 @@ export function isMeaningfulLoadDraft(draft: LoadDraft): boolean {
     || draft.directUnitId
     || draft.unitPriceUsd.trim()
     || draft.notes.trim()
+    || draft.driverSignaturePaths.length > 0
   );
 }
 
@@ -215,6 +220,19 @@ export function createAnotherItemDraft(source: SharedDeliveryContext): LoadDraft
     truckId: source.truckId,
     truckPlate: source.truckPlate,
   };
+}
+
+/** The conversion rule text a plain direct load keeps (Phase 2 reads it to tell plain and converted direct loads apart). */
+export const ENTERED_DIRECTLY = 'Entered directly';
+
+/**
+ * Phase 2. A direct load may also carry a conversion: the entered quantity (in its entered unit) becomes the
+ * billed quantity in the conversion's output unit. Returns the two lines a document shows, or null for a plain
+ * direct or weighbridge load.
+ */
+export function directConversionLines(load: Pick<ConfirmedLoad, 'quantityMethod' | 'directQuantity' | 'directUnitSymbol' | 'conversionRule'>): { entered: string; rule: string } | null {
+  if (load.quantityMethod !== 'direct' || load.directQuantity == null || !load.conversionRule || load.conversionRule === ENTERED_DIRECTLY) return null;
+  return { entered: `${load.directQuantity} ${load.directUnitSymbol ?? ''}`.trim(), rule: load.conversionRule };
 }
 
 export type LoadCalculation = {
@@ -320,6 +338,12 @@ export function calculateLoad(
   if (draft.quantityMethod === 'direct') {
     const quantity = positiveDecimal(draft.directQuantity);
     if (quantity == null) return { netWeightKg: null, convertedQuantity: null, billedQuantity: null, subtotalUsd: null, vatAmountUsd: null, finalTotalUsd: null };
+    // Phase 2. An optional conversion that starts from the entered unit.
+    if (conversion && conversion.inputUnitId === draft.directUnitId) {
+      const converted = (quantity / conversion.inputQuantity) * conversion.outputQuantity;
+      const factor = 10 ** conversion.decimalPlaces;
+      return calculateValue(null, converted, Math.round((converted + Number.EPSILON) * factor) / factor, draft.unitPriceUsd, vatRatePercent);
+    }
     return calculateValue(null, quantity, quantity, draft.unitPriceUsd, vatRatePercent);
   }
   const empty = wholeNumber(draft.emptyWeightKg);
@@ -359,13 +383,19 @@ export function validateLoadDraft(draft: LoadDraft, options: LoadSetupOptions): 
   if (!options.items.some((value) => value.id === draft.itemId)) issues.push('Select a load-enabled item.');
   const driver = options.drivers.find((value) => value.id === draft.driverId);
   const truck = options.trucks.find((value) => value.id === draft.truckId);
-  if (!driver) issues.push('Select a saved driver or operator.');
-  if (!truck) issues.push('Select a saved truck.');
+  // Phase 2. A driver or truck may be typed for this load only (no saved id); a chosen saved id must still exist.
+  if (draft.driverId && !driver) issues.push('Select a saved driver or operator.');
+  if (draft.truckId && !truck) issues.push('Select a saved truck.');
   if (!draft.driverName.trim()) issues.push('Driver or operator name is required.');
   if (!draft.truckPlate.trim()) issues.push('Truck plate is required.');
   if (draft.quantityMethod === 'direct') {
     if (positiveDecimal(draft.directQuantity) == null) issues.push('Direct quantity must be greater than zero with no more than six decimals.');
     if (!options.units.some((value) => value.id === draft.directUnitId)) issues.push('Select the direct quantity unit.');
+    if (draft.conversionId) {
+      const chosen = options.conversions.find((value) => value.id === draft.conversionId);
+      if (!chosen) issues.push('Select a conversion or choose No conversion.');
+      else if (chosen.inputUnitId !== draft.directUnitId) issues.push('The conversion must start from the unit entered.');
+    }
   } else {
     const empty = wholeNumber(draft.emptyWeightKg);
     const full = wholeNumber(draft.fullWeightKg);

@@ -22,6 +22,8 @@ export type DocumentViewData = {
   unitPriceUsd: number | null; subtotalUsd: number | null; vatRatePercent: number | null;
   vatAmountUsd: number | null; finalTotalUsd: number | null;
   signaturePaths: string[];
+  /** Phase 2. A direct quantity that used a conversion: what was entered and the rule applied. Absent on every other load. */
+  enteredQuantity?: string | null; conversionRule?: string | null;
   /** DEC-503. The supplier's (Owner's) signature, under the driver's on the Delivery Authorization. */
   supplierSignature?: SignerSnapshot | null;
 };
@@ -57,6 +59,7 @@ export function LoadDocuments({ data, isDraft }: { data: DocumentViewData; isDra
         <Line label="Item" value={missing(data.itemName)} />
         {tab === 'receipt' ? (
           <>
+            {data.enteredQuantity ? <><Line label="Entered" value={data.enteredQuantity} /><Line label="Conversion" value={data.conversionRule ?? '—'} /></> : null}
             <Line label="Quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} />
             <Line label="Unit price" value={data.unitPriceUsd == null ? 'Unpriced' : formatUsd(data.unitPriceUsd)} />
             {data.unitPriceUsd != null ? <><Line label="Subtotal" value={formatUsd(data.subtotalUsd)} /><Line label="VAT rate" value={`${data.vatRatePercent ?? 0}%`} /><Line label="VAT amount" value={formatUsd(data.vatAmountUsd)} /><Line label="Final total" value={formatUsd(data.finalTotalUsd)} strong /></> : null}
@@ -66,7 +69,7 @@ export function LoadDocuments({ data, isDraft }: { data: DocumentViewData; isDra
             {data.destinationAddress ? <Line label="Destination" value={data.destinationAddress} /> : null}
             <Line label={truckCrewRoleLabel(data.driverRole)} value={missing(data.driverName)} />
             <Line label="Truck plate" value={missing(data.truckPlate)} />
-            {data.quantityMethod==='weighbridge'?<>{data.requestedQuantityKg != null ? <Line label="Requested quantity" value={`${data.requestedQuantityKg} kg`} /> : null}<Line label="Empty weight" value={data.emptyWeightKg == null ? '—' : `${data.emptyWeightKg} kg`} /><Line label="Full weight" value={data.fullWeightKg == null ? '—' : `${data.fullWeightKg} kg`} /><Line label="Net weight" value={data.netWeightKg == null ? '—' : `${data.netWeightKg} kg`} strong /><Line label="Converted quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} /></>:<Line label="Quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} strong />}
+            {data.quantityMethod==='weighbridge'?<>{data.requestedQuantityKg != null ? <Line label="Requested quantity" value={`${data.requestedQuantityKg} kg`} /> : null}<Line label="Empty weight" value={data.emptyWeightKg == null ? '—' : `${data.emptyWeightKg} kg`} /><Line label="Full weight" value={data.fullWeightKg == null ? '—' : `${data.fullWeightKg} kg`} /><Line label="Net weight" value={data.netWeightKg == null ? '—' : `${data.netWeightKg} kg`} strong /><Line label="Converted quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} /></>:<>{data.enteredQuantity ? <Line label="Entered" value={data.enteredQuantity} /> : null}<Line label="Quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} strong /></>}
             {data.signaturePaths.length ? <View style={styles.signature}><Svg width="100%" height={80} viewBox="0 0 320 140">{data.signaturePaths.map((path,index)=><Path key={`${index}-${path.length}`} d={path} fill="none" stroke="#111" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"/>)}</Svg><Text style={styles.signatureLabel}>{truckCrewRoleLabel(data.driverRole)} signature: {data.driverName}</Text></View> : <Line label={`${truckCrewRoleLabel(data.driverRole)} signature`} value="Unsigned" />}
             {data.supplierSignature ? <View style={styles.signature}>{data.supplierSignature.display==='name_with_signature'&&data.supplierSignature.signature.length?<Svg width="100%" height={80} viewBox="0 0 320 140" preserveAspectRatio="xMidYMid meet">{data.supplierSignature.signature.map((path,index)=><Path key={`s${index}-${path.length}`} d={path} fill="none" stroke="#111" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"/>)}</Svg>:<Text style={styles.byName}>Signed by name</Text>}<Text style={styles.signatureLabel}>Supplier signature: {data.supplierSignature.name}</Text>{[data.supplierSignature.jobTitle,data.supplierSignature.department].filter(Boolean).length?<Text style={styles.signatureLabel}>{[data.supplierSignature.jobTitle,data.supplierSignature.department].filter(Boolean).join(' · ')}</Text>:null}</View> : null}
           </>

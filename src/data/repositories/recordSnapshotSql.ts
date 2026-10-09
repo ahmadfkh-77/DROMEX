@@ -10,7 +10,8 @@ import {NO_CUSTOMER_KEY} from '../../domain/companyTotals';
 export const keyOf=(idColumn:string,nameColumn:string)=>`CASE WHEN ${idColumn} IS NOT NULL THEN 'id:' || ${idColumn} ELSE 'name:' || lower(trim(${nameColumn})) END`;
 /** How many audited corrections a record carries; unreadable history counts as none. */
 const historyCount=(column:string)=>`CASE WHEN json_valid(${column}) AND json_type(${column}) = 'array' THEN json_array_length(${column}) ELSE 0 END`;
-export const LOAD_UNIT_SQL="CASE WHEN l.quantity_method = 'direct' THEN l.direct_unit_id ELSE c.output_unit_id END";
+// Phase 2. A direct load that used a conversion is counted in the conversion's output unit, like a weighbridge load.
+export const LOAD_UNIT_SQL="CASE WHEN l.quantity_method = 'direct' AND COALESCE(l.conversion_rule,'Entered directly') = 'Entered directly' THEN l.direct_unit_id ELSE c.output_unit_id END";
 
 /** Company loads (customer side). `record_day` is the local calendar date of the load. */
 export const COMPANY_LOAD_RECORDS=`SELECT 'company_load' record_type, l.id record_id, 'company_load:' || l.id record_key, l.transaction_number reference,
