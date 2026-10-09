@@ -15,6 +15,8 @@ export type DecodedArchive={manifest:BackupManifest;databaseBytes:Uint8Array;pre
 const singleSpecs=[
   {table:'company_settings',column:'logo_uri'},
   {table:'company_settings',column:'ministry_logo_uri'},
+  // Phase 1. The Project Company header logo.
+  {table:'project_company_profile',column:'logo_uri'},
   {table:'loads',column:'company_logo_uri'},
   {table:'quick_text_documents',column:'company_logo_uri'},
   // DEC-500. The company logo as it was when a business document was issued.

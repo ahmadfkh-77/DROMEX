@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
+import type { CompanyHeaderRepository } from '../../data/repositories/CompanyHeaderRepository';
+import type { DocumentSignerRepository } from '../../data/repositories/DocumentSignerRepository';
 import type { DemoArchiveStatus, ProfileRepository } from '../../data/repositories/ProfileRepository';
+import type { DocumentSigner } from '../../domain/documentSigners';
 import { validateCompanySettings } from '../../domain/profiles';
 import { pickPersistentImage } from '../../services/media';
 import { AppButton, AppCard, AppField, AppPage, Feedback, PageHeader } from '../components/AppPrimitives';
+import { HeaderSignerField, type HeaderSignerValue } from '../components/HeaderSignerField';
 import { colors } from '../theme';
 
-export function SettingsScreen({ repository, onBack }: { repository: ProfileRepository; onBack: () => void }) {
+/** The Plant Company: the existing Company profile. `headers` and `signers` add its registration number and default signer. */
+export function SettingsScreen({ repository, onBack, headers, signers }: { repository: ProfileRepository; onBack: () => void; headers?: CompanyHeaderRepository; signers?: DocumentSignerRepository }) {
   const [companyName, setCompanyName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
@@ -16,6 +21,9 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
   const [receiptFooter, setReceiptFooter] = useState('');
   const [vatRate, setVatRate] = useState('0');
   const [logoUri, setLogoUri] = useState<string | null>(null);
+  const [registrationNumber, setRegistrationNumber] = useState('');
+  const [headerSigner, setHeaderSigner] = useState<HeaderSignerValue>({ signerId: null, display: null });
+  const [signerList, setSignerList] = useState<DocumentSigner[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,6 +46,18 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
     });
     return () => { active = false; };
   }, [repository]);
+
+  useEffect(() => {
+    if (!headers || !signers) return;
+    let active = true;
+    void Promise.all([headers.getPlantExtras(), signers.listSigners()]).then(([extras, list]) => {
+      if (!active) return;
+      setRegistrationNumber(extras.registrationNumber ?? '');
+      setHeaderSigner({ signerId: extras.signerId, display: extras.signerDisplay });
+      setSignerList(list);
+    }).catch(() => { if (active) setError('The registration number and default signer could not be loaded.'); });
+    return () => { active = false; };
+  }, [headers, signers]);
 
   useEffect(() => {
     let active = true;
@@ -67,6 +87,7 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
     setSaved(false);
     try {
       await repository.saveCompanySettings(draft);
+      if (headers) await headers.savePlantExtras({ registrationNumber, signerId: headerSigner.signerId, signerDisplay: headerSigner.display });
       setSaved(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save settings.');
@@ -92,7 +113,7 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
 
   return (
     <AppPage keyboard>
-      <PageHeader eyebrow="SETTINGS" title="Company profile" onBack={onBack} />
+      <PageHeader eyebrow="COMPANY SETUPS" title="Plant Company" onBack={onBack} />
       <AppCard tone="navy" title="Your business identity" hint="Keep the details used on future receipts, authorizations, reports, and tax calculations in one place.">
         <View style={styles.contextRow}><Text style={styles.contextLabel}>DOCUMENT PROFILE</Text><Text style={styles.contextValue}>{companyName.trim() || 'Not configured'}</Text></View>
       </AppCard>
@@ -120,8 +141,15 @@ export function SettingsScreen({ repository, onBack }: { repository: ProfileRepo
 
       <AppCard title="Document details" hint="Optional information used on receipts and authorization output.">
         <AppField label="Tax / VAT registration number" value={taxVatNumber} onChangeText={setTaxVatNumber} />
+        {headers ? <AppField label="Company registration number" value={registrationNumber} onChangeText={setRegistrationNumber} /> : null}
         <AppField label="Receipt footer message" value={receiptFooter} onChangeText={setReceiptFooter} multiline placeholder="Thank you for your business" />
       </AppCard>
+
+      {headers && signers ? (
+        <AppCard title="Default signer" hint="Chosen from Authorized signers. Their name, title and saved signature print on documents under this header. No second signature is stored here.">
+          <HeaderSignerField signers={signerList} value={headerSigner} onChange={setHeaderSigner} />
+        </AppCard>
+      ) : null}
 
       <AppCard tone="cream" title="Tax settings" hint="The universal VAT rate applies to future numeric-priced receipts and purchases.">
         <AppField label="VAT percentage" value={vatRate} onChangeText={setVatRate} keyboardType="decimal-pad" placeholder="0" />

@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 50;
+export const DATABASE_VERSION = 51;
 
 type TableColumn = { name: string };
 
@@ -1975,6 +1975,37 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_fuel_movements_batch ON fuel_movements(batch_id);
     `);
     currentVersion = 50;
+  }
+
+
+  if (currentVersion === 50) {
+    // Phase 1 (Receipts, Load History and PDFs). Two company headers. The Plant Company is the existing
+    // company_settings row and is not copied or moved: it only gains a registration number and a default
+    // signer. The Project Company is one new row that LINKS to an existing customer by id and adds header
+    // details only; nothing in customers, loads, payments or projects is written. A project may remember
+    // which header its PDFs default to (NULL = Plant Company). Purely additive.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS project_company_profile (
+        id TEXT PRIMARY KEY NOT NULL CHECK (id = 'project'),
+        customer_id TEXT NOT NULL REFERENCES customers(id),
+        logo_uri TEXT,
+        address TEXT,
+        phone TEXT,
+        email TEXT,
+        tax_vat_number TEXT,
+        registration_number TEXT,
+        receipt_footer TEXT,
+        signer_id TEXT REFERENCES document_signers(id),
+        signer_display TEXT CHECK (signer_display IS NULL OR signer_display IN ('name_only', 'name_with_signature')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    await addColumnIfMissing(db, 'company_settings', 'registration_number', 'TEXT');
+    await addColumnIfMissing(db, 'company_settings', 'header_signer_id', 'TEXT REFERENCES document_signers(id)');
+    await addColumnIfMissing(db, 'company_settings', 'header_signer_display', "TEXT CHECK (header_signer_display IS NULL OR header_signer_display IN ('name_only', 'name_with_signature'))");
+    await addColumnIfMissing(db, 'projects', 'header_company', "TEXT CHECK (header_company IS NULL OR header_company IN ('plant', 'project'))");
+    currentVersion = 51;
   }
 
 
