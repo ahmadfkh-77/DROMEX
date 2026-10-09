@@ -20,7 +20,7 @@ type ProfileRow = {
   tax_vat_number: string | null; registration_number: string | null; receipt_footer: string | null;
   signer_id: string | null; signer_display: SignerDisplay | null; updated_at: string;
 };
-type CustomerRow = { id: string; name: string; is_active: number; merged_into_id: string | null };
+type CustomerRow = { id: string; name: string; is_active: number; merged_into_id: string | null; is_own_company?: number };
 type PlantRow = {
   company_name: string; logo_uri: string | null; address: string | null; phone: string | null; email: string | null;
   tax_vat_number: string | null; receipt_footer: string | null; registration_number: string | null;
@@ -88,13 +88,25 @@ export class SqliteCompanyHeaderRepository implements CompanyHeaderRepository {
   async saveProjectCompany(draft: ProjectCompanyDraft): Promise<ProjectCompanyProfile> {
     const issue = validateProjectCompanyDraft(draft)[0];
     if (issue) throw new Error(issue);
-    const customer = await this.db.getFirstAsync<CustomerRow>('SELECT id, name, is_active, merged_into_id FROM customers WHERE id = ?', draft.customerId);
+    const customer = await this.db.getFirstAsync<CustomerRow>('SELECT id, name, is_active, merged_into_id, is_own_company FROM customers WHERE id = ?', draft.customerId);
     if (!customer) throw new Error('The chosen customer was not found.');
+    // DEC-508. Only the own-company customer is named here; any other customer keeps the name it was given in Customers.
+    const newName = customer.is_own_company === 1 && draft.customerName !== undefined ? draft.customerName.trim().replace(/\s+/g, ' ') : null;
+    if (newName !== null && !newName) throw new Error('Enter the company name.');
+    if (newName !== null && newName !== customer.name) {
+      const clash = await this.db.getFirstAsync<{ name: string }>('SELECT name FROM customers WHERE id <> ? AND is_active = 1 AND name = ? COLLATE NOCASE', customer.id, newName);
+      if (clash) throw new Error(`A customer named "${clash.name}" already exists. Choose a different name.`);
+    }
     if (customer.is_active !== 1 && !customer.merged_into_id) throw new Error('The chosen customer is archived. Choose an active customer.');
     if (draft.signerId) await this.requireUsableSigner(draft.signerId, draft.signerDisplay ?? 'name_only');
     const now = new Date().toISOString();
     // Only project_company_profile is written. customers, loads, payments and projects are never touched.
     await this.db.withTransactionAsync(async () => {
+      if (newName !== null && newName !== customer.name) {
+        // Only the customer's current name changes. Loads, receipts and documents keep the name they were made with.
+        await this.db.runAsync('UPDATE customers SET name = ?, updated_at = ? WHERE id = ?', newName, now, customer.id);
+        await this.enqueue('customer', customer.id, { id: customer.id, name: newName, updatedAt: now });
+      }
       await this.db.runAsync(
         `INSERT INTO project_company_profile (id, customer_id, logo_uri, address, phone, email, tax_vat_number, registration_number, receipt_footer, signer_id, signer_display, created_at, updated_at)
          VALUES ('project', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

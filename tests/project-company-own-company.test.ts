@@ -86,3 +86,51 @@ describe('where the controls are',()=>{
     expect(app).toContain('initialCustomerId={projectCompanyPick}');
   });
 });
+
+describe('the own-company customer is named by the Project Company, not by the plant',()=>{
+  it('keeps the customer\'s name and details when the Plant Company is saved',async()=>{
+    const {db}=await setup();
+    const {SqliteProfileRepository}=await import('../src/data/repositories/SqliteProfileRepository');
+    const profiles=new SqliteProfileRepository(db as never);
+    db.raw.exec("UPDATE customers SET phone='01 111', address='Zahle', tax_vat_number='T-9' WHERE id='own'");
+    const before=db.raw.prepare("SELECT * FROM customers WHERE id='own'").get();
+    await profiles.saveCompanySettings({companyName:'DROMEX Asphalt Co. (renamed)',phone:'01 999',email:'plant@x.test',address:'Beirut',taxVatNumber:'P-1',vatRatePercent:11,logoUri:null} as never);
+    expect(db.raw.prepare("SELECT * FROM customers WHERE id='own'").get()).toEqual(before);
+    expect(db.raw.prepare("SELECT company_name FROM company_settings WHERE id='company'").get()).toEqual({company_name:'DROMEX Asphalt Co. (renamed)'});
+    expect((db.raw.prepare('SELECT COUNT(*) n FROM customers WHERE is_own_company=1').get() as {n:number}).n).toBe(1);
+  });
+
+  it('still creates the own-company customer the first time, from the plant\'s details',async()=>{
+    const {db}=await setup();
+    db.raw.exec("UPDATE projects SET customer_id='customer' WHERE customer_id='own';DELETE FROM customers WHERE id='own'");
+    const {SqliteProfileRepository}=await import('../src/data/repositories/SqliteProfileRepository');
+    await new SqliteProfileRepository(db as never).saveCompanySettings({companyName:'First Plant',phone:null,email:null,address:null,taxVatNumber:null,vatRatePercent:11,logoUri:null} as never);
+    expect(db.raw.prepare('SELECT name FROM customers WHERE is_own_company=1').get()).toEqual({name:'First Plant'});
+  });
+
+  it('renames the own-company customer from the Project Company setup, leaving old records and other customers alone',async()=>{
+    const {db,headers}=await setup();
+    const loadsBefore=db.raw.prepare('SELECT * FROM loads ORDER BY id').all(),othersBefore=db.raw.prepare("SELECT * FROM customers WHERE id <> 'own' ORDER BY id").all();
+    const saved=await headers.saveProjectCompany({...draft('own'),customerName:'  Hashem   Contracting '});
+    expect(saved).toMatchObject({customerId:'own',customerName:'Hashem Contracting'});
+    expect(db.raw.prepare("SELECT name FROM customers WHERE id='own'").get()).toEqual({name:'Hashem Contracting'});
+    expect(db.raw.prepare('SELECT * FROM loads ORDER BY id').all()).toEqual(loadsBefore);
+    expect(db.raw.prepare("SELECT * FROM customers WHERE id <> 'own' ORDER BY id").all()).toEqual(othersBefore);
+    expect(await headers.resolveHeader('project')).toMatchObject({name:'Hashem Contracting'});
+    expect(await headers.resolveHeader('plant')).toMatchObject({name:'DROMEX Asphalt Co.'});
+  });
+
+  it('refuses an empty name or one another customer already has, and never renames a customer that is not the own company',async()=>{
+    const {db,headers}=await setup();
+    await expect(headers.saveProjectCompany({...draft('own'),customerName:'   '})).rejects.toThrow('Enter the company name.');
+    await expect(headers.saveProjectCompany({...draft('own'),customerName:'road co'})).rejects.toThrow('already exists');
+    await headers.saveProjectCompany({...draft('customer'),customerName:'Should Not Apply'});
+    expect(db.raw.prepare("SELECT name FROM customers WHERE id='customer'").get()).toEqual({name:'Road Co'});
+  });
+
+  it('shows the Company name field only for the own company, prefilled',()=>{
+    const screen=read('src/ui/screens/ProjectCompanyScreen.tsx');
+    expect(screen).toContain('label="Company name *"');expect(screen).toContain('chosen?.isOwnCompany');
+    expect(screen).toContain('...(chosen?.isOwnCompany?{customerName:companyName}:{})');
+  });
+});

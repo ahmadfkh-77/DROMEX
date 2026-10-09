@@ -18,6 +18,8 @@ export type PlantHeaderExtrasDraft = { registrationNumber: string; signerId: str
 
 export type ProjectCompanyDraft = {
   customerId: string;
+  /** DEC-508. For the own-company customer only: the name it takes (the Project Company's name). Left out, the name stays as it is. */
+  customerName?: string;
   logoUri: string | null;
   address: string;
   phone: string;

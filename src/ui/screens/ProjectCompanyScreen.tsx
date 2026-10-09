@@ -24,6 +24,7 @@ export function ProjectCompanyScreen({profiles,headers,signers,onBack,initialCus
   const[signerList,setSignerList]=useState<DocumentSigner[]>([]);
   const[existing,setExisting]=useState<ProjectCompanyProfile|null>(null);
   const[customerId,setCustomerId]=useState('');
+  const[companyName,setCompanyName]=useState('');
   const[logoUri,setLogoUri]=useState<string|null>(null);
   const[address,setAddress]=useState('');const[phone,setPhone]=useState('');const[email,setEmail]=useState('');
   const[taxVatNumber,setTaxVatNumber]=useState('');const[registrationNumber,setRegistrationNumber]=useState('');const[footer,setFooter]=useState('');
@@ -48,9 +49,12 @@ export function ProjectCompanyScreen({profiles,headers,signers,onBack,initialCus
     .filter(value=>value.isActive||value.id===customerId)
     .map(value=>({id:value.id,label:value.isOwnCompany?`${value.name} (Own company)`:value.name,detail:value.isActive?undefined:'Archived'}));
   const state=projectCompanyState(existing);
+  const chosen=customers.find(value=>value.id===customerId)??null;
+  // DEC-508. The own-company customer is named here; the name field follows whichever customer is chosen.
+  useEffect(()=>{setCompanyName(chosen?.name??'');},[chosen?.id,chosen?.name]);
 
   async function save(){
-    const draft={customerId,logoUri,address,phone,email,taxVatNumber,registrationNumber,receiptFooter:footer,signerId:signer.signerId,signerDisplay:signer.display};
+    const draft={customerId,...(chosen?.isOwnCompany?{customerName:companyName}:{}),logoUri,address,phone,email,taxVatNumber,registrationNumber,receiptFooter:footer,signerId:signer.signerId,signerDisplay:signer.display};
     const issue=validateProjectCompanyDraft(draft)[0];
     if(issue){setSaved(null);setError(issue);return;}
     setBusy(true);setError(null);setSaved(null);
@@ -77,7 +81,8 @@ export function ProjectCompanyScreen({profiles,headers,signers,onBack,initialCus
       {state==='customer_archived'?<Feedback kind="warning">The linked customer is archived. The header still prints from the saved details. Records are unaffected.</Feedback>:null}
       <AppCard title="Which customer is it?" hint="The project owner is one of your existing customers, including your own company. Choosing it only adds header details to that customer.">
         <SearchableSelect label="Customer *" options={customerOptions} selectedId={customerId} onSelect={setCustomerId} placeholder={customerOptions.length?'Search and select a customer':'Create a customer first'}/>
-        <Text style={styles.helper}>The link never renames, moves, merges or changes the customer, its loads, payments or projects. If the customer is renamed later, the header follows its new name.</Text>
+        {chosen?.isOwnCompany?<><AppField label="Company name *" value={companyName} onChangeText={setCompanyName}/><Text style={styles.helper}>For your own company this is the customer's name. Saving renames the customer to this name from now on. Loads, receipts and documents already made keep the name they were made with. The Plant Company in Company Settings is not changed.</Text></>:null}
+        <Text style={styles.helper}>The link never moves, merges or changes the customer's loads, payments or projects. If the customer is renamed later, the header follows its new name.</Text>
       </AppCard>
       <AppCard title="Header details" hint="Used only when you choose Project Company as the header on a PDF.">
         <View style={styles.logoPanel}>

@@ -265,31 +265,11 @@ export class SqliteProfileRepository implements ProfileRepository {
       const ownRow = await this.db.getFirstAsync<CustomerRow>(
         'SELECT * FROM customers WHERE is_own_company = 1',
       );
-      let ownCustomer: Customer;
-      if (ownRow) {
-        await this.db.runAsync(
-          `UPDATE customers SET customer_type = 'company', name = ?, phone = ?, email = ?,
-            address = ?, tax_vat_number = ?, is_active = 1, updated_at = ? WHERE id = ?`,
-          settings.companyName,
-          settings.phone,
-          settings.email,
-          settings.address,
-          settings.taxVatNumber,
-          now,
-          ownRow.id,
-        );
-        ownCustomer = {
-          ...rowToCustomer(ownRow),
-          type: 'company',
-          name: settings.companyName,
-          phone: settings.phone,
-          email: settings.email,
-          address: settings.address,
-          taxVatNumber: settings.taxVatNumber,
-          isActive: true,
-          updatedAt: now,
-        };
-      } else {
+      // DEC-508. The plant (Company Settings) and the own-company customer are different companies: once the
+      // customer exists, saving the plant never changes its name or details. The customer is named from the Project
+      // Company setup. Only a database with no own-company customer yet gets one, created from these details.
+      let ownCustomer: Customer | null = null;
+      if (!ownRow) {
         ownCustomer = {
           id: makeId('customer'),
           type: 'company',
@@ -310,7 +290,7 @@ export class SqliteProfileRepository implements ProfileRepository {
 
       await this.enqueue('companySettings', 'company', settings);
       await this.enqueue('taxSettings', 'tax', { vatRatePercent: settings.vatRatePercent });
-      await this.enqueue('customer', ownCustomer.id, ownCustomer);
+      if (ownCustomer) await this.enqueue('customer', ownCustomer.id, ownCustomer);
     });
 
     return settings;
