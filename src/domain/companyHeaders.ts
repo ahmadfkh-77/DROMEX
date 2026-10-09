@@ -1,4 +1,5 @@
 import type {SignerDisplay, SignerSnapshot} from './documentSigners';
+import type {ConfirmedLoad} from './loads';
 
 /**
  * Phase 1 (Receipts, Load History and PDFs). A PDF can be headed by one of two companies:
@@ -86,3 +87,26 @@ export function effectiveHeaderKind(requested: HeaderCompanyKind, projectCompany
 }
 
 export const HEADER_PICKER_HELPER = 'Its name, logo, contact details and signature go on this PDF. Records and numbers do not change. Remembered for this project.';
+
+/**
+ * Phase 3. The loaded record as a PDF, preview or printed slip should show it under the chosen header
+ * company. Only the company name, logo, contact details, footer and the supplier signature line change;
+ * every number, quantity, price and signature the load was confirmed with is read from the record as is.
+ * The Plant Company returns the record exactly as confirmed (its own header and supplier signature snapshot), so
+ * reprinting an old receipt never changes it when the company profile is edited later. The Project Company shows
+ * its own header and signer, or no supplier line when it has none. The original record is never changed.
+ */
+export function applyHeaderCompany(record: ConfirmedLoad, header: HeaderCompany): ConfirmedLoad {
+  if (header.kind === 'plant') return record;
+  return {
+    ...record,
+    companyName: header.name,
+    companyAddress: header.address,
+    companyPhone: header.phone,
+    companyEmail: header.email,
+    companyTaxVatNumber: header.taxVatNumber,
+    companyReceiptFooter: header.footer,
+    companyLogoUri: header.logoUri,
+    supplierSignature: header.signer,
+  };
+}

@@ -8,6 +8,10 @@ import type { LoadRepository } from '../../data/repositories/LoadRepository';
 import { truckCrewRoleLabel, type TruckCrewRole } from '../../domain/people';
 import { calculateLoad, createAnotherItemDraft, directConversionLines, emptyLoadDraft, formatUsd, type ConfirmedLoad, type LoadDraft, type LoadSetupOptions, validateLoadDraft } from '../../domain/loads';
 import { printLoadBluetooth } from '../../services/bluetoothPrinter';
+import { exportAndShareLoadDocument, type LoadDocumentKind, type PaperWidth } from '../../services/documentExport';
+import type { CompanyHeaderRepository } from '../../data/repositories/CompanyHeaderRepository';
+import { applyHeaderCompany, type HeaderCompany, type HeaderCompanyKind } from '../../domain/companyHeaders';
+import { HeaderCompanyPicker } from '../components/HeaderCompanyPicker';
 import { AppButton, AppCard, AppField, Feedback, MetricCard, PageHeader } from '../components/AppPrimitives';
 import { LoadDocuments, type DocumentViewData } from '../components/LoadDocuments';
 import { SearchableSelect } from '../components/SearchableSelect';
@@ -19,11 +23,13 @@ import { DatePickerField, todayIso } from '../components/DatePickerField';
 import { useReducedMotion } from '../components/ExpandableMenu';
 import { colors } from '../theme';
 
-export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId, seriesRepository, onOpenCompanySetups }: { repository: LoadRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null;
+export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId, seriesRepository, onOpenCompanySetups, headers }: { repository: LoadRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null;
   /** DEC-500. Previews the Company Load number this load will receive. */
   seriesRepository?: LoadNumberSeriesRepository;
   /** Phase 2. Opens Company setups when no supplier signer is saved. */
-  onOpenCompanySetups?: () => void }) {
+  onOpenCompanySetups?: () => void;
+  /** Phase 3. Offers the Header company picker on the Load confirmed screen. */
+  headers?: CompanyHeaderRepository }) {
   const [options, setOptions] = useState<LoadSetupOptions | null>(null);
   const [draft, setDraft] = useState<LoadDraft>(emptyLoadDraft);
   // DEC-477. Narrows the Driver / Operator list; the selected person always stays listed so a filter change never hides the current choice.
@@ -139,13 +145,12 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
       { text: 'Confirm load', onPress: () => { setBusy(true); setError(null); const submittedDraft = draft; void repository.confirmLoad(draft).then((record) => { setConfirmed(record); setLastConfirmedDraft(submittedDraft); setPreview(false); setDraft(emptyLoadDraft); }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not confirm load.')).finally(() => setBusy(false)); } },
     ]);
   }
-  async function printConfirmedReceipt(record: ConfirmedLoad) { setBusy(true); setError(null); setMessage(null); try { const printer = await printLoadBluetooth(record, 'receipt'); setMessage(`Receipt sent to ${printer.name}.`); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not print. The confirmed record is still saved.'); } finally { setBusy(false); } }
   function createAnotherItemForSameDelivery() { if (!lastConfirmedDraft) return; setIssues([]); setError(null); setMessage(null); setDraft(createAnotherItemDraft(lastConfirmedDraft)); setConfirmed(null); }
   const motion = (index: number) => { const value = entrance[index]!; return { opacity: value, transform: [{ translateY: value.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }; };
 
   if (setupStatus === 'error') return <ErrorView message={setupError} onBack={onBack} onRetry={loadSetup} />;
   if (!options) return <LoadingView onBack={onBack} />;
-  if (confirmed) return <ConfirmedView record={confirmed} busy={busy} error={error} message={message} canRepeatDelivery={Boolean(lastConfirmedDraft)} onBack={onBack} onPrint={() => void printConfirmedReceipt(confirmed)} onCreateAnotherItem={createAnotherItemForSameDelivery} onStartAnotherLoad={() => { setConfirmed(null); setMessage(null); setError(null); }} />;
+  if (confirmed) return <ConfirmedView record={confirmed} headers={headers} projectId={lastConfirmedDraft?.projectId || null} canRepeatDelivery={Boolean(lastConfirmedDraft)} onBack={onBack} onOpenCompanySetups={onOpenCompanySetups} onCreateAnotherItem={createAnotherItemForSameDelivery} onStartAnotherLoad={() => { setConfirmed(null); setMessage(null); setError(null); }} />;
   if (preview) return <PreviewView options={options} draft={draft} calculation={calculation} issues={issues} busy={busy} onBack={() => setPreview(false)} onConfirm={() => void doConfirm()} seriesRepository={seriesRepository} />;
 
   return (
@@ -340,7 +345,50 @@ function ErrorView({ message, onBack, onRetry }: { message: string | null; onBac
   );
 }
 
-function ConfirmedView({ record, busy, error, message, canRepeatDelivery, onBack, onPrint, onCreateAnotherItem, onStartAnotherLoad }: { record: ConfirmedLoad; busy: boolean; error: string | null; message: string | null; canRepeatDelivery: boolean; onBack: () => void; onPrint: () => void; onCreateAnotherItem: () => void; onStartAnotherLoad: () => void }) {
+/**
+ * Phase 3. What happens after confirming: choose the document, choose the Header company, see a live preview,
+ * print or share it, and only then start something new. Nothing here starts a new load by itself.
+ */
+function ConfirmedView({ record, headers, projectId, canRepeatDelivery, onBack, onOpenCompanySetups, onCreateAnotherItem, onStartAnotherLoad }: { record: ConfirmedLoad; headers?: CompanyHeaderRepository; projectId: string | null; canRepeatDelivery: boolean; onBack: () => void; onOpenCompanySetups?: () => void; onCreateAnotherItem: () => void; onStartAnotherLoad: () => void }) {
+  const [kind, setKind] = useState<LoadDocumentKind>('receipt');
+  const [paper, setPaper] = useState<PaperWidth>('58');
+  const [headerKind, setHeaderKind] = useState<HeaderCompanyKind>('plant');
+  const [remember, setRemember] = useState(false);
+  const [header, setHeader] = useState<HeaderCompany | null>(null);
+  const [busy, setBusy] = useState<'print' | 'pdf' | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [printFailed, setPrintFailed] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+  // The project's remembered header is the starting choice; a project with none starts on the Plant Company.
+  useEffect(() => {
+    if (!headers || !projectId) return;
+    let active = true;
+    headers.getProjectHeaderDefault(projectId).then((stored) => { if (active) setHeaderKind(stored); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [headers, projectId]);
+  useEffect(() => {
+    if (!headers) { setHeader(null); return; }
+    let active = true;
+    headers.resolveHeader(headerKind).then((value) => { if (active) setHeader(value); }).catch(() => { if (active) setHeader(null); });
+    return () => { active = false; };
+  }, [headers, headerKind]);
+  const shown = header ? applyHeaderCompany(record, header) : record;
+  const label = kind === 'receipt' ? 'Receipt' : 'Delivery Authorization';
+  async function rememberChoice() { if (headers && remember && projectId && header) await headers.setProjectHeaderDefault(projectId, header.kind); }
+  async function print() {
+    setBusy('print'); setError(null); setMessage(null); setPrintFailed(false);
+    try { await rememberChoice(); const printer = await printLoadBluetooth(shown, kind, paper); if (mounted.current) setMessage(`${label} sent to ${printer.name}.`); }
+    catch (cause) { if (mounted.current) { setPrintFailed(true); setError(`${cause instanceof Error ? cause.message : 'Could not print.'} The confirmed record is still saved.`); } }
+    finally { if (mounted.current) setBusy(null); }
+  }
+  async function share() {
+    setBusy('pdf'); setError(null); setMessage(null); setPrintFailed(false);
+    try { await rememberChoice(); await exportAndShareLoadDocument(shown, kind, paper); if (mounted.current) setMessage(`${label} PDF created.`); }
+    catch (cause) { if (mounted.current) setError(`${cause instanceof Error ? cause.message : 'Could not create the PDF.'} The confirmed record is still saved.`); }
+    finally { if (mounted.current) setBusy(null); }
+  }
   return (
     <Animated.ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <PageHeader eyebrow="LOAD WORKFLOW" title="Load confirmed" onBack={onBack} />
@@ -352,8 +400,19 @@ function ConfirmedView({ record, busy, error, message, canRepeatDelivery, onBack
       </View>
       {error ? <Feedback kind="error">{error}</Feedback> : null}
       {message ? <Feedback kind="success">{message}</Feedback> : null}
-      <LoadDocuments data={confirmedDocument(record)} isDraft={false} />
-      <AppButton label="Bluetooth Print Receipt" busy={busy} onPress={onPrint} />
+      <AppCard title="What do you want to print?">
+        <View style={styles.methodSelector}>
+          <MethodChoice title="Receipt" hint="Quantity, price and total for the customer" selected={kind === 'receipt'} onPress={() => setKind('receipt')} />
+          <MethodChoice title="Delivery Authorization" hint="Driver, truck and both signatures" selected={kind === 'authorization'} onPress={() => setKind('authorization')} />
+        </View>
+        <SegmentedChoice label="Paper" options={[{ id: '58' as const, label: '58 mm' }, { id: '80' as const, label: '80 mm' }]} selectedId={paper} onSelect={setPaper} />
+      </AppCard>
+      {headers ? <HeaderCompanyPicker headers={headers} value={headerKind} onChange={setHeaderKind} remember={projectId ? { checked: remember, onChange: setRemember } : undefined} onOpenSetups={onOpenCompanySetups} /> : null}
+      <LoadDocuments data={confirmedDocument(shown)} isDraft={false} kind={kind} paper={paper} />
+      <AppButton label={printFailed ? 'Retry Print' : `Bluetooth Print ${label}`} busy={busy === 'print'} disabled={busy !== null} onPress={() => void print()} />
+      <AppButton label={`Share ${label} PDF`} tone="navy" busy={busy === 'pdf'} disabled={busy !== null} onPress={() => void share()} />
+      <View style={styles.nextRule}><View style={styles.nextLine} /><Text style={styles.nextText}>Done printing? Choose what is next.</Text><View style={styles.nextLine} /></View>
+      <Text style={styles.nextHint}>Nothing starts until you tap.</Text>
       {canRepeatDelivery ? (
         <View style={styles.repeatCard}>
           <Text style={styles.repeatTitle}>Same truck, another item?</Text>
@@ -429,7 +488,8 @@ function IssueList({ issues }: { issues: string[] }) { if (!issues.length) retur
 function draftDocument(options: LoadSetupOptions, draft: LoadDraft, calculation: ReturnType<typeof calculateLoad>, loadNumber: string | null = null): DocumentViewData { const customer = options.customers.find((v) => v.id === draft.customerId); const project = options.projects.find((v) => v.id === draft.projectId); const item = options.items.find((v) => v.id === draft.itemId); const conversion = options.conversions.find((v) => v.id === draft.conversionId); const unit = options.units.find(v => v.id === draft.directUnitId); const direct = draft.quantityMethod === 'direct'; return { quantityMethod: draft.quantityMethod, companyName: options.companySettings.companyName, companyAddress: options.companySettings.address, companyPhone: options.companySettings.phone, companyEmail: options.companySettings.email, companyTaxVatNumber: options.companySettings.taxVatNumber, companyReceiptFooter: options.companySettings.receiptFooter, loadNumber, transactionNumber: '', dateTime: new Date(`${draft.recordDate}T12:00:00`).toISOString(), customerName: customer?.name ?? '', projectName: project?.name ?? null, destinationAddress: project?.location ?? (draft.destinationAddress.trim() || null), itemName: item?.name ?? '', driverName: draft.driverName.trim(), driverRole: options.drivers.find((v) => v.id === draft.driverId)?.role ?? null, truckPlate: draft.truckPlate.trim(), requestedQuantityKg: !direct && draft.requestedQuantityKg ? Number(draft.requestedQuantityKg) : null, emptyWeightKg: !direct && draft.emptyWeightKg ? Number(draft.emptyWeightKg) : null, fullWeightKg: !direct && draft.fullWeightKg ? Number(draft.fullWeightKg) : null, netWeightKg: calculation.netWeightKg, convertedQuantity: calculation.billedQuantity, outputUnitSymbol: direct && !conversion ? (unit?.symbol ?? null) : (conversion?.outputUnitSymbol ?? null), unitPriceUsd: draft.unitPriceUsd.trim() ? Number(draft.unitPriceUsd.replace(',', '.')) : null, subtotalUsd: calculation.subtotalUsd, vatRatePercent: draft.unitPriceUsd.trim() ? options.companySettings.vatRatePercent : null, vatAmountUsd: calculation.vatAmountUsd, finalTotalUsd: calculation.finalTotalUsd, signaturePaths: draft.driverSignaturePaths, supplierSignature: options.deliverySignature ?? null, enteredQuantity: direct && conversion ? `${draft.directQuantity.trim().replace(',', '.')} ${unit?.symbol ?? ''}`.trim() : null, conversionRule: direct && conversion ? `${conversion.inputQuantity} ${conversion.inputUnitSymbol} = ${conversion.outputQuantity} ${conversion.outputUnitSymbol}` : null }; }
 export function confirmedDocument(record: ConfirmedLoad): DocumentViewData { return { quantityMethod: record.quantityMethod, companyName: record.companyName, companyAddress: record.companyAddress, companyPhone: record.companyPhone, companyEmail: record.companyEmail, companyTaxVatNumber: record.companyTaxVatNumber, companyReceiptFooter: record.companyReceiptFooter, loadNumber: record.loadNumber ?? null, transactionNumber: record.transactionNumber, dateTime: record.confirmedAt, customerName: record.customerName, projectName: record.projectName, destinationAddress: record.projectLocation ?? record.destinationAddress, itemName: record.itemName, driverName: record.driverName, driverRole: record.driverRole ?? null, truckPlate: record.truckPlate, requestedQuantityKg: record.requestedQuantityKg, emptyWeightKg: record.emptyWeightKg, fullWeightKg: record.fullWeightKg, netWeightKg: record.netWeightKg, convertedQuantity: record.billedQuantity, outputUnitSymbol: record.outputUnitSymbol, unitPriceUsd: record.unitPriceUsd, subtotalUsd: record.subtotalUsd, vatRatePercent: record.vatRatePercent, vatAmountUsd: record.vatAmountUsd, finalTotalUsd: record.finalTotalUsd, signaturePaths: record.signaturePaths, supplierSignature: record.supplierSignature ?? null, enteredQuantity: directConversionLines(record)?.entered ?? null, conversionRule: directConversionLines(record)?.rule ?? null }; }
 
-const styles = StyleSheet.create({ notSavedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, notSavedChip: { color: colors.warning, backgroundColor: '#FFF3D8', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', fontSize: 10, fontWeight: '900', letterSpacing: .6 },
+const styles = StyleSheet.create({ nextRule: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }, nextLine: { flex: 1, borderTopWidth: 1, borderTopColor: colors.line }, nextText: { color: colors.muted, fontSize: 12, fontWeight: '800' }, nextHint: { color: colors.muted, fontSize: 12, textAlign: 'center' },
+  notSavedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, notSavedChip: { color: colors.warning, backgroundColor: '#FFF3D8', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', fontSize: 10, fontWeight: '900', letterSpacing: .6 },
   sigCard: { borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 12, gap: 6, backgroundColor: '#FCFBF8' }, sigPreview: { height: 64, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: '#FFF' }, sigName: { color: colors.ink, fontSize: 14, fontWeight: '900' }, autoChip: { alignSelf: 'flex-start', color: colors.success, backgroundColor: '#E5F3EC', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', fontSize: 10, fontWeight: '900', letterSpacing: .6 }, sigEmpty: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, borderRadius: 12, padding: 14, gap: 8, backgroundColor: colors.surface },
   loadNumberPreview: { backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: '#C9D7E6', padding: 14, gap: 3 }, loadNumberLabel: { color: colors.navy, fontSize: 12, fontWeight: '700' }, loadNumberValue: { color: colors.ink, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] }, loadNumberHint: { color: '#4F5B66', fontSize: 13, lineHeight: 18 },
   screen: { flex: 1 }, content: { padding: 20, paddingBottom: 42, gap: 16 }, contentWithFooter: { paddingBottom: 125 }, flex: { flex: 1, minWidth: 0 },

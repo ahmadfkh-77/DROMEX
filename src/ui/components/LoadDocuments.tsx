@@ -28,20 +28,27 @@ export type DocumentViewData = {
   supplierSignature?: SignerSnapshot | null;
 };
 
-export function LoadDocuments({ data, isDraft }: { data: DocumentViewData; isDraft: boolean }) {
-  const [tab, setTab] = useState<'receipt' | 'authorization'>('receipt');
-  const [paper, setPaper] = useState<'58' | '80'>('58');
+/**
+ * `kind` and `paper` are optional: when a parent passes both it owns the choice (and its own controls), so
+ * this view only draws the chosen document. Otherwise the view keeps its own Receipt / Authorization and paper toggles.
+ */
+export function LoadDocuments({ data, isDraft, kind, paper: controlledPaper }: { data: DocumentViewData; isDraft: boolean; kind?: 'receipt' | 'authorization'; paper?: '58' | '80' }) {
+  const [ownTab, setTab] = useState<'receipt' | 'authorization'>('receipt');
+  const [ownPaper, setPaper] = useState<'58' | '80'>('58');
+  const controlled = kind !== undefined && controlledPaper !== undefined;
+  const tab = controlled ? kind : ownTab;
+  const paper = controlled ? controlledPaper : ownPaper;
   const missing = (value: string | number | null) => value === '' || value == null ? '—' : String(value);
   return (
     <View style={styles.wrapper}>
-      <View style={styles.controls}>
+      {controlled ? null : <View style={styles.controls}>
         <Toggle label="Receipt" selected={tab === 'receipt'} onPress={() => setTab('receipt')} />
         <Toggle label="Delivery authorization" selected={tab === 'authorization'} onPress={() => setTab('authorization')} />
-      </View>
-      <View style={styles.controls}>
+      </View>}
+      {controlled ? null : <View style={styles.controls}>
         <Toggle label="58 mm" selected={paper === '58'} onPress={() => setPaper('58')} />
         <Toggle label="80 mm" selected={paper === '80'} onPress={() => setPaper('80')} />
-      </View>
+      </View>}
       <View style={[styles.paper, paper === '80' && styles.paperWide]}>
         {isDraft ? <Text style={styles.draft}>DRAFT PREVIEW</Text> : null}
         <Text style={styles.company}>{missing(data.companyName)}</Text>
