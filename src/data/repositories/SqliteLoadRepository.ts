@@ -36,6 +36,7 @@ import { SqliteProfileRepository } from './SqliteProfileRepository';
 import { issueLoadNumber } from './SqliteLoadNumberSeriesRepository';
 import { deliverySignatureFor, recordSignerEvent } from './SqliteDocumentSignerRepository';
 import { supplierSignatureForNewLoad } from './SqliteCompanyHeaderRepository';
+import { correctionChanges, correctionToLoadDraft, isFullCorrection, loadLocalDate, validateLoadCorrection, type LoadCorrectionContext } from '../../domain/loadCorrection';
 import type { SignerDisplay, SignerSnapshot } from '../../domain/documentSigners';
 import { parseStoredSignature } from '../../domain/supervisors';
 
@@ -68,7 +69,7 @@ type PersonRow = {
 type TruckRow = { id: string; plate: string; make_model: string | null; capacity_kg: number | null; owner_name: string | null; notes: string | null; is_active: number };
 type MachineRow = { id: string; name: string; machine_type: string | null; identifier: string | null; notes: string | null; is_active: number };
 type LoadRow = {
-  id: string; transaction_number: string; confirmed_at: string; customer_name: string;
+  id: string; transaction_number: string; confirmed_at: string; customer_id: string; project_id: string | null; item_id: string; truck_profile_id: string | null; customer_name: string;
   project_name: string | null; project_location: string | null; destination_address: string | null;
   item_name: string; item_code: string | null; category_name: string; driver_name: string;
   truck_plate: string; requested_quantity_kg: number | null; empty_weight_kg: number;
@@ -149,6 +150,7 @@ function loadFromRow(row: LoadRow): ConfirmedLoad {
   const directConverted = quantityMethod === 'direct' && (row.conversion_rule ?? ENTERED_DIRECTLY) !== ENTERED_DIRECTLY;
   return {
     quantityMethod,
+    customerId: row.customer_id, projectId: row.project_id, itemId: row.item_id, truckId: row.truck_profile_id, conversionId: row.conversion_id, directUnitId: row.direct_unit_id,
     id: row.id, transactionNumber: row.transaction_number, confirmedAt: row.confirmed_at,
     customerName: row.customer_name, projectName: row.project_name, projectLocation: row.project_location,
     destinationAddress: row.destination_address, itemName: row.item_name, itemCode: row.item_code,
@@ -578,6 +580,7 @@ export class SqliteLoadRepository implements LoadRepository {
     const row=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!row)throw new Error('Load was not found.');
     if((row.status??'Active')==='Cancelled')throw new Error('A cancelled load cannot be corrected.');
     const reason=(draft.correctionReason??'').trim();if(!reason)throw new Error('Correction reason is required.');
+    if(isFullCorrection(draft))return this.correctLoadFull(row,draft,reason);
     const isDirect=(row.quantity_method??'weighbridge')==='direct';
     const whole=(value:string,optional=false)=>optional&&!value.trim()?null:/^\d+$/.test(value.trim())?Number(value):NaN;
     const directText=draft.directQuantity.trim().replace(',','.');
@@ -624,8 +627,100 @@ export class SqliteLoadRepository implements LoadRepository {
     const history=[...safeCorrectionHistory(row.correction_history_json),{correctedAt:now,correctedBy:'Admin',reason,changes}];
     const crewChanged=crew.id!==(row.driver_profile_id??'');
     await this.db.withTransactionAsync(async()=>{
+      await this.saveVersion(row,reason,changes,now);
       await this.db.runAsync('UPDATE loads SET requested_quantity_kg=?,empty_weight_kg=?,full_weight_kg=?,net_weight_kg=?,direct_quantity=?,converted_quantity=?,billed_quantity=?,unit_price_usd_cents=?,subtotal_usd_cents=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,destination_address=?,notes=?,correction_history_json=?,updated_at=? WHERE id=?',requested,empty,full,net,isDirect?direct:null,converted,billed,price==null?null:Math.round(price*100),subtotal,vat,total,paymentStatusValue,clean(draft.destinationAddress),clean(draft.notes),JSON.stringify(history),now,loadId);
       if(crewChanged)await this.db.runAsync('UPDATE loads SET driver_profile_id=?,driver_name=?,driver_role=? WHERE id=?',crew.id,crew.name,crew.role,loadId);
+      await this.enqueue('load',loadId,{id:loadId,correctedAt:now,reason,changes,paymentStatus:paymentStatusValue,updatedAt:now});
+    });
+    const updated=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!updated)throw new Error('Corrected load was not found.');return loadFromRow(updated);
+  }
+  /** Saves the load exactly as it is now, before a correction changes it. Append-only: version n is the load before correction n. */
+  private async saveVersion(row:LoadRow,reason:string,changes:unknown,correctedAt:string):Promise<void>{
+    const next=await this.db.getFirstAsync<{next:number}>('SELECT COALESCE(MAX(version),0)+1 next FROM load_versions WHERE load_id=?',row.id);
+    const version=next?.next??1;
+    await this.db.runAsync('INSERT INTO load_versions (id,load_id,version,snapshot_json,reason,changes_json,corrected_at) VALUES (?,?,?,?,?,?,?)',makeId('loadver'),row.id,version,JSON.stringify(row),reason,JSON.stringify(changes),correctedAt);
+    await this.enqueue('loadVersion',row.id+':'+version,{loadId:row.id,version,correctedAt});
+  }
+
+  async getCorrectionContext(loadId:string):Promise<LoadCorrectionContext>{
+    const row=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!row)throw new Error('Load was not found.');
+    const options=await this.getSetupOptions();
+    const customers=[...options.customers];
+    if(!customers.some(value=>value.id===row.customer_id)){const found=(await this.profiles.listCustomers()).find(value=>value.id===row.customer_id);if(found)customers.push(found);}
+    const projects=[...options.projects];
+    if(row.project_id&&!projects.some(value=>value.id===row.project_id)){const found=await this.db.getFirstAsync<ProjectRow>('SELECT p.*, c.name customer_name FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.id = ?',row.project_id);if(found)projects.push(projectFromRow(found));}
+    const items=[...options.items];
+    if(!items.some(value=>value.id===row.item_id)){const found=await this.db.getFirstAsync<ItemRow>('SELECT i.id, i.name, i.internal_code, i.default_unit_id, c.name category_name, i.default_receipt_price_usd_cents FROM catalog_items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?',row.item_id);if(found)items.push({id:found.id,name:found.name,internalCode:found.internal_code,categoryName:found.category_name,defaultPriceUsd:found.default_receipt_price_usd_cents==null?null:found.default_receipt_price_usd_cents/100,defaultUnitId:found.default_unit_id});}
+    const conversions=[...options.conversions];
+    if(row.conversion_id&&!conversions.some(value=>value.id===row.conversion_id)){const found=(await this.listConversionOptions()).find(value=>value.id===row.conversion_id);if(found)conversions.push(found);}
+    const units=[...options.units];
+    if(row.direct_unit_id&&!units.some(value=>value.id===row.direct_unit_id)){const found=(await this.listMeasurementUnits()).find(value=>value.id===row.direct_unit_id);if(found)units.push(found);}
+    const drivers=[...options.drivers];
+    if(row.driver_profile_id&&!drivers.some(value=>value.id===row.driver_profile_id)){const found=await this.db.getFirstAsync<PersonRow>('SELECT * FROM driver_profiles WHERE id=?',row.driver_profile_id);if(found)drivers.push(crewFromRow(found));}
+    const trucks=[...options.trucks];
+    if(row.truck_profile_id&&!trucks.some(value=>value.id===row.truck_profile_id)){const found=await this.db.getFirstAsync<TruckRow>('SELECT * FROM truck_profiles WHERE id=?',row.truck_profile_id);if(found)trucks.push({id:found.id,plate:found.plate,makeModel:found.make_model,capacityKg:found.capacity_kg,ownerName:found.owner_name,notes:found.notes,isActive:found.is_active===1});}
+    const paid=await this.db.getFirstAsync<{count:number;total:number}>("SELECT COUNT(*) count, COALESCE(SUM(amount_usd_cents),0) total FROM payment_entries WHERE load_id=? AND status='Active'",loadId);
+    const versions=await this.db.getAllAsync<{version:number;corrected_at:string;reason:string}>('SELECT version, corrected_at, reason FROM load_versions WHERE load_id=? ORDER BY version',loadId);
+    const issued=await this.db.getFirstAsync<{count:number}>("SELECT COUNT(*) count FROM business_document_records WHERE load_id=? AND document_status='Issued'",loadId);
+    return {options:{...options,customers,projects,items,conversions,units,drivers,trucks},activePaymentCount:paid?.count??0,activePaymentCents:paid?.total??0,versions:versions.map(value=>({version:value.version,correctedAt:value.corrected_at,reason:value.reason})),issuedDocumentCount:issued?.count??0};
+  }
+
+  /** Phase 4. The full correction: every field of a confirmed load can change, the original is saved first, and the load number never changes. */
+  private async correctLoadFull(row:LoadRow,draft:LoadCorrectionDraft,reason:string):Promise<ConfirmedLoad>{
+    const loadId=row.id;
+    const selected=loadFromRow(row);
+    const context=await this.getCorrectionContext(loadId);
+    const options=context.options;
+    const issues=validateLoadCorrection(selected,draft,options,context.activePaymentCents);
+    if(issues.length)throw new Error(issues.join('\n'));
+    const supplier=draft.supplierSignature?await deliverySignatureFor(this.db,draft.supplierSignature):null;
+    const supplierLabel=supplier?`${supplier.name}${supplier.display==='name_only'?' (name only)':''}`:'None';
+    const changes=correctionChanges(selected,draft,options,()=>supplierLabel);
+    if(!changes.length)throw new Error('No information was changed.');
+    const effective=correctionToLoadDraft(selected,draft);
+    const isDirect=selected.quantityMethod==='direct';
+    const conversion=options.conversions.find(value=>value.id===effective.conversionId);
+    const directUnit=options.units.find(value=>value.id===effective.directUnitId);
+    const calculation=calculateLoad(effective,conversion,selected.vatRatePercent??0);
+    if(calculation.convertedQuantity==null||calculation.billedQuantity==null||(!isDirect&&calculation.netWeightKg==null))throw new Error('Load calculations are incomplete.');
+    const cents=(value:number|null)=>value==null?null:Math.round(value*100);
+    const priceText=effective.unitPriceUsd.trim().replace(',','.');const price=priceText?Number(priceText):null;
+    const subtotal=cents(calculation.subtotalUsd),vat=cents(calculation.vatAmountUsd),total=cents(calculation.finalTotalUsd);
+    if(total==null&&context.activePaymentCents>0)throw new Error('A load with active payments cannot be corrected to Unpriced.');
+    const paymentStatusValue=total==null?'Unpriced':paymentStatus(total,context.activePaymentCents);
+    const customer=options.customers.find(value=>value.id===effective.customerId)!;
+    const project=effective.projectId?options.projects.find(value=>value.id===effective.projectId):undefined;
+    const item=options.items.find(value=>value.id===effective.itemId)!;
+    const crew=effective.driverId?options.drivers.find(value=>value.id===effective.driverId):undefined;
+    const driverName=crew?.name??clean(effective.driverName)??'';
+    const now=new Date().toISOString();
+    let confirmedAt=row.confirmed_at;
+    if(effective.recordDate!==loadLocalDate(row.confirmed_at)){const old=new Date(row.confirmed_at),[year=0,month=0,day=0]=effective.recordDate.split('-').map(Number);confirmedAt=new Date(year,month-1,day,old.getHours(),old.getMinutes(),old.getSeconds(),old.getMilliseconds()).toISOString();}
+    let conversionId=row.conversion_id,conversionName=row.conversion_name,conversionRule=row.conversion_rule,outputSymbol=row.output_unit_symbol;
+    if(conversion){conversionId=conversion.id;conversionName=conversion.name;conversionRule=`${conversion.inputQuantity} ${conversion.inputUnitSymbol} = ${conversion.outputQuantity} ${conversion.outputUnitSymbol}`;outputSymbol=conversion.outputUnitSymbol;}
+    else if(isDirect){
+      const retained=await this.db.getFirstAsync<{id:string}>('SELECT id FROM conversion_options WHERE id=?','conversion_kg_ton');
+      conversionId=retained?.id??row.conversion_id;conversionName='Direct quantity';conversionRule=ENTERED_DIRECTLY;outputSymbol=directUnit!.symbol;
+    }
+    const entered=isDirect?Number(effective.directQuantity.trim().replace(',','.')):null;
+    const history=[...safeCorrectionHistory(row.correction_history_json),{correctedAt:now,correctedBy:'Admin',reason,changes}];
+    const signaturePaths=effective.driverSignaturePaths;
+    await this.db.withTransactionAsync(async()=>{
+      await this.saveVersion(row,reason,changes,now);
+      await this.db.runAsync(`UPDATE loads SET confirmed_at=?,customer_id=?,customer_name=?,project_id=?,project_name=?,project_location=?,destination_address=?,item_id=?,item_name=?,item_code=?,category_name=?,
+        driver_name=?,driver_profile_id=?,driver_role=?,truck_plate=?,truck_profile_id=?,requested_quantity_kg=?,empty_weight_kg=?,full_weight_kg=?,net_weight_kg=?,
+        conversion_id=?,conversion_name=?,conversion_rule=?,output_unit_symbol=?,converted_quantity=?,billed_quantity=?,direct_quantity=?,direct_unit_id=?,direct_unit_name=?,direct_unit_symbol=?,
+        unit_price_usd_cents=?,subtotal_usd_cents=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,notes=?,signature_json=?,signature_status=?,correction_history_json=?,updated_at=? WHERE id=?`,
+        confirmedAt,customer.id,customer.name,project?.id??null,project?.name??null,project?.location??null,clean(effective.destinationAddress),item.id,item.name,item.internalCode,item.categoryName,
+        driverName,crew?.id??null,crew?.role??null,effective.truckPlate.trim().toUpperCase(),effective.truckId||null,
+        !isDirect&&effective.requestedQuantityKg.trim()?Number(effective.requestedQuantityKg):null,isDirect?0:Number(effective.emptyWeightKg),isDirect?1:Number(effective.fullWeightKg),isDirect?1:calculation.netWeightKg,
+        conversionId,conversionName,conversionRule,outputSymbol,calculation.convertedQuantity,calculation.billedQuantity,
+        isDirect?entered:null,isDirect?directUnit!.id:null,isDirect?directUnit!.name:null,isDirect?directUnit!.symbol:null,
+        price==null?null:Math.round(price*100),subtotal,vat,total,paymentStatusValue,clean(effective.notes),signaturePaths.length?JSON.stringify(signaturePaths):null,signaturePaths.length?'Signed':'Unsigned',JSON.stringify(history),now,loadId);
+      if(draft.supplierSignature!==undefined){
+        await this.db.runAsync('UPDATE loads SET supplier_signature_json=? WHERE id=?',supplier?JSON.stringify(supplier):null,loadId);
+        if(supplier)await recordSignerEvent(this.db,supplier.signerId,'used',now,null,`Delivery Authorization ${row.transaction_number}`);
+      }
       await this.enqueue('load',loadId,{id:loadId,correctedAt:now,reason,changes,paymentStatus:paymentStatusValue,updatedAt:now});
     });
     const updated=await this.db.getFirstAsync<LoadRow>('SELECT * FROM loads WHERE id=?',loadId);if(!updated)throw new Error('Corrected load was not found.');return loadFromRow(updated);

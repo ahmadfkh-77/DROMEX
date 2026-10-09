@@ -1,3 +1,4 @@
+import type { LoadCorrectionContext } from '../../domain/loadCorrection';
 import type {
   ConfirmedLoad, ConversionDraft, ConversionOption, LoadCorrectionDraft, LoadDraft, LoadSetupOptions,
   MachineDraft, MachineProfile, MeasurementUnit, Project, ProjectDraft, ProjectInformationDraft, TruckDraft, TruckProfile, UnitDraft,
@@ -57,5 +58,7 @@ export interface LoadRepository {
   /** DEC-503. Adds, replaces (from a saved signer) or removes the load's supplier signature. */
   saveLoadSupplierSignature(loadId: string, selection: { signerId: string; display: 'name_only' | 'name_with_signature' } | null): Promise<ConfirmedLoad>;
   correctLoad(loadId: string, draft: LoadCorrectionDraft): Promise<ConfirmedLoad>;
+  /** Phase 4. What the Correct this load screen needs: this load's own records, payments, saved originals and issued documents. */
+  getCorrectionContext(loadId: string): Promise<LoadCorrectionContext>;
   cancelLoad(loadId: string, reason: string): Promise<ConfirmedLoad>;
 }

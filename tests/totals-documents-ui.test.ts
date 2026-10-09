@@ -124,7 +124,8 @@ describe('Company Load Number Series',()=>{
     expect(receipt).toContain('loadNumberLabel(record.loadNumber)');
     expect(history).toContain('loadNumberLabel(load.loadNumber)');
     expect(history).toContain('${load.loadNumber??\'\'}');
-    expect(corrections).toContain('A correction never changes the load number.');
+    expect(corrections).toContain('LoadCorrectionForm');
+    expect(read('src/ui/components/LoadCorrectionForm.tsx')).toContain('A correction never changes the load number.');
   });
   it('totals company loads by series or item, keeps cancelled loads apart, and exports a PDF',()=>{
     expect(loadTotals).toContain("label:'Number series'");

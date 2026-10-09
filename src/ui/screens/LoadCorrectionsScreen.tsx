@@ -2,93 +2,44 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import {loadNumberLabel} from '../../domain/loadNumberSeries';
 import {Alert,LayoutAnimation,ScrollView,StyleSheet,Text,TextInput,TouchableOpacity,View} from 'react-native';
 import type {LoadRepository} from '../../data/repositories/LoadRepository';
-import type {ConfirmedLoad,DriverProfile,LoadCorrectionDraft} from '../../domain/loads';
-import {truckCrewRoleLabel} from '../../domain/people';
-import {correctionValidationError,formatUsd} from '../../domain/loads';
-import {AppButton,AppCard,AppField,Feedback,MetricCard,PageHeader} from '../components/AppPrimitives';
+import type {DocumentSignerRepository} from '../../data/repositories/DocumentSignerRepository';
+import type {ConfirmedLoad} from '../../domain/loads';
+import {AppButton,AppCard,Feedback,PageHeader} from '../components/AppPrimitives';
+import {LoadCorrectionForm} from '../components/LoadCorrectionForm';
 import {SearchableSelect} from '../components/SearchableSelect';
 import {CollapsibleFilterCard} from '../components/CollapsibleFilterCard';
 import {useReducedMotion} from '../components/ExpandableMenu';
 import {colors} from '../theme';
 
 type GroupMode='project'|'customer';
-type Stage='browse'|'blocked'|'edit'|'review';
-type DiffRow={field:string;was:string;now:string};
+type Stage='browse'|'blocked'|'edit';
 
-const draftFrom=(load:ConfirmedLoad):LoadCorrectionDraft=>({requestedQuantityKg:load.requestedQuantityKg==null?'':String(load.requestedQuantityKg),emptyWeightKg:load.emptyWeightKg==null?'':String(load.emptyWeightKg),fullWeightKg:load.fullWeightKg==null?'':String(load.fullWeightKg),directQuantity:load.directQuantity==null?'':String(load.directQuantity),unitPriceUsd:load.unitPriceUsd==null?'':load.unitPriceUsd.toFixed(2),destinationAddress:load.destinationAddress??'',notes:load.notes??'',correctionReason:'',driverId:load.driverId??''});
 const localDate=(value:string)=>{const date=new Date(value);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
 const unique=(values:string[])=>[...new Set(values)].sort((a,b)=>a.localeCompare(b));
 
-/** Mirrors correctLoad's own field parsing so the review stage previews exactly what the repository will record. */
-function computeCorrectionPreview(selected:ConfirmedLoad,draft:LoadCorrectionDraft,crew:DriverProfile[]=[]):DiffRow[]{
-  const isDirect=selected.quantityMethod==='direct';
-  const whole=(value:string)=>{const t=value.trim();return /^\d+$/.test(t)?Number(t):null;};
-  const price=(value:string)=>{const t=value.trim().replace(',','.');return t?Number(t):null;};
-  const direct=(value:string)=>{const t=value.trim().replace(',','.');return /^\d+(\.\d{1,6})?$/.test(t)?Number(t):null;};
-  const text=(value:string)=>{const t=value.trim().replace(/\s+/g,' ');return t||null;};
-  const asString=(value:number|null)=>value==null?null:String(value);
-
-  const oldValues:Record<string,string|null>=isDirect
-    ?{'Direct quantity':asString(selected.directQuantity),'Unit price':asString(selected.unitPriceUsd),'Destination address':selected.destinationAddress,Notes:selected.notes}
-    :{'Requested quantity kg':asString(selected.requestedQuantityKg),'Empty weight kg':asString(selected.emptyWeightKg),'Full weight kg':asString(selected.fullWeightKg),'Unit price':asString(selected.unitPriceUsd),'Destination address':selected.destinationAddress,Notes:selected.notes};
-  const newValues:Record<string,string|null>=isDirect
-    ?{'Direct quantity':asString(direct(draft.directQuantity)),'Unit price':asString(price(draft.unitPriceUsd)),'Destination address':text(draft.destinationAddress),Notes:text(draft.notes)}
-    :{'Requested quantity kg':asString(draft.requestedQuantityKg.trim()?whole(draft.requestedQuantityKg):null),'Empty weight kg':asString(whole(draft.emptyWeightKg)),'Full weight kg':asString(whole(draft.fullWeightKg)),'Unit price':asString(price(draft.unitPriceUsd)),'Destination address':text(draft.destinationAddress),Notes:text(draft.notes)};
-
-  // DEC-477. The same "Name (Role)" wording correctLoad writes into the audit history.
-  const nextCrew=draft.driverId&&draft.driverId!==(selected.driverId??'')?crew.find(value=>value.id===draft.driverId):undefined;
-  if(nextCrew){oldValues['Driver / Operator']=`${selected.driverName} (${truckCrewRoleLabel(selected.driverRole)})`;newValues['Driver / Operator']=`${nextCrew.name} (${truckCrewRoleLabel(nextCrew.role)})`;}
-  return Object.keys(newValues).filter(field=>newValues[field]!==oldValues[field]).map(field=>{
-    const was=oldValues[field],now=newValues[field];
-    if(field==='Unit price')return {field,was:was==null?'Unpriced':formatUsd(Number(was)),now:now==null?'Unpriced':formatUsd(Number(now))};
-    return {field,was:was??'—',now:now??'—'};
-  });
-}
-
-export function LoadCorrectionsScreen({repository,onBack,initialLoadId}:{repository:LoadRepository;onBack:()=>void;initialLoadId?:string|null}){
+export function LoadCorrectionsScreen({repository,onBack,initialLoadId,signers}:{repository:LoadRepository;onBack:()=>void;initialLoadId?:string|null;
+  /** Phase 4. Saved signers for re-signing the supplier signature. */
+  signers?:DocumentSignerRepository}){
   const reducedMotion=useReducedMotion();
-  const[loads,setLoads]=useState<ConfirmedLoad[]>([]);const[selected,setSelected]=useState<ConfirmedLoad|null>(null);const[draft,setDraft]=useState<LoadCorrectionDraft|null>(null);const[stage,setStage]=useState<Stage>('browse');
+  const[loads,setLoads]=useState<ConfirmedLoad[]>([]);const[selected,setSelected]=useState<ConfirmedLoad|null>(null);const[stage,setStage]=useState<Stage>('browse');const[signing,setSigning]=useState(false);
   const[groupMode,setGroupMode]=useState<GroupMode>('project');const[projectFilter,setProjectFilter]=useState('');const[customerFilter,setCustomerFilter]=useState('');const[fromDate,setFromDate]=useState('');const[toDate,setToDate]=useState('');const[search,setSearch]=useState('');
-  const[busy,setBusy]=useState(false);const[error,setError]=useState<string|null>(null);const[message,setMessage]=useState<string|null>(null);const[historyOpen,setHistoryOpen]=useState(false);
-  const[crew,setCrew]=useState<DriverProfile[]>([]);
-  const refresh=useCallback(async()=>{const[nextLoads,setup]=await Promise.all([repository.listLoads(),repository.getSetupOptions()]);setLoads(nextLoads);setCrew(setup.drivers);},[repository]);
+  const[message,setMessage]=useState<string|null>(null);
+  const refresh=useCallback(async()=>{setLoads(await repository.listLoads());},[repository]);
   useEffect(()=>{void refresh();},[refresh]);
   useEffect(()=>{if(initialLoadId&&loads.length&&!selected){const match=loads.find(load=>load.id===initialLoadId);if(match)choose(match);}},[initialLoadId,loads]); // eslint-disable-line react-hooks/exhaustive-deps
   const projectOptions=useMemo(()=>unique(loads.map(load=>load.projectName??'No project')).map(value=>({id:value,label:value})),[loads]);
   const customerOptions=useMemo(()=>unique(loads.map(load=>load.customerName)).map(value=>({id:value,label:value})),[loads]);
   const filtered=useMemo(()=>{const query=search.trim().toLocaleLowerCase('en-US');return loads.filter(load=>{const date=localDate(load.confirmedAt);if(projectFilter&&(load.projectName??'No project')!==projectFilter)return false;if(customerFilter&&load.customerName!==customerFilter)return false;if(fromDate&&date<fromDate)return false;if(toDate&&date>toDate)return false;if(query&&!`${load.loadNumber??''} ${load.transactionNumber} ${load.customerName} ${load.projectName??''} ${load.itemName} ${load.driverName} ${load.truckPlate}`.toLocaleLowerCase('en-US').includes(query))return false;return true;});},[customerFilter,fromDate,loads,projectFilter,search,toDate]);
   const groups=useMemo(()=>{const map=new Map<string,ConfirmedLoad[]>();for(const load of filtered){const key=groupMode==='project'?(load.projectName??'No project'):load.customerName;map.set(key,[...(map.get(key)??[]),load]);}return [...map].sort(([a],[b])=>a.localeCompare(b));},[filtered,groupMode]);
-  const preview=useMemo(()=>selected&&draft?computeCorrectionPreview(selected,draft,crew):[],[selected,draft,crew]);
-  const validationError=useMemo(()=>selected&&draft?correctionValidationError(selected,draft):null,[selected,draft]);
 
   function animateLayout(){if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);}
-  function choose(load:ConfirmedLoad){animateLayout();setSelected(load);setHistoryOpen(false);setError(null);setMessage(null);if(load.status==='Cancelled'){setDraft(null);setStage('blocked');}else{setDraft(draftFrom(load));setStage('edit');}}
-  function chooseAnother(){animateLayout();setSelected(null);setDraft(null);setStage('browse');setError(null);setMessage(null);}
-  function update<K extends keyof LoadCorrectionDraft>(key:K,value:string){if(draft)setDraft({...draft,[key]:value});}
-  function goToReview(){if(!draft?.correctionReason?.trim())return;if(!preview.length)return;if(validationError)return;animateLayout();setError(null);setStage('review');}
-  function backToEdit(){animateLayout();setStage('edit');}
-
-  function confirmCorrection(){
-    if(!selected||!draft)return;
-    Alert.alert('Confirm this correction?','This updates the confirmed record. The transaction number and original confirmation time never change. This cannot be undone.',[
-      {text:'Review again',style:'cancel'},
-      {text:'Confirm Correction',onPress:()=>{
-        setBusy(true);setError(null);
-        void repository.correctLoad(selected.id,draft)
-          .then(updated=>{setSelected(updated);setDraft(draftFrom(updated));setStage('edit');setMessage('Confirmed load corrected. Its transaction number and original confirmation time did not change. Future PDFs and reprints use the corrected values.');void refresh();})
-          .catch(cause=>setError(cause instanceof Error?cause.message:'Could not correct the load.'))
-          .finally(()=>setBusy(false));
-      }},
-    ]);
-  }
+  function choose(load:ConfirmedLoad){animateLayout();setSelected(load);setMessage(null);setStage(load.status==='Cancelled'?'blocked':'edit');}
+  function chooseAnother(){animateLayout();setSelected(null);setStage('browse');setMessage(null);setSigning(false);}
   function clearFilters(){setProjectFilter('');setCustomerFilter('');setFromDate('');setToDate('');setSearch('');}
 
-  const showReasonHint=Boolean(draft&&!draft.correctionReason?.trim());
-  const showNoChangeHint=Boolean(draft&&draft.correctionReason?.trim()&&!preview.length);
-
-  return <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-    <PageHeader eyebrow="AUDITED CORRECTION" title="Correct Confirmed Load" onBack={onBack}/>
-    <Text style={styles.helper}>Confirmed loads are never edited directly. Every correction records a reason and keeps a before/after history alongside the load.</Text>
+  return <ScrollView scrollEnabled={!signing} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <PageHeader eyebrow="AUDITED CORRECTION" title={stage==='edit'?'Correct this load':'Correct Confirmed Load'} onBack={stage==='edit'?chooseAnother:onBack}/>
+    {stage==='edit'?null:<Text style={styles.helper}>Confirmed loads are never edited directly. Every correction records a reason and keeps the original in the history alongside the load.</Text>}
     {message?<Feedback kind="success">{message}</Feedback>:null}
 
     {stage==='browse'?<>
@@ -115,44 +66,7 @@ export function LoadCorrectionsScreen({repository,onBack,initialLoadId}:{reposit
       <AppButton label="Choose Another Load" tone="secondary" onPress={chooseAnother}/>
     </AppCard>:null}
 
-    {(stage==='edit'||stage==='review')&&selected&&draft?<>
-      <AppCard>
-        <View style={styles.identityRow}><View style={styles.flex}><Text style={styles.cardTitle}>{loadNumberLabel(selected.loadNumber)}</Text><Text style={styles.helper}>Transaction {selected.transactionNumber}. A correction never changes the load number.</Text><Text style={styles.helper}>Confirmed {new Date(selected.confirmedAt).toLocaleString()}</Text></View><TouchableOpacity onPress={chooseAnother} accessibilityRole="button"><Text style={styles.clear}>Choose another load</Text></TouchableOpacity></View>
-        <Text style={styles.helper}>{selected.customerName} · {selected.projectName??selected.destinationAddress??'No project'} · {selected.itemName}</Text>
-        <Text style={styles.notice}>Transaction number, original confirmation time, customer, project, item, quantity method/unit, and existing payments always stay unchanged.</Text>
-        {selected.correctionHistory.length?<TouchableOpacity onPress={()=>{animateLayout();setHistoryOpen(v=>!v);}} accessibilityRole="button" accessibilityState={{expanded:historyOpen}}><Text style={styles.historyToggle}>{historyOpen?'Hide':'Show'} correction history ({selected.correctionHistory.length})</Text></TouchableOpacity>:null}
-        {historyOpen?<View style={styles.historyList}>{[...selected.correctionHistory].reverse().map((entry,index)=><View key={index} style={styles.historyEntry}><Text style={styles.historyDate}>{new Date(entry.correctedAt).toLocaleString()}</Text><Text style={styles.historyReason}>{entry.reason}</Text><Text style={styles.helper}>Changed: {entry.changes.map(change=>change.field).join(', ')}</Text></View>)}</View>:null}
-      </AppCard>
-
-      {stage==='edit'?<AppCard title="What changed?" hint="Only the fields already supported for correction are editable here.">
-        <AppField label="Correction reason *" value={draft.correctionReason??''} onChangeText={(v)=>update('correctionReason',v)} multiline placeholder="Why is this correction needed?"/>
-        {selected.quantityMethod==='direct'?<AppField label={`Direct quantity (${selected.outputUnitSymbol}) *`} value={draft.directQuantity} onChangeText={(v)=>update('directQuantity',v)} keyboardType="decimal-pad"/>:<>
-          <AppField label="Requested quantity kg" value={draft.requestedQuantityKg} onChangeText={(v)=>update('requestedQuantityKg',v)} keyboardType="number-pad"/>
-          <View style={styles.columns}><View style={styles.flex}><AppField label="Empty weight kg *" value={draft.emptyWeightKg} onChangeText={(v)=>update('emptyWeightKg',v)} keyboardType="number-pad"/></View><View style={styles.flex}><AppField label="Full weight kg *" value={draft.fullWeightKg} onChangeText={(v)=>update('fullWeightKg',v)} keyboardType="number-pad"/></View></View>
-        </>}
-        {selected.signatureStatus==='Signed'
-          ?<View style={styles.lockedCrew}><Text style={styles.lockedCrewLabel}>{truckCrewRoleLabel(selected.driverRole)}</Text><Text style={styles.lockedCrewName}>{selected.driverName}</Text><Text style={styles.helper}>Signed by this person, so the Driver / Operator of this load cannot be changed.</Text></View>
-          :<SearchableSelect label="Driver / Operator" options={[...(crew.some(value=>value.id===selected.driverId)?[]:[{id:selected.driverId??'',label:selected.driverName,detail:`${truckCrewRoleLabel(selected.driverRole)} · currently recorded`}]),...crew.map(value=>({id:value.id,label:value.name,detail:truckCrewRoleLabel(value.role)}))]} selectedId={draft.driverId??''} onSelect={(v)=>update('driverId',v)}/>}
-        <AppField label="Unit price USD (blank = Unpriced)" value={draft.unitPriceUsd} onChangeText={(v)=>update('unitPriceUsd',v)} keyboardType="decimal-pad"/>
-        <AppField label="Destination address" value={draft.destinationAddress} onChangeText={(v)=>update('destinationAddress',v)} multiline/>
-        <AppField label="Notes" value={draft.notes} onChangeText={(v)=>update('notes',v)} multiline/>
-        <View style={styles.metricRow}><MetricCard label="Current quantity" value={`${selected.billedQuantity.toFixed(3)} ${selected.outputUnitSymbol}`} result/><MetricCard label="Current payment status" value={selected.paymentStatus} accent/></View>
-        {showReasonHint?<Feedback kind="warning">Enter a correction reason to continue.</Feedback>:null}
-        {!showReasonHint&&validationError?<Feedback kind="warning">{validationError}</Feedback>:null}
-        {!showReasonHint&&!validationError&&showNoChangeHint?<Feedback kind="warning">Change at least one field to continue.</Feedback>:null}
-        {error?<Feedback kind="error">{error}</Feedback>:null}
-        <AppButton label="Review Correction" onPress={goToReview} disabled={showReasonHint||Boolean(validationError)||showNoChangeHint}/>
-      </AppCard>:null}
-
-      {stage==='review'?<AppCard title="Review before confirming" hint="Only the fields below will change. Confirming updates the permanent record.">
-        <Text style={styles.reasonLabel}>Correction reason</Text>
-        <Text style={styles.reasonValue}>{draft.correctionReason}</Text>
-        {preview.map(row=><View key={row.field} style={styles.diffRow}><Text style={styles.diffField}>{row.field}</Text><View style={styles.diffValues}><Text style={styles.diffWas}>{row.was}</Text><Text style={styles.diffArrow}>→</Text><Text style={styles.diffNow}>{row.now}</Text></View></View>)}
-        {error?<Feedback kind="error">{error}</Feedback>:null}
-        <AppButton label="Confirm Correction" busy={busy} onPress={confirmCorrection}/>
-        <AppButton label="Back to Edit" tone="secondary" onPress={backToEdit}/>
-      </AppCard>:null}
-    </>:null}
+    {stage==='edit'&&selected?<LoadCorrectionForm key={selected.id+selected.correctionHistory.length} repository={repository} signers={signers} selected={selected} onChooseAnother={chooseAnother} onSigningChange={setSigning} onSaved={updated=>{setSelected(updated);setMessage('Load corrected. The original is saved in the history. The load number and transaction number did not change. Future PDFs and reprints use the corrected values.');void refresh();}}/>:null}
   </ScrollView>;
 }
 

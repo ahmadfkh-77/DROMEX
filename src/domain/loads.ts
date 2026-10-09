@@ -1,5 +1,5 @@
 import type { CompanySettings, Customer } from './profiles';
-import type { SignerSnapshot } from './documentSigners';
+import type { SignerDisplay, SignerSnapshot } from './documentSigners';
 import type { TruckCrewRole } from './people';
 
 export type MeasurementUnit = {
@@ -64,7 +64,31 @@ export type QuantityMethod = 'weighbridge' | 'direct';
  * requires a non-empty value at runtime. `driverId`, when present and different from the load's person,
  * reassigns the Driver / Operator through the same reasoned, audited correction (DEC-477).
  */
-export type LoadCorrectionDraft = { requestedQuantityKg: string; emptyWeightKg: string; fullWeightKg: string; directQuantity: string; unitPriceUsd: string; destinationAddress: string; notes: string; correctionReason?: string; driverId?: string };
+/**
+ * Phase 4. Everything else about a confirmed load that can be corrected. Every field is optional: an absent field
+ * means "leave as confirmed", so the older partial form of a correction keeps working unchanged.
+ */
+export type LoadFullCorrectionFields = {
+  /** Local calendar date (yyyy-mm-dd). The time of day of the confirmation is kept. */
+  recordDate?: string;
+  customerId?: string;
+  /** '' means no project. */
+  projectId?: string;
+  itemId?: string;
+  /** The driver or operator name; with an empty `driverId` it is typed for this load only. */
+  driverName?: string;
+  /** '' with a typed `truckPlate` means a plate typed for this load only. */
+  truckId?: string;
+  truckPlate?: string;
+  /** A weighbridge load's conversion, or a direct load's optional conversion ('' = none). */
+  conversionId?: string;
+  directUnitId?: string;
+  /** The driver's drawn signature; [] removes it. Absent keeps it (it is removed when the driver changes). */
+  driverSignaturePaths?: string[];
+  /** A saved signer for the supplier signature; null removes it. Absent keeps it. */
+  supplierSignature?: { signerId: string; display: SignerDisplay } | null;
+};
+export type LoadCorrectionDraft = { requestedQuantityKg: string; emptyWeightKg: string; fullWeightKg: string; directQuantity: string; unitPriceUsd: string; destinationAddress: string; notes: string; correctionReason?: string; driverId?: string } & LoadFullCorrectionFields;
 export type LoadStatus = 'Active' | 'Cancelled';
 export type LoadCorrectionChange = { field: string; originalValue: string | null; newValue: string | null };
 export type LoadCorrectionEntry = { correctedAt: string; correctedBy: string; reason: string; changes: LoadCorrectionChange[] };
@@ -246,6 +270,13 @@ export type LoadCalculation = {
 
 export type ConfirmedLoad = Omit<LoadCalculation, 'netWeightKg' | 'convertedQuantity' | 'billedQuantity'> & {
   quantityMethod: QuantityMethod;
+  /** Phase 4. The ids behind this load, used to pre-fill and compare a correction. Absent only on hand-built records. */
+  customerId?: string;
+  projectId?: string | null;
+  itemId?: string;
+  truckId?: string | null;
+  conversionId?: string;
+  directUnitId?: string | null;
   netWeightKg: number | null;
   convertedQuantity: number;
   billedQuantity: number;

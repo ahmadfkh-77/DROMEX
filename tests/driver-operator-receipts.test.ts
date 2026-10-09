@@ -155,10 +155,14 @@ describe('documents and exports show the role served',()=>{
   });
 
   it('offers the Driver / Operator as a reasoned correction, locked once the load is signed',()=>{
-    const screen=readFileSync(join(__dirname,'..','src/ui/screens/LoadCorrectionsScreen.tsx'),'utf8');
-    expect(screen).toContain('<SearchableSelect label="Driver / Operator"');
-    expect(screen).toContain("selected.signatureStatus==='Signed'");
-    expect(screen).toContain('cannot be changed');
-    expect(screen).toContain("oldValues['Driver / Operator']");
+    // Phase 4: the screen is now the full Correct this load form. A saved person can still be chosen there; on a
+    // signed load the old signature is removed (and kept in the saved original) when the driver changes. The older
+    // partial form of a correction, kept in the repository, still refuses to change the person on a signed load.
+    const form=readFileSync(join(__dirname,'..','src/ui/components/LoadCorrectionForm.tsx'),'utf8');
+    expect(form).toContain('Saved driver or operator');
+    expect(form).toContain('Changing the driver removes that signature');
+    const repository=readFileSync(join(__dirname,'..','src/data/repositories/SqliteLoadRepository.ts'),'utf8');
+    expect(repository).toContain('cannot be changed');
+    expect(repository).toContain("oldValues['Driver / Operator']");
   });
 });

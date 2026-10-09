@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 51;
+export const DATABASE_VERSION = 52;
 
 type TableColumn = { name: string };
 
@@ -2006,6 +2006,31 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'company_settings', 'header_signer_display', "TEXT CHECK (header_signer_display IS NULL OR header_signer_display IN ('name_only', 'name_with_signature'))");
     await addColumnIfMissing(db, 'projects', 'header_company', "TEXT CHECK (header_company IS NULL OR header_company IN ('plant', 'project'))");
     currentVersion = 51;
+  }
+
+  if (currentVersion === 51) {
+    // Phase 4 (Receipts, Load History and PDFs). Full correction of a confirmed load. Before each correction the
+    // load is saved exactly as it was in this append-only table, so the history always shows what was before and
+    // after. Nothing existing is rewritten: a load that was corrected before this migration simply has no saved
+    // original for those earlier corrections (its readable history in loads.correction_history_json is unchanged).
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS load_versions (
+        id TEXT PRIMARY KEY NOT NULL,
+        load_id TEXT NOT NULL REFERENCES loads(id),
+        version INTEGER NOT NULL CHECK (version > 0),
+        snapshot_json TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        changes_json TEXT NOT NULL,
+        corrected_at TEXT NOT NULL,
+        UNIQUE (load_id, version)
+      );
+      CREATE INDEX IF NOT EXISTS idx_load_versions_load ON load_versions(load_id, version);
+      CREATE TRIGGER IF NOT EXISTS trg_load_versions_no_update BEFORE UPDATE ON load_versions
+        BEGIN SELECT RAISE(ABORT, 'Saved originals of a load cannot change.'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_load_versions_no_delete BEFORE DELETE ON load_versions
+        BEGIN SELECT RAISE(ABORT, 'Saved originals of a load cannot be deleted.'); END;
+    `);
+    currentVersion = 52;
   }
 
 
