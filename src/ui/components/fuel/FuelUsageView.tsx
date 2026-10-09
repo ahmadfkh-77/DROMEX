@@ -20,7 +20,7 @@ import {FuelDayCard,SectionTitle} from './FuelBatchParts';
  * then the fills one card per day. Tapping a project, site or Unassigned shows only its fills and offers a
  * PDF of just that destination.
  */
-type Props={movements:FuelMovement[];overview:DieselBatchOverview;onSelectFill:(fill:FuelMovement)=>void;onExport:(filter:DieselExportFilter,includePrices:boolean)=>Promise<void>};
+type Props={movements:FuelMovement[];overview:DieselBatchOverview;onSelectFill:(fill:FuelMovement)=>void;onExport:(filter:DieselExportFilter,includePrices:boolean,company?:{name:string;logoUri:string|null;contactLine:string|null})=>Promise<void>};
 type TypeChoice='all'|FuelDestinationType;
 const LABEL:Record<FuelDestinationType,string>={project:'PROJECTS',company_site:'COMPANY SITES',unassigned:'UNASSIGNED'};
 
@@ -82,7 +82,7 @@ export function FuelUsageView({movements,overview,onSelectFill,onExport}:Props){
     {days.length?days.map(card=><FuelDayCard key={card.day} card={card} onSelectRow={id=>{const fill=byId.get(id);if(fill)onSelectFill(fill);}}/>)
       :<EmptyState title={hasAnyFill?'No fills match':'No equipment fills yet'} body={hasAnyFill?'Change or clear the filters, or show every destination.':'Record an equipment fill and choose where the fuel went. Each day appears here as its own card.'}/>}
 
-    <DieselPdfExportPanel label={chosen?`Export ${chosen.type==='unassigned'?'Unassigned':chosen.name} PDF`:'Export Usage PDF'} scope={chosen?`A Diesel Batch Report of every diesel fill to ${chosen.type==='unassigned'?'no destination (Unassigned)':chosen.name}${fromDate||toDate?' in the dates chosen':''}, by day.`:'A Diesel Batch Report of every diesel fill in the dates chosen, by destination and day. Tap a destination above for its own PDF.'} onExport={includePrices=>onExport(exportFilter,includePrices)}/>
+    <DieselPdfExportPanel label={chosen?`Export ${chosen.type==='unassigned'?'Unassigned':chosen.name} PDF`:'Export Usage PDF'} scope={chosen?`A Diesel Batch Report of every diesel fill to ${chosen.type==='unassigned'?'no destination (Unassigned)':chosen.name}${fromDate||toDate?' in the dates chosen':''}, by day.`:'A Diesel Batch Report of every diesel fill in the dates chosen, by destination and day. Tap a destination above for its own PDF.'} onExport={(includePrices,company)=>onExport(exportFilter,includePrices,company)}/>
   </View>;
 }
 

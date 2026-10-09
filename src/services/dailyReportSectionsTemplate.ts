@@ -39,7 +39,7 @@ export function supplierLoadsHtml(loads:readonly LinkedQuarryLoad[],includePrice
   const groups=groupSupplierLoads(loads);
   const columns=includePrices?6:5;
   if(!groups.length)return `<table class="table-accent-supplier"><tbody><tr><td colspan="${columns}" class="empty">No project-linked supplier loads for this date</td></tr></tbody></table>`;
-  const head=`<tr><th>Reference</th><th>Delivery</th><th>Truck</th><th>Ticket</th><th>Quantity</th>${includePrices?'<th>Total</th>':''}</tr>`;
+  const head=`<tr><th>Reference</th><th>Delivery</th><th>Truck</th><th>Ticket</th><th class="number">Quantity</th>${includePrices?'<th class="number">Total</th>':''}</tr>`;
   // One fixed column set for every item table, so quantities and totals line up from item to item.
   const widths=includePrices?[20,24,14,12,14,16]:[24,30,16,14,16];
   const colgroup=`<colgroup>${widths.map(width=>`<col style="width:${width}%">`).join('')}</colgroup>`;

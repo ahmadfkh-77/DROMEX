@@ -3,7 +3,10 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {strFromU8,unzipSync} from 'fflate';
-import {describe,expect,it} from 'vitest';
+import {describe,expect,it,vi} from 'vitest';
+
+// Building and encrypting a whole backup can exceed vitest's 5 s default while the full suite runs in parallel.
+vi.setConfig({testTimeout:60_000});
 
 import {generateCustomerTestBackup} from '../scripts/generate-customer-test-backup';
 import {DATABASE_VERSION} from '../src/data/database/migrations';

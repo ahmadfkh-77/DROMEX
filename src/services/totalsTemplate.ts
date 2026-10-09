@@ -70,9 +70,9 @@ function materialBlock(material:MaterialNode,index:number,showUsed:boolean,price
         <div class="figure side"><span class="figure-label">Records</span><b>${material.inclusion.total}</b>${prices?`<span class="figure-label spaced">Recorded value</span><b>${value(material.value)}</b>`:''}</div>
       </div>
       ${deliveredRows?`<h4 class="sub">Delivered — by project and supplier</h4>
-      <table class="grid"><thead><tr><th>Project · supplier or source</th><th>Unit</th><th class="num">Delivered</th><th class="num">Records</th>${prices?'<th class="num">Recorded value</th>':''}</tr></thead><tbody>${deliveredRows}</tbody></table>`:''}
+      <table class="grid"><colgroup>${(prices?[46,10,18,10,16]:[52,12,22,14]).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Project · supplier or source</th><th>Unit</th><th class="num">Delivered</th><th class="num">Records</th>${prices?'<th class="num">Recorded value</th>':''}</tr></thead><tbody>${deliveredRows}</tbody></table>`:''}
       ${useRows?`<h4 class="sub">Recorded on site — Daily Reports</h4>
-      <table class="grid"><thead><tr><th>Project</th><th>Unit</th><th class="num">Used</th><th class="num">Transported</th><th class="num">Delivered minus recorded use</th></tr></thead><tbody>${useRows}</tbody></table>`:''}
+      <table class="grid"><colgroup><col style="width:34%"/><col style="width:10%"/><col style="width:18%"/><col style="width:18%"/><col style="width:20%"/></colgroup><thead><tr><th>Project</th><th>Unit</th><th class="num">Used</th><th class="num">Transported</th><th class="num">Delivered minus recorded use</th></tr></thead><tbody>${useRows}</tbody></table>`:''}
     </div>
   </section>`;
 }
@@ -92,65 +92,72 @@ function fuelBlock(fills:ProjectFuelFill[],index:number,prices:boolean):string{
     <div class="block-body">
       <p class="lead">Equipment fills recorded to this project. Each fuel type is totalled on its own; diesel and gasoline are never added together.${prices?` Fuel cost of priced fills: <b>${summary.cost.totalCents==null?'No prices recorded':e(formatCents(summary.cost.totalCents))}</b>${summary.cost.unpricedCount?` (${plural(summary.cost.unpricedCount,'fill')} unpriced)`:''}.`:''}</p>
       <h4 class="sub">By fuel type and equipment</h4>
-      <table class="grid"><thead><tr><th>Fuel type · equipment</th><th class="num">Litres</th><th class="num">Fills</th></tr></thead><tbody>${equipmentRows}</tbody></table>
+      <table class="grid"><colgroup><col style="width:60%"/><col style="width:22%"/><col style="width:18%"/></colgroup><thead><tr><th>Fuel type · equipment</th><th class="num">Litres</th><th class="num">Fills</th></tr></thead><tbody>${equipmentRows}</tbody></table>
       <h4 class="sub">Every fill</h4>
-      <table class="grid"><thead><tr><th>Date and time</th><th>Equipment</th><th>Fuel</th><th class="num">Litres</th>${prices?'<th class="num">Price</th><th class="num">Cost</th>':''}</tr></thead><tbody>${fillRows}</tbody></table>
+      <table class="grid"><colgroup>${(prices?[14,30,12,14,16,14]:[18,40,16,26]).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Date and time</th><th>Equipment</th><th>Fuel</th><th class="num">Litres</th>${prices?'<th class="num">Price</th><th class="num">Cost</th>':''}</tr></thead><tbody>${fillRows}</tbody></table>
     </div>
   </section>`;
 }
 
 function historyBlock(records:CompanyTotalsRecord[],index:number,prices:boolean,showProject:boolean):string{
   const sorted=[...records].sort((a,b)=>a.snapshot.recordedAt.localeCompare(b.snapshot.recordedAt)||a.snapshot.reference.localeCompare(b.snapshot.reference,undefined,{numeric:true}));
-  const rows=sorted.map(record=>{const s=record.snapshot;return `<tr><td class="nowrap">${e(formatDay(localDay(s.recordedAt)))}<div class="muted">${e(localTime(s.recordedAt))}</div></td>
-    <td><b>${e(recordTitle(s))}</b><div class="muted">${e(recordReferences(s))}</div></td>${showProject?`<td>${t(s.projectName??'No project')}</td>`:''}
-    <td>${t(s.recordType==='company_load'?`Company load · ${s.partyName}`:s.partyName)}</td><td>${t(s.itemName)}</td>
-    <td class="num">${e(formatTotalQuantity(s.quantity,s.unitSymbol))}</td>${prices?`<td class="num wrap">${s.unitPriceCents==null?'<span class="missing">No price recorded</span>':e(recordMoneyLine(s))}</td>`:''}</tr>`;}).join('');
   return `<section class="block" data-kind="history">
     <div class="block-bar"><span class="block-index">${index}</span><span class="block-name">Loads history · ${plural(sorted.length,'load')}</span></div>
-    <div class="block-body">
-      <table class="grid history"><colgroup><col style="width:13%"/><col style="width:22%"/>${showProject?'<col style="width:19%"/>':''}<col style="width:18%"/><col style="width:${(prices?12:27)+(showProject?0:19)}%"/><col style="width:11%"/>${prices?'<col style="width:16%"/>':''}</colgroup>
-      <thead><tr><th>Date and time</th><th>Number and reference</th>${showProject?'<th>Project</th>':''}<th>Supplier or customer</th><th>Item</th><th class="num">Quantity</th>${prices?'<th class="num">Price as recorded</th>':''}</tr></thead>
-      <tbody>${rows}</tbody></table>
-    </div>
+    <div class="block-body">${loadListTable(sorted,prices,showProject)}</div>
   </section>`;
 }
 
 const dateCell=(raw:string)=>`${e(formatDay(localDay(raw)))}<div class="muted">${e(localTime(raw))}</div>`;
+
+/** What the Supplier column reads on the company's own loads (Owner decision, Phase 5). */
+const PLANT_COMPANY_LABEL='Plant Company';
+/**
+ * Phase 5. Column widths of every load list, each set adding up to exactly 100%, so the base columns keep their
+ * order and nearly their width with or without prices and a Project column. Order: Date, time | Load No. | Item |
+ * Supplier | Customer | Driver | Truck plate | Unit | Quantity, then Project, then the two price columns.
+ */
+const LOAD_LIST_WIDTHS={plain:[11,10,12,12,12,12,10,6,15],project:[10,9,10,10,10,10,9,5,12],prices:[9,9,10,10,10,10,8,5,9],projectPrices:[8,8,9,9,9,9,8,4,8]};
 const notRecordedOr=(raw:string|null|undefined)=>raw?t(raw):missing;
+
+/**
+ * Phase 5. One table for every list of loads in a Totals PDF (Loads History, Customer Deliveries, and the company
+ * and supplier loads of a Project Totals). Every fact has its own column: no two values share a cell except the
+ * date with its time and a load number with its reference. Supplier is "Plant Company" on the company's own
+ * loads; Customer on an incoming delivery is the customer of its project. Fixed layout, numbers right-aligned.
+ */
+function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:boolean):string{
+  const base=showProject?(prices?LOAD_LIST_WIDTHS.projectPrices:LOAD_LIST_WIDTHS.project):(prices?LOAD_LIST_WIDTHS.prices:LOAD_LIST_WIDTHS.plain);
+  const widths=[...base,...(showProject?[prices?10:15]:[]),...(prices?(showProject?[9,9]:[10,10]):[])];
+  const rows=records.map(record=>{
+    const s=record.snapshot,d=record.details,company=s.recordType==='company_load';
+    const driver=company?d?.driverName:d?.deliveredBy==='supplier'?'Supplier delivering':d?.driverName;
+    const number=company
+      ?`${s.loadNumber?`<span class="ln">${e(s.loadNumber)}</span>`:`<span class="legacy" title="${e(recordTitle(s))}">Legacy load</span>`}<div class="muted">${e(companyLoadReference(s))}</div>`
+      :`<span class="ln">${e(s.reference)}</span>${s.supplierReference?`<div class="muted">Supplier ticket ${e(s.supplierReference)}</div>`:''}`;
+    const priceCells=prices?`<td class="num wrap">${s.unitPriceCents==null?'<span class="missing">No price recorded</span>':e(priceAsRecorded(s))}</td><td class="num wrap">${s.totalCents==null?missing:e(vatAndTotal(s))}</td>`:'';
+    return `<tr><td class="nowrap">${dateCell(s.recordedAt)}</td><td>${number}</td><td>${t(s.itemName)}</td>
+      <td>${company?t(PLANT_COMPANY_LABEL):t(s.partyName)}</td><td>${notRecordedOr(company?s.partyName:d?.customerName)}</td>
+      <td>${notRecordedOr(driver)}</td><td>${notRecordedOr(d?.truckPlate)}</td><td>${e(s.unitSymbol)}</td><td class="num">${e(formatTotalQuantity(s.quantity,'').trim())}</td>
+      ${showProject?`<td>${s.projectName?t(s.projectName):missing}</td>`:''}${priceCells}</tr>`;
+  }).join('');
+  const columns=['Date, time','Load No.','Item','Supplier','Customer','Driver','Truck plate','Unit','Quantity'];
+  const head=columns.map((column,position)=>`<th${position===8?' class="num"':''}>${e(column)}</th>`).join('')+(showProject?'<th>Project</th>':'')+(prices?'<th class="num">Price as recorded</th><th class="num">VAT · Total</th>':'');
+  return `<table class="grid history"><colgroup>${widths.map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
 
 /**
  * Project Totals: every Active load behind the totals, listed per load. Company loads (delivered to
  * the customer) and Supplier Loads (incoming) are separate sections with their own labels and their
- * own per-unit totals; units are never added together. Cancelled loads are not listed. Price and VAT
- * columns exist only on a priced export. Empty sections are left out.
+ * own per-unit totals; units are never added together. Cancelled loads are not listed. Both sections use the
+ * same columns as every other load list. Price and VAT columns exist only on a priced export. Empty sections are left out.
  */
 function projectLoadsBlock(kind:'company'|'supplier',records:CompanyTotalsRecord[],index:number,prices:boolean):string{
   const ordered=[...records].sort((a,b)=>a.snapshot.recordedAt.localeCompare(b.snapshot.recordedAt)||a.snapshot.reference.localeCompare(b.snapshot.reference,undefined,{numeric:true}));
   const pills=unitTotals(ordered).map(unit=>`<span class="pill">${e(formatTotalQuantity(unit.quantity,unit.unitSymbol))}</span>`).join('');
-  const rows=ordered.map(record=>{
-    const s=record.snapshot,by=deliveredByLabel(record.details);
-    const priceCells=prices?`<td class="num wrap">${s.unitPriceCents==null?'<span class="missing">No price recorded</span>':e(priceAsRecorded(s))}</td><td class="num wrap">${s.totalCents==null?missing:e(vatAndTotal(s))}</td>`:'';
-    if(kind==='company')return `<tr><td class="nowrap">${dateCell(s.recordedAt)}</td>
-      <td>${s.loadNumber?`<span class="ln">${e(s.loadNumber)}</span>`:`<span class="legacy">${e(recordTitle(s))}</span>`}<div class="muted">${e(companyLoadReference(s))}</div></td>
-      <td>${t(s.itemName)}</td><td>${t(s.partyName)}</td><td class="num">${e(formatTotalQuantity(s.quantity,s.unitSymbol))}</td>
-      <td>${notRecordedOr(record.details?.destination)}</td><td>${t(by.main)}${by.sub?`<div class="muted">${e(by.sub)}</div>`:''}</td><td class="ok">Active</td>${priceCells}</tr>`;
-    return `<tr><td class="nowrap">${dateCell(s.recordedAt)}</td><td><span class="ln">${e(s.reference)}</span></td><td>${t(s.itemName)}</td><td>${t(s.partyName)}</td>
-      <td class="num">${e(formatTotalQuantity(s.quantity,s.unitSymbol))}</td><td>${t(by.main)}${by.sub?`<div class="muted">${e(by.sub)}</div>`:''}</td>
-      <td>${notRecordedOr(s.supplierReference)}</td><td class="ok">Active</td>${priceCells}</tr>`;
-  }).join('');
-  const columns=kind==='company'
-    ?['Date, time','Load No. · Transaction','Material','Customer','Quantity','Destination','Driver · Truck','Status']
-    :['Date, time','Supplier Load No.','Material','Supplier','Quantity','Delivered by','Ticket','Status'];
-  const widths=kind==='company'?(prices?[9,13,9,10,8,9,9,6]:[11,17,11,14,10,13,14,7]):(prices?[9,11,10,12,8,11,7,6]:[11,14,13,17,11,17,10,7]);
-  const priceHead=prices?'<th class="num">Price as recorded</th><th class="num">VAT · Total</th>':'';
-  const priceWidths=prices?'<col style="width:13%"/><col style="width:11%"/>':'';
   const title=kind==='company'?'Company loads delivered · own deliveries':'Supplier loads delivered · incoming from suppliers';
   return `<section class="block" data-kind="project-${kind}-loads">
     <div class="block-bar"><span class="block-index">${index}</span><span class="block-name">${e(title)}</span><span class="block-figures">${pills}<span class="pill">${plural(ordered.length,'load')}</span></span></div>
-    <div class="block-body">
-      <table class="grid history"><colgroup>${widths.map(width=>`<col style="width:${width}%"/>`).join('')}${priceWidths}</colgroup>
-      <thead><tr>${columns.map((column,position)=>`<th${position===4?' class="num"':''}>${e(column)}</th>`).join('')}${priceHead}</tr></thead><tbody>${rows}</tbody></table>
-    </div>
+    <div class="block-body">${loadListTable(ordered,prices,false)}</div>
   </section>`;
 }
 
@@ -182,9 +189,11 @@ export function buildTotalsHtml(input:TotalsPdf):string{
   const tiles=[`<div class="tile"><span class="figure-label">Materials</span><b>${whole.materialCount}</b></div>`,`<div class="tile"><span class="figure-label">Records delivered</span><b>${whole.inclusion.total}</b></div>`,
     prices?`<div class="tile"><span class="figure-label">Recorded value</span><b>${whole.value.totalCents==null?'<span class="missing">No prices recorded</span>':e(formatCents(whole.value.totalCents))}</b>${whole.value.unpricedCount?`<div class="muted">${plural(whole.value.unpricedCount,'record')} unpriced</div>`:''}</div>`:''].join('');
 
+  // Phase 5. A priced list adds two price columns (and perhaps Project) to nine others: that needs the width of a landscape page.
+  const landscape=prices&&Boolean(history||companyLoads.length||supplierLoads.length);
   return `<!doctype html><html><head><meta charset="utf-8"><title>${e(input.title)}</title><style>
-    @page{size:A4;margin:12mm 11mm 14mm}
-    @media screen{body{max-width:210mm;margin:0 auto;padding:12mm}}
+    @page{size:${landscape?'A4 landscape':'A4'};margin:12mm 11mm 14mm}
+    @media screen{body{max-width:${landscape?'297mm':'210mm'};margin:0 auto;padding:12mm}}
     *{box-sizing:border-box}
     body{font-family:Arial,'Noto Naskh Arabic','Geeza Pro',sans-serif;color:#17212B;font-size:9pt;line-height:1.35}
     .head{display:flex;justify-content:space-between;align-items:flex-start;gap:6mm;border-bottom:2px solid #C84B31;padding-bottom:4mm;margin-bottom:3mm}
@@ -239,7 +248,8 @@ export function buildTotalsHtml(input:TotalsPdf):string{
     tbody tr:nth-child(even) td{background:#FAF8F4}
     tr.group-row td{background:#F0EBE2;font-weight:700;color:#17212B;border-bottom:.3mm solid #D9CFBE;padding-top:1.8mm}
     td.indent{padding-left:5mm}
-    .history{table-layout:fixed}
+    .grid{table-layout:fixed}
+    .history td{font-size:8pt}
     .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
     .nowrap{white-space:nowrap}
     .wrap{white-space:normal}

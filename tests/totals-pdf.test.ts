@@ -90,7 +90,9 @@ describe('Loads History PDF',()=>{
     expect(right.indexOf('Alpha Quarry')).toBeLessThan(right.indexOf('2 Sep 2026'));
     expect(html).toContain('Loads history · 2 loads');
     expect(html.indexOf('QP-1')).toBeLessThan(html.indexOf('QP-2'));
-    for(const text of ['10 Aug 2026','09:30','Supplier ticket T-88','Mountain Road','Alpha Quarry','8 m³','4 m³'])expect(html).toContain(text);
+    for(const text of ['10 Aug 2026','09:30','Supplier ticket T-88','Mountain Road','Alpha Quarry'])expect(html).toContain(text);
+    // Phase 5: the quantity and its unit are separate columns, and the section total still reads "12 m³".
+    for(const text of ['<td class="num">8</td>','<td class="num">4</td>','<td>m³</td>'])expect(html).toContain(text);
     expect(html).toContain('12 m³');
   });
   it('is not a billing document: no number, no signer, and it says so',()=>{

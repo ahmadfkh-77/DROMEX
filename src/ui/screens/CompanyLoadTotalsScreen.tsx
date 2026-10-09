@@ -1,3 +1,4 @@
+import {useExportHeader} from '../components/useExportHeader';
 import {useEffect,useMemo,useState} from 'react';
 import {ActivityIndicator,LayoutAnimation,Pressable,StyleSheet,Text,View} from 'react-native';
 
@@ -66,21 +67,23 @@ export function CompanyLoadTotalsScreen({totals,series,profiles,onBack,onOpenRec
   },[currentGroup?.key,project?.key,status,filters,groupBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const back=()=>{if(project){setProject(null);return;}if(group){setGroup(null);return;}onBack();};
+  // Phase 5. The Header company for this PDF; the PDF always lists Active loads only, whatever the Status filter on screen.
+  const exportHeader=useExportHeader(null);
   const exportPdf=async()=>{
     setBusy(true);setError(null);setMessage(null);
     try{
-      const [all,company]=await Promise.all([totals.listCompanyLoads(filters,status,5000),profiles.getCompanySettings()]);
-      const labels=[describeTotalsRange(filters.fromDate,filters.toDate),groupBy==='series'?'Grouped by number series':'Grouped by item',status==='active'?'Active loads':status==='cancelled'?'Cancelled loads only':'Active and cancelled loads',
+      const [all,company,chosen]=await Promise.all([totals.listCompanyLoads(filters,'active',5000),profiles.getCompanySettings(),exportHeader.resolve()]);
+      const labels=[describeTotalsRange(filters.fromDate,filters.toDate),groupBy==='series'?'Grouped by number series':'Grouped by item','Active loads',
         ...(filters.itemKey?[`Item: ${choices.items.find(value=>value.id===filters.itemKey)?.label??''}`]:[]),...(filters.projectKey?[`Project: ${choices.projects.find(value=>value.id===filters.projectKey)?.label??''}`]:[]),
         ...(filters.unitKey?[`Unit: ${choices.units.find(value=>value.id===filters.unitKey)?.label??''}`]:[]),...(filters.seriesId?[`Series: ${seriesChoices.find(value=>value.id===filters.seriesId)?.label??''}`]:[]),...(customerFilterLabel(filters.customerKeys,customerChoices)?[customerFilterLabel(filters.customerKeys,customerChoices)!]:[])];
-      await exportAndShareCompanyLoadTotals({fileName:{projectName:filters.projectKey?choices.projects.find(value=>value.id===filters.projectKey)?.label??null:null,fromDate:filters.fromDate,toDate:filters.toDate},companyName:company.companyName,contactLine:companyContactLine(company),logoUri:company.logoUri,generatedAt:new Date().toISOString(),filters:labels,groupBy,groups:tree,loads:all});
+      await exportAndShareCompanyLoadTotals({fileName:{projectName:filters.projectKey?choices.projects.find(value=>value.id===filters.projectKey)?.label??null:null,fromDate:filters.fromDate,toDate:filters.toDate},companyName:chosen?chosen.list.companyName:company.companyName,contactLine:chosen?chosen.list.contactLine:companyContactLine(company),logoUri:chosen?chosen.list.logoUri:company.logoUri,generatedAt:new Date().toISOString(),filters:labels,groupBy,groups:tree,loads:all});
       setMessage('PDF ready to share.');
     }catch(cause){setError(cause instanceof Error?cause.message:'The PDF could not be created.');}finally{setBusy(false);}
   };
 
   return <AppPage keyboard>
     <PageHeader eyebrow="COMPANY LOAD TOTALS" title={project?.name??currentGroup?.label??'Company loads'} onBack={back}/>
-    {!group?<Text style={styles.lead}>Company loads by number series or item, then by project. Each unit is totalled on its own; cancelled loads are listed apart and never counted.</Text>:null}
+    {!group?<Text style={styles.lead}>Company loads by number series or item, then by project. Each unit is totalled on its own; cancelled loads are listed apart on screen and never counted. PDFs never include them.</Text>:null}
     <View style={styles.filterBlock}>
       <Pressable onPress={()=>{if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.create(180,'easeInEaseOut','opacity'));setFiltersOpen(value=>!value);}} style={({pressed})=>[styles.filterBar,pressed&&parts.pressed]} accessibilityRole="button" accessibilityState={{expanded:filtersOpen}}>
         <View style={parts.flex}><Text style={styles.caption}>Covering</Text><Text style={styles.range}>{describeTotalsRange(filters.fromDate,filters.toDate)}</Text></View>
@@ -110,7 +113,7 @@ export function CompanyLoadTotalsScreen({totals,series,profiles,onBack,onOpenRec
       :tree.length?<Ledger title={groupBy==='series'?'By number series':'By item'}>
         {tree.map((value,index)=><GroupRow key={value.key} first={index===0} title={value.label} count={value.loadCount} units={value.units} cancelled={value.cancelledCount} onPress={()=>setGroup(value)}/>)}
       </Ledger>:<EmptyState title="No company loads" body="No company loads match these filters."/>}
-    {!issues.length&&rows?<AppButton label="Export PDF" tone="secondary" onPress={()=>void exportPdf()} busy={busy} hint="Every series or item, project and load for these filters"/>:null}
+    {!issues.length&&rows?<>{exportHeader.picker}{status==='cancelled'?<Feedback kind="warning">Your Status filter shows only cancelled loads. PDFs never include cancelled loads, so choose Active or Both to export.</Feedback>:<AppButton label="Export PDF" tone="secondary" onPress={()=>void exportPdf()} busy={busy} hint="Every series or item, project and active load for these filters. Cancelled loads are never in a PDF."/>}</>:null}
   </AppPage>;
 }
 

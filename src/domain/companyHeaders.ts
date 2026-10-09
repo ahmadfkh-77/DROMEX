@@ -1,5 +1,6 @@
 import type {SignerDisplay, SignerSnapshot} from './documentSigners';
 import type {ConfirmedLoad} from './loads';
+import {companyContactLine} from './projectTotalsPdf';
 
 /**
  * Phase 1 (Receipts, Load History and PDFs). A PDF can be headed by one of two companies:
@@ -109,4 +110,12 @@ export function applyHeaderCompany(record: ConfirmedLoad, header: HeaderCompany)
     companyLogoUri: header.logoUri,
     supplierSignature: header.signer,
   };
+}
+
+/**
+ * Phase 5. What every list and report PDF needs from the chosen Header company: the name, the logo and the one
+ * contact line printed under the name. It changes nothing in a record.
+ */
+export function listHeaderFrom(header: HeaderCompany): { companyName: string; logoUri: string | null; contactLine: string | null } {
+  return { companyName: header.name, logoUri: header.logoUri, contactLine: companyContactLine({ address: header.address, phone: header.phone, email: header.email, taxVatNumber: header.taxVatNumber }) };
 }

@@ -98,11 +98,14 @@ describe('Project Totals PDF',()=>{
     expect(plain).toContain('SL-000212');
     expect(plain).toContain('T-4471');
     expect(plain).toContain('Supplier delivering');
-    expect(plain).toContain('Plate 778899');
+    expect(plain).toContain('778899');
   });
-  it('lists each load with its load number next to its transaction number, destination, driver and status',()=>{
-    for(const text of ['ASP-00001','20261005-A-00123','Transaction 20261005-A-00123','ASP series','Zahle, km 12','R. Haddad','112233','AGG-00003','شركة النور للمقاولات','Active'])expect(plain).toContain(text);
-    expect(plain).toContain('18.5 t');
+  it('lists each load with its load number next to its transaction number, in separate Supplier, Customer, Driver and Truck plate columns',()=>{
+    for(const text of ['ASP-00001','20261005-A-00123','Transaction 20261005-A-00123','ASP series','R. Haddad','112233','AGG-00003','شركة النور للمقاولات','Plant Company'])expect(plain).toContain(text);
+    expect(plain).toContain('<th>Supplier</th><th>Customer</th><th>Driver</th><th>Truck plate</th><th>Unit</th><th class="num">Quantity</th>');
+    expect(plain).not.toContain('Supplier or customer');
+    expect(plain).toContain('<td class="num">18.5</td>');
+    expect(plain).toContain('<td>t</td>');
   });
   it('labels a load with no generated number as legacy and never invents one',()=>{
     expect(plain).toContain(LEGACY_LOAD_NUMBER_LABEL);

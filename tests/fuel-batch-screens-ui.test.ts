@@ -102,10 +102,10 @@ describe('Screen F · exporting the Diesel Batch Report',()=>{
   const panel=source('src/ui/components/fuel/DieselBatchesPanel.tsx');
   const exportPanel=source('src/ui/components/fuel/DieselPdfExportPanel.tsx');
   it('can be exported from the batch page, the filter view and the project view',()=>{
-    expect(screen).toContain('exportReport({batchId:openBatch.id},includePrices)');
-    expect(screen).toContain('exportReport({projectId:lockedProjectId},includePrices)');
+    expect(screen).toContain('exportReport({batchId:openBatch.id},includePrices,company)');
+    expect(screen).toContain('exportReport({projectId:lockedProjectId},includePrices,company)');
     expect(screen).toContain('onExport={exportReport}');
-    expect(panel).toContain('onExport({projectId:projectId||undefined,companySiteId:companySiteId||undefined,stationId:stationId||undefined,fromDate:fromDate||undefined,toDate:toDate||undefined},includePrices)');
+    expect(panel).toContain('onExport({projectId:projectId||undefined,companySiteId:companySiteId||undefined,stationId:stationId||undefined,fromDate:fromDate||undefined,toDate:toDate||undefined},includePrices,company)');
   });
   it('defaults to Without prices, as DEC-373 says',()=>{
     expect(exportPanel).toContain("useState<'without'|'with'>('without')");
@@ -157,7 +157,7 @@ describe('History and Usage tabs in the day-card design (amended 2026-10-03)',()
 
 describe('Diesel Batch Report header',()=>{
   it('prints the company from Company Settings with its logo',()=>{
-    expect(source('src/ui/screens/FuelTrackingScreen.tsx')).toContain('exportAndShareDieselBatchReport(report,await repository.getCompanyIdentity())');
+    expect(source('src/ui/screens/FuelTrackingScreen.tsx')).toContain('exportAndShareDieselBatchReport(report,company??await repository.getCompanyIdentity())');
     expect(source('src/services/documentExport.ts')).toContain('const logo=await imageUriToDataUrl(company.logoUri)');
     expect(source('src/services/dieselBatchTemplate.ts')).not.toContain('Plant Management');
   });

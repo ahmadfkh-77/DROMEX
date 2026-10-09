@@ -33,7 +33,7 @@ export function buildBusinessDocumentHtml(doc:BusinessDocument,logo:string|null)
   const money=doc.groups.money;
   const recordCount=doc.records.length;
 
-  const projectTables=doc.groups.projects.map(project=>`<table class="lines">
+  const projectTables=doc.groups.projects.map(project=>`<table class="lines"><colgroup>${(official?[34,17,12,19,18]:[46,22,14,18]).map(width=>`<col style="width:${width}%">`).join('')}</colgroup>
     <thead><tr class="project-row"><th colspan="${official?5:4}">${t(project.projectName)}</th></tr>
     <tr><th>Item</th><th class="num">Quantity</th><th class="num">Records</th>${official?'<th class="num">Unit price</th>':''}<th class="num">Amount</th></tr></thead>
     <tbody>${project.lines.map(line=>`<tr><td>${t(line.itemName)}${line.priceBasis==='whole'?'<div class="muted small">Priced for the whole delivery</div>':''}</td>
@@ -56,7 +56,7 @@ export function buildBusinessDocumentHtml(doc:BusinessDocument,logo:string|null)
   const recordRows=doc.records.map(({snapshot})=>`<tr><td>${e(recordTitle(snapshot))}<div class="muted small">${e(recordReferences(snapshot))}</div></td>
     <td>${e(formatRecordedAt(snapshot.recordedAt))}</td><td>${t(snapshot.itemName)}<div class="muted small">${t(snapshot.projectName??'No project')}</div></td>
     <td class="num">${e(formatTotalQuantity(snapshot.quantity,snapshot.unitSymbol))}</td><td class="num">${e(recordMoneyLine(snapshot))}</td></tr>`).join('');
-  const recordsTable=`<h2 class="section">Records on this document</h2><table class="records"><thead><tr><th>${ourSide?'Load number / reference':'Supplier Load / ticket'}</th><th>Date and time</th><th>Item and project</th><th class="num">Quantity</th><th class="num">Price as recorded</th></tr></thead><tbody>${recordRows}</tbody></table>`;
+  const recordsTable=`<h2 class="section">Records on this document</h2><table class="records"><colgroup>${[24,16,28,14,18].map(width=>`<col style="width:${width}%">`).join('')}</colgroup><thead><tr><th>${ourSide?'Load number / reference':'Supplier Load / ticket'}</th><th>Date and time</th><th>Item and project</th><th class="num">Quantity</th><th class="num">Price as recorded</th></tr></thead><tbody>${recordRows}</tbody></table>`;
 
   const terms=doc.terms;
   const termLines:[string,string|null][]=[['Payment terms',terms?.paymentTerms??null],['Payment instructions',terms?.bankDetails??null]];
@@ -102,6 +102,7 @@ export function buildBusinessDocumentHtml(doc:BusinessDocument,logo:string|null)
     .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
     td.num{white-space:normal}
     .lines{margin-top:3mm}
+    .lines,.records{table-layout:fixed}
     .project-row th{font-size:10pt;color:#17212B;border-bottom:none;padding-top:3mm;background:#F5F2EC}
     .keep{break-inside:avoid}
     .summary{margin-top:5mm}

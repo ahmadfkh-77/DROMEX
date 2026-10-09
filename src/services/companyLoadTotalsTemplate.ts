@@ -5,8 +5,9 @@ import {formatDay,formatRecordedAt,recordTitle} from '../domain/recordFormat';
 
 /**
  * DEC-500 (6). Company Load Totals as an A4 PDF: the filters it covers, then each series (or item) with
- * its load count and per-unit totals, its projects, and every load. Cancelled loads are listed under
- * their own heading and never added to a total. Table headings repeat on every page.
+ * its load count and per-unit totals, its projects, and every Active load. Cancelled loads are left out of
+ * this PDF altogether (Owner decision, Phase 5): no row, no column, no count, no section. They stay in the app.
+ * Every fact has its own column, the widths add up to 100%, and table headings repeat on every page.
  */
 export type CompanyLoadTotalsPdf={companyName:string;/** Company Settings address, phone, email and Tax/VAT under the name. */contactLine?:string|null;logo:string|null;generatedAt:string;filters:string[];groupBy:'series'|'item';groups:CompanyLoadGroupNode[];loads:CompanyTotalsRecord[]};
 
@@ -28,20 +29,18 @@ export function buildCompanyLoadTotalsHtml(input:CompanyLoadTotalsPdf):string{
   const sections=input.groups.map(group=>{
     const own=input.loads.filter(record=>groupKeyOf(record,input.groupBy)===group.key);
     const active=own.filter(record=>record.status==='Active');
-    const cancelled=own.filter(record=>record.status==='Cancelled');
-    const projectRows=group.projects.map(project=>`<tr><td>${t(project.projectName)}</td><td class="num nowrap">${loadsWord(project.loadCount)}</td><td class="num nowrap">${units(project.units)}</td><td class="num">${project.cancelledCount||''}</td></tr>`).join('');
+    const projectRows=group.projects.map(project=>`<tr><td>${t(project.projectName)}</td><td class="num nowrap">${loadsWord(project.loadCount)}</td><td class="num nowrap">${units(project.units)}</td></tr>`).join('');
     const loadRow=(record:CompanyTotalsRecord)=>`<tr><td class="strong">${e(recordTitle(record.snapshot))}<div class="muted">Transaction ${e(record.snapshot.reference)}</div></td>
-      <td class="nowrap">${e(formatDay(localDay(record.snapshot.recordedAt)))}<div class="muted">${e(localTime(record.snapshot.recordedAt))}</div></td><td>${t(record.snapshot.itemName)}</td><td>${t(record.snapshot.projectName??'No project')}<div class="muted">${t(record.snapshot.partyName)}</div></td>
+      <td class="nowrap">${e(formatDay(localDay(record.snapshot.recordedAt)))}<div class="muted">${e(localTime(record.snapshot.recordedAt))}</div></td><td>${t(record.snapshot.itemName)}</td><td>${t(record.snapshot.projectName??'No project')}</td><td>${t(record.snapshot.partyName)}</td>
       <td class="num nowrap">${e(formatTotalQuantity(record.snapshot.quantity,record.snapshot.unitSymbol))}</td>
-      <td class="history">${record.status==='Cancelled'?`Cancelled${record.cancellationReason?` — ${t(record.cancellationReason)}`:''}`:record.correctionCount?`Corrected ${record.correctionCount}×`:''}</td></tr>`;
-    const table=(caption:string,rows:CompanyTotalsRecord[])=>rows.length?`<table class="loads"><colgroup><col style="width:19%"/><col style="width:13%"/><col style="width:19%"/><col style="width:28%"/><col style="width:10%"/><col style="width:11%"/></colgroup><thead><tr class="caption"><th colspan="6">${t(group.label)} · ${e(caption)}</th></tr>
-      <tr><th>Load number</th><th>Date and time</th><th>Item</th><th>Project and customer</th><th class="num">Quantity</th><th>History</th></tr></thead><tbody>${rows.map(loadRow).join('')}</tbody></table>`:'';
+      <td class="history">${record.correctionCount?`Corrected ${record.correctionCount}×`:''}</td></tr>`;
+    const table=(caption:string,rows:CompanyTotalsRecord[])=>rows.length?`<table class="loads"><colgroup><col style="width:17%"/><col style="width:12%"/><col style="width:15%"/><col style="width:16%"/><col style="width:16%"/><col style="width:12%"/><col style="width:12%"/></colgroup><thead><tr class="caption"><th colspan="7">${t(group.label)} · ${e(caption)}</th></tr>
+      <tr><th>Load number</th><th>Date and time</th><th>Item</th><th>Project</th><th>Customer</th><th class="num">Quantity</th><th>History</th></tr></thead><tbody>${rows.map(loadRow).join('')}</tbody></table>`:'';
     return `<section class="group">
       <h2>${t(group.label)}</h2>
-      <div class="summary"><div><span class="label">Loads</span><b>${loadsWord(group.loadCount)}</b></div><div><span class="label">Delivered</span><b>${units(group.units)}</b></div>${group.cancelledCount?`<div><span class="label">Cancelled, not counted</span><b>${loadsWord(group.cancelledCount)}</b></div>`:''}</div>
-      <table class="projects"><thead><tr><th>Project</th><th class="num">Loads</th><th class="num">Delivered</th><th class="num">Cancelled</th></tr></thead><tbody>${projectRows}</tbody></table>
+      <div class="summary"><div><span class="label">Loads</span><b>${loadsWord(group.loadCount)}</b></div><div><span class="label">Delivered</span><b>${units(group.units)}</b></div></div>
+      <table class="projects"><colgroup><col style="width:52%"/><col style="width:20%"/><col style="width:28%"/></colgroup><thead><tr><th>Project</th><th class="num">Loads</th><th class="num">Delivered</th></tr></thead><tbody>${projectRows}</tbody></table>
       ${table('Loads',active)}
-      ${cancelled.length?`<h3>Cancelled — not counted</h3>${table('Cancelled — not counted',cancelled)}`:''}
     </section>`;
   }).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>Company Load Totals</title><style>
@@ -67,7 +66,7 @@ export function buildCompanyLoadTotalsHtml(input:CompanyLoadTotalsPdf):string{
     .caption th{color:#17212B;font-size:8.5pt;background:#F5F2EC;border-bottom:none}
     .num{text-align:right;font-variant-numeric:tabular-nums}
     .strong{font-weight:700}.muted{color:#5A6570;font-size:7.5pt}
-    .loads{table-layout:fixed}
+    .loads,.projects{table-layout:fixed}
     .nowrap{white-space:nowrap}
     .history{font-size:8pt}
     .loads .muted{overflow-wrap:anywhere}
@@ -78,6 +77,6 @@ export function buildCompanyLoadTotalsHtml(input:CompanyLoadTotalsPdf):string{
       <div><h1>Company Load Totals</h1><div class="filters">${e(formatRecordedAt(input.generatedAt))}</div></div></div>
     <p class="meta">${input.filters.map(e).join(' · ')}</p>
     ${sections||'<p>No company loads match these filters.</p>'}
-    <p class="note">Each unit is totalled on its own; different units are never added together. Cancelled loads keep their number and are listed, but are never counted. Loads confirmed before number series existed are shown as legacy loads with no generated number.</p>
+    <p class="note">Each unit is totalled on its own; different units are never added together. Cancelled loads are never included. Loads confirmed before number series existed are shown as legacy loads with no generated number.</p>
   </body></html>`;
 }

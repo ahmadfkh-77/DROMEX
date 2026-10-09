@@ -31,10 +31,17 @@ describe('Company Load Totals PDF',()=>{
     expect(html).not.toContain('44.5');
     expect(html).toMatch(/3 loads/);
   });
-  it('lists cancelled loads apart and never adds them in',()=>{
-    expect(html).toContain('Cancelled — not counted');
-    expect(html).toContain('Duplicate ticket');
-    expect(html).not.toContain('88.5');
+  it('leaves cancelled loads out altogether: no row, section, column, tile or count (Phase 5)',()=>{
+    for(const text of ['ASP-2026-003','Duplicate ticket','Cancelled — not counted','Cancelled, not counted','>Cancelled<','88.5'])expect(html).not.toContain(text);
+    expect(html).toContain('Cancelled loads are never included.');
+  });
+  it('gives Project and Customer their own columns, with widths that add up to 100%',()=>{
+    expect(html).toContain('<th>Item</th><th>Project</th><th>Customer</th><th class="num">Quantity</th>');
+    expect(html).not.toContain('Project and customer');
+    const widths=(table:string)=>[...table.matchAll(/<col style="width:(\d+)%"\/>/g)].map(match=>Number(match[1]));
+    const groups=html.match(/<colgroup>.*?<\/colgroup>/g)??[];
+    expect(groups.length).toBeGreaterThan(0);
+    for(const group of groups)expect(widths(group).reduce((sum,value)=>sum+value,0)).toBe(100);
   });
   it('lists each load with its number and the legacy wording, escaped',()=>{
     expect(html).toContain('ASP-2026-001');

@@ -86,7 +86,7 @@ describe('Daily Report PDF Supplier Loads',()=>{
   });
   it('keeps every existing load field: reference, quantity, delivery, truck and ticket, plus total with prices',()=>{
     // Quantity is the last data column so every subtotal and item total sits directly under it.
-    expect(html).toContain('<th>Reference</th><th>Delivery</th><th>Truck</th><th>Ticket</th><th>Quantity</th>');
+    expect(html).toContain('<th>Reference</th><th>Delivery</th><th>Truck</th><th>Ticket</th><th class="number">Quantity</th>');
     expect(html).toMatch(/<td>QP-\d+<\/td><td dir="auto">Omar Haddad<\/td><td>B123<\/td><td>T-9<\/td><td class="number">6 m³<\/td>/);
     expect(priced).toMatch(/Supplier subtotal · Alpha Asphalt<\/td><td class="number">20 t<\/td><td class="number">\$500\.00<\/td>/);
     expect(priced).toContain('<td class="number">Unpriced</td>');

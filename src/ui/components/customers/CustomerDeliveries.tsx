@@ -1,3 +1,4 @@
+import {useExportHeader} from '../useExportHeader';
 import {useEffect,useMemo,useState} from 'react';
 import {ActivityIndicator,Pressable,StyleSheet,Text,View} from 'react-native';
 
@@ -70,12 +71,14 @@ export function CustomerDeliveries({customer,totals,profiles,onOpenRecord,onOpen
   const active=countCustomerDeliveryFilters(scope);
   const rangeLabel=describeTotalsRange(scope.fromDate,scope.toDate);
 
+  // Phase 5. The Header company for this PDF (company-wide, so it is not remembered for a project).
+  const exportHeader=useExportHeader(null);
   const exportPdf=async()=>{
     setExporting(true);setMessage(null);
     try{
-      const [current,company,history]=await Promise.all([totals.getCompanyTotals(pageFilters),profiles.getCompanySettings(),totals.listRecords(pageFilters,5000)]);
+      const [current,company,history,chosen]=await Promise.all([totals.getCompanyTotals(pageFilters),profiles.getCompanySettings(),totals.listRecords(pageFilters,5000),exportHeader.resolve()]);
       const names={project:choices.projects.find(value=>value.id===scope.projectKey)?.label,item:choices.items.find(value=>value.id===scope.itemKey)?.label};
-      await exportAndShareTotals({companyName:company.companyName,logoUri:company.logoUri,contactLine:companyContactLine(company),title:'Customer Deliveries',scope:'company',
+      await exportAndShareTotals({companyName:chosen?chosen.list.companyName:company.companyName,logoUri:chosen?chosen.list.logoUri:company.logoUri,contactLine:chosen?chosen.list.contactLine:companyContactLine(company),title:'Customer Deliveries',scope:'company',
         filters:customerDeliveryLabels(customer.name,scope,names),generatedAt:new Date().toISOString(),includePrices:exportPrices==='with',showProject:true,data:current,records:history,issuedTo:customer.name,
         fileName:{scopeName:customer.name,fromDate:scope.fromDate,toDate:scope.toDate}});
       setExportOpen(false);
@@ -145,6 +148,7 @@ export function CustomerDeliveries({customer,totals,profiles,onOpenRecord,onOpen
       <Text style={styles.helper}>Exactly what is on this page for {customer.name}: {rangeLabel}{active?` · ${active} filter${active===1?'':'s'}`:''}. Not an invoice or bill.</Text>
       <SegmentedChoice mode="tabs" label="Prices" options={[{id:'without',label:'Without prices'},{id:'with',label:'With prices'}]} selectedId={exportPrices} onSelect={setExportPrices}/>
       <Text style={styles.helper}>Without prices is the default: no amount appears. With prices adds only recorded prices.</Text>
+      {exportHeader.picker}
       {message?.kind==='error'?<Feedback kind="error">{message.text}</Feedback>:null}
     </FocusedSheet>
   </View>;

@@ -1,3 +1,4 @@
+import {useExportHeader} from '../components/useExportHeader';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {BusinessDocumentRepository} from '../../data/repositories/BusinessDocumentRepository';
 import {deriveInclusion,inclusionLabel,type DocumentLink} from '../../domain/businessDocuments';
@@ -44,6 +45,8 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   const [project, setProject] = useState<ReportProject | null>(null);
+  // Phase 5. The Header company for the Daily Report and Completion PDFs, remembered per project when ticked.
+  const exportHeader = useExportHeader(project?.id);
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [reports, setReports] = useState<DailyProjectReport[]>([]);
   const [draft, setDraft] = useState<DailyProjectReportDraft | null>(null);
@@ -160,9 +163,14 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save the report.'); }
     finally { setBusy(false); }
   }
+  /** The company a report PDF prints: the chosen Header company's name, logo and contact details; the ministry, agency and custom headers of the report stay as set in PDF Settings. */
+  async function reportCompany() {
+    const chosen = await exportHeader.resolve();
+    return chosen ? { ...setup!.company, name: chosen.list.companyName, logoUri: chosen.list.logoUri, address: chosen.header.address, phone: chosen.header.phone, email: chosen.header.email } : setup!.company;
+  }
   async function shareReport(report: DailyProjectReport,includePrices=false) {
     if (!project) return; setBusy(true); setError(null); setMessage(null);
-    try { const [loads,quarry,waste,fuel,wallWork,foundationActivity] = await Promise.all([repository.listLinkedLoads(project.id, report.workDate),repository.listLinkedQuarryLoads(project.id,report.workDate),repository.listLinkedWasteDumps(project.id, report.workDate),repository.listLinkedFuelFills(project.id,report.workDate),repository.listLinkedWallWork(project.id,report.workDate),repository.listLinkedFoundationActivity(project.id,report.workDate)]); await exportAndShareProjectReport(report, project, loads, quarry, waste, fuel, setup!.company,includePrices,wallWork,includeFoundationSection?foundationActivity:[]); setMessage(includePrices?'PDF with prices created.':'PDF without prices created.'); setPdfChoiceId(null); }
+    try { const [loads,quarry,waste,fuel,wallWork,foundationActivity] = await Promise.all([repository.listLinkedLoads(project.id, report.workDate),repository.listLinkedQuarryLoads(project.id,report.workDate),repository.listLinkedWasteDumps(project.id, report.workDate),repository.listLinkedFuelFills(project.id,report.workDate),repository.listLinkedWallWork(project.id,report.workDate),repository.listLinkedFoundationActivity(project.id,report.workDate)]); await exportAndShareProjectReport(report, project, loads, quarry, waste, fuel, await reportCompany(),includePrices,wallWork,includeFoundationSection?foundationActivity:[]); setMessage(includePrices?'PDF with prices created.':'PDF without prices created.'); setPdfChoiceId(null); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not export project report.'); }
     finally { setBusy(false); }
   }
@@ -176,7 +184,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
     if (!project || project.status !== 'completed') return; setBusy(true); setError(null); setMessage(null);
     try {
       const [allReports, loads, waste] = await Promise.all([repository.listReports(project.id), repository.listProjectLoads(project.id), repository.listProjectWasteDumps(project.id)]);
-      await exportAndShareProjectCompletion(project, allReports, loads, waste, setup!.company);
+      await exportAndShareProjectCompletion(project, allReports, loads, waste, await reportCompany());
       setMessage('Completed project PDF created and ready to share.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not export the completed project report.'); }
     finally { setBusy(false); }
@@ -195,7 +203,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
       <IdentityCard project={project} subtitle={`${reports.length} report${reports.length===1?'':'s'} on file`}/>
       <WorkbookLanguagePicker locale={workbookLocale} onChange={setWorkbookLocale}/>
       {error ? <Text style={styles.error}>{error}</Text> : null}{message ? <Text style={styles.success}>{message}</Text> : null}
-      {project.status === 'active' ? <TouchableOpacity style={styles.primary} onPress={() => void openNewReport(project)} accessibilityRole="button"><Text style={styles.primaryText}>Make Daily Report</Text><Text style={styles.primaryHint}>The project is selected automatically · draft autosaves locally</Text></TouchableOpacity> : <><Text style={styles.notice}>This project is completed. Its reports remain available, but a new report cannot be created until the project is reactivated.</Text><TouchableOpacity style={styles.completionExport} disabled={busy} onPress={()=>void shareCompletion()} accessibilityRole="button"><Text style={styles.completionExportTitle}>{busy?'Creating final PDF…':'Create Full Project PDF'}</Text><Text style={styles.completionExportHint}>Start-to-finish summary, daily timeline, loads, waste, working time, issues, people, equipment, and photos</Text></TouchableOpacity></>}
+      {project.status === 'active' ? <TouchableOpacity style={styles.primary} onPress={() => void openNewReport(project)} accessibilityRole="button"><Text style={styles.primaryText}>Make Daily Report</Text><Text style={styles.primaryHint}>The project is selected automatically · draft autosaves locally</Text></TouchableOpacity> : <><Text style={styles.notice}>This project is completed. Its reports remain available, but a new report cannot be created until the project is reactivated.</Text>{exportHeader.picker}<TouchableOpacity style={styles.completionExport} disabled={busy} onPress={()=>void shareCompletion()} accessibilityRole="button"><Text style={styles.completionExportTitle}>{busy?'Creating final PDF…':'Create Full Project PDF'}</Text><Text style={styles.completionExportHint}>Start-to-finish summary, daily timeline, loads, waste, working time, issues, people, equipment, and photos</Text></TouchableOpacity></>}
       <View style={styles.historyHeading}><Text style={styles.sectionTitle}>Report history</Text><Text style={styles.historyCount}>{reports.length}</Text></View>
       {visibleReports.length ? <>{visibleReports.map((report) => {
         const exportingThis=dailyExportingId===report.id;
@@ -217,6 +225,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
             <PdfChoiceCard label="No Prices" recommended selected={!pdfChoicePrices} onPress={()=>setPdfChoicePrices(false)}/>
             <PdfChoiceCard label="With Prices" selected={pdfChoicePrices} onPress={()=>setPdfChoicePrices(true)}/>
             <Text style={styles.pdfChoiceExplain}>No Prices removes prices, VAT, and financial totals from the generated document only. Stored records are not changed.</Text>
+            {exportHeader.picker}
             <TouchableOpacity style={styles.pdfChoiceConfirm} disabled={busy} onPress={()=>void shareReport(report,pdfChoicePrices)} accessibilityRole="button"><Text style={styles.pdfChoiceConfirmText}>{busy?'Creating…':`Generate ${pdfChoicePrices?'With':'No'} Prices PDF`}</Text></TouchableOpacity>
           </View>:null}
         </View>;

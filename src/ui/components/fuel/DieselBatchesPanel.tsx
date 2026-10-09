@@ -32,7 +32,7 @@ type Props={
   onOpenBatch:(batch:BatchDetail)=>void;
   onOpenHistory:()=>void;
   onStart:(draft:StartDieselBatchesDraft)=>Promise<void>;
-  onExport:(filter:DieselExportFilter,includePrices:boolean)=>Promise<void>;
+  onExport:(filter:DieselExportFilter,includePrices:boolean,company?:{name:string;logoUri:string|null;contactLine:string|null})=>Promise<void>;
 };
 type Source='all'|'tank'|'station';
 type Status='all'|'open'|'closed'|'cancelled';
@@ -92,7 +92,7 @@ export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKn
       <SearchableSelect label="Company site" options={setup.companySites.map(site=>({id:site.id,label:site.name,detail:site.isActive?undefined:'Inactive'}))} selectedId={companySiteId} onSelect={setCompanySiteId} placeholder="All company sites" allowClear/>
       <SearchableSelect label="Station" options={setup.fuelStations.map(station=>({id:station.id,label:station.name,detail:station.isActive?station.location??undefined:'Inactive'}))} selectedId={stationId} onSelect={setStationId} placeholder="All stations" allowClear/>
       <View style={styles.pair}><View style={styles.flex}><DatePickerField label="From date" value={fromDate} onChange={setFromDate} allowClear/></View><View style={styles.flex}><DatePickerField label="To date" value={toDate} onChange={setToDate} minDate={fromDate||undefined} allowClear/></View></View>
-      <DieselPdfExportPanel label="Export PDF" scope="A Diesel Batch Report of the fills that match the project, company site, station and dates chosen above. To export one batch, open it." onExport={includePrices=>onExport({projectId:projectId||undefined,companySiteId:companySiteId||undefined,stationId:stationId||undefined,fromDate:fromDate||undefined,toDate:toDate||undefined},includePrices)}/>
+      <DieselPdfExportPanel label="Export PDF" scope="A Diesel Batch Report of the fills that match the project, company site, station and dates chosen above. To export one batch, open it." projectId={projectId||null} onExport={(includePrices,company)=>onExport({projectId:projectId||undefined,companySiteId:companySiteId||undefined,stationId:stationId||undefined,fromDate:fromDate||undefined,toDate:toDate||undefined},includePrices,company)}/>
     </CollapsibleFilterCard>
     {chips.length?<View style={styles.chips}>
       {chips.map(([label,remove])=><TouchableOpacity key={label} style={styles.chip} onPress={remove} accessibilityRole="button" accessibilityLabel={`Remove filter ${label}`}><Text style={styles.chipText}>{label}  ×</Text></TouchableOpacity>)}
