@@ -761,6 +761,24 @@ values on its next save.
 - **Not yet accepted.** Physical-device review and an in-place install over build 29 are pending. The phone screens were
   checked by the type checker and source tests only, not rendered on a device.
 
+## Release — DROMEX 0.22.0, Android build 31 (2026-10-09)
+
+- **Why**: build 30 showed "v0.21.0 · build 29" on Home because `src/appVersion.ts` was not bumped with `app.json`
+  (the app was 0.22.0 / 30 underneath). Build 31 fixes the label and adds DEC-507. Build 30 is superseded.
+- **Branch**: `feature/android-receipts-history-pdfs`. Commits `724b815` (DEC-507) and `4816c84` (release: version code 31,
+  `src/appVersion.ts` 0.22.0 / 31). Not pushed at the time of the build; not merged into `main`.
+- **Scope (DEC-507)**: the own-company customer can be the Project Company (preselected when nothing is saved); "Use as
+  Project Company" / "Edit Project Company details" and a Project Company pill on the Customers page; projects of the
+  Project Company customer start on that header on every PDF picker (a remembered choice still wins); the daily
+  project report headings read Loads delivered, Fuel used, Waste dumps completed and Wall construction.
+- **Tests**: 154 files, 2,062 tests green; typecheck clean.
+- **EAS build**: `efc3fd2b-6b17-46ed-b9d2-d18bec47301d`, eas-cli 24.7.0; profile `preview`, APK, account `drofk12`. Remote
+  credentials reused unchanged (`Build Credentials wtQXwzktVi (default)`), so it should install in place.
+- **Artifact**: `output/DROMEX-0.22.0-build31.apk`, 84,113,298 bytes (~80 MB). SHA-256:
+  `571a2f8ef66fee7bc2592c82e71a9c0214658c88b5e2ab2bedb6df3e9f17ccb7`. Ignored by `output/*.apk` and untracked (DEC-396). Its
+  JavaScript bundle contains "Use as Project Company" and no "that day" headings.
+- **Not yet accepted.** Physical-device review and the in-place install over build 30 are pending.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:
