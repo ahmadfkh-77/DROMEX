@@ -11,6 +11,8 @@ export type SupplierPriceBasis = 'per_unit' | 'whole';
 export type SupplierVatMode = 'company' | 'none' | 'custom';
 export type QuarryPurchaseDraft = {
   recordDate:string; supplierId: string; projectId: string; destinationType?: FuelDestinationType; companySiteId?: string; itemId: string; unitId: string; quantityCubicMetres: string;
+  /** Steel and other counted goods: the number of pieces, beside the quantity (which is the weight for rebar). Optional; blank means not recorded. */
+  pieces?: string;
   deliveryMethod: QuarryDeliveryMethod; driverId: string; truckId: string; supplierTruckPlate: string;
   supplierTicketNumber: string; priceBasis: SupplierPriceBasis; unitPriceUsd: string; vatMode: SupplierVatMode;
   customVatRatePercent: string; vatInclusive: boolean; notes: string; photos: string[];
@@ -23,6 +25,10 @@ export type QuarryPurchase = {
   id: string; purchaseNumber: string; confirmedAt: string; supplierId:string; supplierName: string;
   projectId:string|null; projectName:string|null; destinationType?:FuelDestinationType; companySiteId?:string|null; companySiteName?:string|null; itemId:string; itemName: string; itemCode: string | null;
   categoryName: string; unitId:string; unitName:string; unitSymbol:string; quantityCubicMetres: number;
+  /** Number of pieces recorded beside the quantity; null/absent on every load recorded without one. Information only: never added to a weight or volume. */
+  pieces?: number|null;
+  /** Loads of one delivery note (several items) share this id; null/absent for a single-item load. */
+  deliveryGroupId?: string|null;
   deliveryMethod:QuarryDeliveryMethod; driverId:string; driverName: string; truckId:string; truckPlate: string;
   supplierTicketNumber: string | null; priceBasis:SupplierPriceBasis; unitPriceUsd: number | null;
   subtotalUsd: number | null; vatMode:SupplierVatMode; vatInclusive:boolean; vatRatePercent: number | null;
@@ -35,7 +41,9 @@ export type QuarryProjectGroup={id:string|null;name:string;purchases:QuarryPurch
 export type QuarrySupplierGroup={id:string;name:string;purchases:QuarryPurchase[];projectGroups:QuarryProjectGroup[]};
 export type QuarryDailyCounter={key:string;sourcePurchaseId:string;supplierName:string;projectName:string|null;itemName:string;unitId:string;unitSymbol:string;deliveryMethod:QuarryDeliveryMethod;driverName:string;truckPlate:string;tripCount:number;totalQuantityCubicMetres:number;defaultQuantityCubicMetres:number;lastConfirmedAt:string};
 
-export type SupplierMaterialTotal={itemId:string;itemName:string;categoryName:string;unitId:string;unitSymbol:string;quantity:number;deliveries:number;firstDeliveryAt:string;lastDeliveryAt:string};
+export type SupplierMaterialTotal={itemId:string;itemName:string;categoryName:string;unitId:string;unitSymbol:string;quantity:number;deliveries:number;firstDeliveryAt:string;lastDeliveryAt:string;
+  /** Pieces added up for this item; 0 when no load of it recorded any. Pieces are never added to the quantity. */
+  pieces?:number;piecesLoads?:number};
 /** `projectId` is null for a site or unassigned group; a site group carries `companySiteId` and its name in `projectName`. */
 export type SupplierDeliveryGroup={projectId:string|null;projectName:string;deliveries:number;materials:SupplierMaterialTotal[];destinationType?:FuelDestinationType;companySiteId?:string|null};
 export type SupplierDeliverySummary={supplierId:string;supplierName:string;deliveries:number;cancelledDeliveries:number;projectGroups:SupplierDeliveryGroup[];materialTotals:SupplierMaterialTotal[]};
@@ -72,8 +80,8 @@ const settleQuantity=(value:number)=>Number(value.toFixed(6));
 
 function accumulate(bucket:Map<string,SupplierMaterialTotal>,purchase:QuarryPurchase){
   const key=`${purchase.itemId}|${purchase.unitId}`;const current=bucket.get(key);
-  if(!current){bucket.set(key,{itemId:purchase.itemId,itemName:purchase.itemName,categoryName:purchase.categoryName,unitId:purchase.unitId,unitSymbol:purchase.unitSymbol,quantity:purchase.quantityCubicMetres,deliveries:1,firstDeliveryAt:purchase.confirmedAt,lastDeliveryAt:purchase.confirmedAt});return;}
-  current.quantity+=purchase.quantityCubicMetres;current.deliveries+=1;
+  if(!current){bucket.set(key,{itemId:purchase.itemId,itemName:purchase.itemName,categoryName:purchase.categoryName,unitId:purchase.unitId,unitSymbol:purchase.unitSymbol,quantity:purchase.quantityCubicMetres,deliveries:1,firstDeliveryAt:purchase.confirmedAt,lastDeliveryAt:purchase.confirmedAt,pieces:purchase.pieces??0,piecesLoads:purchase.pieces?1:0});return;}
+  current.quantity+=purchase.quantityCubicMetres;current.deliveries+=1;current.pieces=(current.pieces??0)+(purchase.pieces??0);current.piecesLoads=(current.piecesLoads??0)+(purchase.pieces?1:0);
   if(purchase.confirmedAt<current.firstDeliveryAt)current.firstDeliveryAt=purchase.confirmedAt;
   if(purchase.confirmedAt>current.lastDeliveryAt)current.lastDeliveryAt=purchase.confirmedAt;
 }
@@ -159,6 +167,7 @@ export function validateQuarryPurchase(draft: QuarryPurchaseDraft, setup: Quarry
   if (!setup.items.some((value) => value.id === draft.itemId)) issues.push('Select an item enabled for suppliers.');
   if (!setup.units.some((value) => value.id === draft.unitId)) issues.push('Select a measurement unit.');
   const quantity = Number(draft.quantityCubicMetres); if (!Number.isFinite(quantity) || quantity <= 0) issues.push('Quantity must be greater than zero.');
+  if (draft.pieces?.trim() && !/^[1-9][0-9]{0,8}$/.test(draft.pieces.trim())) issues.push('Pieces must be a whole number greater than zero, or left blank.');
   if (draft.deliveryMethod==='company') {
     if (!setup.drivers.some((value) => value.id === draft.driverId)) issues.push('Select a driver.');
     if (!setup.trucks.some((value) => value.id === draft.truckId)) issues.push('Select a truck.');

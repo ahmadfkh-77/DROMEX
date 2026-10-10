@@ -18,21 +18,26 @@ const missing=`<span class="missing">${NOT_RECORDED}</span>`;
 
 export function buildSupplierDeliveriesHtml(input:SupplierDeliveriesPdfInput):string{
   const {report}=input,prices=report.includePrices;
-  const head=['Load','Date, time','Material','Driver · truck','Ticket','Quantity',...(prices?['Price','Total']:[]),'Status'].map((label,position)=>`<th${label==='Quantity'||label==='Price'||label==='Total'?' class="num"':''}>${e(label)}</th>`);
-  const colgroup=`<colgroup>${(prices?[16,10,13,14,11,8,9,9,10]:[19,12,16,17,12,12,12]).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup>`;
+  const pieces=report.hasPieces;
+  const head=['Load','Date, time','Material','Driver · truck','Ticket',...(pieces?['Pieces']:[]),'Quantity',...(prices?['Price','Total']:[]),'Status'].map((label,position)=>`<th${label==='Pieces'||label==='Quantity'||label==='Price'||label==='Total'?' class="num"':''}>${e(label)}</th>`);
+  const colgroup=`<colgroup>${(prices?(pieces?[14,9,11,13,8,7,9,9,9,11]:[16,10,13,14,11,8,9,9,10]):(pieces?[17,11,15,16,9,8,13,11]:[19,12,16,17,12,12,12])).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup>`;
   const blocks=report.destinations.map((destination,index)=>{
     const rows=destination.loads.map(load=>`<tr>
       <td><span class="ln">${t(load.reference)}</span></td>
       <td class="nowrap">${e(day(load.recordedAt))}<div class="muted">${e(time(load.recordedAt))}</div></td>
-      <td>${t(load.item)}</td><td>${t(load.driver)}</td><td>${load.ticket?t(load.ticket):missing}</td>
+      <td>${t(load.item)}</td><td>${t(load.driver)}</td><td>${load.ticket?t(load.ticket):missing}</td>${pieces?`<td class="num">${load.pieces?e(load.pieces):missing}</td>`:''}
       <td class="num">${e(load.quantityText)}</td>${prices?`<td class="num">${e(load.unitPrice)}</td><td class="num">${e(load.total)}</td>`:''}
       <td><b>${e(load.status)}</b>${load.statusNote?`<div class="muted">${e(load.statusNote)}</div>`:''}</td></tr>`).join('');
-    const totals=destination.totals.map(total=>`<span class="pill">${t(total.item)} · ${e(total.quantityText)} · ${total.count} load${total.count===1?'':'s'}</span>`).join('');
+    const totals=destination.totals.map(total=>`<span class="pill">${t(total.item)} · ${e(total.quantityText)}${total.piecesText?` · ${e(total.piecesText)}`:''} · ${total.count} load${total.count===1?'':'s'}</span>`).join('');
     return `<section class="block"><div class="block-bar"><span class="block-index">${index+1}</span><span class="block-name">${t(destination.label)}</span><span class="block-count">${destination.loads.length} load${destination.loads.length===1?'':'s'}</span></div>
     <div class="block-body"><table>${colgroup}<thead><tr>${head.join('')}</tr></thead><tbody>${rows}</tbody></table>
     <div class="pills">${totals}</div>${prices&&destination.unpricedCount?`<p class="note">${destination.unpricedCount} unpriced load${destination.unpricedCount===1?'':'s'}: shown as Unpriced, never as zero.</p>`:''}</div></section>`;
   }).join('');
-  const overall=report.totals.map(total=>`<span class="pill strong">${t(total.item)} · ${e(total.quantityText)} · ${total.count}</span>`).join('');
+  const overall=report.totals.map(total=>`<span class="pill strong">${t(total.item)} · ${e(total.quantityText)}${total.piecesText?` · ${e(total.piecesText)}`:''} · ${total.count}</span>`).join('');
+  const categories=report.categories.map(category=>`<section class="block"><div class="block-bar"><span class="block-index">S</span><span class="block-name">${t(category.categoryName)} summary · quantity added per unit</span><span class="block-count">${category.loadCount} load${category.loadCount===1?'':'s'}</span></div>
+    <div class="block-body"><table><colgroup>${[40,20,20,20].map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>${t(category.categoryName)} item</th><th class="num">Loads</th><th class="num">Pieces</th><th class="num">Quantity</th></tr></thead><tbody>${category.items.map(item=>`<tr><td>${t(item.item)}</td><td class="num">${item.loadCount}</td><td class="num">${item.piecesText?e(item.piecesText):missing}</td><td class="num">${e(item.quantityText)}</td></tr>`).join('')}
+    ${category.totals.map((total,position)=>`<tr class="total"><td>Total ${t(category.categoryName)}, all items</td><td class="num">${total.loadCount}</td><td class="num">${position===0&&category.piecesText?e(category.piecesText):''}</td><td class="num">${e(total.quantityText)}</td></tr>`).join('')}</tbody></table>
+    <p class="note">A quantity is added only to the same unit. Pieces are shown beside it and never added to a weight or volume. Cancelled loads are not included.</p></div></section>`).join('');
   const diesel=report.diesel?`<section class="block"><div class="block-bar"><span class="block-index">D</span><span class="block-name">Diesel delivered (litres only)</span><span class="block-count">${report.diesel.batchCount} batch${report.diesel.batchCount===1?'':'es'}</span></div>
     <div class="block-body"><table><colgroup>${(prices?[20,22,20,12,13,13]:[28,30,24,18]).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Date</th><th>Batch</th><th>Invoice</th><th class="num">Litres</th>${prices?'<th class="num">Price / L</th><th class="num">Amount</th>':''}</tr></thead><tbody>${report.diesel.rows.map(row=>`<tr><td>${e(row.date)}</td><td>${e(row.batchNumber)}</td><td>${t(row.invoice)}</td><td class="num">${e(row.litres)}</td>${prices?`<td class="num">${e(row.price)}</td><td class="num">${e(row.amount)}</td>`:''}</tr>`).join('')}
     <tr class="total"><td colspan="3">Total diesel</td><td class="num">${e(report.diesel.totalLitres)}</td>${prices?`<td></td><td class="num">${e(report.diesel.amount??'')}</td>`:''}</tr></tbody></table>
@@ -68,6 +73,6 @@ export function buildSupplierDeliveriesHtml(input:SupplierDeliveriesPdfInput):st
     <div class="head-right"><h1>Totals</h1><div class="who">${t(report.supplierName)}</div><div class="when">${e(day(report.generatedAt))}, ${e(time(report.generatedAt))}</div></div></div>
   <div class="meta">${report.meta.map(item=>`<div><b>${e(item.label)}</b><span>${t(item.value)}</span></div>`).join('')}</div>
   ${report.totals.length?`<h2 class="sum">Received from this supplier · ${report.loadCount} load${report.loadCount===1?'':'s'}</h2><div class="pills" style="margin:0 0 4mm">${overall}</div>`:''}
-  ${report.empty?'<div class="empty">No deliveries match these filters.</div>':blocks+diesel}
+  ${report.empty?'<div class="empty">No deliveries match these filters.</div>':blocks+categories+diesel}
   </body></html>`;
 }

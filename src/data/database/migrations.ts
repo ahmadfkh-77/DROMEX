@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 53;
+export const DATABASE_VERSION = 54;
 
 type TableColumn = { name: string };
 
@@ -2043,6 +2043,16 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'fuel_batches', 'correction_history_json', "TEXT NOT NULL DEFAULT '[]'");
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_quarry_purchases_site ON quarry_purchases(company_site_id, confirmed_at DESC)');
     currentVersion = 53;
+  }
+
+  if (currentVersion === 53) {
+    // Steel on Supplier Loads (Step 1). A Supplier Load can carry the number of pieces beside its quantity (for rebar the
+    // quantity is the weight in kg), and the loads of one delivery note share a delivery group id. Purely additive: both
+    // columns stay NULL on every existing load, which reads exactly as before (no pieces, not part of a group).
+    await addColumnIfMissing(db, 'quarry_purchases', 'pieces', 'INTEGER CHECK (pieces IS NULL OR pieces > 0)');
+    await addColumnIfMissing(db, 'quarry_purchases', 'delivery_group_id', 'TEXT');
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_quarry_purchases_group ON quarry_purchases(delivery_group_id)');
+    currentVersion = 54;
   }
 
 

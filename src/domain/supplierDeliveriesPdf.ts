@@ -3,6 +3,7 @@ import {localDateKey} from './fuel';
 import type {BatchDetail} from './fuelBatches';
 import {purchaseDestination,purchaseDestinationName,type QuarryPurchase} from './quarry';
 import {supplierDieselDeliveries,type SupplierDieselSummary} from './supplierDiesel';
+import {categorySummaries,piecesText} from './supplierSteel';
 
 /**
  * DEC-506. The PDF of what one supplier delivered. It is headed "Totals" with the supplier's name in bold, groups the
@@ -13,8 +14,10 @@ import {supplierDieselDeliveries,type SupplierDieselSummary} from './supplierDie
 export const NOT_RECORDED='Not recorded';
 export type SupplierPdfFilters={fromDate?:string;toDate?:string;/** Item ids; empty or absent = every material. */itemIds?:string[];/** Destination keys (see purchaseDestination); empty or absent = everywhere. */destinationKeys?:string[];includePrices:boolean;includeDiesel:boolean};
 
-export type SupplierPdfLoad={id:string;reference:string;recordedAt:string;item:string;quantityText:string;driver:string;ticket:string|null;status:'Active'|'Corrected';statusNote:string|null;unitPrice?:string;total?:string};
-export type SupplierPdfTotal={item:string;unitSymbol:string;quantity:number;quantityText:string;count:number};
+export type SupplierPdfLoad={id:string;reference:string;recordedAt:string;item:string;quantityText:string;driver:string;ticket:string|null;/** Pieces recorded beside the quantity, as text; null when none. */pieces:string|null;status:'Active'|'Corrected';statusNote:string|null;unitPrice?:string;total?:string};
+export type SupplierPdfTotal={item:string;unitSymbol:string;quantity:number;quantityText:string;count:number;pieces:number;piecesText:string};
+/** A category whose loads carry pieces (steel): each item, then one total per unit for all items together. */
+export type SupplierPdfCategory={categoryName:string;items:{item:string;loadCount:number;piecesText:string;quantityText:string}[];totals:{quantityText:string;loadCount:number}[];piecesText:string;loadCount:number};
 export type SupplierPdfDestination={key:string;type:FuelDestinationType;name:string;label:string;loads:SupplierPdfLoad[];totals:SupplierPdfTotal[];unpricedCount:number};
 export type SupplierPdfDiesel={rows:{date:string;batchNumber:string;invoice:string;litres:string;price?:string;amount?:string}[];totalLitres:string;batchCount:number;amount?:string;unpricedNote:string|null};
 export type SupplierDeliveriesPdf={
@@ -23,6 +26,9 @@ export type SupplierDeliveriesPdf={
   destinations:SupplierPdfDestination[];
   totals:SupplierPdfTotal[];
   loadCount:number;
+  /** True when any listed load carries pieces; the Pieces column and the category summaries appear only then. */
+  hasPieces:boolean;
+  categories:SupplierPdfCategory[];
   diesel:SupplierPdfDiesel|null;
   includePrices:boolean;
   empty:boolean;
@@ -67,10 +73,10 @@ export function buildSupplierDeliveriesPdf(input:{supplierId:string;supplierName
     return true;
   });
   const addTotal=(map:Map<string,SupplierPdfTotal>,purchase:QuarryPurchase)=>{
-    const key=`${purchase.itemId}|${purchase.unitId}`,current=map.get(key)??{item:purchase.itemName,unitSymbol:purchase.unitSymbol,quantity:0,quantityText:'',count:0};
-    current.quantity=round(current.quantity+purchase.quantityCubicMetres);current.count+=1;map.set(key,current);
+    const key=`${purchase.itemId}|${purchase.unitId}`,current=map.get(key)??{item:purchase.itemName,unitSymbol:purchase.unitSymbol,quantity:0,quantityText:'',count:0,pieces:0,piecesText:''};
+    current.quantity=round(current.quantity+purchase.quantityCubicMetres);current.count+=1;current.pieces+=purchase.pieces??0;map.set(key,current);
   };
-  const finish=(map:Map<string,SupplierPdfTotal>)=>[...map.values()].map(total=>({...total,quantityText:quantityText(total.quantity,total.unitSymbol)})).sort((a,b)=>a.item.localeCompare(b.item)||a.unitSymbol.localeCompare(b.unitSymbol));
+  const finish=(map:Map<string,SupplierPdfTotal>)=>[...map.values()].map(total=>({...total,quantityText:quantityText(total.quantity,total.unitSymbol),piecesText:piecesText(total.pieces)})).sort((a,b)=>a.item.localeCompare(b.item)||a.unitSymbol.localeCompare(b.unitSymbol));
   const groups=new Map<string,{key:string;type:FuelDestinationType;name:string;purchases:QuarryPurchase[]}>();
   const overall=new Map<string,SupplierPdfTotal>();
   for(const purchase of loads){
@@ -89,7 +95,7 @@ export function buildSupplierDeliveriesPdf(input:{supplierId:string;supplierName
         const base:SupplierPdfLoad={
           id:purchase.id,reference:purchase.purchaseNumber,recordedAt:purchase.confirmedAt,item:purchase.itemName,quantityText:quantityText(purchase.quantityCubicMetres,purchase.unitSymbol),
           driver:purchase.deliveryMethod==='supplier'?(purchase.truckPlate.trim()?`Supplier Delivering · ${purchase.truckPlate.trim()}`:'Supplier Delivering'):[purchase.driverName,purchase.truckPlate].map(value=>value.trim()).filter(Boolean).join(' · ')||NOT_RECORDED,
-          ticket:purchase.supplierTicketNumber?.trim()||null,status:edited?'Corrected':'Active',statusNote:edited?'Corrected after confirmation':null,
+          ticket:purchase.supplierTicketNumber?.trim()||null,pieces:purchase.pieces?String(purchase.pieces):null,status:edited?'Corrected':'Active',statusNote:edited?'Corrected after confirmation':null,
         };
         return filters.includePrices?{...base,unitPrice:purchase.unitPriceUsd==null?'Unpriced':money(purchase.unitPriceUsd),total:purchase.finalTotalUsd==null?'Unpriced':money(purchase.finalTotalUsd)}:base;
       }),
@@ -119,7 +125,11 @@ export function buildSupplierDeliveriesPdf(input:{supplierId:string;supplierName
       {label:'Dates',value:period},{label:'Destinations',value:destinationNames.length?destinationNames.join(', '):'All projects and sites'},
       {label:'Materials',value:materialNames.length?materialNames.join(', '):'All'},{label:'Prices',value:filters.includePrices?'Included (recorded prices only)':'Excluded'},
     ],
-    destinations,totals:finish(overall),loadCount:loads.length,diesel,includePrices:filters.includePrices,
+    destinations,totals:finish(overall),loadCount:loads.length,hasPieces:loads.some(purchase=>Boolean(purchase.pieces)),
+    categories:categorySummaries(loads).map((category):SupplierPdfCategory=>({categoryName:category.categoryName,loadCount:category.loadCount,piecesText:piecesText(category.pieces),
+      items:category.items.map(item=>({item:item.itemName,loadCount:item.loads,piecesText:piecesText(item.pieces),quantityText:quantityText(item.quantity,item.unitSymbol)})),
+      totals:category.totals.map(total=>({quantityText:quantityText(total.quantity,total.unitSymbol),loadCount:total.loads}))})),
+    diesel,includePrices:filters.includePrices,
     empty:!loads.length&&!diesel,
     fileName:`Totals-${safe(input.supplierName)}-${filters.fromDate||filters.toDate?`${filters.fromDate||'start'}_to_${filters.toDate||'today'}`:localDateKey(input.generatedAt)}.pdf`,
   };

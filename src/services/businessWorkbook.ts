@@ -58,7 +58,7 @@ const ARABIC_LABELS: Record<string, string> = {
   'Movement Details': 'تفاصيل الحركات', 'Diesel Batches': 'دفعات الديزل', 'Fuel Stations': 'محطات الوقود', 'Equipment Totals': 'إجماليات المعدات', 'Project Summary': 'ملخص المشاريع',
   'Project Loads': 'أحمال المشاريع', 'Supplier Loads': 'أحمال الموردين', 'Fuel Movements': 'حركات الوقود',
   'Daily Report Index': 'فهرس التقارير اليومية', 'Materials Summary': 'ملخص المواد', 'Executive Summary': 'الملخص التنفيذي',
-  Payments: 'المدفوعات', 'Daily Reports': 'التقارير اليومية', 'Data Dictionary': 'قاموس البيانات', Charts: 'الرسوم البيانية',
+  Pieces: 'القطع', 'Delivery Group ID': 'معرف مجموعة التسليم', 'Category Totals': 'مجاميع الفئات', Payments: 'المدفوعات', 'Daily Reports': 'التقارير اليومية', 'Data Dictionary': 'قاموس البيانات', Charts: 'الرسوم البيانية',
   'Financial Charts': 'الرسوم المالية', 'Operations Charts': 'الرسوم التشغيلية', Photos: 'الصور',
   'Work Details': 'تفاصيل العمل', Presence: 'الحضور والمعدات', Materials: 'المواد', 'Linked Loads': 'الأحمال المرتبطة', 'Waste Dumps': 'نقل النفايات',
   'Report information': 'معلومات التقرير', Details: 'التفاصيل', 'Report title': 'عنوان التقرير', Company: 'الشركة',
@@ -202,7 +202,7 @@ function englishSheetsForBusinessReport(kind: BusinessReportKind, data: Business
   ] };
   if (kind === 'loads') return [overview, { name: 'Summary', rows: summary(data).slice(0, 5) }, chartSheet('Charts', groupedRows(data.loads, 'Item', ['Final Total USD'], ['Sales USD']), 'Load sales by item (USD)', 'Item', ['Sales USD']), { name: 'Loads and Sales', rows: data.loads }, { name: 'Payment Details', rows: payments(['load']) }];
   if (kind === 'customers') return [overview, chartSheet('Charts', data.customers.length ? data.customers.slice().sort((a, b) => Number(b['Remaining USD'] ?? 0) - Number(a['Remaining USD'] ?? 0)).slice(0, 10).map((row) => ({ Customer: row.Customer ?? null, 'Billed USD': row['Total Billed USD'] ?? null, 'Paid USD': row['Total Paid USD'] ?? null, 'Remaining USD': row['Remaining USD'] ?? null })) : [{ Customer: 'No matching records', 'Billed USD': 0, 'Paid USD': 0, 'Remaining USD': 0 }], 'Customer balances (USD)', 'Customer', ['Billed USD', 'Paid USD', 'Remaining USD'], 'bar'), { name: 'Customer Summary', rows: data.customers }, { name: 'Payment Details', rows: payments(['load', 'openingBalance']).filter((value) => value['Customer ID']) }, { name: 'Opening Balances', rows: data.openingBalances.filter((value) => value['Party Type'] === 'customer') }];
-  if (kind === 'quarry') return [overview, chartSheet('Charts', groupedRows(data.quarryPurchases.filter((row) => row['Record Status'] === 'Active'), 'Supplier', ['Final Total USD'], ['Purchase USD']), 'Supplier load value by supplier (USD)', 'Supplier', ['Purchase USD'], 'bar'), { name: 'Supplier Summary', rows: data.suppliers }, { name: 'Purchase Details', rows: data.quarryPurchases }, { name: 'Payment Details', rows: payments(['quarryPurchase', 'openingBalance']).filter((value) => value['Supplier ID']) }];
+  if (kind === 'quarry') return [overview, chartSheet('Charts', groupedRows(data.quarryPurchases.filter((row) => row['Record Status'] === 'Active'), 'Supplier', ['Final Total USD'], ['Purchase USD']), 'Supplier load value by supplier (USD)', 'Supplier', ['Purchase USD'], 'bar'), { name: 'Supplier Summary', rows: data.suppliers }, { name: 'Purchase Details', rows: data.quarryPurchases }, ...categoryTotalsSheet(data.quarryPurchases), { name: 'Payment Details', rows: payments(['quarryPurchase', 'openingBalance']).filter((value) => value['Supplier ID']) }];
   if (kind === 'fuel') {
     const gauge = [...data.fuelMovements].reverse().find((value) => value.Type === 'gauge' && value.Status === 'Active');
     const fuelChart = [{ Type: 'Delivered', Litres: data.fuelMovements.filter((value) => value.Type === 'delivery' && value.Status === 'Active').reduce((sum, value) => sum + Number(value['Litres In'] ?? 0), 0) }, { Type: 'Equipment fills', Litres: data.fuelMovements.filter((value) => value.Type === 'fill' && value.Status === 'Active').reduce((sum, value) => sum + Number(value['Litres Out'] ?? 0), 0) }];
@@ -227,6 +227,36 @@ function localizeSheet(sheet: SheetSpec, locale: WorkbookLocale): SheetSpec {
     charts: sheet.charts?.map((chart) => ({ ...chart, title: translate(chart.title, locale), categoryKey: translate(chart.categoryKey, locale), valueKeys: chart.valueKeys.map((key) => translate(key, locale)) })),
   };
 }
+/**
+ * Steel on Supplier Loads. For each category whose active loads carry pieces: each item's loads, pieces and quantity, then
+ * one total per unit for all items together. A quantity is added only to the same unit and pieces only to pieces.
+ * No sheet at all when no load carries pieces, so a workbook without steel is unchanged.
+ */
+function categoryTotalsSheet(rows: WorkbookRow[]): { name: string; rows: WorkbookRow[] }[] {
+  const active = rows.filter((row) => row['Record Status'] === 'Active');
+  const categories = [...new Set(active.filter((row) => Number(row.Pieces ?? 0) > 0).map((row) => String(row.Category ?? '')))].sort((a, b) => a.localeCompare(b));
+  if (!categories.length) return [];
+  const out: WorkbookRow[] = [];
+  const settle = (value: number) => Number(value.toFixed(6));
+  for (const category of categories) {
+    const own = active.filter((row) => String(row.Category ?? '') === category);
+    const items = new Map<string, { item: string; unit: string; loads: number; pieces: number; quantity: number }>();
+    const units = new Map<string, { unit: string; loads: number; quantity: number }>();
+    let pieces = 0;
+    for (const row of own) {
+      const unit = String(row.Unit ?? ''), key = `${row['Item ID'] ?? row.Item}|${unit}`;
+      const item = items.get(key) ?? { item: String(row.Item ?? ''), unit, loads: 0, pieces: 0, quantity: 0 };
+      item.loads += 1; item.pieces += Number(row.Pieces ?? 0); item.quantity = settle(item.quantity + Number(row.Quantity ?? 0)); items.set(key, item);
+      const total = units.get(unit) ?? { unit, loads: 0, quantity: 0 };
+      total.loads += 1; total.quantity = settle(total.quantity + Number(row.Quantity ?? 0)); units.set(unit, total);
+      pieces += Number(row.Pieces ?? 0);
+    }
+    for (const item of [...items.values()].sort((a, b) => a.item.localeCompare(b.item) || a.unit.localeCompare(b.unit))) out.push({ Category: category, Level: 'Item', Item: item.item, Unit: item.unit, Loads: item.loads, Pieces: item.pieces || null, 'Total Quantity': item.quantity });
+    [...units.values()].sort((a, b) => a.unit.localeCompare(b.unit)).forEach((total, position) => out.push({ Category: category, Level: 'Total, all items', Item: null, Unit: total.unit, Loads: total.loads, Pieces: position === 0 ? pieces : null, 'Total Quantity': total.quantity }));
+  }
+  return [{ name: 'Category Totals', rows: out }];
+}
+
 export function sheetsForBusinessReport(kind: BusinessReportKind, data: BusinessReportData, locale: WorkbookLocale = 'en'): SheetSpec[] { return englishSheetsForBusinessReport(kind, data).map((sheet) => localizeSheet(sheet, locale)); }
 export function localizeWorkbookSheets(sheets: SheetSpec[], locale: WorkbookLocale): SheetSpec[] { return sheets.map((sheet) => localizeSheet(sheet, locale)); }
 

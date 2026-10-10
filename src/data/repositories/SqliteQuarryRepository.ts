@@ -28,6 +28,7 @@ type PurchaseRow = {
   photos_json:string;status:'Active'|'Cancelled';cancellation_reason:string|null;cancelled_at:string|null;
   correction_history_json:string|null;updated_at:string|null;
   destination_type?:'project'|'company_site'|'unassigned'|null;company_site_id?:string|null;company_site_name?:string|null;
+  pieces?:number|null;delivery_group_id?:string|null;
 };
 // DEC-506. A site's name is read live through this join, so renaming a site never rewrites its loads.
 const PURCHASE_SELECT='SELECT q.*,cs.name company_site_name FROM quarry_purchases q LEFT JOIN company_sites cs ON cs.id=q.company_site_id';
@@ -37,6 +38,8 @@ function makeId(prefix:string){return `${prefix}_${Date.now().toString(36)}_${Ma
 function clean(value:string){const next=value.trim().replace(/\s+/g,' ');return next||null;}
 function dateKey(value:string){const date=new Date(value);return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
 function timestampForDate(value:string){const now=new Date(),[year=0,month=0,day=0]=value.split('-').map(Number);return new Date(year,month-1,day,now.getHours(),now.getMinutes(),now.getSeconds(),now.getMilliseconds()).toISOString();}
+/** Steel and counted goods: pieces typed beside the quantity; blank means not recorded. */
+function piecesOf(value?:string){const text=value?.trim();return text?Number(text):null;}
 function cents(value:number|null){return value===null?null:Math.round(value*100);}
 function safeHistory(value:string|null):SupplierCorrectionEntry[]{try{return JSON.parse(value||'[]') as SupplierCorrectionEntry[];}catch{return[];}}
 /** DEC-506. The same rule a fuel fill uses: a destination keeps only the link its type needs. */
@@ -48,7 +51,7 @@ function fromRow(row:PurchaseRow):QuarryPurchase{
   return{id:row.id,purchaseNumber:row.purchase_number,confirmedAt:row.confirmed_at,supplierId:row.supplier_id,
     supplierName:row.supplier_name,projectId:row.project_id,projectName:row.project_name,destinationType:row.destination_type??(row.project_id?'project':'unassigned'),companySiteId:row.company_site_id??null,companySiteName:row.company_site_name??null,itemId:row.item_id,
     itemName:row.item_name,itemCode:row.item_code,categoryName:row.category_name,unitId:row.unit_id??'unit_m3',
-    unitName:row.unit_name??'Cubic metre',unitSymbol:row.unit_symbol??'m³',quantityCubicMetres:row.quantity_cubic_metres,
+    unitName:row.unit_name??'Cubic metre',unitSymbol:row.unit_symbol??'m³',quantityCubicMetres:row.quantity_cubic_metres,pieces:row.pieces??null,deliveryGroupId:row.delivery_group_id??null,
     deliveryMethod:row.delivery_method??'company',driverId:row.driver_profile_id,driverName:row.driver_name,
     truckId:row.truck_profile_id,truckPlate:row.truck_plate,supplierTicketNumber:row.supplier_ticket_number,
     priceBasis:row.price_basis??'per_unit',unitPriceUsd:row.unit_price_usd_cents==null?null:row.unit_price_usd_cents/100,
@@ -100,7 +103,20 @@ export class SqliteQuarryRepository implements QuarryRepository {
   }
 
   async confirmPurchase(draft:QuarryPurchaseDraft):Promise<QuarryPurchase>{
-    const setup=await this.getSetup(),issues=validateQuarryPurchase(draft,setup);if(issues.length)throw new Error(issues.join('\n'));
+    const [saved]=await this.confirmDelivery([draft]);return saved!;
+  }
+
+  /** One delivery note with several items: every item is saved as its own Supplier Load, all or none, and the loads of a multi-item delivery share one delivery group id. */
+  async confirmDelivery(drafts:QuarryPurchaseDraft[]):Promise<QuarryPurchase[]>{
+    if(!drafts.length)throw new Error('Add at least one item.');
+    const setup=await this.getSetup();
+    drafts.forEach((draft,index)=>{const issues=validateQuarryPurchase(draft,setup);if(issues.length)throw new Error((drafts.length>1?`Item ${index+1}: `:'')+issues.join('\n'));});
+    const groupId=drafts.length>1?makeId('delivery'):null,ids:string[]=[];
+    await this.db.withTransactionAsync(async()=>{for(const draft of drafts)ids.push(await this.insertPurchase(draft,setup,groupId));});
+    return Promise.all(ids.map(id=>this.get(id)));
+  }
+
+  private async insertPurchase(draft:QuarryPurchaseDraft,setup:QuarrySetup,groupId:string|null):Promise<string>{
     const supplier=setup.suppliers.find(v=>v.id===draft.supplierId)!;
     const destination=resolveDestination(draft,setup);
     const project=destination.projectId?setup.projects.find(v=>v.id===destination.projectId)??null:null;
@@ -111,7 +127,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
     const truckId=truck?.id??SUPPLIER_TRUCK_ID,truckPlate=truck?.plate??(clean(draft.supplierTruckPlate)??'');
     const calculation=calculateQuarryPurchase(draft,setup.vatRatePercent),price=draft.unitPriceUsd.trim()?Number(draft.unitPriceUsd.replace(',','.')):null;
     const enteredAt=new Date().toISOString(),confirmedAt=timestampForDate(draft.recordDate),id=makeId('supplier_load');let purchaseNumber='';
-    await this.db.withTransactionAsync(async()=>{
+    {
       purchaseNumber=await this.nextPurchaseNumber(confirmedAt);
       const status:QuarryPurchase['paymentStatus']=price==null?'Unpriced':calculation.finalTotalUsd===0?'No Payment Due':'Unpaid';
       await this.db.runAsync(
@@ -122,9 +138,10 @@ export class SqliteQuarryRepository implements QuarryRepository {
         draft.vatInclusive?1:0,calculation.vatRatePercent==null?null:Math.round(calculation.vatRatePercent*100),cents(calculation.vatAmountUsd),
         cents(calculation.finalTotalUsd),status,clean(draft.notes),JSON.stringify(draft.photos),'[]',enteredAt,enteredAt);
       await this.db.runAsync('UPDATE quarry_purchases SET destination_type=?,company_site_id=? WHERE id=?',destination.type,destination.companySiteId,id);
-      await this.enqueue('quarryPurchase',id,{id,purchaseNumber,confirmedAt,enteredAt,projectId:project?.id??null,destinationType:destination.type,companySiteId:destination.companySiteId,deliveryMethod:draft.deliveryMethod});
-    });
-    return this.get(id);
+      await this.db.runAsync('UPDATE quarry_purchases SET pieces=?,delivery_group_id=? WHERE id=?',piecesOf(draft.pieces),groupId,id);
+      await this.enqueue('quarryPurchase',id,{id,purchaseNumber,confirmedAt,enteredAt,projectId:project?.id??null,destinationType:destination.type,companySiteId:destination.companySiteId,deliveryMethod:draft.deliveryMethod,pieces:piecesOf(draft.pieces),deliveryGroupId:groupId});
+    }
+    return id;
   }
 
   async incrementPurchase(sourcePurchaseId:string,quantityCubicMetres:number):Promise<QuarryPurchase>{
@@ -177,13 +194,13 @@ export class SqliteQuarryRepository implements QuarryRepository {
     const status:QuarryPurchase['paymentStatus']=total===null?'Unpriced':total===0?'No Payment Due':paymentStatus(total,paid);
     const now=new Date().toISOString();
     const values:Record<string,string|null>={
-      Supplier:supplier.name,Destination:purchaseDestinationLabel({projectId:project?.id??null,projectName:project?.name??null,destinationType:destination.type,companySiteId:destination.companySiteId,companySiteName:site?.name??null}),Item:item.name,Unit:unit.symbol,Quantity:String(Number(draft.quantityCubicMetres)),
+      Supplier:supplier.name,Destination:purchaseDestinationLabel({projectId:project?.id??null,projectName:project?.name??null,destinationType:destination.type,companySiteId:destination.companySiteId,companySiteName:site?.name??null}),Item:item.name,Unit:unit.symbol,Quantity:String(Number(draft.quantityCubicMetres)),Pieces:piecesOf(draft.pieces)===null?null:String(piecesOf(draft.pieces)),
       Delivery:draft.deliveryMethod,Driver:driverName,Truck:truckPlate,Ticket:clean(draft.supplierTicketNumber),
       'Price basis':draft.priceBasis,Price:price===null?null:String(price),VAT:calculation.vatRatePercent===null?null:String(calculation.vatRatePercent),
       'VAT treatment':draft.vatInclusive?'Included':'Excluded',Notes:clean(draft.notes),
     };
     const oldValues:Record<string,string|null>={
-      Supplier:existing.supplierName,Destination:purchaseDestinationLabel(existing),Item:existing.itemName,Unit:existing.unitSymbol,Quantity:String(existing.quantityCubicMetres),
+      Supplier:existing.supplierName,Destination:purchaseDestinationLabel(existing),Item:existing.itemName,Unit:existing.unitSymbol,Quantity:String(existing.quantityCubicMetres),Pieces:existing.pieces?String(existing.pieces):null,
       Delivery:existing.deliveryMethod,Driver:existing.driverName,Truck:existing.truckPlate,Ticket:existing.supplierTicketNumber,
       'Price basis':existing.priceBasis,Price:existing.unitPriceUsd===null?null:String(existing.unitPriceUsd),
       VAT:existing.vatRatePercent===null?null:String(existing.vatRatePercent),'VAT treatment':existing.vatInclusive?'Included':'Excluded',Notes:existing.notes,
@@ -200,6 +217,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
         calculation.vatRatePercent==null?null:Math.round(calculation.vatRatePercent*100),cents(calculation.vatAmountUsd),total,status,
         clean(draft.notes),JSON.stringify(history),now,id);
       await this.db.runAsync('UPDATE quarry_purchases SET destination_type=?,company_site_id=? WHERE id=?',destination.type,destination.companySiteId,id);
+      await this.db.runAsync('UPDATE quarry_purchases SET pieces=? WHERE id=?',piecesOf(draft.pieces),id);
       await this.enqueue('quarryPurchase',id,{id,correctedAt:now,reason,changes,paymentStatus:status,destinationType:destination.type,companySiteId:destination.companySiteId});
     });
     return this.get(id);
@@ -225,7 +243,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
   }
 
   private draftFromPurchase(p:QuarryPurchase):QuarryPurchaseDraft{
-    return{recordDate:dateKey(p.confirmedAt),supplierId:p.supplierId,projectId:p.projectId??'',destinationType:purchaseDestination(p).type,companySiteId:p.companySiteId??'',itemId:p.itemId,unitId:p.unitId,quantityCubicMetres:String(p.quantityCubicMetres),
+    return{recordDate:dateKey(p.confirmedAt),supplierId:p.supplierId,projectId:p.projectId??'',destinationType:purchaseDestination(p).type,companySiteId:p.companySiteId??'',itemId:p.itemId,unitId:p.unitId,quantityCubicMetres:String(p.quantityCubicMetres),pieces:p.pieces?String(p.pieces):'',
       deliveryMethod:p.deliveryMethod,driverId:p.driverId,truckId:p.truckId,supplierTruckPlate:p.truckPlate,
       supplierTicketNumber:p.supplierTicketNumber??'',priceBasis:p.priceBasis,unitPriceUsd:p.unitPriceUsd===null?'':String(p.unitPriceUsd),
       vatMode:p.vatMode,customVatRatePercent:p.vatMode==='custom'?String(p.vatRatePercent??0):'',vatInclusive:p.vatInclusive,notes:p.notes??'',photos:[]};
