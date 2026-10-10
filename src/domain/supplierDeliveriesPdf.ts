@@ -4,6 +4,7 @@ import type {BatchDetail} from './fuelBatches';
 import {purchaseDestination,purchaseDestinationName,type QuarryPurchase} from './quarry';
 import {supplierDieselDeliveries,type SupplierDieselSummary} from './supplierDiesel';
 import {categorySummaries,piecesText} from './supplierSteel';
+import {formatKgFixed,formatMeters} from './rebar';
 
 /**
  * DEC-506. The PDF of what one supplier delivered. It is headed "Totals" with the supplier's name in bold, groups the
@@ -14,7 +15,7 @@ import {categorySummaries,piecesText} from './supplierSteel';
 export const NOT_RECORDED='Not recorded';
 export type SupplierPdfFilters={fromDate?:string;toDate?:string;/** Item ids; empty or absent = every material. */itemIds?:string[];/** Destination keys (see purchaseDestination); empty or absent = everywhere. */destinationKeys?:string[];includePrices:boolean;includeDiesel:boolean};
 
-export type SupplierPdfLoad={id:string;reference:string;recordedAt:string;item:string;quantityText:string;driver:string;ticket:string|null;/** Pieces recorded beside the quantity, as text; null when none. */pieces:string|null;status:'Active'|'Corrected';statusNote:string|null;unitPrice?:string;total?:string};
+export type SupplierPdfLoad={id:string;reference:string;recordedAt:string;item:string;quantityText:string;driver:string;ticket:string|null;/** Pieces recorded beside the quantity, as text; null when none. */pieces:string|null;/** Rebar: length per bar ("6 m") and meters (pieces × length), or null when not recorded. */length:string|null;meters:string|null;/** Where the weight came from: "Calculated 266.3 kg" beside a typed weight, "Typed only", or "Calculated weight". Only printed on a steel PDF. */weightNote:string|null;status:'Active'|'Corrected';statusNote:string|null;unitPrice?:string;total?:string};
 export type SupplierPdfTotal={item:string;unitSymbol:string;quantity:number;quantityText:string;count:number;pieces:number;piecesText:string};
 /** A category whose loads carry pieces (steel): each item, then one total per unit for all items together. */
 export type SupplierPdfCategory={categoryName:string;items:{item:string;loadCount:number;piecesText:string;quantityText:string}[];totals:{quantityText:string;loadCount:number}[];piecesText:string;loadCount:number};
@@ -28,6 +29,8 @@ export type SupplierDeliveriesPdf={
   loadCount:number;
   /** True when any listed load carries pieces; the Pieces column and the category summaries appear only then. */
   hasPieces:boolean;
+  /** True when any listed load carries a length per bar; the Length per bar and Meters columns and the weight note appear only then. */
+  hasLength:boolean;
   categories:SupplierPdfCategory[];
   diesel:SupplierPdfDiesel|null;
   includePrices:boolean;
@@ -36,6 +39,11 @@ export type SupplierDeliveriesPdf={
 };
 
 const round=(value:number)=>Math.round(value*1000000)/1000000;
+function weightNote(purchase:QuarryPurchase):string{
+  if(purchase.calculatedWeightKg==null)return 'Typed only';
+  if(purchase.weightSource==='calculated')return 'Calculated weight';
+  return `Calculated ${formatKgFixed(purchase.calculatedWeightKg)} kg`;
+}
 const quantityText=(value:number,unitSymbol:string)=>`${Math.round(value*1000)/1000} ${unitSymbol}`.trim();
 const money=(value:number)=>`$${value.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -95,7 +103,7 @@ export function buildSupplierDeliveriesPdf(input:{supplierId:string;supplierName
         const base:SupplierPdfLoad={
           id:purchase.id,reference:purchase.purchaseNumber,recordedAt:purchase.confirmedAt,item:purchase.itemName,quantityText:quantityText(purchase.quantityCubicMetres,purchase.unitSymbol),
           driver:purchase.deliveryMethod==='supplier'?(purchase.truckPlate.trim()?`Supplier Delivering · ${purchase.truckPlate.trim()}`:'Supplier Delivering'):[purchase.driverName,purchase.truckPlate].map(value=>value.trim()).filter(Boolean).join(' · ')||NOT_RECORDED,
-          ticket:purchase.supplierTicketNumber?.trim()||null,pieces:purchase.pieces?String(purchase.pieces):null,status:edited?'Corrected':'Active',statusNote:edited?'Corrected after confirmation':null,
+          ticket:purchase.supplierTicketNumber?.trim()||null,pieces:purchase.pieces?String(purchase.pieces):null,length:purchase.lengthPerBarM?`${formatMeters(purchase.lengthPerBarM)} m`:null,meters:purchase.lengthPerBarM&&purchase.pieces?formatMeters(purchase.lengthPerBarM*purchase.pieces):null,weightNote:weightNote(purchase),status:edited?'Corrected':'Active',statusNote:edited?'Corrected after confirmation':null,
         };
         return filters.includePrices?{...base,unitPrice:purchase.unitPriceUsd==null?'Unpriced':money(purchase.unitPriceUsd),total:purchase.finalTotalUsd==null?'Unpriced':money(purchase.finalTotalUsd)}:base;
       }),
@@ -125,7 +133,7 @@ export function buildSupplierDeliveriesPdf(input:{supplierId:string;supplierName
       {label:'Dates',value:period},{label:'Destinations',value:destinationNames.length?destinationNames.join(', '):'All projects and sites'},
       {label:'Materials',value:materialNames.length?materialNames.join(', '):'All'},{label:'Prices',value:filters.includePrices?'Included (recorded prices only)':'Excluded'},
     ],
-    destinations,totals:finish(overall),loadCount:loads.length,hasPieces:loads.some(purchase=>Boolean(purchase.pieces)),
+    destinations,totals:finish(overall),loadCount:loads.length,hasPieces:loads.some(purchase=>Boolean(purchase.pieces)),hasLength:loads.some(purchase=>Boolean(purchase.lengthPerBarM)),
     categories:categorySummaries(loads).map((category):SupplierPdfCategory=>({categoryName:category.categoryName,loadCount:category.loadCount,piecesText:piecesText(category.pieces),
       items:category.items.map(item=>({item:item.itemName,loadCount:item.loads,piecesText:piecesText(item.pieces),quantityText:quantityText(item.quantity,item.unitSymbol)})),
       totals:category.totals.map(total=>({quantityText:quantityText(total.quantity,total.unitSymbol),loadCount:total.loads}))})),

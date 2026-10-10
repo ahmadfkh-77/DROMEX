@@ -1,3 +1,4 @@
+import type { SteelSettings } from '../../domain/rebar';
 import type { QuarryCorrectionDraft, QuarryPurchase, QuarryPurchaseDraft, QuarrySetup, Supplier, SupplierDraft } from '../../domain/quarry';
 
 export interface QuarryRepository {
@@ -9,6 +10,9 @@ export interface QuarryRepository {
   confirmDelivery(drafts: QuarryPurchaseDraft[]): Promise<QuarryPurchase[]>;
   incrementPurchase(sourcePurchaseId:string,quantityCubicMetres:number):Promise<QuarryPurchase>;
   listPurchases(): Promise<QuarryPurchase[]>;
+  /** The steel density (kg/m³) and the diameter list the rebar calculator uses; one saved value, edited in one place. */
+  getSteelSettings(): Promise<SteelSettings>;
+  saveSteelSettings(settings: SteelSettings): Promise<SteelSettings>;
   correctPurchase(id:string,draft:QuarryCorrectionDraft):Promise<QuarryPurchase>;
   cancelPurchase(id:string,reason:string):Promise<QuarryPurchase>;
   reactivatePurchase(id:string,draft:QuarryCorrectionDraft):Promise<QuarryPurchase>;

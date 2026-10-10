@@ -15,18 +15,20 @@ const two=(value:number)=>String(value).padStart(2,'0');
 const day=(raw:string)=>{const date=new Date(raw);return Number.isNaN(date.getTime())?raw.slice(0,10):pdfDayLabel(`${date.getFullYear()}-${two(date.getMonth()+1)}-${two(date.getDate())}`);};
 const time=(raw:string)=>{const date=new Date(raw);return Number.isNaN(date.getTime())?'':`${two(date.getHours())}:${two(date.getMinutes())}`;};
 const missing=`<span class="missing">${NOT_RECORDED}</span>`;
+/** In a narrow number column of the steel layout the words wrap instead of running into the next column. */
+const missingWrap=`<span class="missing wrap">${NOT_RECORDED}</span>`;
 
 export function buildSupplierDeliveriesHtml(input:SupplierDeliveriesPdfInput):string{
   const {report}=input,prices=report.includePrices;
-  const pieces=report.hasPieces;
-  const head=['Load','Date, time','Material','Driver · truck','Ticket',...(pieces?['Pieces']:[]),'Quantity',...(prices?['Price','Total']:[]),'Status'].map((label,position)=>`<th${label==='Pieces'||label==='Quantity'||label==='Price'||label==='Total'?' class="num"':''}>${e(label)}</th>`);
-  const colgroup=`<colgroup>${(prices?(pieces?[14,9,11,13,8,7,9,9,9,11]:[16,10,13,14,11,8,9,9,10]):(pieces?[17,11,15,16,9,8,13,11]:[19,12,16,17,12,12,12])).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup>`;
+  const lengths=report.hasLength,pieces=report.hasPieces||lengths;
+  const head=['Load','Date, time','Material','Driver · truck','Ticket',...(pieces?['Pieces']:[]),...(lengths?['Length per bar','Meters']:[]),'Quantity',...(prices?['Price','Total']:[]),'Status'].map((label,position)=>`<th${label==='Pieces'||label==='Length per bar'||label==='Meters'||label==='Quantity'||label==='Price'||label==='Total'?' class="num"':''}>${e(label)}</th>`);
+  const colgroup=`<colgroup>${(lengths?(prices?[9,8,9,10,7,7,9,8,9,8,8,8]:[12,9,12,13,8,7,9,8,12,10]):prices?(pieces?[14,9,11,13,8,7,9,9,9,11]:[16,10,13,14,11,8,9,9,10]):(pieces?[17,11,15,16,9,8,13,11]:[19,12,16,17,12,12,12])).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup>`;
   const blocks=report.destinations.map((destination,index)=>{
     const rows=destination.loads.map(load=>`<tr>
       <td><span class="ln">${t(load.reference)}</span></td>
-      <td class="nowrap">${e(day(load.recordedAt))}<div class="muted">${e(time(load.recordedAt))}</div></td>
-      <td>${t(load.item)}</td><td>${t(load.driver)}</td><td>${load.ticket?t(load.ticket):missing}</td>${pieces?`<td class="num">${load.pieces?e(load.pieces):missing}</td>`:''}
-      <td class="num">${e(load.quantityText)}</td>${prices?`<td class="num">${e(load.unitPrice)}</td><td class="num">${e(load.total)}</td>`:''}
+      <td class="${lengths?'':'nowrap'}">${e(day(load.recordedAt))}<div class="muted">${e(time(load.recordedAt))}</div></td>
+      <td>${t(load.item)}</td><td>${t(load.driver)}</td><td>${load.ticket?t(load.ticket):missing}</td>${pieces?`<td class="num${lengths?' wr':''}">${load.pieces?e(load.pieces):(lengths?missingWrap:missing)}</td>`:''}${lengths?`<td class="num wr">${load.length?e(load.length):missingWrap}</td><td class="num wr">${load.meters?e(load.meters):missingWrap}</td>`:''}
+      <td class="num">${e(load.quantityText)}${lengths&&load.weightNote?`<div class="muted">${e(load.weightNote)}</div>`:''}</td>${prices?`<td class="num">${e(load.unitPrice)}</td><td class="num">${e(load.total)}</td>`:''}
       <td><b>${e(load.status)}</b>${load.statusNote?`<div class="muted">${e(load.statusNote)}</div>`:''}</td></tr>`).join('');
     const totals=destination.totals.map(total=>`<span class="pill">${t(total.item)} · ${e(total.quantityText)}${total.piecesText?` · ${e(total.piecesText)}`:''} · ${total.count} load${total.count===1?'':'s'}</span>`).join('');
     return `<section class="block"><div class="block-bar"><span class="block-index">${index+1}</span><span class="block-name">${t(destination.label)}</span><span class="block-count">${destination.loads.length} load${destination.loads.length===1?'':'s'}</span></div>
@@ -62,7 +64,7 @@ export function buildSupplierDeliveriesHtml(input:SupplierDeliveriesPdfInput):st
     th{text-align:left;color:#173F67;font-size:7pt;border-bottom:1.5px solid #173F67;padding:1.4mm 1.6mm;vertical-align:bottom}
     td{padding:1.4mm 1.6mm;border-bottom:.3mm solid #EAE3D7;vertical-align:top;overflow-wrap:anywhere}
     tbody tr:nth-child(even) td{background:#FAF8F4}
-    .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.nowrap{white-space:nowrap}.muted{color:#5A6570;font-size:7pt}.missing{color:#8A6D1D;font-style:italic;white-space:nowrap}
+    .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.nowrap{white-space:nowrap}.muted{color:#5A6570;font-size:7pt}.missing{color:#8A6D1D;font-style:italic;white-space:nowrap}.missing.wrap{white-space:normal;font-size:6.5pt}.num.wr{white-space:normal}
     .ln{font-weight:700;color:#173F67}
     tr.total td{font-weight:800;border-top:1.5px solid #17212B;background:#F5F5F5}
     .pills{display:flex;flex-wrap:wrap;gap:1.5mm;margin-top:2.5mm}.pill{border:1px solid #CFC5B3;border-radius:5mm;padding:.8mm 2.6mm;font-size:8pt;background:#FBF9F4}.pill.strong{background:#EAF1F6;border-color:#173F67;font-weight:700}

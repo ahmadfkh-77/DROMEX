@@ -14,6 +14,7 @@ import {
   validateQuarryPurchase,
 } from '../../domain/quarry';
 import {paymentStatus} from '../../domain/financials';
+import {DEFAULT_STEEL_DIAMETERS,defaultSteelSettings,validateSteelSettings,type SteelSettings} from '../../domain/rebar';
 import type { QuarryRepository } from './QuarryRepository';
 
 type PurchaseRow = {
@@ -29,6 +30,7 @@ type PurchaseRow = {
   correction_history_json:string|null;updated_at:string|null;
   destination_type?:'project'|'company_site'|'unassigned'|null;company_site_id?:string|null;company_site_name?:string|null;
   pieces?:number|null;delivery_group_id?:string|null;
+  diameter_mm?:number|null;length_per_bar_m?:number|null;calculated_weight_kg?:number|null;weight_source?:'typed'|'calculated'|null;
 };
 // DEC-506. A site's name is read live through this join, so renaming a site never rewrites its loads.
 const PURCHASE_SELECT='SELECT q.*,cs.name company_site_name FROM quarry_purchases q LEFT JOIN company_sites cs ON cs.id=q.company_site_id';
@@ -40,6 +42,10 @@ function dateKey(value:string){const date=new Date(value);return`${date.getFullY
 function timestampForDate(value:string){const now=new Date(),[year=0,month=0,day=0]=value.split('-').map(Number);return new Date(year,month-1,day,now.getHours(),now.getMinutes(),now.getSeconds(),now.getMilliseconds()).toISOString();}
 /** Steel and counted goods: pieces typed beside the quantity; blank means not recorded. */
 function piecesOf(value?:string){const text=value?.trim();return text?Number(text):null;}
+/** Rebar calculator inputs (diameter, length per bar, calculated weight): a decimal typed with a point or a comma; blank means not recorded. */
+function decimalOf(value?:string){const text=value?.trim().replace(',','.');return text?Number(text):null;}
+const sourceOf=(draft:{weightSource?:string})=>draft.weightSource==='typed'||draft.weightSource==='calculated'?draft.weightSource:null;
+const steelRow=(value:number|null|undefined)=>value==null?null:String(value);
 function cents(value:number|null){return value===null?null:Math.round(value*100);}
 function safeHistory(value:string|null):SupplierCorrectionEntry[]{try{return JSON.parse(value||'[]') as SupplierCorrectionEntry[];}catch{return[];}}
 /** DEC-506. The same rule a fuel fill uses: a destination keeps only the link its type needs. */
@@ -51,7 +57,7 @@ function fromRow(row:PurchaseRow):QuarryPurchase{
   return{id:row.id,purchaseNumber:row.purchase_number,confirmedAt:row.confirmed_at,supplierId:row.supplier_id,
     supplierName:row.supplier_name,projectId:row.project_id,projectName:row.project_name,destinationType:row.destination_type??(row.project_id?'project':'unassigned'),companySiteId:row.company_site_id??null,companySiteName:row.company_site_name??null,itemId:row.item_id,
     itemName:row.item_name,itemCode:row.item_code,categoryName:row.category_name,unitId:row.unit_id??'unit_m3',
-    unitName:row.unit_name??'Cubic metre',unitSymbol:row.unit_symbol??'m³',quantityCubicMetres:row.quantity_cubic_metres,pieces:row.pieces??null,deliveryGroupId:row.delivery_group_id??null,
+    unitName:row.unit_name??'Cubic metre',unitSymbol:row.unit_symbol??'m³',quantityCubicMetres:row.quantity_cubic_metres,pieces:row.pieces??null,deliveryGroupId:row.delivery_group_id??null,diameterMm:row.diameter_mm??null,lengthPerBarM:row.length_per_bar_m??null,calculatedWeightKg:row.calculated_weight_kg??null,weightSource:row.weight_source??null,
     deliveryMethod:row.delivery_method??'company',driverId:row.driver_profile_id,driverName:row.driver_name,
     truckId:row.truck_profile_id,truckPlate:row.truck_plate,supplierTicketNumber:row.supplier_ticket_number,
     priceBasis:row.price_basis??'per_unit',unitPriceUsd:row.unit_price_usd_cents==null?null:row.unit_price_usd_cents/100,
@@ -138,7 +144,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
         draft.vatInclusive?1:0,calculation.vatRatePercent==null?null:Math.round(calculation.vatRatePercent*100),cents(calculation.vatAmountUsd),
         cents(calculation.finalTotalUsd),status,clean(draft.notes),JSON.stringify(draft.photos),'[]',enteredAt,enteredAt);
       await this.db.runAsync('UPDATE quarry_purchases SET destination_type=?,company_site_id=? WHERE id=?',destination.type,destination.companySiteId,id);
-      await this.db.runAsync('UPDATE quarry_purchases SET pieces=?,delivery_group_id=? WHERE id=?',piecesOf(draft.pieces),groupId,id);
+      await this.db.runAsync('UPDATE quarry_purchases SET pieces=?,delivery_group_id=?,diameter_mm=?,length_per_bar_m=?,calculated_weight_kg=?,weight_source=? WHERE id=?',piecesOf(draft.pieces),groupId,decimalOf(draft.diameterMm),decimalOf(draft.lengthPerBarM),decimalOf(draft.calculatedWeightKg),sourceOf(draft),id);
       await this.enqueue('quarryPurchase',id,{id,purchaseNumber,confirmedAt,enteredAt,projectId:project?.id??null,destinationType:destination.type,companySiteId:destination.companySiteId,deliveryMethod:draft.deliveryMethod,pieces:piecesOf(draft.pieces),deliveryGroupId:groupId});
     }
     return id;
@@ -169,6 +175,24 @@ export class SqliteQuarryRepository implements QuarryRepository {
     return this.get(id);
   }
 
+  /** The steel density and the diameter list, kept once for the whole app (a backup carries them). */
+  async getSteelSettings():Promise<SteelSettings>{
+    const row=await this.db.getFirstAsync<{density_kg_m3:number;diameters_json:string}>("SELECT density_kg_m3,diameters_json FROM steel_settings WHERE id='steel'");
+    if(!row)return defaultSteelSettings();
+    let diameters:number[]=[];try{const parsed=JSON.parse(row.diameters_json);if(Array.isArray(parsed))diameters=parsed.map(Number).filter(value=>Number.isFinite(value)&&value>0);}catch{diameters=[];}
+    return{densityKgM3:row.density_kg_m3,diameters:diameters.length?diameters:[...DEFAULT_STEEL_DIAMETERS]};
+  }
+  async saveSteelSettings(settings:SteelSettings):Promise<SteelSettings>{
+    const next:SteelSettings={densityKgM3:settings.densityKgM3,diameters:[...new Set(settings.diameters)].sort((a,b)=>a-b)};
+    const issues=validateSteelSettings(next);if(issues.length)throw new Error(issues.join('\n'));
+    const now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync("INSERT INTO steel_settings (id,density_kg_m3,diameters_json,updated_at) VALUES ('steel',?,?,?) ON CONFLICT(id) DO UPDATE SET density_kg_m3=excluded.density_kg_m3,diameters_json=excluded.diameters_json,updated_at=excluded.updated_at",next.densityKgM3,JSON.stringify(next.diameters),now);
+      await this.enqueue('steelSettings','steel',{...next,updatedAt:now});
+    });
+    return next;
+  }
+
   async listPurchases(){return(await this.db.getAllAsync<PurchaseRow>(PURCHASE_SELECT+' ORDER BY q.confirmed_at DESC')).map(fromRow);}
 
   async correctPurchase(id:string,draft:QuarryCorrectionDraft):Promise<QuarryPurchase>{
@@ -194,13 +218,13 @@ export class SqliteQuarryRepository implements QuarryRepository {
     const status:QuarryPurchase['paymentStatus']=total===null?'Unpriced':total===0?'No Payment Due':paymentStatus(total,paid);
     const now=new Date().toISOString();
     const values:Record<string,string|null>={
-      Supplier:supplier.name,Destination:purchaseDestinationLabel({projectId:project?.id??null,projectName:project?.name??null,destinationType:destination.type,companySiteId:destination.companySiteId,companySiteName:site?.name??null}),Item:item.name,Unit:unit.symbol,Quantity:String(Number(draft.quantityCubicMetres)),Pieces:piecesOf(draft.pieces)===null?null:String(piecesOf(draft.pieces)),
+      Supplier:supplier.name,Destination:purchaseDestinationLabel({projectId:project?.id??null,projectName:project?.name??null,destinationType:destination.type,companySiteId:destination.companySiteId,companySiteName:site?.name??null}),Item:item.name,Unit:unit.symbol,Quantity:String(Number(draft.quantityCubicMetres)),Pieces:piecesOf(draft.pieces)===null?null:String(piecesOf(draft.pieces)),'Length per bar':steelRow(decimalOf(draft.lengthPerBarM)),Diameter:steelRow(decimalOf(draft.diameterMm)),'Calculated weight':steelRow(decimalOf(draft.calculatedWeightKg)),
       Delivery:draft.deliveryMethod,Driver:driverName,Truck:truckPlate,Ticket:clean(draft.supplierTicketNumber),
       'Price basis':draft.priceBasis,Price:price===null?null:String(price),VAT:calculation.vatRatePercent===null?null:String(calculation.vatRatePercent),
       'VAT treatment':draft.vatInclusive?'Included':'Excluded',Notes:clean(draft.notes),
     };
     const oldValues:Record<string,string|null>={
-      Supplier:existing.supplierName,Destination:purchaseDestinationLabel(existing),Item:existing.itemName,Unit:existing.unitSymbol,Quantity:String(existing.quantityCubicMetres),Pieces:existing.pieces?String(existing.pieces):null,
+      Supplier:existing.supplierName,Destination:purchaseDestinationLabel(existing),Item:existing.itemName,Unit:existing.unitSymbol,Quantity:String(existing.quantityCubicMetres),Pieces:existing.pieces?String(existing.pieces):null,'Length per bar':steelRow(existing.lengthPerBarM),Diameter:steelRow(existing.diameterMm),'Calculated weight':steelRow(existing.calculatedWeightKg),
       Delivery:existing.deliveryMethod,Driver:existing.driverName,Truck:existing.truckPlate,Ticket:existing.supplierTicketNumber,
       'Price basis':existing.priceBasis,Price:existing.unitPriceUsd===null?null:String(existing.unitPriceUsd),
       VAT:existing.vatRatePercent===null?null:String(existing.vatRatePercent),'VAT treatment':existing.vatInclusive?'Included':'Excluded',Notes:existing.notes,
@@ -217,7 +241,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
         calculation.vatRatePercent==null?null:Math.round(calculation.vatRatePercent*100),cents(calculation.vatAmountUsd),total,status,
         clean(draft.notes),JSON.stringify(history),now,id);
       await this.db.runAsync('UPDATE quarry_purchases SET destination_type=?,company_site_id=? WHERE id=?',destination.type,destination.companySiteId,id);
-      await this.db.runAsync('UPDATE quarry_purchases SET pieces=? WHERE id=?',piecesOf(draft.pieces),id);
+      await this.db.runAsync('UPDATE quarry_purchases SET pieces=?,diameter_mm=?,length_per_bar_m=?,calculated_weight_kg=?,weight_source=? WHERE id=?',piecesOf(draft.pieces),decimalOf(draft.diameterMm),decimalOf(draft.lengthPerBarM),decimalOf(draft.calculatedWeightKg),sourceOf(draft),id);
       await this.enqueue('quarryPurchase',id,{id,correctedAt:now,reason,changes,paymentStatus:status,destinationType:destination.type,companySiteId:destination.companySiteId});
     });
     return this.get(id);
@@ -243,7 +267,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
   }
 
   private draftFromPurchase(p:QuarryPurchase):QuarryPurchaseDraft{
-    return{recordDate:dateKey(p.confirmedAt),supplierId:p.supplierId,projectId:p.projectId??'',destinationType:purchaseDestination(p).type,companySiteId:p.companySiteId??'',itemId:p.itemId,unitId:p.unitId,quantityCubicMetres:String(p.quantityCubicMetres),pieces:p.pieces?String(p.pieces):'',
+    return{recordDate:dateKey(p.confirmedAt),supplierId:p.supplierId,projectId:p.projectId??'',destinationType:purchaseDestination(p).type,companySiteId:p.companySiteId??'',itemId:p.itemId,unitId:p.unitId,quantityCubicMetres:String(p.quantityCubicMetres),pieces:p.pieces?String(p.pieces):'',diameterMm:steelRow(p.diameterMm)??'',lengthPerBarM:steelRow(p.lengthPerBarM)??'',calculatedWeightKg:steelRow(p.calculatedWeightKg)??'',weightSource:p.weightSource??'',
       deliveryMethod:p.deliveryMethod,driverId:p.driverId,truckId:p.truckId,supplierTruckPlate:p.truckPlate,
       supplierTicketNumber:p.supplierTicketNumber??'',priceBasis:p.priceBasis,unitPriceUsd:p.unitPriceUsd===null?'':String(p.unitPriceUsd),
       vatMode:p.vatMode,customVatRatePercent:p.vatMode==='custom'?String(p.vatRatePercent??0):'',vatInclusive:p.vatInclusive,notes:p.notes??'',photos:[]};

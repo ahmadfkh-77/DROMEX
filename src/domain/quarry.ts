@@ -13,6 +13,8 @@ export type QuarryPurchaseDraft = {
   recordDate:string; supplierId: string; projectId: string; destinationType?: FuelDestinationType; companySiteId?: string; itemId: string; unitId: string; quantityCubicMetres: string;
   /** Steel and other counted goods: the number of pieces, beside the quantity (which is the weight for rebar). Optional; blank means not recorded. */
   pieces?: string;
+  /** Rebar (Step 2): the bar diameter (mm) and length per bar (m) the pieces are counted in, the calculated weight (kg), and where the saved weight came from. All optional; blank means not recorded. */
+  diameterMm?: string; lengthPerBarM?: string; calculatedWeightKg?: string; weightSource?: 'typed'|'calculated'|'';
   deliveryMethod: QuarryDeliveryMethod; driverId: string; truckId: string; supplierTruckPlate: string;
   supplierTicketNumber: string; priceBasis: SupplierPriceBasis; unitPriceUsd: string; vatMode: SupplierVatMode;
   customVatRatePercent: string; vatInclusive: boolean; notes: string; photos: string[];
@@ -29,6 +31,8 @@ export type QuarryPurchase = {
   pieces?: number|null;
   /** Loads of one delivery note (several items) share this id; null/absent for a single-item load. */
   deliveryGroupId?: string|null;
+  /** Rebar (Step 2). Null/absent on every load saved without them. Meters = pieces × length per bar; the quantity stays the weight that counts. */
+  diameterMm?: number|null; lengthPerBarM?: number|null; calculatedWeightKg?: number|null; weightSource?: 'typed'|'calculated'|null;
   deliveryMethod:QuarryDeliveryMethod; driverId:string; driverName: string; truckId:string; truckPlate: string;
   supplierTicketNumber: string | null; priceBasis:SupplierPriceBasis; unitPriceUsd: number | null;
   subtotalUsd: number | null; vatMode:SupplierVatMode; vatInclusive:boolean; vatRatePercent: number | null;
@@ -168,6 +172,11 @@ export function validateQuarryPurchase(draft: QuarryPurchaseDraft, setup: Quarry
   if (!setup.units.some((value) => value.id === draft.unitId)) issues.push('Select a measurement unit.');
   const quantity = Number(draft.quantityCubicMetres); if (!Number.isFinite(quantity) || quantity <= 0) issues.push('Quantity must be greater than zero.');
   if (draft.pieces?.trim() && !/^[1-9][0-9]{0,8}$/.test(draft.pieces.trim())) issues.push('Pieces must be a whole number greater than zero, or left blank.');
+  for (const [label, value, limit] of [['Length per bar', draft.lengthPerBarM, 1000], ['Diameter', draft.diameterMm, 200], ['Calculated weight', draft.calculatedWeightKg, 1_000_000]] as const) {
+    const text = value?.trim().replace(',', '.'); if (!text) continue;
+    const number = Number(text); if (!Number.isFinite(number) || number <= 0 || number > limit) issues.push(`${label} must be a number greater than zero, or left blank.`);
+  }
+  if (draft.weightSource && draft.weightSource !== 'typed' && draft.weightSource !== 'calculated') issues.push('The weight source is not valid.');
   if (draft.deliveryMethod==='company') {
     if (!setup.drivers.some((value) => value.id === draft.driverId)) issues.push('Select a driver.');
     if (!setup.trucks.some((value) => value.id === draft.truckId)) issues.push('Select a truck.');

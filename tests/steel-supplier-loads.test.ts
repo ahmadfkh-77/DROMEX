@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 
-import {migrateDatabase} from '../src/data/database/migrations';
+import {DATABASE_VERSION,migrateDatabase} from '../src/data/database/migrations';
 import {SqliteBusinessReportRepository} from '../src/data/repositories/SqliteBusinessReportRepository';
 import {SqliteQuarryRepository} from '../src/data/repositories/SqliteQuarryRepository';
 import {emptyQuarryPurchaseDraft,summarizeSupplierDeliveries,validateQuarryPurchase,type QuarryPurchaseDraft} from '../src/domain/quarry';
@@ -199,13 +199,13 @@ describe('the Excel export',()=>{
 });
 
 describe('data safety',()=>{
-  it('upgrades a version-53 database with every existing load left without pieces or a group',async()=>{
+  it('upgrades a version-53 database to the current version with every existing load left without pieces or a group',async()=>{
     const {db,quarry,draft}=await setup();
     const old=await quarry.confirmPurchase(draft({itemId:'gravel',unitId:'unit_ton',quantityCubicMetres:'22',pieces:''}));
     db.raw.exec('DROP INDEX idx_quarry_purchases_group;ALTER TABLE quarry_purchases DROP COLUMN pieces;ALTER TABLE quarry_purchases DROP COLUMN delivery_group_id;PRAGMA user_version=53;');
     const before=db.raw.prepare('SELECT * FROM quarry_purchases WHERE id=?').get(old.id);
     await migrateDatabase(db as never);
-    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(54);
+    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(DATABASE_VERSION);
     expect(db.raw.prepare('SELECT * FROM quarry_purchases WHERE id=?').get(old.id)).toEqual({...before,pieces:null,delivery_group_id:null});
     await migrateDatabase(db as never);
     expect((await quarry.listPurchases())[0]).toMatchObject({quantityCubicMetres:22,unitSymbol:'t',pieces:null,deliveryGroupId:null});

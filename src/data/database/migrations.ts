@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 54;
+export const DATABASE_VERSION = 55;
 
 type TableColumn = { name: string };
 
@@ -2053,6 +2053,28 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'quarry_purchases', 'delivery_group_id', 'TEXT');
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_quarry_purchases_group ON quarry_purchases(delivery_group_id)');
     currentVersion = 54;
+  }
+
+  if (currentVersion === 54) {
+    // Steel on Supplier Loads (Step 2, the rebar calculator). A load can keep the bar diameter and length it was
+    // calculated from, the calculated weight (full precision) and where the saved weight came from. Purely additive:
+    // every column stays NULL on every existing load. The steel density and the diameter list live once, in
+    // steel_settings, so no load repeats them and a backup carries them.
+    await addColumnIfMissing(db, 'quarry_purchases', 'diameter_mm', 'REAL CHECK (diameter_mm IS NULL OR diameter_mm > 0)');
+    await addColumnIfMissing(db, 'quarry_purchases', 'length_per_bar_m', 'REAL CHECK (length_per_bar_m IS NULL OR length_per_bar_m > 0)');
+    await addColumnIfMissing(db, 'quarry_purchases', 'calculated_weight_kg', 'REAL CHECK (calculated_weight_kg IS NULL OR calculated_weight_kg > 0)');
+    await addColumnIfMissing(db, 'quarry_purchases', 'weight_source', "TEXT CHECK (weight_source IS NULL OR weight_source IN ('typed', 'calculated'))");
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS steel_settings (
+        id TEXT PRIMARY KEY NOT NULL CHECK (id = 'steel'),
+        density_kg_m3 REAL NOT NULL CHECK (density_kg_m3 > 0),
+        diameters_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT OR IGNORE INTO steel_settings (id, density_kg_m3, diameters_json, updated_at)
+        VALUES ('steel', 7850, '[8,10,12,14,16,18,20,25,32]', '2026-10-11T00:00:00.000Z');
+    `);
+    currentVersion = 55;
   }
 
 

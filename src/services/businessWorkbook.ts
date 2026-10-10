@@ -58,7 +58,7 @@ const ARABIC_LABELS: Record<string, string> = {
   'Movement Details': 'تفاصيل الحركات', 'Diesel Batches': 'دفعات الديزل', 'Fuel Stations': 'محطات الوقود', 'Equipment Totals': 'إجماليات المعدات', 'Project Summary': 'ملخص المشاريع',
   'Project Loads': 'أحمال المشاريع', 'Supplier Loads': 'أحمال الموردين', 'Fuel Movements': 'حركات الوقود',
   'Daily Report Index': 'فهرس التقارير اليومية', 'Materials Summary': 'ملخص المواد', 'Executive Summary': 'الملخص التنفيذي',
-  Pieces: 'القطع', 'Delivery Group ID': 'معرف مجموعة التسليم', 'Category Totals': 'مجاميع الفئات', Payments: 'المدفوعات', 'Daily Reports': 'التقارير اليومية', 'Data Dictionary': 'قاموس البيانات', Charts: 'الرسوم البيانية',
+  Pieces: 'القطع', 'Diameter mm': 'القطر (مم)', 'Length per Bar m': 'طول القضيب (م)', Meters: 'الأمتار', 'Calculated Weight kg': 'الوزن المحسوب (كغ)', 'Weight Difference kg': 'فرق الوزن (كغ)', 'Weight Source': 'مصدر الوزن', 'Delivery Group ID': 'معرف مجموعة التسليم', 'Category Totals': 'مجاميع الفئات', Payments: 'المدفوعات', 'Daily Reports': 'التقارير اليومية', 'Data Dictionary': 'قاموس البيانات', Charts: 'الرسوم البيانية',
   'Financial Charts': 'الرسوم المالية', 'Operations Charts': 'الرسوم التشغيلية', Photos: 'الصور',
   'Work Details': 'تفاصيل العمل', Presence: 'الحضور والمعدات', Materials: 'المواد', 'Linked Loads': 'الأحمال المرتبطة', 'Waste Dumps': 'نقل النفايات',
   'Report information': 'معلومات التقرير', Details: 'التفاصيل', 'Report title': 'عنوان التقرير', Company: 'الشركة',
