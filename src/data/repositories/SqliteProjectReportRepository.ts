@@ -267,8 +267,8 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   }
 
   async listLinkedWasteDumps(projectId: string, workDate: string): Promise<LinkedWasteDump[]> {
-    const rows=await this.db.getAllAsync<{id:string;dumped_at:string;material_type:string|null;dump_location:string|null;truck_plate:string|null;driver_name:string|null}>("SELECT id,dumped_at,material_type,dump_location,truck_plate,driver_name FROM waste_dumps WHERE project_id=? AND work_date=? AND status='Active' ORDER BY dumped_at",projectId,workDate);
-    return rows.map((row)=>({id:row.id,dumpedAt:row.dumped_at,materialType:row.material_type??'Unspecified material',dumpLocation:row.dump_location??'Unspecified location',truckPlate:row.truck_plate,driverName:row.driver_name}));
+    const rows=await this.db.getAllAsync<{id:string;dumped_at:string;material_type:string|null;dump_location:string|null;truck_plate:string|null;driver_name:string|null;notes:string|null}>("SELECT id,dumped_at,material_type,dump_location,truck_plate,driver_name,notes FROM waste_dumps WHERE project_id=? AND work_date=? AND status='Active' ORDER BY dumped_at,id",projectId,workDate);
+    return rows.map((row)=>({id:row.id,dumpedAt:row.dumped_at,materialType:row.material_type??'Unspecified material',dumpLocation:row.dump_location??'Unspecified location',truckPlate:row.truck_plate,driverName:row.driver_name,notes:row.notes?.trim()||null}));
   }
 
   async listProjectLoads(projectId: string): Promise<ProjectCompletionLoad[]> {
@@ -277,8 +277,8 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   }
 
   async listProjectWasteDumps(projectId: string): Promise<ProjectCompletionWasteDump[]> {
-    const rows = await this.db.getAllAsync<{id:string;work_date:string;dumped_at:string;material_type:string|null;dump_location:string|null;truck_plate:string|null;driver_name:string|null}>("SELECT id,work_date,dumped_at,material_type,dump_location,truck_plate,driver_name FROM waste_dumps WHERE project_id=? AND status='Active' ORDER BY dumped_at", projectId);
-    return rows.map((row) => ({ id:row.id, workDate:row.work_date, dumpedAt:row.dumped_at, materialType:row.material_type??'Unspecified material', dumpLocation:row.dump_location??'Unspecified location', truckPlate:row.truck_plate, driverName:row.driver_name }));
+    const rows = await this.db.getAllAsync<{id:string;work_date:string;dumped_at:string;material_type:string|null;dump_location:string|null;truck_plate:string|null;driver_name:string|null;notes:string|null}>("SELECT id,work_date,dumped_at,material_type,dump_location,truck_plate,driver_name,notes FROM waste_dumps WHERE project_id=? AND status='Active' ORDER BY dumped_at,id", projectId);
+    return rows.map((row) => ({ id:row.id, workDate:row.work_date, dumpedAt:row.dumped_at, materialType:row.material_type??'Unspecified material', dumpLocation:row.dump_location??'Unspecified location', truckPlate:row.truck_plate, driverName:row.driver_name, notes:row.notes?.trim()||null }));
   }
 
   async saveReport(draft: DailyProjectReportDraft): Promise<DailyProjectReport> {

@@ -125,7 +125,7 @@ export type LinkedProjectLoad = {
 /** DEC-480. itemId, supplierId and unitId are the stable keys Supplier Loads are grouped by; absent only on hand-built fixtures. */
 export type LinkedQuarryLoad = { id:string; purchaseNumber:string; confirmedAt:string; supplierId?:string|null; supplierName:string; itemId?:string|null; itemName:string; quantity:number; unitId?:string|null; unitSymbol:string; deliveryMethod:'company'|'supplier'; deliveryLabel:string; truckPlate:string|null; supplierTicketNumber:string|null; notes:string|null; unitPriceUsd?:number|null;subtotalUsd?:number|null;vatAmountUsd?:number|null;finalTotalUsd?:number|null };
 export type LinkedFuelFill = {id:string;confirmedAt:string;equipmentName:string;fuelType:FuelType;litres:number;pricePerLitreUsd:number|null;consumptionCostUsd:number|null;odometerReading:string|null;notes:string|null};
-export type LinkedWasteDump = { id: string; dumpedAt: string; materialType: string; dumpLocation: string; truckPlate: string | null; driverName: string | null };
+export type LinkedWasteDump = { id: string; dumpedAt: string; materialType: string; dumpLocation: string; truckPlate: string | null; driverName: string | null; /** The free note typed on the dump; null or absent when none. */ notes?: string | null };
 // DEC-453. Wall construction read live for a Daily Report, like every other linked section: each
 // consumption record whose wall belongs to the report's project and whose used-on date equals the work
 // date, grouped by wall. Corrections therefore appear in the next generated export.
