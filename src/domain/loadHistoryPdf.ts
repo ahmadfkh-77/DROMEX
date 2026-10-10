@@ -1,13 +1,13 @@
 import type { ConfirmedLoad } from './loads';
 import { loadNumberLabel } from './loadNumberSeries';
 import { loadLocalDate } from './loadCorrection';
+import { plantSupplierName } from './loadSupplier';
 
 /**
  * Phase 5. The Load History export: the company loads a person is looking at in Load History, as a list
  * PDF. Only Active loads are ever listed or counted; a cancelled load stays in the app, marked, and its number is
- * never reused. The Supplier column reads "Plant Company" because every company load is the Plant Company's.
+ * never reused. The Supplier column reads the Plant Company's real name as issued on the load (see plantSupplierName).
  */
-export const PLANT_COMPANY_LABEL = 'Plant Company';
 export const NOT_RECORDED = 'Not recorded';
 
 /** The short noun a corrected field is called in the Status column ("Truck changed"). */
@@ -52,7 +52,7 @@ export type LoadHistoryPdfRow = {
 const quantity = (value: number) => String(Math.round(value * 1000) / 1000);
 
 /** Active loads only, newest first, ready to print. A missing driver or plate is null so the template can say Not recorded. */
-export function loadHistoryRows(loads: ConfirmedLoad[]): LoadHistoryPdfRow[] {
+export function loadHistoryRows(loads: ConfirmedLoad[], currentPlantName?: string | null): LoadHistoryPdfRow[] {
   return loads
     .filter((load) => load.status !== 'Cancelled')
     .sort((a, b) => b.confirmedAt.localeCompare(a.confirmedAt) || b.transactionNumber.localeCompare(a.transactionNumber))
@@ -64,7 +64,7 @@ export function loadHistoryRows(loads: ConfirmedLoad[]): LoadHistoryPdfRow[] {
         loadNumberLabel: load.loadNumber ? loadNumberLabel(load.loadNumber) : 'Legacy load',
         transaction: load.transactionNumber,
         item: load.itemName,
-        supplier: PLANT_COMPANY_LABEL,
+        supplier: plantSupplierName(load.companyName, currentPlantName) ?? NOT_RECORDED,
         customer: load.customerName,
         driver: load.driverName?.trim() || null,
         truckPlate: load.truckPlate?.trim() || null,

@@ -77,7 +77,7 @@ describe('supplier and company deliveries',()=>{
     companyLoad('sand','Sand',5,'2026-08-10',{status:'Cancelled'});
     companyLoad('sand','Sand',7,'2026-08-10',{archived:1});
     const rows=(await totals.getProjectTotals('road',{fromDate:'',toDate:''})).deliveries.filter(row=>row.source==='company_delivery');
-    expect(rows).toEqual([{source:'company_delivery',itemKey:'id:sand',itemName:'Sand',supplierKey:'company',supplierName:'Company deliveries',unitKey:'unit_ton',unitSymbol:'t',quantity:10,recordCount:1}]);
+    expect(rows).toEqual([{source:'company_delivery',itemKey:'id:sand',itemName:'Sand',supplierKey:'company',supplierName:'DROMEX',unitKey:'unit_ton',unitSymbol:'t',quantity:10,recordCount:1}]);
   });
 });
 

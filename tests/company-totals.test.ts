@@ -52,7 +52,7 @@ describe('company totals tree',()=>{
     expect(sand.projects.map(project=>project.projectName)).toEqual(['Coastal Road','Mountain Road','No project — direct customer deliveries']);
     const road=sand.projects.find(project=>project.projectName==='Mountain Road')!;
     expect(road.suppliers.map(supplier=>[supplier.supplierName,supplier.units.map(unit=>`${unit.quantity} ${unit.unitSymbol}`)])).toEqual([
-      ['Alpha Quarry',['12 m³']],['Beta Quarry',['6 t']],['Company loads — own deliveries',['10 t']],
+      ['Alpha Quarry',['12 m³']],['Beta Quarry',['6 t']],['DROMEX',['10 t']],
     ]);
     expect(road.units.map(unit=>[unit.unitSymbol,unit.delivered?.quantity,unit.used?.quantity])).toEqual([['m³',12,9],['t',16,2]]);
   });

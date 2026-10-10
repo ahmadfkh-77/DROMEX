@@ -67,13 +67,14 @@ export class SqliteProjectTotalsRepository implements ProjectTotalsRepository{
     const [loadDates,loadParams]=within("date(l.confirmed_at,'localtime')",range);
     const companyRows=await this.db.getAllAsync<Row>(`SELECT ${keyOf('l.item_id','l.item_name')} item_key, COALESCE(MAX(ci.name), MAX(l.item_name)) item_name,
         COALESCE(${LOAD_UNIT}, 'symbol:' || l.output_unit_symbol) unit_key, MAX(l.output_unit_symbol) unit_symbol,
+        COALESCE(NULLIF(trim(MAX(l.company_name)),''), (SELECT NULLIF(trim(cs.company_name),'') FROM company_settings cs WHERE cs.id = 'company')) supplier_name,
         SUM(l.billed_quantity) quantity, COUNT(*) record_count
       FROM loads l LEFT JOIN conversion_options c ON c.id = l.conversion_id LEFT JOIN catalog_items ci ON ci.id = l.item_id
       WHERE l.project_id = ? AND l.status = 'Active' AND l.is_archived = 0 AND ${loadDates}
       GROUP BY item_key, unit_key`,projectId,...loadParams);
     return [
       ...supplierRows.map((row):DeliveryTotal=>({source:'supplier_delivery',itemKey:text(row.item_key),itemName:text(row.item_name),supplierKey:text(row.supplier_key),supplierName:text(row.supplier_name),unitKey:text(row.unit_key),unitSymbol:text(row.unit_symbol),quantity:number(row.quantity),recordCount:Number(row.record_count)})),
-      ...companyRows.map((row):DeliveryTotal=>({source:'company_delivery',itemKey:text(row.item_key),itemName:text(row.item_name),supplierKey:'company',supplierName:'Company deliveries',unitKey:text(row.unit_key),unitSymbol:text(row.unit_symbol),quantity:number(row.quantity),recordCount:Number(row.record_count)})),
+      ...companyRows.map((row):DeliveryTotal=>({source:'company_delivery',itemKey:text(row.item_key),itemName:text(row.item_name),supplierKey:'company',supplierName:text(row.supplier_name)||'Company deliveries',unitKey:text(row.unit_key),unitSymbol:text(row.unit_symbol),quantity:number(row.quantity),recordCount:Number(row.record_count)})),
     ];
   }
 

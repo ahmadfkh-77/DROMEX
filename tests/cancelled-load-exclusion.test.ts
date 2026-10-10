@@ -101,6 +101,8 @@ describe('B3A: cancelled loads excluded from active aggregates, retained in sear
     const activeRow = data.loads.find((row) => row['Record ID'] === 'load_active');
     const cancelledRow = data.loads.find((row) => row['Record ID'] === 'load_cancelled');
     expect(activeRow?.['Record Status']).toBe('Active');
+    expect(activeRow?.Supplier).toBe('DROMEX');
+    expect(activeRow?.Supplier).not.toBe('Plant Company');
     expect(activeRow?.['Cancellation Reason']).toBeNull();
     expect(cancelledRow?.['Record Status']).toBe('Cancelled');
     expect(cancelledRow?.['Cancellation Reason']).toBe('Duplicate entry');

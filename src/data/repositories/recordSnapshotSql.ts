@@ -22,7 +22,8 @@ export const COMPANY_LOAD_RECORDS=`SELECT 'company_load' record_type, l.id recor
     l.subtotal_usd_cents subtotal_cents, l.vat_rate_basis_points vat_rate_basis_points, l.vat_amount_usd_cents vat_cents, l.final_total_usd_cents total_cents,
     NULL supplier_reference, COALESCE(l.status,'Active') record_status, l.is_archived archived, date(l.confirmed_at,'localtime') record_day, l.payment_status,
     l.cancellation_reason, ${historyCount('l.correction_history_json')} correction_count,
-    COALESCE(l.project_location, l.destination_address) destination, l.driver_name, l.truck_plate, NULL delivery_method, l.customer_name customer_name
+    COALESCE(l.project_location, l.destination_address) destination, l.driver_name, l.truck_plate, NULL delivery_method, l.customer_name customer_name,
+    COALESCE(NULLIF(trim(l.company_name),''), (SELECT NULLIF(trim(cs.company_name),'') FROM company_settings cs WHERE cs.id = 'company')) supplier_name
   FROM loads l LEFT JOIN conversion_options c ON c.id = l.conversion_id`;
 
 /** Supplier Loads (supplier side). */
@@ -37,7 +38,8 @@ export const SUPPLIER_LOAD_RECORDS=`SELECT 'supplier_load' record_type, q.id rec
     q.supplier_ticket_number supplier_reference, COALESCE(q.status,'Active') record_status, 0 archived, date(q.confirmed_at,'localtime') record_day, q.payment_status,
     q.cancellation_reason, ${historyCount('q.correction_history_json')} correction_count,
     NULL destination, q.driver_name, q.truck_plate, COALESCE(q.delivery_method,'company') delivery_method,
-    (SELECT c.name FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.id = q.project_id) customer_name
+    (SELECT c.name FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.id = q.project_id) customer_name,
+    q.supplier_name supplier_name
   FROM quarry_purchases q`;
 
 export type RecordRow={
@@ -50,6 +52,8 @@ export type RecordRow={
   destination?:string|null;driver_name?:string|null;truck_plate?:string|null;delivery_method?:'company'|'supplier'|null;
   /** The customer of a company load, or of the project a Supplier Load was delivered to (null when it has none). */
   customer_name?:string|null;
+  /** Who issued the material: the Plant Company's real name on a company load (as issued), the outside supplier's name on a Supplier Load. */
+  supplier_name?:string|null;
 };
 
 const round=(value:unknown)=>Math.round(Number(value??0)*1e6)/1e6;

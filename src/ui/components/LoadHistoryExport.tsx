@@ -42,7 +42,7 @@ export function LoadHistoryExport({headers,loads,filters,onOpenCompanySetups}:{h
       if(remember&&projectId)await headers.setProjectHeaderDefault(projectId,header.kind);
       const list=customizedListHeader(header,custom);
       const generatedAt=new Date().toISOString();
-      await exportAndShareLoadHistory({companyName:list.companyName,logoUri:list.logoUri,contactLine:list.contactLine,generatedAt,summary,rows:loadHistoryRows(exportable),totals:loadHistoryUnitTotals(exportable).map(value=>value),fileName:loadHistoryFileName(filters,generatedAt)});
+      await exportAndShareLoadHistory({companyName:list.companyName,logoUri:list.logoUri,contactLine:list.contactLine,generatedAt,summary,rows:loadHistoryRows(exportable,(await headers.resolveHeader('plant')).name),totals:loadHistoryUnitTotals(exportable).map(value=>value),fileName:loadHistoryFileName(filters,generatedAt)});
       if(mounted.current){setMessage({kind:'success',text:`Load History PDF ready to share: ${exportable.length} load${exportable.length===1?'':'s'}.`});setOpen(false);}
     }catch(cause){if(mounted.current)setMessage({kind:'error',text:`${cause instanceof Error?cause.message:'The PDF could not be created.'} Nothing was changed.`});}
     finally{if(mounted.current)setBusy(false);}

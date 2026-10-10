@@ -3,7 +3,7 @@ import {buildMaterialTree,treeTotals,unitDifferences,type CompanyTotalsData,type
 import {fuelTypeLabels} from '../domain/fuel';
 import {formatTotalQuantity,summarizeFuelFills,type ProjectFuelFill} from '../domain/projectTotals';
 import {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
-import {companyLoadReference,deliveredByLabel,INTERNAL_PROJECT,priceAsRecorded,supplierBox,unitTotals,vatAndTotal,type CustomerBox} from '../domain/projectTotalsPdf';
+import {companyLoadReference,deliveredByLabel,INTERNAL_PROJECT,priceAsRecorded,supplierBox,supplierNameOf,unitTotals,vatAndTotal,type CustomerBox} from '../domain/projectTotalsPdf';
 
 /**
  * DEC-500 (1), DEC-501, DEC-502. Company Totals, Project Totals and Loads History as an A4 PDF.
@@ -109,8 +109,6 @@ function historyBlock(records:CompanyTotalsRecord[],index:number,prices:boolean,
 
 const dateCell=(raw:string)=>`${e(formatDay(localDay(raw)))}<div class="muted">${e(localTime(raw))}</div>`;
 
-/** What the Supplier column reads on the company's own loads (Owner decision, Phase 5). */
-const PLANT_COMPANY_LABEL='Plant Company';
 /**
  * Phase 5. Column widths of every load list, each set adding up to exactly 100%, so the base columns keep their
  * order and nearly their width with or without prices and a Project column. Order: Date, time | Load No. | Item |
@@ -122,8 +120,8 @@ const notRecordedOr=(raw:string|null|undefined)=>raw?t(raw):missing;
 /**
  * Phase 5. One table for every list of loads in a Totals PDF (Loads History, Customer Deliveries, and the company
  * and supplier loads of a Project Totals). Every fact has its own column: no two values share a cell except the
- * date with its time and a load number with its reference. Supplier is "Plant Company" on the company's own
- * loads; Customer on an incoming delivery is the customer of its project. Fixed layout, numbers right-aligned.
+ * date with its time and a load number with its reference. Supplier is the Plant Company's real name on the company's own
+ * loads (as issued) and the outside supplier on an incoming one; Customer on an incoming delivery is the customer of its project. Fixed layout, numbers right-aligned.
  */
 function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:boolean):string{
   const base=showProject?(prices?LOAD_LIST_WIDTHS.projectPrices:LOAD_LIST_WIDTHS.project):(prices?LOAD_LIST_WIDTHS.prices:LOAD_LIST_WIDTHS.plain);
@@ -136,7 +134,7 @@ function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:
       :`<span class="ln">${e(s.reference)}</span>${s.supplierReference?`<div class="muted">Supplier ticket ${e(s.supplierReference)}</div>`:''}`;
     const priceCells=prices?`<td class="num wrap">${s.unitPriceCents==null?'<span class="missing">No price recorded</span>':e(priceAsRecorded(s))}</td><td class="num wrap">${s.totalCents==null?missing:e(vatAndTotal(s))}</td>`:'';
     return `<tr><td class="nowrap">${dateCell(s.recordedAt)}</td><td>${number}</td><td>${t(s.itemName)}</td>
-      <td>${company?t(PLANT_COMPANY_LABEL):t(s.partyName)}</td><td>${notRecordedOr(company?s.partyName:d?.customerName)}</td>
+      <td>${notRecordedOr(supplierNameOf(record))}</td><td>${notRecordedOr(company?s.partyName:d?.customerName)}</td>
       <td>${notRecordedOr(driver)}</td><td>${notRecordedOr(d?.truckPlate)}</td><td>${e(s.unitSymbol)}</td><td class="num">${e(formatTotalQuantity(s.quantity,'').trim())}</td>
       ${showProject?`<td>${s.projectName?t(s.projectName):missing}</td>`:''}${priceCells}</tr>`;
   }).join('');

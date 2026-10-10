@@ -24,14 +24,14 @@ const widthSums=(html:string)=>(html.match(/<colgroup>.*?<\/colgroup>/gs)??[]).m
 
 const load=(over:Partial<ConfirmedLoad>):ConfirmedLoad=>({quantityMethod:'direct',id:'l1',transactionNumber:'20261009-A-00127',confirmedAt:'2026-10-09T09:05:00',customerName:'Al Amal Contracting',projectId:'road',projectName:'Highway Link',projectLocation:null,destinationAddress:null,itemName:'Asphalt',itemCode:null,categoryName:'x',
   driverName:'Walid Khoury',truckPlate:'B 884211',requestedQuantityKg:null,emptyWeightKg:null,fullWeightKg:null,netWeightKg:null,conversionName:null,conversionRule:null,directQuantity:1,directUnitName:null,directUnitSymbol:null,outputUnitSymbol:'m³',unitPriceUsd:null,vatRatePercent:null,
-  paymentStatus:'Unpriced',signatureStatus:'Unsigned',signaturePaths:[],notes:null,companyName:'x',companyAddress:null,companyPhone:null,companyEmail:null,companyTaxVatNumber:null,companyReceiptFooter:null,companyLogoUri:null,status:'Active',cancellationReason:null,cancelledAt:null,
+  paymentStatus:'Unpriced',signatureStatus:'Unsigned',signaturePaths:[],notes:null,companyName:'DROMEX S.A.R.L.',companyAddress:null,companyPhone:null,companyEmail:null,companyTaxVatNumber:null,companyReceiptFooter:null,companyLogoUri:null,status:'Active',cancellationReason:null,cancelledAt:null,
   correctionHistory:[],loadNumber:'ASP-00001',convertedQuantity:4.167,billedQuantity:4.167,subtotalUsd:null,vatAmountUsd:null,finalTotalUsd:null,...over} as ConfirmedLoad);
 const change=(field:string)=>({field,originalValue:'a',newValue:'b'});
 const loads=[
   load({correctionHistory:[{correctedAt:'2026-10-09T10:00:00',correctedBy:'Admin',reason:'x',changes:[change('Truck plate'),change('Unit price')]}]}),
   load({id:'l2',loadNumber:'ASP-00003',transactionNumber:'20261008-A-00130',confirmedAt:'2026-10-08T14:30:00',itemName:'Sand',driverName:'R. Haddad',truckPlate:'112233',billedQuantity:12,outputUnitSymbol:'t'}),
   load({id:'l3',status:'Cancelled',cancellationReason:'Duplicate ticket',loadNumber:'ASP-00002',transactionNumber:'20261008-A-00119',billedQuantity:99,outputUnitSymbol:'t'}),
-  load({id:'l4',loadNumber:null,transactionNumber:'20260612-A-00041',confirmedAt:'2026-06-12T10:00:00',itemName:'Sand',driverName:'',truckPlate:'',billedQuantity:18.5,outputUnitSymbol:'t'}),
+  load({id:'l4',loadNumber:null,companyName:'Old Plant Name Ltd',transactionNumber:'20260612-A-00041',confirmedAt:'2026-06-12T10:00:00',itemName:'Sand',driverName:'',truckPlate:'',billedQuantity:18.5,outputUnitSymbol:'t'}),
 ];
 
 describe('the Load History export',()=>{
@@ -51,8 +51,11 @@ describe('the Load History export',()=>{
     expect(widthSums(html)).toEqual([100]);
     expect(html).toContain('table-layout:fixed');expect(html).toContain('thead{display:table-header-group}');expect(html).toContain('overflow-wrap:anywhere');
   });
-  it('reads Plant Company as the supplier, Not recorded for a missing driver or plate, and Legacy load for an old load',()=>{
-    expect(html).toContain('<span dir="auto">Plant Company</span>');
+  it('reads the real plant company name as the supplier (as issued on each load), Not recorded for a missing driver or plate, and Legacy load for an old load',()=>{
+    expect(html).toContain('<span dir="auto">DROMEX S.A.R.L.</span>');
+    expect(html).toContain('<span dir="auto">Old Plant Name Ltd</span>');
+    expect(html).not.toContain('Plant Company');
+    expect(loadHistoryRows([load({companyName:' '})],'Current Plant SARL')[0]!.supplier).toBe('Current Plant SARL');
     expect(html.match(/<span class="missing">Not recorded<\/span>/g)?.length).toBe(2);
     expect(html).toContain('<span class="legacy">Legacy load</span>');
   });
@@ -180,7 +183,7 @@ describe('the Header company picker is on every export that can have one',()=>{
   });
   it('shows the Supplier, Driver and Truck plate strip on each Company Loads row, and the picker on the load detail',()=>{
     const screen=read('src/ui/screens/LoadHistoryScreen.tsx');
-    for(const text of ['SUPPLIER','DRIVER','TRUCK PLATE','PLANT_COMPANY_LABEL','NOT_RECORDED','<LoadHistoryExport','<HeaderCompanyPicker','applyHeaderCompany(record,header)'])expect(screen).toContain(text);
+    for(const text of ['SUPPLIER','DRIVER','TRUCK PLATE','record.companyName','NOT_RECORDED','<LoadHistoryExport','<HeaderCompanyPicker','applyHeaderCompany(record,header)'])expect(screen).toContain(text);
     // The two hub cards of the Load History start screen are unchanged.
     expect(screen).toContain('Open Company Loads');
     expect(screen).toContain('Open Supplier Loads');

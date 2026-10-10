@@ -21,11 +21,21 @@ export function customerBox(customer:{name:string;isOwnCompany:boolean}|null|und
   return {label:customer.name.trim(),note:null};
 }
 
+/** The supplier of one record: the issuing company's real name on an own load, the outside supplier on an incoming one; null when unknown. */
+export function supplierNameOf(record:{snapshot:Pick<RecordSnapshot,'recordType'|'partyName'>;details?:{supplierName?:string|null}}):string|null{
+  const issued=record.details?.supplierName?.trim();
+  if(issued)return issued;
+  return record.snapshot.recordType==='supplier_load'?record.snapshot.partyName.trim()||null:null;
+}
+
 export type SupplierBox={label:string;names:string[]};
 
-/** The suppliers behind a project's Active Supplier Loads in the exported period; company loads never count as a supplier. */
-export function supplierBox(records:readonly {snapshot:Pick<RecordSnapshot,'recordType'|'partyName'>}[]):SupplierBox{
-  const names=[...new Set(records.filter(record=>record.snapshot.recordType==='supplier_load').map(record=>record.snapshot.partyName.trim()).filter(Boolean))]
+/**
+ * Whoever issued the material in the exported period: the Plant Company by its real name (as issued on each own
+ * load) and every outside supplier. It never depends on the Header company picker.
+ */
+export function supplierBox(records:readonly {snapshot:Pick<RecordSnapshot,'recordType'|'partyName'>;details?:{supplierName?:string|null}}[]):SupplierBox{
+  const names=[...new Set(records.map(record=>supplierNameOf(record)).filter((name):name is string=>Boolean(name)))]
     .sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base',numeric:true}));
   if(!names.length)return {label:'None in this period',names:[]};
   if(names.length===1)return {label:names[0]!,names:[]};

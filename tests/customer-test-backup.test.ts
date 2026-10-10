@@ -81,13 +81,13 @@ describe('customer and totals test backup',()=>{
       const highway=await totals.listRecords({...emptyCompanyTotalsFilters(),projectKey:'test_project_highway'});
       expect(highway.some(record=>record.status==='Cancelled')).toBe(false);
       expect(highway.some(record=>record.snapshot.loadNumber==='ASP-00003')).toBe(false);
-      expect(supplierBox(highway)).toEqual({label:'Multiple suppliers (2)',names:['Cedar Aggregates','Saad Quarry']});
+      expect(supplierBox(highway)).toEqual({label:'Multiple suppliers (3)',names:['Cedar Aggregates','DROMEX Asphalt Co.','Saad Quarry']});
       expect(highway.find(record=>record.snapshot.loadNumber===null&&record.snapshot.recordType==='company_load')).toBeDefined();
       expect(highway.find(record=>record.snapshot.loadNumber==='ASP-00002')!.details!.destination).toBeNull();
       expect(customerBox({name:'DROMEX Asphalt Co.',isOwnCompany:true}).label).toBe('Internal project');
       // The internal project has one supplier.
       const yard=await totals.listRecords({...emptyCompanyTotalsFilters(),projectKey:'test_project_yard'});
-      expect(supplierBox(yard)).toEqual({label:'Saad Quarry',names:[]});
+      expect(supplierBox(yard)).toEqual({label:'Multiple suppliers (2)',names:['DROMEX Asphalt Co.','Saad Quarry']});
       // Customer filter and No customer / Internal.
       const choices=await totals.listCustomerChoices({fromDate:'',toDate:''});
       expect(choices.map(choice=>choice.name)).toEqual(['Al Amal Contracting','شركة النور للمقاولات','No customer / Internal']);

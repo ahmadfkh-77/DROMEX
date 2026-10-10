@@ -97,7 +97,7 @@ export class SqliteCompanyTotalsRepository implements CompanyTotalsRepository{
     const rows=await this.db.getAllAsync<Row>(`${RECORDS}
       SELECT recs.record_type, recs.item_key, COALESCE(MAX(ci.name), MAX(recs.item_name)) item_name,
         ${PROJECT_KEY} project_key, COALESCE(MAX(p.name), MAX(recs.project_name)) project_name,
-        ${SUPPLIER_KEY} supplier_key, COALESCE(MAX(s.name), MAX(recs.party_name)) supplier_name,
+        ${SUPPLIER_KEY} supplier_key, COALESCE(MAX(s.name), MAX(CASE WHEN recs.record_type = 'supplier_load' THEN recs.party_name ELSE recs.supplier_name END)) supplier_name,
         recs.unit_key, MAX(recs.unit_symbol) unit_symbol, SUM(recs.quantity) quantity, COUNT(*) record_count,
         SUM(recs.total_cents) value_cents, COUNT(recs.unit_price_cents) priced_count,
         SUM(recs.inclusion_state = 'included') included_count, SUM(recs.inclusion_state = 'in_draft') draft_count,
@@ -109,7 +109,7 @@ export class SqliteCompanyTotalsRepository implements CompanyTotalsRepository{
     return rows.map(row=>{
       const company=row.record_type==='company_load';const projectKey=text(row.project_key);
       return {source:company?'company_delivery':'supplier_delivery',itemKey:text(row.item_key),itemName:text(row.item_name),projectKey,projectName:projectKey===NO_PROJECT_KEY?NO_PROJECT_LABEL:projectKey.startsWith('site:')?`${text(row.project_name)} (Site)`:text(row.project_name),
-        supplierKey:text(row.supplier_key),supplierName:company?COMPANY_SUPPLIER_LABEL:text(row.supplier_name),unitKey:text(row.unit_key),unitSymbol:text(row.unit_symbol),
+        supplierKey:text(row.supplier_key),supplierName:company?(text(row.supplier_name)||COMPANY_SUPPLIER_LABEL):text(row.supplier_name),unitKey:text(row.unit_key),unitSymbol:text(row.unit_symbol),
         quantity:number(row.quantity),recordCount:Number(row.record_count),valueCents:row.value_cents==null?null:Number(row.value_cents),pricedCount:Number(row.priced_count),inclusion:inclusionCounts(row)};
     });
   }
@@ -210,6 +210,6 @@ export class SqliteCompanyTotalsRepository implements CompanyTotalsRepository{
     const links=await readDocumentLinks(this.db,rows.map(row=>row.record_key));
     return rows.map(row=>{const own:DocumentLink[]=links[row.record_key]??[];const inclusion:InclusionState=deriveInclusion(own);const snapshot:RecordSnapshot=snapshotFromRow(row);
       return {key:row.record_key,snapshot,seriesId:row.series_id,status:row.record_status,cancellationReason:row.cancellation_reason??null,correctionCount:Number(row.correction_count??0),links:own,inclusion,
-        details:{destination:row.destination?.trim()||null,driverName:row.driver_name?.trim()||null,truckPlate:row.truck_plate?.trim()||null,deliveredBy:row.delivery_method??null,customerName:row.customer_name?.trim()||null}};});
+        details:{destination:row.destination?.trim()||null,driverName:row.driver_name?.trim()||null,truckPlate:row.truck_plate?.trim()||null,deliveredBy:row.delivery_method??null,customerName:row.customer_name?.trim()||null,supplierName:row.supplier_name?.trim()||null}};});
   }
 }

@@ -16,10 +16,10 @@ const snapshot=(over:Partial<RecordSnapshot>):RecordSnapshot=>({
   projectId:'p1',projectName:'Highway Link',partyId:'c1',partyName:'Al Amal Contracting',recordedAt:'2026-10-05T09:05:00',enteredAt:null,unitPriceCents:8200,priceBasis:'per_unit',subtotalCents:151700,
   vatRateBasisPoints:1100,vatCents:16687,totalCents:168387,supplierReference:null,...over});
 const record=(over:Partial<RecordSnapshot>,extra:Partial<CompanyTotalsRecord>={}):CompanyTotalsRecord=>({key:`k:${over.recordId??'r1'}`,snapshot:snapshot(over),seriesId:null,status:'Active',cancellationReason:null,correctionCount:0,links:[],inclusion:{...emptyInclusion()} as never,
-  details:{destination:'Zahle, km 12',driverName:'R. Haddad',truckPlate:'112233',deliveredBy:null},...extra});
+  details:{destination:'Zahle, km 12',driverName:'R. Haddad',truckPlate:'112233',deliveredBy:null,supplierName:'DROMEX S.A.R.L.'},...extra});
 
 const company1=record({recordId:'c1'});
-const company2=record({recordId:'c2',reference:'20261005-A-00124',loadNumber:'ASP-00002',quantity:18,recordedAt:'2026-10-05T10:15:00',unitPriceCents:null,totalCents:null,vatCents:null},{details:{destination:null,driverName:'K. Nasr',truckPlate:'445566',deliveredBy:null}});
+const company2=record({recordId:'c2',reference:'20261005-A-00124',loadNumber:'ASP-00002',quantity:18,recordedAt:'2026-10-05T10:15:00',unitPriceCents:null,totalCents:null,vatCents:null},{details:{destination:null,driverName:'K. Nasr',truckPlate:'445566',deliveredBy:null,supplierName:'Old Plant Name Ltd'}});
 const legacy=record({recordId:'c0',reference:'20260612-A-00041',loadNumber:null,loadNumberSeriesName:null,itemName:'Asphalt, Binder',quantity:20,recordedAt:'2026-06-12T14:20:00'});
 const arabic=record({recordId:'c3',reference:'20261005-A-00125',loadNumber:'AGG-00003',loadNumberSeriesName:'Aggregates',itemName:'Sand',unitKey:'m3',unitSymbol:'m³',quantity:12,partyName:'شركة النور للمقاولات',recordedAt:'2026-10-05T11:40:00'});
 const supplierA=record({recordId:'s1',recordType:'supplier_load',reference:'SL-000212',loadNumber:null,loadNumberSeriesName:null,itemName:'Gravel 3/4',partyName:'Saad Quarry',quantity:22,supplierReference:'T-4471',recordedAt:'2026-10-03T07:50:00'},{details:{destination:null,driverName:'M. Saad',truckPlate:'778899',deliveredBy:'supplier'}});
@@ -39,9 +39,12 @@ describe('Customer and Supplier boxes',()=>{
     expect(customerBox({name:'  ',isOwnCompany:false}).label).toBe('Not recorded');
   });
   it('names one supplier, lists several with a count, and says None in this period',()=>{
-    expect(supplierBox([company1,supplierA])).toEqual({label:'Saad Quarry',names:[]});
+    expect(supplierBox([supplierA])).toEqual({label:'Saad Quarry',names:[]});
     expect(supplierBox([supplierA,supplierB,supplierA])).toEqual({label:'Multiple suppliers (2)',names:['Saad Quarry','محاجر الشمال']});
-    expect(supplierBox([company1,company2])).toEqual({label:'None in this period',names:[]});
+    expect(supplierBox([company1,supplierA])).toEqual({label:'Multiple suppliers (2)',names:['DROMEX S.A.R.L.','Saad Quarry']});
+    expect(supplierBox([company1,company1])).toEqual({label:'DROMEX S.A.R.L.',names:[]});
+    expect(supplierBox([company1,company2])).toEqual({label:'Multiple suppliers (2)',names:['DROMEX S.A.R.L.','Old Plant Name Ltd']});
+    expect(supplierBox([{snapshot:company1.snapshot}])).toEqual({label:'None in this period',names:[]});
     expect(supplierBox([])).toEqual({label:'None in this period',names:[]});
   });
 });
@@ -79,16 +82,17 @@ describe('Project Totals PDF',()=>{
   });
   it('shows the two boxes, the project row, and several suppliers by name',()=>{
     expect(plain).toContain('class="two"');
-    expect(plain).toContain('Multiple suppliers (2)');
+    expect(plain).toContain('Multiple suppliers (4)');
     expect(plain).toContain('Saad Quarry');
+    expect(plain).toContain('<div class="muted"><span dir="auto">DROMEX S.A.R.L.</span> · ');
     expect(plain).toContain('محاجر الشمال');
     expect(plain).toContain('Highway Link');
     expect(plain).toContain('Zahle');
   });
-  it('reads Internal project on the own company and None in this period without suppliers',()=>{
+  it('reads Internal project on the own company and names the plant company as the supplier of its own loads',()=>{
     const html=buildTotalsHtml({...base,includePrices:false,project:project([company1],customerBox({name:'DROMEX Asphalt Co.',isOwnCompany:true}))});
     expect(html).toContain('<div class="subtitle"><span dir="auto">Internal project</span></div>');
-    expect(html).toContain('None in this period');
+    expect(html).toContain('<span class="box-label">Supplier</span><b><span dir="auto">DROMEX S.A.R.L.</span></b>');
     expect(html).not.toContain('Supplier loads delivered');
   });
   it('keeps company loads and supplier loads in separate labelled sections',()=>{
@@ -101,7 +105,8 @@ describe('Project Totals PDF',()=>{
     expect(plain).toContain('778899');
   });
   it('lists each load with its load number next to its transaction number, in separate Supplier, Customer, Driver and Truck plate columns',()=>{
-    for(const text of ['ASP-00001','20261005-A-00123','Transaction 20261005-A-00123','ASP series','R. Haddad','112233','AGG-00003','شركة النور للمقاولات','Plant Company'])expect(plain).toContain(text);
+    for(const text of ['ASP-00001','20261005-A-00123','Transaction 20261005-A-00123','ASP series','R. Haddad','112233','AGG-00003','شركة النور للمقاولات','DROMEX S.A.R.L.','Old Plant Name Ltd'])expect(plain).toContain(text);
+    expect(plain).not.toContain('Plant Company');
     expect(plain).toContain('<th>Supplier</th><th>Customer</th><th>Driver</th><th>Truck plate</th><th>Unit</th><th class="num">Quantity</th>');
     expect(plain).not.toContain('Supplier or customer');
     expect(plain).toContain('<td class="num">18.5</td>');
@@ -188,5 +193,16 @@ describe('company load reference',()=>{
     expect(companyLoadReference({reference:'20261005-A-00125',loadNumber:'AGG-00003'})).toBe('Transaction 20261005-A-00125 · AGG series');
     expect(companyLoadReference({reference:'20261005-A-00130',loadNumber:'ASP-2026-001'})).toBe('Transaction 20261005-A-00130 · ASP-2026 series');
     expect(companyLoadReference({reference:'20260612-A-00041',loadNumber:null})).toBe('Transaction 20260612-A-00041');
+  });
+});
+
+describe('the supplier never depends on the Header company',()=>{
+  it('keeps the plant company as supplier when the Project Company heads the PDF',()=>{
+    const html=buildTotalsHtml({...base,companyName:'Al Amal Contracting',includePrices:false,project:project([company1,supplierA])});
+    const plain=html.replace(/\s+/g,' ');
+    expect(plain).toContain('<td><span dir="auto">DROMEX S.A.R.L.</span></td>');
+    expect(plain).toContain('<td><span dir="auto">Saad Quarry</span></td>');
+    expect(plain).toContain('Multiple suppliers (2)');
+    expect(plain).not.toContain('Plant Company');
   });
 });
