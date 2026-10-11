@@ -11,6 +11,7 @@ import {
   type ProjectCompanyProfile,
 } from '../../domain/companyHeaders';
 import {signerSnapshot, type SignerDisplay, type SignerSnapshot} from '../../domain/documentSigners';
+import {planLoadNameUpdate, validateLoadNameUpdate, type CompanyDetails, type LoadNameStatus, type LoadNameUpdateInput, type LoadNameUpdateRecord} from '../../domain/loadCompanyName';
 import type {CompanyHeaderRepository} from './CompanyHeaderRepository';
 import {defaultDeliverySignature, signerFromRow} from './SqliteDocumentSignerRepository';
 
@@ -192,6 +193,64 @@ export class SqliteCompanyHeaderRepository implements CompanyHeaderRepository {
   }
 
   private signerFor(signerId: string, display: SignerDisplay): Promise<SignerSnapshot | null> { return signerCopy(this.db, signerId, display); }
+
+  /** The Plant Company name and the details a load saves with it. */
+  private async plantNameAndDetails(): Promise<{ name: string; details: CompanyDetails }> {
+    const row = await this.db.getFirstAsync<{ company_name: string; address: string | null; phone: string | null; email: string | null; tax_vat_number: string | null; receipt_footer: string | null }>(
+      "SELECT company_name, address, phone, email, tax_vat_number, receipt_footer FROM company_settings WHERE id = 'company'");
+    return { name: row?.company_name?.trim() ?? '', details: { address: row?.address ?? null, phone: row?.phone ?? null, email: row?.email ?? null, taxVatNumber: row?.tax_vat_number ?? null, receiptFooter: row?.receipt_footer ?? null } };
+  }
+
+  private async loadFacts() {
+    const rows = await this.db.getAllAsync<{ id: string; company_name: string | null; company_address: string | null; company_phone: string | null; company_email: string | null; company_tax_vat_number: string | null; company_receipt_footer: string | null }>(
+      'SELECT id, company_name, company_address, company_phone, company_email, company_tax_vat_number, company_receipt_footer FROM loads');
+    return rows.map((row) => ({ id: row.id, companyName: row.company_name ?? '', address: row.company_address, phone: row.company_phone, email: row.company_email, taxVatNumber: row.company_tax_vat_number, receiptFooter: row.company_receipt_footer }));
+  }
+
+  /** How many of my loads carry another name than the current Plant Company, by name. Read-only. */
+  async getLoadNameStatus(includeDetails: boolean): Promise<LoadNameStatus> {
+    const plant = await this.plantNameAndDetails();
+    return planLoadNameUpdate(await this.loadFacts(), plant.name, plant.details, includeDetails).status;
+  }
+
+  /**
+   * The one explicit update of the name (and, when asked, the address, phone, email, Tax/VAT number and receipt footer) saved
+   * on my loads, cancelled and archived loads included. All or nothing, with one audit row per old name. It touches no other column.
+   */
+  async updateLoadCompanyName(input: LoadNameUpdateInput): Promise<{ updated: number; records: LoadNameUpdateRecord[] }> {
+    const plant = await this.plantNameAndDetails();
+    const issues = validateLoadNameUpdate(plant.name, input);
+    if (issues.length) throw new Error(issues.join('\n'));
+    const note = input.note.trim().replace(/\s+/g, ' ') || null;
+    const records: LoadNameUpdateRecord[] = [];
+    let updated = 0;
+    await this.db.withTransactionAsync(async () => {
+      const plan = planLoadNameUpdate(await this.loadFacts(), plant.name, plant.details, input.includeDetails);
+      if (!plan.ids.length) throw new Error('All loads already carry this name.');
+      const now = new Date().toISOString();
+      for (const id of plan.ids) {
+        if (input.includeDetails) {
+          await this.db.runAsync('UPDATE loads SET company_name = ?, company_address = ?, company_phone = ?, company_email = ?, company_tax_vat_number = ?, company_receipt_footer = ? WHERE id = ?',
+            plant.name, plant.details.address, plant.details.phone, plant.details.email, plant.details.taxVatNumber, plant.details.receiptFooter, id);
+        } else await this.db.runAsync('UPDATE loads SET company_name = ? WHERE id = ?', plant.name, id);
+        updated += 1;
+      }
+      for (const group of plan.status.groups) {
+        const id = `name_update_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        await this.db.runAsync('INSERT INTO load_company_name_updates (id, updated_at, old_name, new_name, loads_count, details_included, note) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          id, now, group.oldName, plant.name, group.count, input.includeDetails ? 1 : 0, note);
+        records.push({ id, updatedAt: now, oldName: group.oldName, newName: plant.name, loadsCount: group.count, detailsIncluded: input.includeDetails, note, detailsOnly: group.detailsOnly });
+      }
+      await this.enqueue('loadCompanyNameUpdate', records[0]!.id, { loads: updated, newName: plant.name, includeDetails: input.includeDetails, groups: records.map((record) => ({ oldName: record.oldName, count: record.loadsCount })), updatedAt: now });
+    });
+    return { updated, records };
+  }
+
+  async listLoadNameUpdates(): Promise<LoadNameUpdateRecord[]> {
+    const rows = await this.db.getAllAsync<{ id: string; updated_at: string; old_name: string; new_name: string; loads_count: number; details_included: number; note: string | null }>(
+      'SELECT id, updated_at, old_name, new_name, loads_count, details_included, note FROM load_company_name_updates ORDER BY updated_at DESC, old_name');
+    return rows.map((row) => ({ id: row.id, updatedAt: row.updated_at, oldName: row.old_name, newName: row.new_name, loadsCount: row.loads_count, detailsIncluded: row.details_included === 1, note: row.note, detailsOnly: row.old_name === row.new_name }));
+  }
 
   private async enqueue(entityType: string, entityId: string, payload: unknown): Promise<void> {
     await this.db.runAsync("INSERT INTO sync_outbox (entity_type, entity_id, operation, payload_json, created_at) VALUES (?, ?, 'upsert', ?, ?)",

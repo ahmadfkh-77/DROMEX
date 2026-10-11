@@ -5,13 +5,14 @@ import type {CompanyHeaderRepository} from '../../data/repositories/CompanyHeade
 import type {ProfileRepository} from '../../data/repositories/ProfileRepository';
 import {projectCompanyState,type ProjectCompanyProfile} from '../../domain/companyHeaders';
 import {AppButton,AppCard,AppPage,Feedback,PageHeader} from '../components/AppPrimitives';
+import {LoadCompanyNameCard} from '../components/LoadCompanyNameCard';
 import {colors} from '../theme';
 
 /**
  * Settings › Company setups. Two companies can head a PDF. The Plant Company is the existing Company
  * profile (nothing moved or copied); the Project Company is a customer that owns the project.
  */
-export function CompanySetupsScreen({profiles,headers,onBack,onOpenPlant,onOpenProject}:{profiles:ProfileRepository;headers:CompanyHeaderRepository;onBack:()=>void;onOpenPlant:()=>void;onOpenProject:()=>void}){
+export function CompanySetupsScreen({profiles,headers,onBack,onOpenPlant,onOpenProject,onOpenBackup}:{profiles:ProfileRepository;headers:CompanyHeaderRepository;onBack:()=>void;onOpenPlant:()=>void;onOpenProject:()=>void;onOpenBackup?:()=>void}){
   const[status,setStatus]=useState<'loading'|'error'|'ready'>('loading');
   const[plantName,setPlantName]=useState('');
   const[project,setProject]=useState<ProjectCompanyProfile|null>(null);
@@ -34,6 +35,7 @@ export function CompanySetupsScreen({profiles,headers,onBack,onOpenPlant,onOpenP
       <HubCard tone="project" marker="02" badge={state==='not_set_up'?'NOT SET UP':state==='customer_archived'?'CUSTOMER ARCHIVED':'LINKED'} eyebrow="PROJECT COMPANY" title={project?.customerName??'Project owner'}
         hint="The project owner, linked to one of your existing customers. It does not make receipts." open={state==='not_set_up'?'Set up Project Company':'Open Project Company'} onPress={onOpenProject}/>
       <AppCard tone="cream" title="Tax and VAT" hint="The VAT percentage and the DEMO record switch stay in the Plant Company screen, exactly where they are today."><View/></AppCard>
+      <LoadCompanyNameCard headers={headers} plantName={plantName} onOpenBackup={onOpenBackup}/>
     </>:null}
   </AppPage>;
 }

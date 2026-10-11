@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 55;
+export const DATABASE_VERSION = 56;
 
 type TableColumn = { name: string };
 
@@ -2075,6 +2075,26 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
         VALUES ('steel', 7850, '[8,10,12,14,16,18,20,25,32]', '2026-10-11T00:00:00.000Z');
     `);
     currentVersion = 55;
+  }
+
+  if (currentVersion === 55) {
+    // The name on my loads. A company load saves the company name (and details) it was issued with. When the Plant Company is
+    // renamed, the owner can update that saved name on the loads in one explicit, confirmed action; this table is its audit
+    // trail: one row per old name, with the new name, how many loads, whether the address and details were included, and the
+    // owner's note. Purely additive: it is empty until that action is used, and no load is touched by the migration.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS load_company_name_updates (
+        id TEXT PRIMARY KEY NOT NULL,
+        updated_at TEXT NOT NULL,
+        old_name TEXT NOT NULL,
+        new_name TEXT NOT NULL,
+        loads_count INTEGER NOT NULL CHECK (loads_count > 0),
+        details_included INTEGER NOT NULL DEFAULT 0 CHECK (details_included IN (0, 1)),
+        note TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_load_company_name_updates_at ON load_company_name_updates(updated_at DESC);
+    `);
+    currentVersion = 56;
   }
 
 

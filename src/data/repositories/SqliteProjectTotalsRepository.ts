@@ -67,7 +67,7 @@ export class SqliteProjectTotalsRepository implements ProjectTotalsRepository{
     const [loadDates,loadParams]=within("date(l.confirmed_at,'localtime')",range);
     const companyRows=await this.db.getAllAsync<Row>(`SELECT ${keyOf('l.item_id','l.item_name')} item_key, COALESCE(MAX(ci.name), MAX(l.item_name)) item_name,
         COALESCE(${LOAD_UNIT}, 'symbol:' || l.output_unit_symbol) unit_key, MAX(l.output_unit_symbol) unit_symbol,
-        COALESCE(NULLIF(trim(MAX(l.company_name)),''), (SELECT NULLIF(trim(cs.company_name),'') FROM company_settings cs WHERE cs.id = 'company')) supplier_name,
+        COALESCE((SELECT NULLIF(trim(cs.company_name),'') FROM company_settings cs WHERE cs.id = 'company'), NULLIF(trim(MAX(l.company_name)),'')) supplier_name,
         SUM(l.billed_quantity) quantity, COUNT(*) record_count
       FROM loads l LEFT JOIN conversion_options c ON c.id = l.conversion_id LEFT JOIN catalog_items ci ON ci.id = l.item_id
       WHERE l.project_id = ? AND l.status = 'Active' AND l.is_archived = 0 AND ${loadDates}

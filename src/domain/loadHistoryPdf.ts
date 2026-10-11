@@ -6,7 +6,7 @@ import { plantSupplierName } from './loadSupplier';
 /**
  * Phase 5. The Load History export: the company loads a person is looking at in Load History, as a list
  * PDF. Only Active loads are ever listed or counted; a cancelled load stays in the app, marked, and its number is
- * never reused. The Supplier column reads the Plant Company's real name as issued on the load (see plantSupplierName).
+ * never reused. The Supplier column reads the CURRENT Plant Company name (see plantSupplierName); the name saved on a load is used only when none is set.
  */
 export const NOT_RECORDED = 'Not recorded';
 
@@ -64,7 +64,7 @@ export function loadHistoryRows(loads: ConfirmedLoad[], currentPlantName?: strin
         loadNumberLabel: load.loadNumber ? loadNumberLabel(load.loadNumber) : 'Legacy load',
         transaction: load.transactionNumber,
         item: load.itemName,
-        supplier: plantSupplierName(load.companyName, currentPlantName) ?? NOT_RECORDED,
+        supplier: plantSupplierName(currentPlantName, load.companyName) ?? NOT_RECORDED,
         customer: load.customerName,
         driver: load.driverName?.trim() || null,
         truckPlate: load.truckPlate?.trim() || null,

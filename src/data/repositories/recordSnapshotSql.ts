@@ -23,7 +23,7 @@ export const COMPANY_LOAD_RECORDS=`SELECT 'company_load' record_type, l.id recor
     NULL supplier_reference, COALESCE(l.status,'Active') record_status, l.is_archived archived, date(l.confirmed_at,'localtime') record_day, l.payment_status,
     l.cancellation_reason, ${historyCount('l.correction_history_json')} correction_count,
     COALESCE(l.project_location, l.destination_address) destination, l.driver_name, l.truck_plate, NULL delivery_method, l.customer_name customer_name,
-    COALESCE(NULLIF(trim(l.company_name),''), (SELECT NULLIF(trim(cs.company_name),'') FROM company_settings cs WHERE cs.id = 'company')) supplier_name
+    COALESCE((SELECT NULLIF(trim(cs.company_name),'') FROM company_settings cs WHERE cs.id = 'company'), NULLIF(trim(l.company_name),'')) supplier_name
   FROM loads l LEFT JOIN conversion_options c ON c.id = l.conversion_id`;
 
 /** Supplier Loads (supplier side). */
@@ -52,7 +52,7 @@ export type RecordRow={
   destination?:string|null;driver_name?:string|null;truck_plate?:string|null;delivery_method?:'company'|'supplier'|null;
   /** The customer of a company load, or of the project a Supplier Load was delivered to (null when it has none). */
   customer_name?:string|null;
-  /** Who issued the material: the Plant Company's real name on a company load (as issued), the outside supplier's name on a Supplier Load. */
+  /** Who issued the material: the CURRENT Plant Company name on a company load (the name saved on the load only when no Plant Company name is set), the outside supplier's name on a Supplier Load. */
   supplier_name?:string|null;
 };
 
