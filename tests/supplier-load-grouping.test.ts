@@ -13,6 +13,7 @@ function load(item:[string|null,string],supplier:[string|null,string],quantity:n
     itemId:item[0],itemName:item[1],supplierId:supplier[0],supplierName:supplier[1],unitId:unit[0],unitSymbol:unit[1],quantity,
     deliveryMethod:'supplier',deliveryLabel:'Supplier Delivering',truckPlate:null,supplierTicketNumber:null,notes:null,...extra};
 }
+const noWbr=(html:string)=>html.replace(/<wbr>/g,'');
 const ASPHALT:[string,string]=['item_asphalt','Asphalt'],READY:[string,string]=['item_ready','Ready Mix'];
 const A:[string,string]=['sup_a','Alpha Asphalt'],B:[string,string]=['sup_b','Beta Quarry'],C:[string,string]=['sup_c','Cedar Concrete'];
 const TON:[string,string]=['unit_ton','t'],M3:[string,string]=['unit_m3','m³'];
@@ -69,8 +70,8 @@ const LONG='Asphalt Concrete Wearing Course Type B with Polymer-Modified Binder 
 
 describe('Daily Report PDF Supplier Loads',()=>{
   const loads=[load(['item_long',LONG],A,20,TON,{finalTotalUsd:500}),load(['item_long',LONG],['sup_ar','مقالع الجنوب <ش.م.ل>'],10,TON),load(READY,C,6,M3,{deliveryMethod:'company',deliveryLabel:'Omar Haddad',truckPlate:'B123',supplierTicketNumber:'T-9'})];
-  const html=buildProjectReportHtmlWithWaste(base,project,[],loads,[],[],company,null,[]);
-  const priced=buildProjectReportHtmlWithWaste(base,project,[],loads,[],[],company,null,[],true);
+  const html=noWbr(buildProjectReportHtmlWithWaste(base,project,[],loads,[],[],company,null,[]));
+  const priced=noWbr(buildProjectReportHtmlWithWaste(base,project,[],loads,[],[],company,null,[],true));
   it('puts each item heading inside the repeating table heading, so it follows the item across page breaks',()=>{
     expect(html).toMatch(new RegExp(`<thead><tr class="item-heading"><th colspan="\\d+" dir="auto">${LONG}</th></tr><tr><th>Reference</th>`));
     expect(html).toMatch(/<thead><tr class="item-heading"><th colspan="\d+" dir="auto">Ready Mix<\/th><\/tr>/);
@@ -97,7 +98,7 @@ describe('Daily Report PDF Supplier Loads',()=>{
     expect((html.match(/<tbody class="supplier-group">/g)??[]).length).toBe(3);
   });
   it('shows a clear empty state and never one grand total across units',()=>{
-    expect(buildProjectReportHtmlWithWaste(base,project,[],[],[],[],company,null,[])).toContain('No project-linked supplier loads for this date');
+    expect(noWbr(buildProjectReportHtmlWithWaste(base,project,[],[],[],[],company,null,[]))).toContain('No project-linked supplier loads for this date');
     expect(html).not.toMatch(/36 t|36 m³|Grand total/);
   });
 });
@@ -120,18 +121,20 @@ describe('Daily Report workbook Supplier Loads',()=>{
 
 describe('Supplier Loads PDF physical-review regressions',()=>{
   it('prints decimal quantities in full: 22.4 t, never 22. t',()=>{
-    const html=buildProjectReportHtmlWithWaste(base,project,[],[load(ASPHALT,A,22.4,TON),load(ASPHALT,A,21.9,TON)],[],[],company,null,[]);
+    const html=noWbr(buildProjectReportHtmlWithWaste(base,project,[],[load(ASPHALT,A,22.4,TON),load(ASPHALT,A,21.9,TON)],[],[],company,null,[]));
     expect(html).toContain('<td class="number">22.4 t</td>');
     expect(html).toContain('<td class="number">44.3 t</td>');
     expect(html).not.toMatch(/\d\. t</);
   });
   it('gives every item table the same fixed columns so their quantities line up down the page',()=>{
-    const html=buildProjectReportHtmlWithWaste(base,project,[],[load(ASPHALT,A,1,TON),load(READY,C,2,M3)],[],[],company,null,[]);
-    expect((html.match(/<colgroup><col style="width:24%"><col style="width:30%"><col style="width:16%"><col style="width:14%"><col style="width:16%"><\/colgroup>/g)??[]).length).toBe(2);
+    const html=noWbr(buildProjectReportHtmlWithWaste(base,project,[],[load(ASPHALT,A,1,TON),load(READY,C,2,M3)],[],[],company,null,[]));
+    const groups=html.match(/<table class="table-accent-supplier supplier-table"><colgroup>.*?<\/colgroup>/g)??[];
+    expect(groups.length).toBe(2);expect(new Set(groups.map(group=>group.match(/<colgroup>.*<\/colgroup>/)![0])).size).toBe(1);
+    expect([...groups[0]!.matchAll(/width:(\d+)%/g)].reduce((sum,match)=>sum+Number(match[1]),0)).toBe(100);
     expect(html).toMatch(/\.supplier-table\{[^}]*table-layout:fixed/);
   });
   it('shows Unpriced, not a false $0.00, when a supplier or item has no priced load',()=>{
-    const html=buildProjectReportHtmlWithWaste(base,project,[],[load(ASPHALT,A,5,TON,{finalTotalUsd:null})],[],[],company,null,[],true);
+    const html=noWbr(buildProjectReportHtmlWithWaste(base,project,[],[load(ASPHALT,A,5,TON,{finalTotalUsd:null})],[],[],company,null,[],true));
     const supplierSection=html.slice(html.indexOf('<h3>Supplier Loads</h3>'),html.indexOf('<h2>Fuel used</h2>'));
     expect(supplierSection).not.toContain('$0.00');
     expect(html).toContain('Supplier subtotal · Alpha Asphalt</td><td class="number">5 t</td><td class="number">Unpriced</td>');

@@ -1,4 +1,5 @@
 import type {DieselBatchReport} from '../domain/dieselBatchReport';
+import {colgroup,columnWidths} from './pdfColumns';
 
 /**
  * DEC-505, Screen F. The Diesel Batch Report as printable, searchable A4 HTML. Table headings repeat on
@@ -17,16 +18,26 @@ export function buildDieselBatchReportHtml(report:DieselBatchReport,input:Diesel
   const head=`<tr><th class="c-date">Date</th><th>Equipment</th><th class="c-type">Type</th><th class="c-src">Source</th><th class="num c-l">Litres</th>${prices?'<th class="num c-p">Price / L</th><th class="num c-c">Cost</th>':''}</tr>`;
   // Totals sit under Litres: four columns before it, then the price columns stay empty.
   const span=4,trail=prices?'<td></td><td></td>':'';
+  // Column widths come from the content of every row (see pdfColumns.ts): room for the longest word of each column and exactly 100% in all.
+  const everyRow=report.sections.flatMap(section=>section.destinations.flatMap(destination=>destination.days.flatMap(day=>day.rows)));
+  const gridColgroup=colgroup(columnWidths([
+    {header:'Date',cells:everyRow.map(row=>row.date)},{header:'Equipment',cells:everyRow.map(row=>row.equipment)},{header:'Type',cells:everyRow.map(row=>row.type)},{header:'Source',cells:everyRow.map(row=>row.source)},
+    {header:'Litres',kind:'number',cells:everyRow.map(row=>row.litres)},
+    ...(prices?[{header:'Price / L',kind:'amount' as const,cells:everyRow.map(row=>row.price??'')},{header:'Cost',kind:'amount' as const,cells:everyRow.map(row=>row.cost??'')}]:[]),
+  ]));
   const sections=report.sections.map(section=>`<section><h2 class="band">${e(section.title)}</h2>${section.destinations.map(destination=>`
     <div class="dest"><h3><span class="type">${e(destination.typeLabel)}</span><bdi dir="auto">${e(destination.name)}</bdi></h3>
-    <table class="grid${prices?' priced':''}"><thead>${head}</thead><tbody>${destination.days.map(day=>`${day.rows.map(row=>`<tr><td>${e(row.date)}</td><td><bdi dir="auto">${e(row.equipment)}</bdi></td><td>${e(row.type)}</td><td><bdi dir="auto">${e(row.source)}</bdi></td><td class="num">${e(row.litres)}</td>${prices?`<td class="num">${e(row.price)}</td><td class="num wrap">${e(row.cost)}</td>`:''}</tr>`).join('')}
+    <table class="grid${prices?' priced':''}">${gridColgroup}<thead>${head}</thead><tbody>${destination.days.map(day=>`${day.rows.map(row=>`<tr><td>${e(row.date)}</td><td><bdi dir="auto">${e(row.equipment)}</bdi></td><td>${e(row.type)}</td><td><bdi dir="auto">${e(row.source)}</bdi></td><td class="num">${e(row.litres)}</td>${prices?`<td class="num">${e(row.price)}</td><td class="num wrap">${e(row.cost)}</td>`:''}</tr>`).join('')}
       <tr class="daytotal"><td colspan="${span}">Day total · ${e(day.label)}</td><td class="num">${e(day.totalText)}</td>${trail}</tr>`).join('')}
       <tr class="desttotal"><td colspan="${span}">${e(destination.totalLabel)}</td><td class="num">${e(destination.totalText)}</td>${trail}</tr>
     </tbody></table></div>`).join('')}</section>`).join('');
   // DEC-506. A supplier's delivered diesel: litres only, with the recorded amount of the priced batches when prices are on.
   const supplier=report.supplier;
   const supplierSection=supplier?`<section><h2 class="band">SUPPLIER DIESEL DELIVERIES</h2><div class="dest"><h3><span class="type">SUPPLIER</span><bdi dir="auto">${e(supplier.name)}</bdi></h3>
-    <table class="grid"><colgroup>${(prices?[19,19,16,14,15,17]:[28,30,24,18]).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Date</th><th>Batch</th><th>Invoice</th><th class="num">Litres</th>${prices?'<th class="num">Price / L</th><th class="num">Amount</th>':''}</tr></thead><tbody>${supplier.rows.map(row=>`<tr><td>${e(row.date)}</td><td>${e(row.batchNumber)}</td><td><bdi dir="auto">${e(row.invoice)}</bdi></td><td class="num">${e(row.litres)}</td>${prices?`<td class="num">${e(row.price)}</td><td class="num">${e(row.amount)}</td>`:''}</tr>`).join('')||`<tr><td colspan="${prices?6:4}">No diesel batches from this supplier in these filters.</td></tr>`}
+    <table class="grid">${colgroup(columnWidths([
+      {header:'Date',cells:supplier.rows.map(row=>row.date)},{header:'Batch',cells:supplier.rows.map(row=>row.batchNumber)},{header:'Invoice',cells:supplier.rows.map(row=>row.invoice)},{header:'Litres',kind:'number',cells:supplier.rows.map(row=>row.litres)},
+      ...(prices?[{header:'Price / L',kind:'amount' as const,cells:supplier.rows.map(row=>row.price??'')},{header:'Amount',kind:'amount' as const,cells:supplier.rows.map(row=>row.amount??'')}]:[]),
+    ]))}<thead><tr><th>Date</th><th>Batch</th><th>Invoice</th><th class="num">Litres</th>${prices?'<th class="num">Price / L</th><th class="num">Amount</th>':''}</tr></thead><tbody>${supplier.rows.map(row=>`<tr><td>${e(row.date)}</td><td>${e(row.batchNumber)}</td><td><bdi dir="auto">${e(row.invoice)}</bdi></td><td class="num">${e(row.litres)}</td>${prices?`<td class="num">${e(row.price)}</td><td class="num">${e(row.amount)}</td>`:''}</tr>`).join('')||`<tr><td colspan="${prices?6:4}">No diesel batches from this supplier in these filters.</td></tr>`}
     <tr class="desttotal"><td colspan="3">Supplier total · ${supplier.batchCount} batch${supplier.batchCount===1?'':'es'}</td><td class="num">${e(supplier.totalLitres)}</td>${prices?`<td></td><td class="num">${e(supplier.amount??'')}</td>`:''}</tr></tbody></table>
     <p class="note">${prices?'The amount covers the priced batches only, with VAT as recorded. ':''}${[supplier.unpricedNote,supplier.cancelledNote].filter(Boolean).map(value=>e(value)).join(' · ')}</p></div></section>`:'';
   const litres=(value:number)=>`${value<0?'−':''}${Math.abs(value).toLocaleString('en-US',{maximumFractionDigits:1})} L`;
@@ -45,7 +56,6 @@ bdi{unicode-bidi:isolate}.num{text-align:right;font-variant-numeric:tabular-nums
 table.grid{width:100%;border-collapse:collapse;table-layout:fixed}table.grid thead{display:table-header-group}table.grid tr{break-inside:avoid}
 table.grid th{font-size:7.5pt;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#333;text-align:left;padding:5px 6px;border-bottom:1px solid #777;background:#F2F3F5}table.grid th.num{text-align:right}
 table.grid td{padding:5px 6px;border-bottom:1px solid #DDD;vertical-align:top;overflow-wrap:anywhere}
-.c-date{width:20%}.c-type{width:10%}.c-src{width:26%}.c-l{width:14%}.priced .c-date{width:15%}.priced .c-type{width:8%}.priced .c-src{width:20%}.priced .c-l{width:10%}.c-p{width:12%}.c-c{width:13%}
 tr.daytotal td{font-weight:700;background:#F5F5F5;border-bottom:1px solid #999}tr.desttotal td{font-weight:800;border-top:1.5px solid #111;border-bottom:0;padding-top:7px}
 .final{break-before:page}table.totals{width:100%;border-collapse:collapse;margin-top:8px}table.totals td,table.totals th{padding:6px 8px;border-bottom:1px solid #DDD;text-align:left;vertical-align:top;overflow-wrap:anywhere}table.totals th{font-size:7.5pt;text-transform:uppercase;letter-spacing:.04em;color:#333;background:#F2F3F5}table.totals .strong td{border-top:2px solid #111;font-weight:800}
 .adj{border:1px solid #A07A1E;background:#FFF8E6;padding:7px 9px;margin-top:10px;font-size:8.8pt}.adj b{display:block}.empty{border:1px dashed #999;padding:14px;margin-top:14px;text-align:center}

@@ -2,6 +2,7 @@ import {normalizeCustomResourceSnapshots,type CustomResourceSnapshot} from '../d
 import type {LinkedQuarryLoad} from '../domain/projectReports';
 import {groupSupplierLoads,type UnitQuantity} from '../domain/supplierLoadGroups';
 import {normalizeSupervisorSignoffs,type SupervisorSignoffSnapshot} from '../domain/supervisors';
+import {breakAfterHyphens,colgroup as colgroupOf,columnWidths} from './pdfColumns';
 
 /**
  * Daily Report PDF sections added by DEC-478 and DEC-479, kept out of projectReportWasteTemplate.ts so
@@ -40,14 +41,21 @@ export function supplierLoadsHtml(loads:readonly LinkedQuarryLoad[],includePrice
   const columns=includePrices?6:5;
   if(!groups.length)return `<table class="table-accent-supplier"><tbody><tr><td colspan="${columns}" class="empty">No project-linked supplier loads for this date</td></tr></tbody></table>`;
   const head=`<tr><th>Reference</th><th>Delivery</th><th>Truck</th><th>Ticket</th><th class="number">Quantity</th>${includePrices?'<th class="number">Total</th>':''}</tr>`;
-  // One fixed column set for every item table, so quantities and totals line up from item to item.
-  const widths=includePrices?[20,24,14,12,14,16]:[24,30,16,14,16];
-  const colgroup=`<colgroup>${widths.map(width=>`<col style="width:${width}%">`).join('')}</colgroup>`;
+  // One column set for every item table, so quantities and totals line up from item to item. The widths come from the content of
+  // every load (see pdfColumns.ts): room for the longest word of each column, a load number that may break after a hyphen, exactly 100%.
+  const colgroup=colgroupOf(columnWidths([
+    {header:'Reference',kind:'code',cells:loads.map(load=>load.purchaseNumber)},
+    {header:'Delivery',cells:loads.map(load=>load.deliveryLabel)},
+    {header:'Truck',cells:loads.map(load=>load.truckPlate||'—')},
+    {header:'Ticket',cells:loads.map(load=>load.supplierTicketNumber||'—')},
+    {header:'Quantity',kind:'number',cells:loads.map(load=>`${fmt(load.quantity)} ${load.unitSymbol}`)},
+    ...(includePrices?[{header:'Total',kind:'amount' as const,cells:loads.map(load=>load.finalTotalUsd==null?'Unpriced':money(load.finalTotalUsd))}]:[]),
+  ]));
   const quantityRows=(cls:string,label:string,values:UnitQuantity[],usd:{pricedTotalUsd:number;unpricedCount:number})=>values.map((value,index)=>
     `<tr class="${cls}"><td colspan="4" dir="auto">${e(label)}</td><td class="number">${fmt(value.quantity)} ${e(value.unitSymbol)}</td>${includePrices?`<td class="number">${index===0?pricedLabel(usd,values.reduce((sum,value)=>sum+value.loadCount,0)):''}</td>`:''}</tr>`).join('');
   return groups.map(item=>`<table class="table-accent-supplier supplier-table">${colgroup}<thead><tr class="item-heading"><th colspan="${columns}" dir="auto">${e(item.itemName)}</th></tr>${head}</thead>${
     item.suppliers.map(supplier=>`<tbody class="supplier-group"><tr class="supplier-heading"><td colspan="${columns}" dir="auto">${e(supplier.supplierName)}</td></tr>${
-      supplier.loads.map(load=>`<tr><td>${e(load.purchaseNumber)}</td><td dir="auto">${e(load.deliveryLabel)}</td><td>${load.truckPlate?e(load.truckPlate):'&mdash;'}</td><td>${load.supplierTicketNumber?e(load.supplierTicketNumber):'&mdash;'}</td><td class="number">${fmt(load.quantity)} ${e(load.unitSymbol)}</td>${includePrices?`<td class="number">${load.finalTotalUsd==null?'Unpriced':money(load.finalTotalUsd)}</td>`:''}</tr>`).join('')
+      supplier.loads.map(load=>`<tr><td>${breakAfterHyphens(e(load.purchaseNumber))}</td><td dir="auto">${e(load.deliveryLabel)}</td><td>${load.truckPlate?e(load.truckPlate):'&mdash;'}</td><td>${load.supplierTicketNumber?e(load.supplierTicketNumber):'&mdash;'}</td><td class="number">${fmt(load.quantity)} ${e(load.unitSymbol)}</td>${includePrices?`<td class="number">${load.finalTotalUsd==null?'Unpriced':money(load.finalTotalUsd)}</td>`:''}</tr>`).join('')
     }${quantityRows('subtotal-row',`Supplier subtotal · ${supplier.supplierName}`,supplier.subtotals,supplier)}</tbody>`).join('')
   }<tbody class="item-total">${quantityRows('item-total-row',`Item total delivered · ${item.itemName}`,item.totals,item)}</tbody></table>`).join('');
 }

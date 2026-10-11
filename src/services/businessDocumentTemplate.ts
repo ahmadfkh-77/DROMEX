@@ -1,4 +1,5 @@
 import {documentKindInfo,type BusinessDocument,type PartyBlock} from '../domain/businessDocuments';
+import {breakAfterHyphens,colgroup,columnWidths} from './pdfColumns';
 import {formatTotalQuantity} from '../domain/projectTotals';
 import {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
 
@@ -33,7 +34,17 @@ export function buildBusinessDocumentHtml(doc:BusinessDocument,logo:string|null)
   const money=doc.groups.money;
   const recordCount=doc.records.length;
 
-  const projectTables=doc.groups.projects.map(project=>`<table class="lines"><colgroup>${(official?[34,17,12,19,18]:[46,22,14,18]).map(width=>`<col style="width:${width}%">`).join('')}</colgroup>
+  // Column widths come from the content (see pdfColumns.ts): room for the longest word of each column and exactly 100% in all.
+  const everyLine=doc.groups.projects.flatMap(project=>project.lines);
+  const priceText=(line:(typeof everyLine)[number])=>line.unitPriceCents==null?'No price recorded':`${formatCents(line.unitPriceCents)}${line.priceBasis==='whole'?'':` / ${line.unitSymbol}`}`;
+  const linesColgroup=colgroup(columnWidths([
+    {header:'Item',cells:everyLine.map(line=>line.itemName)},
+    {header:'Quantity',kind:'amount',cells:everyLine.map(line=>formatTotalQuantity(line.quantity,line.unitSymbol))},
+    {header:'Records',kind:'number',cells:everyLine.map(line=>String(line.recordCount))},
+    ...(official?[{header:'Unit price',kind:'amount' as const,cells:everyLine.map(priceText)}]:[]),
+    {header:'Amount',kind:'amount',cells:everyLine.map(line=>line.totalCents==null?'No price recorded':formatCents(line.totalCents))},
+  ]));
+  const projectTables=doc.groups.projects.map(project=>`<table class="lines">${linesColgroup}
     <thead><tr class="project-row"><th colspan="${official?5:4}">${t(project.projectName)}</th></tr>
     <tr><th>Item</th><th class="num">Quantity</th><th class="num">Records</th>${official?'<th class="num">Unit price</th>':''}<th class="num">Amount</th></tr></thead>
     <tbody>${project.lines.map(line=>`<tr><td>${t(line.itemName)}${line.priceBasis==='whole'?'<div class="muted small">Priced for the whole delivery</div>':''}</td>
@@ -53,10 +64,17 @@ export function buildBusinessDocumentHtml(doc:BusinessDocument,logo:string|null)
       <tr class="grand"><td>Total (${e(doc.terms?.currency??'USD')})</td><td class="num">${e(formatCents(money.totalCents))}</td></tr>
     </tbody></table>${moneyNote}</div>`;
 
-  const recordRows=doc.records.map(({snapshot})=>`<tr><td>${e(recordTitle(snapshot))}<div class="muted small">${e(recordReferences(snapshot))}</div></td>
+  const recordRows=doc.records.map(({snapshot})=>`<tr><td>${breakAfterHyphens(e(recordTitle(snapshot)))}<div class="muted small">${breakAfterHyphens(e(recordReferences(snapshot)))}</div></td>
     <td>${e(formatRecordedAt(snapshot.recordedAt))}</td><td>${t(snapshot.itemName)}<div class="muted small">${t(snapshot.projectName??'No project')}</div></td>
     <td class="num">${e(formatTotalQuantity(snapshot.quantity,snapshot.unitSymbol))}</td><td class="num">${e(recordMoneyLine(snapshot))}</td></tr>`).join('');
-  const recordsTable=`<h2 class="section">Records on this document</h2><table class="records"><colgroup>${[24,16,28,14,18].map(width=>`<col style="width:${width}%">`).join('')}</colgroup><thead><tr><th>${ourSide?'Load number / reference':'Supplier Load / ticket'}</th><th>Date and time</th><th>Item and project</th><th class="num">Quantity</th><th class="num">Price as recorded</th></tr></thead><tbody>${recordRows}</tbody></table>`;
+  const recordsColgroup=colgroup(columnWidths([
+    {header:ourSide?'Load number / reference':'Supplier Load / ticket',kind:'code',cells:doc.records.flatMap(({snapshot})=>[recordTitle(snapshot),recordReferences(snapshot)])},
+    {header:'Date and time',cells:doc.records.map(({snapshot})=>formatRecordedAt(snapshot.recordedAt))},
+    {header:'Item and project',cells:doc.records.flatMap(({snapshot})=>[snapshot.itemName,snapshot.projectName??'No project'])},
+    {header:'Quantity',kind:'amount',cells:doc.records.map(({snapshot})=>formatTotalQuantity(snapshot.quantity,snapshot.unitSymbol))},
+    {header:'Price as recorded',kind:'amount',cells:doc.records.map(({snapshot})=>recordMoneyLine(snapshot))},
+  ]));
+  const recordsTable=`<h2 class="section">Records on this document</h2><table class="records">${recordsColgroup}<thead><tr><th>${ourSide?'Load number / reference':'Supplier Load / ticket'}</th><th>Date and time</th><th>Item and project</th><th class="num">Quantity</th><th class="num">Price as recorded</th></tr></thead><tbody>${recordRows}</tbody></table>`;
 
   const terms=doc.terms;
   const termLines:[string,string|null][]=[['Payment terms',terms?.paymentTerms??null],['Payment instructions',terms?.bankDetails??null]];

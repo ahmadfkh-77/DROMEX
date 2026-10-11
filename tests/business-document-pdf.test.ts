@@ -4,6 +4,7 @@ import {groupDocumentLines,type BusinessDocument,type RecordSnapshot} from '../s
 import {buildBusinessDocumentHtml} from '../src/services/businessDocumentTemplate';
 
 /** DEC-500 (2), (4), (5). The issued-document PDF prints the frozen snapshot, never invents a field, and never stretches a signature. */
+const noWbr=(html:string)=>html.replace(/<wbr>/g,'');
 const STROKE='M 20.0 80.5 L 60.2 40.0 L 110.1 90.4';
 const snap=(overrides:Partial<RecordSnapshot>):RecordSnapshot=>({recordType:'company_load',recordId:'l1',reference:'20260810-AB12-00007',loadNumber:'ASP-2026-004',loadNumberSeriesName:'Asphalt',itemKey:'id:a',itemName:'Asphalt',unitKey:'unit_ton',unitSymbol:'t',quantity:10,projectId:'p',projectName:'Mountain Road',partyId:'c',partyName:'Road Co',recordedAt:'2026-08-10T09:05:00',enteredAt:null,unitPriceCents:1500,priceBasis:'per_unit',subtotalCents:15000,vatRateBasisPoints:1100,vatCents:1650,totalCents:16650,supplierReference:null,...overrides});
 const records=[snap({}),snap({recordId:'l2',reference:'TX-2',loadNumber:null,unitKey:'unit_m3',unitSymbol:'m³',quantity:4,unitPriceCents:null,subtotalCents:null,vatCents:null,totalCents:null,vatRateBasisPoints:null,itemName:'رمل <Sand>'})];
@@ -17,13 +18,13 @@ const base:BusinessDocument={id:'d',kind:'customer_invoice',status:'Issued',draf
   issuedAt:'2026-09-01T10:00:00Z',cancelledAt:null,cancellationReason:null,createdAt:'',updatedAt:''};
 
 describe('business document PDF',()=>{
-  const html=buildBusinessDocumentHtml(base,null);
+  const html=noWbr(buildBusinessDocumentHtml(base,null));
   it('titles the document by kind and prints its number, dates, reference and parties',()=>{
     expect(html).toContain('>Invoice<');
     for(const text of ['INV-2026-014','1 Sep 2026','1 Oct 2026','1 Aug 2026 – 31 Aug 2026','PO-77','DROMEX Plant SAL','VAT-77','Maya','Net 30','IBAN LB00 0000'])expect(html).toContain(text);
   });
   it('puts the company logo and name on the left and the document title panel on the right',()=>{
-    const withLogo=buildBusinessDocumentHtml(base,'data:image/png;base64,AAAA');
+    const withLogo=noWbr(buildBusinessDocumentHtml(base,'data:image/png;base64,AAAA'));
     expect(withLogo).toContain('<img class="logo" src="data:image/png;base64,AAAA"');
     const brand=withLogo.indexOf('class="brand"'),panel=withLogo.indexOf('class="title-panel"');
     expect(brand).toBeGreaterThan(-1);expect(panel).toBeGreaterThan(brand);
@@ -66,24 +67,24 @@ describe('business document PDF',()=>{
     expect(html).toContain('preserveAspectRatio="xMidYMid meet"');
     expect(html).toContain('Rana Haddad');
     expect(html).toContain('Finance Manager');
-    const nameOnly=buildBusinessDocumentHtml({...base,signer:{...base.signer!,display:'name_only',signature:[]}},null);
+    const nameOnly=noWbr(buildBusinessDocumentHtml({...base,signer:{...base.signer!,display:'name_only',signature:[]}},null));
     expect(nameOnly).not.toContain('<svg');
     expect(nameOnly).toContain('Signed by name');
   });
   it('marks a draft and a cancelled document unmistakably',()=>{
-    expect(buildBusinessDocumentHtml({...base,status:'Draft',documentNumber:null},null)).toContain('DRAFT — NOT ISSUED');
-    const cancelled=buildBusinessDocumentHtml({...base,status:'Cancelled',cancellationReason:'Wrong PO',cancelledAt:'2026-09-03T08:00:00Z'},null);
+    expect(noWbr(buildBusinessDocumentHtml({...base,status:'Draft',documentNumber:null},null))).toContain('DRAFT — NOT ISSUED');
+    const cancelled=noWbr(buildBusinessDocumentHtml({...base,status:'Cancelled',cancellationReason:'Wrong PO',cancelledAt:'2026-09-03T08:00:00Z'},null));
     expect(cancelled).toContain('CANCELLED');
     expect(cancelled).toContain('Wrong PO');
   });
   it('labels an internal statement as not a tax invoice and makes no compliance claim anywhere',()=>{
-    const statement=buildBusinessDocumentHtml({...base,kind:'customer_statement',documentNumber:'CST-2026-001'},null);
+    const statement=noWbr(buildBusinessDocumentHtml({...base,kind:'customer_statement',documentNumber:'CST-2026-001'},null));
     expect(statement).toContain('Customer statement');
     expect(statement).toContain('Internal statement — not a tax invoice');
     expect(html).not.toMatch(/complian|certified|approved by/i);
   });
   it('labels supplier documents from the supplier’s side',()=>{
-    const bill=buildBusinessDocumentHtml({...base,kind:'supplier_bill',partyType:'supplier',documentNumber:'BILL-2026-001'},null);
+    const bill=noWbr(buildBusinessDocumentHtml({...base,kind:'supplier_bill',partyType:'supplier',documentNumber:'BILL-2026-001'},null));
     expect(bill).toContain('>Bill<');
     expect(bill).toContain('Supplier');
     expect(bill).toContain('Billed to');
