@@ -8,7 +8,7 @@ import {emptyInclusion,type CompanyLoadGroupNode,type CompanyTotalsData} from '.
 import {exportableLoads,loadHistoryFileName,loadHistoryRows,loadHistoryStatus,loadHistorySummary,loadHistoryUnitTotals,singleProjectId} from '../src/domain/loadHistoryPdf';
 import {emptyLoadDraft,type ConfirmedLoad} from '../src/domain/loads';
 import {buildCompanyLoadTotalsHtml} from '../src/services/companyLoadTotalsTemplate';
-import {buildLoadHistoryHtml,LOAD_HISTORY_WIDTHS} from '../src/services/loadHistoryTemplate';
+import {buildLoadHistoryHtml,loadHistoryWidths} from '../src/services/loadHistoryTemplate';
 import {buildTotalsHtml} from '../src/services/totalsTemplate';
 import {SEED_TIME,migratedDatabaseWithProject,type SqliteTestDatabase} from './support/sqliteTestDatabase';
 
@@ -17,6 +17,7 @@ import {SEED_TIME,migratedDatabaseWithProject,type SqliteTestDatabase} from './s
  * Supplier, Customer, Driver and Truck plate columns; every table's widths add up to exactly 100%; and every
  * export that can have the Header company picker has it.
  */
+const noWbr=(html:string)=>html.replace(/<wbr>/g,'');
 const databases:SqliteTestDatabase[]=[];
 afterEach(()=>{for(const database of databases.splice(0))database.close();});
 const read=(file:string)=>readFileSync(file,'utf8');
@@ -47,7 +48,7 @@ describe('the Load History export',()=>{
   });
   it('has the approved columns, each fact in its own column, with widths that add up to exactly 100%',()=>{
     expect(html).toContain('<th>Date, time</th><th>Load No.</th><th>Item</th><th>Supplier</th><th>Customer</th><th>Driver</th><th>Truck plate</th><th class="num">Quantity</th><th>Status</th>');
-    expect(LOAD_HISTORY_WIDTHS.reduce((sum,value)=>sum+value,0)).toBe(100);
+    expect(loadHistoryWidths(rows).reduce((sum,value)=>sum+value,0)).toBe(100);expect(loadHistoryWidths(rows).length).toBe(9);
     expect(widthSums(html)).toEqual([100]);
     expect(html).toContain('table-layout:fixed');expect(html).toContain('thead{display:table-header-group}');expect(html).toContain('overflow-wrap:anywhere');
   });
@@ -98,13 +99,13 @@ describe('cancelled loads are in no PDF, but stay in the app',()=>{
 
   it('leaves a cancelled load out of the Totals PDF, even when handed one',()=>{
     const base={companyName:'DROMEX',logo:null,title:'Project Totals',scope:'project' as const,filters:[],generatedAt:'2026-10-09T08:00:00',data,includePrices:false};
-    const project=buildTotalsHtml({...base,project:{name:'Road',location:null,status:'Active',customer:{label:'Customer One',note:null} as never,loads:records}});
+    const project=noWbr(buildTotalsHtml({...base,project:{name:'Road',location:null,status:'Active',customer:{label:'Customer One',note:null} as never,loads:records}}));
     expect(project).toContain('ASP-00001');
     for(const text of ['ASP-00002','TX-CANCELLED','Duplicate ticket','CANCELLED'])expect(project).not.toContain(text);
   });
   it('leaves cancelled loads out of the Company Load Totals PDF: no row, column, tile, section or count',()=>{
     const groups:CompanyLoadGroupNode[]=[{key:'s',label:'ASP · Asphalt',units:[{unitKey:'t',unitSymbol:'t',quantity:10}],loadCount:1,cancelledCount:1,projects:[{projectKey:'p',projectName:'Road',units:[{unitKey:'t',unitSymbol:'t',quantity:10}],loadCount:1,cancelledCount:1}]} as never];
-    const html=buildCompanyLoadTotalsHtml({companyName:'DROMEX',logo:null,generatedAt:'2026-10-09T08:00:00',filters:[],groupBy:'series',groups,loads:records});
+    const html=noWbr(buildCompanyLoadTotalsHtml({companyName:'DROMEX',logo:null,generatedAt:'2026-10-09T08:00:00',filters:[],groupBy:'series',groups,loads:records}));
     expect(html).toContain('ASP-00001');
     for(const text of ['ASP-00002','TX-CANCELLED','Duplicate ticket','Cancelled — not counted','Cancelled, not counted','>Cancelled<'])expect(html).not.toContain(text);
   });
@@ -148,7 +149,7 @@ describe('every table adds up to 100%',()=>{
     const data:CompanyTotalsData={usageHiddenReason:null,deliveries:[],usage:[]};
     const base={companyName:'D',logo:null,title:'Loads History',scope:'company' as const,filters:[],generatedAt:'2026-10-09T08:00:00',data,records:[]};
     for(const includePrices of [false,true])for(const showProject of [false,true]){
-      const html=buildTotalsHtml({...base,includePrices,showProject,records:[{key:'k',seriesId:null,status:'Active',cancellationReason:null,correctionCount:0,links:[],inclusion:counts0() as never,snapshot:{recordType:'company_load',recordId:'r',reference:'T',loadNumber:'ASP-1',loadNumberSeriesName:null,itemKey:'i',itemName:'A',unitKey:'t',unitSymbol:'t',quantity:1,projectId:null,projectName:null,partyId:'c',partyName:'C',recordedAt:'2026-10-09T09:00:00',enteredAt:null,unitPriceCents:null,priceBasis:'per_unit',subtotalCents:null,vatRateBasisPoints:null,vatCents:null,totalCents:null,supplierReference:null} as never}]});
+      const html=noWbr(buildTotalsHtml({...base,includePrices,showProject,records:[{key:'k',seriesId:null,status:'Active',cancellationReason:null,correctionCount:0,links:[],inclusion:counts0() as never,snapshot:{recordType:'company_load',recordId:'r',reference:'T',loadNumber:'ASP-1',loadNumberSeriesName:null,itemKey:'i',itemName:'A',unitKey:'t',unitSymbol:'t',quantity:1,projectId:null,projectName:null,partyId:'c',partyName:'C',recordedAt:'2026-10-09T09:00:00',enteredAt:null,unitPriceCents:null,priceBasis:'per_unit',subtotalCents:null,vatRateBasisPoints:null,vatCents:null,totalCents:null,supplierReference:null} as never}]}));
       expect(widthSums(html).every(total=>total===100)).toBe(true);
       const columns=1+(html.match(/<th[ >]/g)?.length??0);void columns;
       expect(html).toContain(includePrices?'A4 landscape':'size:A4;');

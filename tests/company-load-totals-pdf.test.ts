@@ -6,6 +6,7 @@ import {buildCompanyLoadTree,type CompanyLoadTotalRow} from '../src/domain/compa
 import {buildCompanyLoadTotalsHtml} from '../src/services/companyLoadTotalsTemplate';
 
 /** DEC-500 (6). The Company Load Totals PDF: filters, load counts, per-unit totals, project grouping, repeated headings. */
+const noWbr=(html:string)=>html.replace(/<wbr>/g,'');
 const rows:CompanyLoadTotalRow[]=[
   {seriesKey:'s_asp',seriesLabel:'ASP · Asphalt',itemKey:'id:a',itemName:'Asphalt',projectKey:'road',projectName:'Mountain Road',unitKey:'unit_ton',unitSymbol:'t',status:'Active',quantity:38.5,loadCount:2},
   {seriesKey:'s_asp',seriesLabel:'ASP · Asphalt',itemKey:'id:a',itemName:'Asphalt',projectKey:'road',projectName:'Mountain Road',unitKey:'unit_ton',unitSymbol:'t',status:'Cancelled',quantity:50,loadCount:1},
@@ -17,7 +18,7 @@ const record=(snapshot:RecordSnapshot,status:'Active'|'Cancelled'='Active',serie
 const loads=[record(snap('1','ASP-2026-001',20)),record(snap('2','ASP-2026-002',18.5)),record(snap('3','ASP-2026-003',50),'Cancelled'),record(snap('4','ASP-2026-004',6,'m³')),record(snap('5',null,7),'Active',null)];
 
 describe('Company Load Totals PDF',()=>{
-  const html=buildCompanyLoadTotalsHtml({companyName:'DROMEX Plant',logo:null,generatedAt:'2026-09-02T08:00:00',filters:['1 Aug 2026 – 31 Aug 2026','Grouped by number series'],groupBy:'series',groups:buildCompanyLoadTree(rows,'series'),loads});
+  const html=noWbr(buildCompanyLoadTotalsHtml({companyName:'DROMEX Plant',logo:null,generatedAt:'2026-09-02T08:00:00',filters:['1 Aug 2026 – 31 Aug 2026','Grouped by number series'],groupBy:'series',groups:buildCompanyLoadTree(rows,'series'),loads}));
   it('prints the filters and the generated time',()=>{
     expect(html).toContain('Company Load Totals');
     expect(html).toContain('1 Aug 2026 – 31 Aug 2026');
@@ -59,8 +60,8 @@ describe('Company Load Totals PDF',()=>{
 describe('Company Settings header on the Company Load Totals PDF',()=>{
   const input={companyName:'DROMEX Plant',logo:null,generatedAt:'2026-09-02T08:00:00',filters:['1 Aug 2026 – 31 Aug 2026'],groupBy:'series' as const,groups:[],loads:[]};
   it('prints the contact line under the company name when one is saved, and nothing when not',()=>{
-    const withContact=buildCompanyLoadTotalsHtml({...input,contactLine:'Beirut · +961 1 234 567 · Tax/VAT: 1234567-001'});
+    const withContact=noWbr(buildCompanyLoadTotalsHtml({...input,contactLine:'Beirut · +961 1 234 567 · Tax/VAT: 1234567-001'}));
     expect(withContact).toContain('<div class="contact"><span dir="auto">Beirut · +961 1 234 567 · Tax/VAT: 1234567-001</span></div>');
-    expect(buildCompanyLoadTotalsHtml(input)).not.toContain('<div class="contact">');
+    expect(noWbr(buildCompanyLoadTotalsHtml(input))).not.toContain('<div class="contact">');
   });
 });

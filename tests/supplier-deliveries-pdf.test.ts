@@ -15,6 +15,7 @@ import {SEED_TIME,SqliteTestDatabase,migratedDatabaseWithProject} from './suppor
  * site, every load listed with its number and prefix, units never mixed, Unpriced never $0, and the header the
  * person chose.
  */
+const noWbr=(html:string)=>html.replace(/<wbr>/g,'');
 const open:SqliteTestDatabase[]=[];
 beforeEach(()=>{vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-10-09T10:30:00'));});
 afterEach(()=>{vi.useRealTimers();for(const database of open.splice(0))database.close();});
@@ -85,13 +86,13 @@ describe('what the supplier PDF lists',()=>{
     const {purchases}=await build();
     const without=buildSupplierDeliveriesPdf({supplierId:'nour',supplierName:'Al-Nour Quarry',purchases,filters:base,generatedAt:'2026-10-09T10:30:00'});
     expect(without.destinations.flatMap(group=>group.loads).every(load=>load.unitPrice===undefined&&load.total===undefined)).toBe(true);
-    const htmlWithout=buildSupplierDeliveriesHtml({companyName:'DROMEX',logo:null,contactLine:null,report:without});
+    const htmlWithout=noWbr(buildSupplierDeliveriesHtml({companyName:'DROMEX',logo:null,contactLine:null,report:without}));
     expect(htmlWithout).not.toContain('Unpriced');expect(htmlWithout).not.toContain('<th class="num">Price</th>');
     const withPrices=buildSupplierDeliveriesPdf({supplierId:'nour',supplierName:'Al-Nour Quarry',purchases,filters:{...base,includePrices:true},generatedAt:'2026-10-09T10:30:00'});
     const loads=withPrices.destinations.flatMap(group=>group.loads);
     expect(loads.find(load=>load.unitPrice==='$12.50')).toBeTruthy();
     expect(loads.filter(load=>load.unitPrice==='Unpriced').length).toBe(3);
-    const html=buildSupplierDeliveriesHtml({companyName:'DROMEX',logo:null,contactLine:null,report:withPrices});
+    const html=noWbr(buildSupplierDeliveriesHtml({companyName:'DROMEX',logo:null,contactLine:null,report:withPrices}));
     expect(html).toContain('Unpriced');expect(html).not.toContain('$0.00');expect(html).toContain('unpriced load');
   });
 
@@ -107,7 +108,7 @@ describe('the page itself',()=>{
   it('is headed Totals with the supplier name in bold, shows the filters and every load number, and isolates long and Arabic names',async()=>{
     const {purchases}=await build();
     const pdf=buildSupplierDeliveriesPdf({supplierId:'nour',supplierName:'مؤسسة النور للمقالع والمحاجر — Al-Nour Quarry and Crushing Company',purchases,filters:base,generatedAt:'2026-10-09T10:30:00'});
-    const html=buildSupplierDeliveriesHtml({companyName:'DROMEX Construction',logo:null,contactLine:'Aley · 01 234 567',report:pdf});
+    const html=noWbr(buildSupplierDeliveriesHtml({companyName:'DROMEX Construction',logo:null,contactLine:'Aley · 01 234 567',report:pdf}));
     expect(html).toContain('<h1>Totals</h1>');
     expect(html).toContain('<div class="who"><bdi dir="auto">مؤسسة النور للمقالع والمحاجر — Al-Nour Quarry and Crushing Company</bdi></div>');
     expect(html).not.toContain('Company Totals');
@@ -128,7 +129,7 @@ describe('the page itself',()=>{
     const pdf=buildSupplierDeliveriesPdf({supplierId:'nour',supplierName:'Al-Nour Quarry',purchases,batches,filters:{includePrices:true,includeDiesel:true},generatedAt:'2026-10-09T10:30:00'});
     expect(pdf.diesel).toMatchObject({batchCount:2,totalLitres:'3,500 L',amount:'$3,300.00',unpricedNote:'1 unpriced batch'});
     expect(pdf.totals.every(total=>total.unitSymbol!=='L')).toBe(true);
-    const html=buildSupplierDeliveriesHtml({companyName:'DROMEX',logo:null,contactLine:null,report:pdf});
+    const html=noWbr(buildSupplierDeliveriesHtml({companyName:'DROMEX',logo:null,contactLine:null,report:pdf}));
     expect(html).toContain('Diesel delivered (litres only)');expect(html).toContain('Litres are never added to tons or m³.');
     const off=buildSupplierDeliveriesPdf({supplierId:'nour',supplierName:'Al-Nour Quarry',purchases,batches,filters:{includePrices:false,includeDiesel:false},generatedAt:'2026-10-09T10:30:00'});
     expect(off.diesel).toBeNull();

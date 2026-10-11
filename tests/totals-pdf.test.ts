@@ -5,6 +5,7 @@ import {totalsFileName} from '../src/domain/recordFormat';
 import {buildTotalsHtml} from '../src/services/totalsTemplate';
 
 /** DEC-500 (1). The Totals PDF: delivered and used quantities, with or without prices. */
+const noWbr=(html:string)=>html.replace(/<wbr>/g,'');
 const counts=(total:number,included=0)=>({...emptyInclusion(),total,included,open:total-included});
 const data:CompanyTotalsData={usageHiddenReason:null,
   deliveries:[
@@ -16,8 +17,8 @@ const data:CompanyTotalsData={usageHiddenReason:null,
 const base={companyName:'DROMEX Plant',logo:null,title:'Company Totals',scope:'company' as const,filters:['1 Aug 2026 – 31 Aug 2026'],generatedAt:'2026-09-02T08:00:00',data};
 
 describe('Totals PDF',()=>{
-  const plain=buildTotalsHtml({...base,includePrices:false});
-  const priced=buildTotalsHtml({...base,includePrices:true});
+  const plain=noWbr(buildTotalsHtml({...base,includePrices:false}));
+  const priced=noWbr(buildTotalsHtml({...base,includePrices:true}));
   it('prints title, filters, generation time and the prices choice',()=>{
     expect(plain).toContain('Company Totals');
     expect(plain).toContain('1 Aug 2026 – 31 Aug 2026');
@@ -53,7 +54,7 @@ describe('Totals PDF',()=>{
     expect(plain).toContain('break-inside:avoid');
   });
   it('says why use is missing when a filter hides it',()=>{
-    expect(buildTotalsHtml({...base,includePrices:false,data:{...data,usage:[],usageHiddenReason:'Use is not recorded per supplier.'}})).toContain('Use is not recorded per supplier.');
+    expect(noWbr(buildTotalsHtml({...base,includePrices:false,data:{...data,usage:[],usageHiddenReason:'Use is not recorded per supplier.'}}))).toContain('Use is not recorded per supplier.');
   });
 });
 
@@ -66,7 +67,7 @@ describe('Totals PDF file name',()=>{
 
 describe('header',()=>{
   it('shows only the title and the date and time on the top right; filters and the price choice move below',()=>{
-    const html=buildTotalsHtml({...base,includePrices:false});
+    const html=noWbr(buildTotalsHtml({...base,includePrices:false}));
     const right=html.slice(html.indexOf('class="head-right"'),html.indexOf('</div></div>',html.indexOf('class="head-right"')));
     expect(right).toContain('Company Totals');
     expect(right).toContain('2 Sep 2026 · 08:00');
@@ -80,7 +81,7 @@ describe('header',()=>{
 describe('Loads History PDF',()=>{
   const snap=(id:string,day:string,quantity:number,priceCents:number|null):import('../src/domain/businessDocuments').RecordSnapshot=>({recordType:'supplier_load',recordId:id,reference:`QP-${id}`,loadNumber:null,loadNumberSeriesName:null,itemKey:'id:sand',itemName:'Sand',unitKey:'m3',unitSymbol:'m³',quantity,projectId:'road',projectName:'Mountain Road',partyId:'a',partyName:'Alpha Quarry',recordedAt:`${day}T09:30:00`,enteredAt:null,unitPriceCents:priceCents,priceBasis:'per_unit',subtotalCents:priceCents==null?null:priceCents*quantity,vatRateBasisPoints:priceCents==null?null:0,vatCents:priceCents==null?null:0,totalCents:priceCents==null?null:priceCents*quantity,supplierReference:'T-88'});
   const records=[snap('2','2026-08-12',4,null),snap('1','2026-08-10',8,1000)].map(snapshot=>({key:`supplier_load:${snapshot.recordId}`,snapshot,seriesId:null,status:'Active' as const,cancellationReason:null,correctionCount:0,links:[],inclusion:{state:'not_included' as const}}));
-  const history=(includePrices:boolean)=>buildTotalsHtml({...base,title:'Loads History',issuedTo:'Alpha Quarry',includePrices,records,data:{...data,deliveries:[data.deliveries[0]!],usage:[]}});
+  const history=(includePrices:boolean)=>noWbr(buildTotalsHtml({...base,title:'Loads History',issuedTo:'Alpha Quarry',includePrices,records,data:{...data,deliveries:[data.deliveries[0]!],usage:[]}}));
   it('lists every delivery oldest first with date, time, references, project, supplier and quantity',()=>{
     const html=history(false);
     expect(html).toContain('Loads History');
@@ -92,7 +93,7 @@ describe('Loads History PDF',()=>{
     expect(html.indexOf('QP-1')).toBeLessThan(html.indexOf('QP-2'));
     for(const text of ['10 Aug 2026','09:30','Supplier ticket T-88','Mountain Road','Alpha Quarry'])expect(html).toContain(text);
     // Phase 5: the quantity and its unit are separate columns, and the section total still reads "12 m³".
-    for(const text of ['<td class="num">8</td>','<td class="num">4</td>','<td>m³</td>'])expect(html).toContain(text);
+    for(const text of ['<td class="num">8 m³</td>','<td class="num">4 m³</td>'])expect(html).toContain(text);
     expect(html).toContain('12 m³');
   });
   it('is not a billing document: no number, no signer, and it says so',()=>{
@@ -120,7 +121,7 @@ describe('project column',()=>{
     const snapshot={recordType:'supplier_load' as const,recordId:'1',reference:'QP-1',loadNumber:null,loadNumberSeriesName:null,itemKey:'id:sand',itemName:'Sand',unitKey:'m3',unitSymbol:'m³',quantity:8,projectId:'road',projectName:'Hidden Project Name',partyId:'a',partyName:'Alpha Quarry',recordedAt:'2026-08-10T09:30:00',enteredAt:null,unitPriceCents:null,priceBasis:'per_unit' as const,subtotalCents:null,vatRateBasisPoints:null,vatCents:null,totalCents:null,supplierReference:null};
     const records=[{key:'supplier_load:1',snapshot,seriesId:null,status:'Active' as const,cancellationReason:null,correctionCount:0,links:[],inclusion:{state:'not_included' as const}}];
     const input={...base,title:'Loads History',includePrices:false,records,data:{usageHiddenReason:null,usage:[],deliveries:[]}};
-    const shown=buildTotalsHtml(input),hidden=buildTotalsHtml({...input,showProject:false});
+    const shown=noWbr(buildTotalsHtml(input)),hidden=noWbr(buildTotalsHtml({...input,showProject:false}));
     const table=(html:string)=>html.slice(html.indexOf('class="grid history"'));
     expect(table(shown)).toContain('<th>Project</th>');
     expect(table(shown)).toContain('Hidden Project Name');

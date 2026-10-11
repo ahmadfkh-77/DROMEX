@@ -11,6 +11,7 @@ import {type SqliteTestDatabase} from './support/sqliteTestDatabase';
 import {recordsDatabase} from './support/recordFixtures';
 
 /** A customer's page: what was delivered to them, grouped by material, with the history of delivered loads. */
+const noWbr=(html:string)=>html.replace(/<wbr>/g,'');
 const databases:SqliteTestDatabase[]=[];
 afterEach(()=>{for(const database of databases.splice(0))database.close();});
 const source=(path:string)=>readFileSync(join(__dirname,'..',path),'utf8');
@@ -116,8 +117,8 @@ describe('Customer Deliveries PDF',()=>{
     const {totals}=await setup();
     const filters=customerDeliveryFilters('customer',emptyCustomerDeliveryScope());
     const data=await totals.getCompanyTotals(filters),records=await totals.listRecords(filters);
-    const plain=buildTotalsHtml({companyName:'DROMEX Plant',logo:null,contactLine:'Beirut · Tax/VAT: 1',title:'Customer Deliveries',scope:'company',filters:customerDeliveryLabels('Road Co',emptyCustomerDeliveryScope(),{}),
-      generatedAt:'2026-10-05T16:30:00',includePrices:false,showProject:true,data,records,issuedTo:'Road Co'});
+    const plain=noWbr(buildTotalsHtml({companyName:'DROMEX Plant',logo:null,contactLine:'Beirut · Tax/VAT: 1',title:'Customer Deliveries',scope:'company',filters:customerDeliveryLabels('Road Co',emptyCustomerDeliveryScope(),{}),
+      generatedAt:'2026-10-05T16:30:00',includePrices:false,showProject:true,data,records,issuedTo:'Road Co'}));
     expect(plain).toContain('Customer Deliveries');
     expect(plain).toContain('Issued to: <span dir="auto">Road Co</span>');
     expect(plain).toContain('Customer: Road Co');

@@ -1,4 +1,5 @@
 import { NOT_RECORDED, type LoadHistoryPdfRow } from '../domain/loadHistoryPdf';
+import { breakAfterHyphens, colgroup, columnWidths, type ColumnSpec } from './pdfColumns';
 
 /**
  * Phase 5. The Load History export as an A4 PDF: the company header, a summary strip (Period, Customer, Items,
@@ -25,13 +26,27 @@ const day = (raw: string) => { const date = new Date(raw); return Number.isNaN(d
 const time = (raw: string) => { const date = new Date(raw); return Number.isNaN(date.getTime()) ? '' : `${two(date.getHours())}:${two(date.getMinutes())}`; };
 const missing = `<span class="missing">${NOT_RECORDED}</span>`;
 const orMissing = (value: string | null) => (value ? t(value) : missing);
-/** Date and time, Load No., Item, Supplier, Customer, Driver, Truck plate, Quantity, Status: 100% in all. */
-export const LOAD_HISTORY_WIDTHS = [11, 10, 12, 11, 12, 11, 9, 9, 15] as const;
+/** Date and time, Load No., Item, Supplier, Customer, Driver, Truck plate, Quantity, Status: widths from the content, 100% in all (see pdfColumns.ts). */
+export function loadHistoryWidths(rows: readonly LoadHistoryPdfRow[]): number[] {
+  const NR = NOT_RECORDED;
+  const specs: ColumnSpec[] = [
+    { header: 'Date, time', cells: rows.map((row) => day(row.recordedAt)) },
+    { header: 'Load No.', kind: 'code', cells: rows.flatMap((row) => [row.loadNumber ?? row.loadNumberLabel, `Transaction ${row.transaction}`]) },
+    { header: 'Item', cells: rows.map((row) => row.item) },
+    { header: 'Supplier', cells: rows.map((row) => row.supplier) },
+    { header: 'Customer', cells: rows.map((row) => row.customer) },
+    { header: 'Driver', cells: rows.map((row) => row.driver ?? NR) },
+    { header: 'Truck plate', cells: rows.map((row) => row.truckPlate ?? NR) },
+    { header: 'Quantity', kind: 'number', cells: rows.map((row) => row.quantityText) },
+    { header: 'Status', cells: rows.map((row) => row.statusLabel) },
+  ];
+  return columnWidths(specs);
+}
 
 export function buildLoadHistoryHtml(input: LoadHistoryPdf): string {
   const rows = input.rows.map((row) => `<tr>
-    <td class="nowrap">${e(day(row.recordedAt))}<div class="muted">${e(time(row.recordedAt))}</div></td>
-    <td>${row.loadNumber ? `<span class="ln">${e(row.loadNumber)}</span>` : `<span class="legacy">${e(row.loadNumberLabel)}</span>`}<div class="muted">Transaction ${e(row.transaction)}</div></td>
+    <td>${e(day(row.recordedAt))}<div class="muted">${e(time(row.recordedAt))}</div></td>
+    <td>${row.loadNumber ? `<span class="ln">${breakAfterHyphens(e(row.loadNumber))}</span>` : `<span class="legacy">${e(row.loadNumberLabel)}</span>`}<div class="muted">Transaction ${breakAfterHyphens(e(row.transaction))}</div></td>
     <td>${t(row.item)}</td><td>${t(row.supplier)}</td><td>${t(row.customer)}</td><td>${orMissing(row.driver)}</td><td>${orMissing(row.truckPlate)}</td>
     <td class="num">${e(row.quantityText)}</td>
     <td><b>${e(row.statusLabel)}</b>${row.statusNote ? `<div class="muted">${e(row.statusNote)}</div>` : ''}</td></tr>`).join('');
@@ -60,7 +75,7 @@ export function buildLoadHistoryHtml(input: LoadHistoryPdf): string {
     tbody tr:nth-child(even) td{background:#FAF8F4}
     .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.nowrap{white-space:nowrap}
     .muted{color:#5A6570;font-size:7pt;font-weight:400}.missing{color:#5A6570;font-style:italic;font-weight:400}
-    .ln{font-weight:700;color:#173F67;white-space:nowrap}.legacy{color:#5A6570;font-style:italic}
+    .ln{font-weight:700;color:#173F67}.legacy{color:#5A6570;font-style:italic}
     .totals{display:flex;flex-wrap:wrap;gap:2mm;margin:3mm 0 0;break-inside:avoid}.pill{display:inline-block;border-radius:5mm;padding:.8mm 2.6mm;font-size:8.5pt;font-weight:700;background:#FBE9E4;color:#8E2E1B;white-space:nowrap}
     .note{color:#5A6570;font-size:7.5pt;margin-top:3mm}.empty{margin:0;color:#5A6570;font-style:italic}
   </style></head><body>
@@ -68,7 +83,7 @@ export function buildLoadHistoryHtml(input: LoadHistoryPdf): string {
       <div class="head-right"><h1>Load History</h1><div class="when">${e(day(input.generatedAt))}, ${e(time(input.generatedAt))}</div></div></div>
     <div class="summary"><div><span class="label">Period</span><b>${t(summary.period)}</b></div><div><span class="label">Customer</span><b>${t(summary.customer)}</b></div><div><span class="label">Items</span><b>${t(summary.items)}</b></div><div><span class="label">Status</span><b>${t(summary.status)}</b></div><div><span class="label">Loads listed</span><b>${e(summary.listed)}</b></div></div>
     <section class="block" data-kind="load-history"><div class="block-bar"><span class="block-index">1</span><span class="block-name">All loads, newest first</span></div>
-      <div class="block-body">${input.rows.length ? `<table class="loads"><colgroup>${LOAD_HISTORY_WIDTHS.map((width) => `<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>` : '<p class="empty">No active loads match these filters.</p>'}</div></section>
+      <div class="block-body">${input.rows.length ? `<table class="loads">${colgroup(loadHistoryWidths(input.rows))}<thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>` : '<p class="empty">No active loads match these filters.</p>'}</div></section>
     ${totals ? `<div class="totals">${totals}</div>` : ''}
     <p class="note">Each unit is totalled on its own and different units are never added together. Cancelled loads are never included. A load with no driver or plate recorded says Not recorded. This is a list of loads, not an invoice or bill.</p>
   </body></html>`;

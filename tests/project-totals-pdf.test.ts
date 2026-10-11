@@ -11,6 +11,7 @@ import {type SqliteTestDatabase} from './support/sqliteTestDatabase';
 import {recordsDatabase} from './support/recordFixtures';
 
 /** Project Totals PDF: the Customer and Supplier boxes and the delivered-loads sections (Owner-approved mockup). */
+const noWbr=(html:string)=>html.replace(/<wbr>/g,'');
 const snapshot=(over:Partial<RecordSnapshot>):RecordSnapshot=>({
   recordType:'company_load',recordId:'r1',reference:'20261005-A-00123',loadNumber:'ASP-00001',loadNumberSeriesName:'Asphalt',itemKey:'id:asphalt',itemName:'Asphalt, Base Course',unitKey:'t',unitSymbol:'t',quantity:18.5,
   projectId:'p1',projectName:'Highway Link',partyId:'c1',partyName:'Al Amal Contracting',recordedAt:'2026-10-05T09:05:00',enteredAt:null,unitPriceCents:8200,priceBasis:'per_unit',subtotalCents:151700,
@@ -71,8 +72,8 @@ describe('row wording helpers',()=>{
 
 describe('Project Totals PDF',()=>{
   const loads=[company1,company2,legacy,arabic,supplierA,supplierB,cancelled];
-  const plain=buildTotalsHtml({...base,includePrices:false,project:project(loads)});
-  const priced=buildTotalsHtml({...base,includePrices:true,project:project(loads)});
+  const plain=noWbr(buildTotalsHtml({...base,includePrices:false,project:project(loads)}));
+  const priced=noWbr(buildTotalsHtml({...base,includePrices:true,project:project(loads)}));
 
   it('heads the page with the Company Settings contact line and the customer',()=>{
     expect(plain).toContain('DROMEX Asphalt Co.');
@@ -90,7 +91,7 @@ describe('Project Totals PDF',()=>{
     expect(plain).toContain('Zahle');
   });
   it('reads Internal project on the own company and names the plant company as the supplier of its own loads',()=>{
-    const html=buildTotalsHtml({...base,includePrices:false,project:project([company1],customerBox({name:'DROMEX Asphalt Co.',isOwnCompany:true}))});
+    const html=noWbr(buildTotalsHtml({...base,includePrices:false,project:project([company1],customerBox({name:'DROMEX Asphalt Co.',isOwnCompany:true}))}));
     expect(html).toContain('<div class="subtitle"><span dir="auto">Internal project</span></div>');
     expect(html).toContain('<span class="box-label">Supplier</span><b><span dir="auto">DROMEX S.A.R.L.</span></b>');
     expect(html).not.toContain('Supplier loads delivered');
@@ -107,10 +108,10 @@ describe('Project Totals PDF',()=>{
   it('lists each load with its load number next to its transaction number, in separate Supplier, Customer, Driver and Truck plate columns',()=>{
     for(const text of ['ASP-00001','20261005-A-00123','Transaction 20261005-A-00123','ASP series','R. Haddad','112233','AGG-00003','شركة النور للمقاولات','DROMEX S.A.R.L.','Old Plant Name Ltd'])expect(plain).toContain(text);
     expect(plain).not.toContain('Plant Company');
-    expect(plain).toContain('<th>Supplier</th><th>Customer</th><th>Driver</th><th>Truck plate</th><th>Unit</th><th class="num">Quantity</th>');
+    expect(plain).toContain('<th>Supplier</th><th>Customer</th><th>Driver</th><th>Truck plate</th><th class="num">Quantity</th>');
     expect(plain).not.toContain('Supplier or customer');
-    expect(plain).toContain('<td class="num">18.5</td>');
-    expect(plain).toContain('<td>t</td>');
+    expect(plain).toContain('<td class="num">18.5 t</td>');
+    expect(plain).not.toContain('<th>Unit</th>');
   });
   it('labels a load with no generated number as legacy and never invents one',()=>{
     expect(plain).toContain(LEGACY_LOAD_NUMBER_LABEL);
@@ -149,10 +150,10 @@ describe('Project Totals PDF',()=>{
     expect(plain).toContain('not an invoice or bill');
   });
   it('leaves out an empty section and prints no customer boxes outside a project',()=>{
-    const onlySupplier=buildTotalsHtml({...base,includePrices:false,project:project([supplierA])});
+    const onlySupplier=noWbr(buildTotalsHtml({...base,includePrices:false,project:project([supplierA])}));
     expect(onlySupplier).not.toContain('Company loads delivered');
     expect(onlySupplier).toContain('Supplier loads delivered');
-    const company=buildTotalsHtml({...base,title:'Company Totals',scope:'company',includePrices:false});
+    const company=noWbr(buildTotalsHtml({...base,title:'Company Totals',scope:'company',includePrices:false}));
     expect(company).not.toContain('class="two"');
     expect(company).not.toContain('Company loads delivered');
   });
@@ -198,7 +199,7 @@ describe('company load reference',()=>{
 
 describe('the supplier never depends on the Header company',()=>{
   it('keeps the plant company as supplier when the Project Company heads the PDF',()=>{
-    const html=buildTotalsHtml({...base,companyName:'Al Amal Contracting',includePrices:false,project:project([company1,supplierA])});
+    const html=noWbr(buildTotalsHtml({...base,companyName:'Al Amal Contracting',includePrices:false,project:project([company1,supplierA])}));
     const plain=html.replace(/\s+/g,' ');
     expect(plain).toContain('<td><span dir="auto">DROMEX S.A.R.L.</span></td>');
     expect(plain).toContain('<td><span dir="auto">Saad Quarry</span></td>');

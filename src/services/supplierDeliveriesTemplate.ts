@@ -1,4 +1,5 @@
 import {NOT_RECORDED,pdfDayLabel,type SupplierDeliveriesPdf} from '../domain/supplierDeliveriesPdf';
+import {breakAfterHyphens,colgroup,columnWidths,type ColumnSpec} from './pdfColumns';
 
 /**
  * DEC-506. The supplier deliveries PDF as A4: the header company, "Totals" with the supplier's name in bold, the
@@ -22,17 +23,33 @@ export function buildSupplierDeliveriesHtml(input:SupplierDeliveriesPdfInput):st
   const {report}=input,prices=report.includePrices;
   const lengths=report.hasLength,pieces=report.hasPieces||lengths;
   const head=['Load','Date, time','Material','Driver · truck','Ticket',...(pieces?['Pieces']:[]),...(lengths?['Length per bar','Meters']:[]),'Quantity',...(prices?['Price','Total']:[]),'Status'].map((label,position)=>`<th${label==='Pieces'||label==='Length per bar'||label==='Meters'||label==='Quantity'||label==='Price'||label==='Total'?' class="num"':''}>${e(label)}</th>`);
-  const colgroup=`<colgroup>${(lengths?(prices?[9,8,9,10,7,7,9,8,9,8,8,8]:[12,9,12,13,8,7,9,8,12,10]):prices?(pieces?[14,9,11,13,8,7,9,9,9,11]:[16,10,13,14,11,8,9,9,10]):(pieces?[17,11,15,16,9,8,13,11]:[19,12,16,17,12,12,12])).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup>`;
+  // Widths come from the content of every load in the report (see pdfColumns.ts): each column has room for its longest word, the load
+  // number may break after a hyphen, and the widths add up to exactly 100%, so nothing runs into the next column.
+  const everyLoad=report.destinations.flatMap(destination=>destination.loads);
+  const NR=NOT_RECORDED;
+  const specs:ColumnSpec[]=[
+    {header:'Load',kind:'code',cells:everyLoad.map(load=>load.reference)},
+    {header:'Date, time',cells:everyLoad.map(load=>day(load.recordedAt))},
+    {header:'Material',cells:everyLoad.map(load=>load.item)},
+    {header:'Driver · truck',cells:everyLoad.map(load=>load.driver)},
+    {header:'Ticket',cells:everyLoad.map(load=>load.ticket??NR)},
+    ...(pieces?[{header:'Pieces',cells:everyLoad.map(load=>load.pieces??NR)}]:[]),
+    ...(lengths?[{header:'Length per bar',cells:everyLoad.map(load=>load.length??NR)},{header:'Meters',cells:everyLoad.map(load=>load.meters??NR)}]:[]),
+    {header:'Quantity',kind:'number',cells:everyLoad.flatMap(load=>[load.quantityText,...(lengths&&load.weightNote?load.weightNote.split(' '):[])])},
+    ...(prices?[{header:'Price',kind:'number' as const,cells:everyLoad.map(load=>load.unitPrice??'')},{header:'Total',kind:'number' as const,cells:everyLoad.map(load=>load.total??'')}]:[]),
+    {header:'Status',cells:everyLoad.map(load=>load.status)},
+  ];
+  const colgroupHtml=colgroup(columnWidths(specs));
   const blocks=report.destinations.map((destination,index)=>{
     const rows=destination.loads.map(load=>`<tr>
-      <td><span class="ln">${t(load.reference)}</span></td>
-      <td class="${lengths?'':'nowrap'}">${e(day(load.recordedAt))}<div class="muted">${e(time(load.recordedAt))}</div></td>
+      <td><span class="ln">${breakAfterHyphens(t(load.reference))}</span></td>
+      <td>${e(day(load.recordedAt))}<div class="muted">${e(time(load.recordedAt))}</div></td>
       <td>${t(load.item)}</td><td>${t(load.driver)}</td><td>${load.ticket?t(load.ticket):missing}</td>${pieces?`<td class="num${lengths?' wr':''}">${load.pieces?e(load.pieces):(lengths?missingWrap:missing)}</td>`:''}${lengths?`<td class="num wr">${load.length?e(load.length):missingWrap}</td><td class="num wr">${load.meters?e(load.meters):missingWrap}</td>`:''}
       <td class="num">${e(load.quantityText)}${lengths&&load.weightNote?`<div class="muted">${e(load.weightNote)}</div>`:''}</td>${prices?`<td class="num">${e(load.unitPrice)}</td><td class="num">${e(load.total)}</td>`:''}
       <td><b>${e(load.status)}</b>${load.statusNote?`<div class="muted">${e(load.statusNote)}</div>`:''}</td></tr>`).join('');
     const totals=destination.totals.map(total=>`<span class="pill">${t(total.item)} · ${e(total.quantityText)}${total.piecesText?` · ${e(total.piecesText)}`:''} · ${total.count} load${total.count===1?'':'s'}</span>`).join('');
     return `<section class="block"><div class="block-bar"><span class="block-index">${index+1}</span><span class="block-name">${t(destination.label)}</span><span class="block-count">${destination.loads.length} load${destination.loads.length===1?'':'s'}</span></div>
-    <div class="block-body"><table>${colgroup}<thead><tr>${head.join('')}</tr></thead><tbody>${rows}</tbody></table>
+    <div class="block-body"><table>${colgroupHtml}<thead><tr>${head.join('')}</tr></thead><tbody>${rows}</tbody></table>
     <div class="pills">${totals}</div>${prices&&destination.unpricedCount?`<p class="note">${destination.unpricedCount} unpriced load${destination.unpricedCount===1?'':'s'}: shown as Unpriced, never as zero.</p>`:''}</div></section>`;
   }).join('');
   const overall=report.totals.map(total=>`<span class="pill strong">${t(total.item)} · ${e(total.quantityText)}${total.piecesText?` · ${e(total.piecesText)}`:''} · ${total.count}</span>`).join('');
@@ -64,7 +81,7 @@ export function buildSupplierDeliveriesHtml(input:SupplierDeliveriesPdfInput):st
     th{text-align:left;color:#173F67;font-size:7pt;border-bottom:1.5px solid #173F67;padding:1.4mm 1.6mm;vertical-align:bottom}
     td{padding:1.4mm 1.6mm;border-bottom:.3mm solid #EAE3D7;vertical-align:top;overflow-wrap:anywhere}
     tbody tr:nth-child(even) td{background:#FAF8F4}
-    .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.nowrap{white-space:nowrap}.muted{color:#5A6570;font-size:7pt}.missing{color:#8A6D1D;font-style:italic;white-space:nowrap}.missing.wrap{white-space:normal;font-size:6.5pt}.num.wr{white-space:normal}
+    .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.nowrap{white-space:nowrap}.muted{color:#5A6570;font-size:7pt}.missing{color:#8A6D1D;font-style:italic;white-space:nowrap}.missing.wrap{white-space:normal;font-size:6.5pt}.num.wr{white-space:normal}.num .muted{white-space:normal}th.num{white-space:normal}
     .ln{font-weight:700;color:#173F67}
     tr.total td{font-weight:800;border-top:1.5px solid #17212B;background:#F5F5F5}
     .pills{display:flex;flex-wrap:wrap;gap:1.5mm;margin-top:2.5mm}.pill{border:1px solid #CFC5B3;border-radius:5mm;padding:.8mm 2.6mm;font-size:8pt;background:#FBF9F4}.pill.strong{background:#EAF1F6;border-color:#173F67;font-weight:700}

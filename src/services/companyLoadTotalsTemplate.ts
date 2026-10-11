@@ -1,6 +1,7 @@
 import type {CompanyTotalsRecord} from '../data/repositories/CompanyTotalsRepository';
 import {LEGACY_SERIES_KEY,type CompanyLoadGroupNode,type UnitQuantity} from '../domain/companyTotals';
 import {formatTotalQuantity} from '../domain/projectTotals';
+import {breakAfterHyphens,colgroup,columnWidths} from './pdfColumns';
 import {formatDay,formatRecordedAt,recordTitle} from '../domain/recordFormat';
 
 /**
@@ -26,15 +27,27 @@ function groupKeyOf(record:CompanyTotalsRecord,groupBy:'series'|'item'){
 }
 
 export function buildCompanyLoadTotalsHtml(input:CompanyLoadTotalsPdf):string{
+  // Widths come from the content of every Active load (see pdfColumns.ts): room for the longest word of each column, a load number that
+  // may break after a hyphen, and exactly 100% in all, so nothing runs into the next column.
+  const everyActive=input.loads.filter(record=>record.status==='Active');
+  const loadsColgroup=colgroup(columnWidths([
+    {header:'Load number',kind:'code',cells:everyActive.map(record=>recordTitle(record.snapshot))},
+    {header:'Date and time',cells:everyActive.map(record=>formatDay(localDay(record.snapshot.recordedAt)))},
+    {header:'Item',cells:everyActive.map(record=>record.snapshot.itemName)},
+    {header:'Project',cells:everyActive.map(record=>record.snapshot.projectName??'No project')},
+    {header:'Customer',cells:everyActive.map(record=>record.snapshot.partyName)},
+    {header:'Quantity',kind:'number',cells:everyActive.map(record=>formatTotalQuantity(record.snapshot.quantity,record.snapshot.unitSymbol))},
+    {header:'History',cells:everyActive.map(record=>record.correctionCount?`Corrected ${record.correctionCount}×`:'')},
+  ]));
   const sections=input.groups.map(group=>{
     const own=input.loads.filter(record=>groupKeyOf(record,input.groupBy)===group.key);
     const active=own.filter(record=>record.status==='Active');
     const projectRows=group.projects.map(project=>`<tr><td>${t(project.projectName)}</td><td class="num nowrap">${loadsWord(project.loadCount)}</td><td class="num nowrap">${units(project.units)}</td></tr>`).join('');
-    const loadRow=(record:CompanyTotalsRecord)=>`<tr><td class="strong">${e(recordTitle(record.snapshot))}<div class="muted">Transaction ${e(record.snapshot.reference)}</div></td>
+    const loadRow=(record:CompanyTotalsRecord)=>`<tr><td class="strong">${breakAfterHyphens(e(recordTitle(record.snapshot)))}<div class="muted">Transaction ${e(record.snapshot.reference)}</div></td>
       <td class="nowrap">${e(formatDay(localDay(record.snapshot.recordedAt)))}<div class="muted">${e(localTime(record.snapshot.recordedAt))}</div></td><td>${t(record.snapshot.itemName)}</td><td>${t(record.snapshot.projectName??'No project')}</td><td>${t(record.snapshot.partyName)}</td>
       <td class="num nowrap">${e(formatTotalQuantity(record.snapshot.quantity,record.snapshot.unitSymbol))}</td>
       <td class="history">${record.correctionCount?`Corrected ${record.correctionCount}×`:''}</td></tr>`;
-    const table=(caption:string,rows:CompanyTotalsRecord[])=>rows.length?`<table class="loads"><colgroup><col style="width:17%"/><col style="width:12%"/><col style="width:15%"/><col style="width:16%"/><col style="width:16%"/><col style="width:12%"/><col style="width:12%"/></colgroup><thead><tr class="caption"><th colspan="7">${t(group.label)} · ${e(caption)}</th></tr>
+    const table=(caption:string,rows:CompanyTotalsRecord[])=>rows.length?`<table class="loads">${loadsColgroup}<thead><tr class="caption"><th colspan="7">${t(group.label)} · ${e(caption)}</th></tr>
       <tr><th>Load number</th><th>Date and time</th><th>Item</th><th>Project</th><th>Customer</th><th class="num">Quantity</th><th>History</th></tr></thead><tbody>${rows.map(loadRow).join('')}</tbody></table>`:'';
     return `<section class="group">
       <h2>${t(group.label)}</h2>

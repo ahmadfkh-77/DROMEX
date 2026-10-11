@@ -1,6 +1,7 @@
 import type {CompanyTotalsRecord} from '../data/repositories/CompanyTotalsRepository';
 import {buildMaterialTree,treeTotals,unitDifferences,type CompanyTotalsData,type MaterialNode,type RecordedValue,type UnitMeasures} from '../domain/companyTotals';
 import {fuelTypeLabels} from '../domain/fuel';
+import {breakAfterHyphens,colgroup,columnWidths,type ColumnSpec} from './pdfColumns';
 import {formatTotalQuantity,summarizeFuelFills,type ProjectFuelFill} from '../domain/projectTotals';
 import {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
 import {companyLoadReference,deliveredByLabel,INTERNAL_PROJECT,priceAsRecorded,supplierBox,supplierNameOf,unitTotals,vatAndTotal,type CustomerBox} from '../domain/projectTotalsPdf';
@@ -108,39 +109,53 @@ function historyBlock(records:CompanyTotalsRecord[],index:number,prices:boolean,
 }
 
 const dateCell=(raw:string)=>`${e(formatDay(localDay(raw)))}<div class="muted">${e(localTime(raw))}</div>`;
-
-/**
- * Phase 5. Column widths of every load list, each set adding up to exactly 100%, so the base columns keep their
- * order and nearly their width with or without prices and a Project column. Order: Date, time | Load No. | Item |
- * Supplier | Customer | Driver | Truck plate | Unit | Quantity, then Project, then the two price columns.
- */
-const LOAD_LIST_WIDTHS={plain:[11,10,12,12,12,12,10,6,15],project:[10,9,10,10,10,10,9,5,12],prices:[9,9,10,10,10,10,8,5,9],projectPrices:[8,8,9,9,9,9,8,4,8]};
 const notRecordedOr=(raw:string|null|undefined)=>raw?t(raw):missing;
 
 /**
- * Phase 5. One table for every list of loads in a Totals PDF (Loads History, Customer Deliveries, and the company
- * and supplier loads of a Project Totals). Every fact has its own column: no two values share a cell except the
- * date with its time and a load number with its reference. Supplier is the Plant Company's real name on the company's own
- * loads (as issued) and the outside supplier on an incoming one; Customer on an incoming delivery is the customer of its project. Fixed layout, numbers right-aligned.
+ * One table for every list of loads in a Totals PDF (Loads History, Customer Deliveries, and the company and supplier
+ * loads of a Project Totals). Every fact has its own column; the quantity is printed with its unit ("27 M³") so the
+ * number and its unit are never apart. Supplier is the Plant Company's real name on the company's own loads and the outside
+ * supplier on an incoming one; Customer on an incoming delivery is the customer of its project. The widths come from the
+ * content (see pdfColumns.ts): every column has room for its longest word and a load number breaks after a hyphen, so
+ * nothing runs into the next column. Numbers are right-aligned.
  */
 function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:boolean):string{
-  const base=showProject?(prices?LOAD_LIST_WIDTHS.projectPrices:LOAD_LIST_WIDTHS.project):(prices?LOAD_LIST_WIDTHS.prices:LOAD_LIST_WIDTHS.plain);
-  const widths=[...base,...(showProject?[prices?10:15]:[]),...(prices?(showProject?[9,9]:[10,10]):[])];
-  const rows=records.map(record=>{
+  const quantityOf=(s:CompanyTotalsRecord['snapshot'])=>`${formatTotalQuantity(s.quantity,'').trim()} ${s.unitSymbol}`.trim();
+  const lines=records.map(record=>{
     const s=record.snapshot,d=record.details,company=s.recordType==='company_load';
     const driver=company?d?.driverName:d?.deliveredBy==='supplier'?'Supplier delivering':d?.driverName;
-    const number=company
-      ?`${s.loadNumber?`<span class="ln">${e(s.loadNumber)}</span>`:`<span class="legacy" title="${e(recordTitle(s))}">Legacy load</span>`}<div class="muted">${e(companyLoadReference(s))}</div>`
-      :`<span class="ln">${e(s.reference)}</span>${s.supplierReference?`<div class="muted">Supplier ticket ${e(s.supplierReference)}</div>`:''}`;
+    const number=company?(s.loadNumber??'Legacy load'):s.reference;
+    return {record,s,d,company,driver,number,quantity:quantityOf(s)};
+  });
+  const rows=lines.map(({record,s,d,company,driver,number,quantity})=>{
+    const numberCell=company
+      ?`${s.loadNumber?`<span class="ln">${breakAfterHyphens(e(s.loadNumber))}</span>`:`<span class="legacy" title="${e(recordTitle(s))}">Legacy load</span>`}<div class="muted">${breakAfterHyphens(e(companyLoadReference(s)))}</div>`
+      :`<span class="ln">${breakAfterHyphens(e(s.reference))}</span>${s.supplierReference?`<div class="muted">Supplier ticket ${e(s.supplierReference)}</div>`:''}`;
     const priceCells=prices?`<td class="num wrap">${s.unitPriceCents==null?'<span class="missing">No price recorded</span>':e(priceAsRecorded(s))}</td><td class="num wrap">${s.totalCents==null?missing:e(vatAndTotal(s))}</td>`:'';
-    return `<tr><td class="nowrap">${dateCell(s.recordedAt)}</td><td>${number}</td><td>${t(s.itemName)}</td>
-      <td>${notRecordedOr(supplierNameOf(record))}</td><td>${notRecordedOr(company?s.partyName:d?.customerName)}</td>
-      <td>${notRecordedOr(driver)}</td><td>${notRecordedOr(d?.truckPlate)}</td><td>${e(s.unitSymbol)}</td><td class="num">${e(formatTotalQuantity(s.quantity,'').trim())}</td>
+    void record;void number;
+    return `<tr><td>${dateCell(s.recordedAt)}</td><td>${numberCell}</td><td>${t(s.itemName)}</td>
+      <td>${notRecordedOr(supplierNameOf({snapshot:s,details:d}))}</td><td>${notRecordedOr(company?s.partyName:d?.customerName)}</td>
+      <td>${notRecordedOr(driver)}</td><td>${notRecordedOr(d?.truckPlate)}</td><td class="num">${e(quantity)}</td>
       ${showProject?`<td>${s.projectName?t(s.projectName):missing}</td>`:''}${priceCells}</tr>`;
   }).join('');
-  const columns=['Date, time','Load No.','Item','Supplier','Customer','Driver','Truck plate','Unit','Quantity'];
-  const head=columns.map((column,position)=>`<th${position===8?' class="num"':''}>${e(column)}</th>`).join('')+(showProject?'<th>Project</th>':'')+(prices?'<th class="num">Price as recorded</th><th class="num">VAT · Total</th>':'');
-  return `<table class="grid history"><colgroup>${widths.map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+  const NR='Not recorded';
+  const specs:ColumnSpec[]=[
+    {header:'Date, time',cells:lines.map(line=>formatDay(localDay(line.s.recordedAt)))},
+    {header:'Load No.',kind:'code',cells:lines.flatMap(line=>line.company?[line.s.loadNumber??'Legacy load',companyLoadReference(line.s)]:[line.s.reference,...(line.s.supplierReference?[`Supplier ticket ${line.s.supplierReference}`]:[])])},
+    {header:'Item',cells:lines.map(line=>line.s.itemName)},
+    {header:'Supplier',cells:lines.map(line=>supplierNameOf({snapshot:line.s,details:line.d})??NR)},
+    {header:'Customer',cells:lines.map(line=>(line.company?line.s.partyName:line.d?.customerName)??NR)},
+    {header:'Driver',cells:lines.map(line=>line.driver??NR)},
+    {header:'Truck plate',cells:lines.map(line=>line.d?.truckPlate??NR)},
+    {header:'Quantity',kind:'number',cells:lines.map(line=>line.quantity)},
+    ...(showProject?[{header:'Project',cells:lines.map(line=>line.s.projectName??NR)} as ColumnSpec]:[]),
+    ...(prices?[{header:'Price as recorded',kind:'amount',cells:lines.map(line=>line.s.unitPriceCents==null?'No price recorded':priceAsRecorded(line.s))} as ColumnSpec,{header:'VAT · Total',kind:'amount',cells:lines.map(line=>line.s.totalCents==null?NR:vatAndTotal(line.s))} as ColumnSpec]:[]),
+  ];
+  // Ten or more columns (a Project column with prices) use a smaller type so every word still fits its column on A4.
+  const dense=specs.length>=10;
+  const widths=columnWidths(specs,dense?{fontPt:7,headerPt:6.5}:{});
+  const head=specs.map(spec=>`<th${spec.header==='Quantity'?' class="num"':(prices&&(spec.header==='Price as recorded'||spec.header==='VAT · Total'))?' class="num wrap"':''}>${e(spec.header)}</th>`).join('');
+  return `<table class="grid history${dense?' dense':''}">${colgroup(widths)}<thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 /**
@@ -247,7 +262,7 @@ export function buildTotalsHtml(input:TotalsPdf):string{
     tr.group-row td{background:#F0EBE2;font-weight:700;color:#17212B;border-bottom:.3mm solid #D9CFBE;padding-top:1.8mm}
     td.indent{padding-left:5mm}
     .grid{table-layout:fixed}
-    .history td{font-size:8pt}
+    .history td{font-size:8pt}.history.dense td{font-size:7pt}.history.dense th{font-size:6.5pt}
     .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
     .nowrap{white-space:nowrap}
     .wrap{white-space:normal}
@@ -260,7 +275,7 @@ export function buildTotalsHtml(input:TotalsPdf):string{
     .proj .figure-label{margin-bottom:.3mm}.proj b{font-size:10.5pt}
     .two{display:flex;gap:4mm;margin:0 0 3mm;break-inside:avoid}.box{flex:1;border:1px solid #CFC5B3;border-radius:2.5mm;padding:2.5mm 4mm;background:#FFFFFF}
     .box-label{display:block;color:#5A6570;font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.box b{display:block;font-size:11.5pt;color:#173F67;overflow-wrap:anywhere}
-    .ln{font-weight:700;color:#173F67;white-space:nowrap}.legacy{color:#5A6570;font-style:italic;font-weight:400}.ok{color:#2F6B3A;font-weight:700;font-size:7.5pt}
+    .ln{font-weight:700;color:#173F67}.legacy{color:#5A6570;font-style:italic;font-weight:400}.ok{color:#2F6B3A;font-weight:700;font-size:7.5pt}
   </style></head><body>
     <div class="head"><div>${input.logo?`<img class="logo" src="${input.logo}" alt=""/>`:''}<b>${t(input.companyName)}</b>${input.contactLine?`<div class="contact">${t(input.contactLine)}</div>`:''}</div>
       <div class="head-right"><h1>${t(input.title)}</h1>${input.issuedTo?`<div class="subtitle">Issued to: ${t(input.issuedTo)}</div>`:''}${input.project?`<div class="subtitle">${input.project.customer.label===INTERNAL_PROJECT?t(INTERNAL_PROJECT):`Customer: ${t(input.project.customer.label)}`}</div>`:''}<div class="when">${e(formatRecordedAt(input.generatedAt))}</div></div></div>
