@@ -9,9 +9,10 @@ import type {BackupExportResult,BackupPreview,RestoreResult,SelectedBackup} from
 import {DATABASE_VERSION,migrateDatabase} from '../database/migrations';
 import type {BackupRepository} from './BackupRepository';
 import {createBackupArchive,decodeBackupArchive,materializeArchiveMedia,previewFromManifest,type DecodedArchive} from '../../services/backup/BackupArchive';
-import {base64ToBytes,bytesToBase64,decryptBackupBytes,encryptBackupBytes,validateNewBackupPassword} from '../../services/backup/BackupCrypto';
+import {decryptBackupBytes,encryptBackupBytes,validateNewBackupPassword} from '../../services/backup/BackupCrypto';
+import {readBytes,saveToSafDirectory,writeBytes} from '../../services/backup/BackupFiles';
 
-type BuiltPackage={bytes:Uint8Array;filename:string;localUri:string;preview:BackupPreview};
+type BuiltPackage={filename:string;localUri:string;preview:BackupPreview};
 type ValidatedPackage={decoded:DecodedArchive;database:SQLiteDatabase;preview:BackupPreview};
 
 export class SqliteBackupRepository implements BackupRepository{
@@ -21,7 +22,7 @@ export class SqliteBackupRepository implements BackupRepository{
     validateNewBackupPassword(password);
     const directory=Platform.OS==='android'?await chooseDestination():null;
     const built=await this.buildPackage(password,'Backup');
-    const destinationUri=directory?await saveToDirectory(directory,built.filename,built.bytes):await shareToAppleFiles(built.localUri);
+    const destinationUri=directory?await saveToSafDirectory(directory,built.filename,built.localUri):await shareToAppleFiles(built.localUri);
     return{filename:built.filename,localUri:built.localUri,destinationUri,preview:built.preview};
   }
 
@@ -42,7 +43,7 @@ export class SqliteBackupRepository implements BackupRepository{
     try{
       const safetyDirectory=Platform.OS==='android'?await chooseDestination():null;
       safety=await this.buildPackage(safetyPassword,'Safety-Before-Restore');
-      const safetyDestinationUri=safetyDirectory?await saveToDirectory(safetyDirectory,safety.filename,safety.bytes):await shareToAppleFiles(safety.localUri);
+      const safetyDestinationUri=safetyDirectory?await saveToSafDirectory(safetyDirectory,safety.filename,safety.localUri):await shareToAppleFiles(safety.localUri);
       await materializeArchiveMedia(validated.database,validated.decoded);
       await assertDatabaseValid(validated.database);
       await backupDatabaseAsync({sourceDatabase:validated.database,destDatabase:this.db});
@@ -56,7 +57,7 @@ export class SqliteBackupRepository implements BackupRepository{
   }
 
   private async loadValidated(source:SelectedBackup,password:string):Promise<ValidatedPackage>{
-    const encrypted=await readFileBytes(source.uri),plain=await decryptBackupBytes(encrypted,password),decoded=decodeBackupArchive(plain);
+    const encrypted=await readSelectedBackup(source.uri),plain=await decryptBackupBytes(encrypted,password),decoded=decodeBackupArchive(plain);
     if(decoded.manifest.databaseVersion>DATABASE_VERSION)throw new Error('This backup was created by a newer DROMEX version. Update the app first.');
     const database=await deserializeDatabaseAsync(decoded.databaseBytes);
     try{await assertDatabaseValid(database);if(decoded.manifest.databaseVersion<DATABASE_VERSION)await migrateDatabase(database);await assertDatabaseValid(database);return{decoded,database,preview:previewFromManifest(decoded.manifest,encrypted.length)};}catch(cause){await database.closeAsync();throw cause;}
@@ -69,9 +70,10 @@ export class SqliteBackupRepository implements BackupRepository{
     if(!FileSystem.documentDirectory)throw new Error('Permanent app storage is unavailable.');
     const directory=`${FileSystem.documentDirectory}backups/`;await FileSystem.makeDirectoryAsync(directory,{intermediates:true});
     const stamp=createdAt.replace(/[:.]/g,'-'),filename=`DROMEX-${label}-${stamp}.dromexbackup`,localUri=`${directory}${filename}`;
-    await FileSystem.writeAsStringAsync(`${localUri}.partial`,bytesToBase64(bytes),{encoding:FileSystem.EncodingType.Base64});
+    // The finished file is written as raw bytes (no base64 text), then renamed into place.
+    await writeBytes(`${localUri}.partial`,bytes);
     await FileSystem.deleteAsync(localUri,{idempotent:true});await FileSystem.moveAsync({from:`${localUri}.partial`,to:localUri});
-    return{bytes,filename,localUri,preview:previewFromManifest(archive.manifest,bytes.length)};
+    return{filename,localUri,preview:previewFromManifest(archive.manifest,bytes.length)};
   }
 }
 
@@ -84,6 +86,6 @@ async function readPreferences():Promise<Array<[string,string]>>{const keys=(awa
 async function replacePreferences(values:Array<[string,string]>){const current=(await Storage.getAllKeys()).filter(key=>key.startsWith('dromex.'));if(current.length)await Storage.multiRemove(current);if(values.length)await Storage.multiSet(values);}
 
 async function chooseDestination(){if(!FileSystem.StorageAccessFramework)throw new Error('Folder selection is unavailable on this device.');const permission=await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();if(!permission.granted)throw new Error('No backup folder was selected. Nothing was changed.');return permission.directoryUri;}
-async function saveToDirectory(directoryUri:string,filename:string,bytes:Uint8Array){const uri=await FileSystem.StorageAccessFramework.createFileAsync(directoryUri,filename,'application/octet-stream');await FileSystem.StorageAccessFramework.writeAsStringAsync(uri,bytesToBase64(bytes),{encoding:FileSystem.EncodingType.Base64});return uri;}
+/** Reads the chosen backup file as bytes; a read problem is reported in plain words. */
+async function readSelectedBackup(uri:string){try{return await readBytes(uri);}catch(cause){if(cause instanceof Error&&cause.message.includes('backup'))throw cause;throw new Error('DROMEX could not read the selected backup file.');}}
 async function shareToAppleFiles(localUri:string){if(Platform.OS!=='ios')throw new Error('This backup destination is unavailable on this device.');if(!await Sharing.isAvailableAsync())throw new Error('Apple Files sharing is unavailable on this device.');await Sharing.shareAsync(localUri,{UTI:'public.data'});return localUri;}
-async function readFileBytes(uri:string){try{return base64ToBytes(await FileSystem.readAsStringAsync(uri,{encoding:FileSystem.EncodingType.Base64}));}catch(cause){if(cause instanceof Error&&cause.message.includes('backup'))throw cause;throw new Error('DROMEX could not read the selected backup file.');}}

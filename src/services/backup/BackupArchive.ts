@@ -1,8 +1,8 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import type {SQLiteDatabase} from 'expo-sqlite';
-import {strFromU8,strToU8,unzipSync,zipSync} from 'fflate';
+import {strFromU8,strToU8,unzipSync,zipSync,type Zippable} from 'fflate';
 import {BACKUP_COUNT_TABLES,type BackupPreview,type BackupRecordCounts} from '../../domain/backup';
-import {base64ToBytes} from './BackupCrypto';
+import {readBytes,writeBytes} from './BackupFiles';
 
 export const BACKUP_ARCHIVE_FORMAT='DROMEX-COMPLETE-BACKUP';
 export const BACKUP_ARCHIVE_VERSION=1;
@@ -34,7 +34,9 @@ export async function createBackupArchive(db:SQLiteDatabase,preferences:Array<[s
   await db.execAsync('PRAGMA wal_checkpoint(FULL)');
   const databaseVersion=(await db.getFirstAsync<{user_version:number}>('PRAGMA user_version'))?.user_version??0;
   const recordCounts=await collectCounts(db);
-  const files:Record<string,Uint8Array>={'database.sqlite':await db.serializeAsync(),'preferences.json':strToU8(JSON.stringify(preferences))};
+  // The database and manifest are compressed; photos and other attachments are stored as they are (a JPEG does not shrink, and
+  // compressing it only costs time and memory). Both read back the same way.
+  const files:Zippable={'database.sqlite':await db.serializeAsync(),'preferences.json':strToU8(JSON.stringify(preferences))};
   const media:MediaLocator[]=[];
   const archivedByUri=new Map<string,string>();
   for(const spec of singleSpecs){
@@ -72,7 +74,7 @@ export async function materializeArchiveMedia(db:SQLiteDatabase,decoded:DecodedA
   const restored=new Map<string,string>();
   for(const locator of decoded.manifest.media){
     let uri=restored.get(locator.archivePath);
-    if(!uri){const data=decoded.files[locator.archivePath];if(!data)throw new Error('A required backup attachment is missing.');const filename=locator.archivePath.split('/').pop()??'attachment.bin';uri=`${root}${safe(filename)}`;await FileSystem.writeAsStringAsync(uri,bytesToBase64Native(data),{encoding:FileSystem.EncodingType.Base64});restored.set(locator.archivePath,uri);}
+    if(!uri){const data=decoded.files[locator.archivePath];if(!data)throw new Error('A required backup attachment is missing.');const filename=locator.archivePath.split('/').pop()??'attachment.bin';uri=`${root}${safe(filename)}`;await writeBytes(uri,data);restored.set(locator.archivePath,uri);}
     if(locator.jsonIndex===null)await db.runAsync(`UPDATE ${locator.table} SET ${locator.column}=? WHERE id=?`,uri,locator.recordId);
   }
   const groups=new Map<string,MediaLocator[]>();
@@ -89,16 +91,15 @@ function validateManifest(manifest:BackupManifest,files:Record<string,Uint8Array
 
 async function collectCounts(db:SQLiteDatabase){const counts:BackupRecordCounts={};for(const table of BACKUP_COUNT_TABLES){const row=await db.getFirstAsync<{count:number}>(`SELECT COUNT(*) count FROM ${table}`);counts[table]=row?.count??0;}return counts;}
 
-async function addMediaFile(files:Record<string,Uint8Array>,archivedByUri:Map<string,string>,uri:string){
+async function addMediaFile(files:Zippable,archivedByUri:Map<string,string>,uri:string){
   const existing=archivedByUri.get(uri);if(existing)return existing;
   if(uri.startsWith('cloud-storage://'))throw new Error('A cloud-only attachment must be downloaded before creating a complete backup.');
   const info=await FileSystem.getInfoAsync(uri);if(!info.exists||info.isDirectory)throw new Error(`A referenced attachment is missing: ${uri.split('/').pop()??'unknown file'}.`);
-  const base64=await FileSystem.readAsStringAsync(uri,{encoding:FileSystem.EncodingType.Base64});
+  const bytes=await readBytes(uri);
   const extension=(uri.split('.').pop()?.split('?')[0]??'bin').replace(/[^a-zA-Z0-9]/g,'').slice(0,8)||'bin';
   const archivePath=`media/${String(archivedByUri.size+1).padStart(5,'0')}.${extension.toLowerCase()}`;
-  files[archivePath]=base64ToBytes(base64);archivedByUri.set(uri,archivePath);return archivePath;
+  files[archivePath]=[bytes,{level:0}];archivedByUri.set(uri,archivePath);return archivePath;
 }
 
 function parseUriArray(value:string){try{const parsed=JSON.parse(value)as unknown;return Array.isArray(parsed)?parsed.filter(item=>typeof item==='string'&&item.trim()).map(item=>String(item)):[];}catch{throw new Error('A saved photo list is damaged and cannot be backed up.');}}
 function safe(value:string){return value.replace(/[^a-zA-Z0-9_.-]/g,'_');}
-function bytesToBase64Native(bytes:Uint8Array){const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';let result='';for(let i=0;i<bytes.length;i+=3){const a=bytes[i]??0,b=bytes[i+1]??0,c=bytes[i+2]??0,n=(a<<16)|(b<<8)|c;result+=alphabet[(n>>18)&63]??'';result+=alphabet[(n>>12)&63]??'';result+=i+1<bytes.length?(alphabet[(n>>6)&63]??''):'=';result+=i+2<bytes.length?(alphabet[n&63]??''):'=';}return result;}
