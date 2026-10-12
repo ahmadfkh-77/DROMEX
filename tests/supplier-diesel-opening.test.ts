@@ -38,6 +38,9 @@ describe('the Suppliers screen',()=>{
     const screen=require('node:fs').readFileSync('src/ui/screens/QuarryPurchasesScreen.tsx','utf8') as string;
     expect(screen).toContain("if(batch.status==='cancelled'||!batch.supplierId||known.has(batch.supplierId)||extra.has(batch.supplierId))continue;");
     expect(screen).not.toContain("batch.kind!=='delivery'||batch.status==='cancelled'");
-    expect(screen).toContain('{row.day} · {row.batchLabel}');
+    // The batch rows are drawn by one shared block: date, number, an "opening stock" tag, invoice, price and litres.
+    const block=require('node:fs').readFileSync('src/ui/components/SupplierDieselBlock.tsx','utf8') as string;
+    expect(screen.match(/<SupplierDieselBlock /g)?.length).toBe(2);
+    expect(block).toContain('{row.day}');expect(block).toContain('row.opening?');expect(block).toContain('opening stock');
   });
 });
