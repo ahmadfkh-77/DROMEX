@@ -38,6 +38,7 @@ describe('a single batch',()=>{
     expect(single.scopeLabel).toBe('DSL-2026-00004 · Invoice 55821');
     expect(single.metadata).toEqual([
       {label:'Batch',value:'DSL-2026-00004'},{label:'Exported',value:'Sat 3 Oct 2026, 18:42'},
+      {label:'Batch supplier',value:'Al-Nour Fuel'},{label:'Arrived',value:'Thu 1 Oct 2026'},{label:'Invoice',value:'55821'},
       {label:'Project filter',value:'All projects'},{label:'Site filter',value:'All sites'},
       {label:'Station filter',value:'All stations'},{label:'Supplier',value:'All suppliers'},{label:'Date range',value:'All dates'},{label:'Prices',value:'Excluded'},
     ]);

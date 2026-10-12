@@ -101,7 +101,7 @@ export function buildDieselBatchReport({movements,overview,names,filter,exported
     name:supplierName,totalLitres:formatLitres(supplierSummary.totalLitres),batchCount:supplierSummary.batchCount,unpricedNote:supplierSummary.unpricedNote,
     cancelledNote:supplierSummary.cancelledCount?`${supplierSummary.cancelledCount} cancelled batch${supplierSummary.cancelledCount===1?'':'es'} not counted`:null,
     amount:filter.includePrices?(supplierSummary.pricedAmountUsd==null?'Unpriced':formatMoney(supplierSummary.pricedAmountUsd)):undefined,
-    rows:supplierSummary.rows.map(row=>{const base:DieselReportSupplierRow={date:fuelDayLabel(row.day),batchNumber:row.batchNumber,invoice:row.invoiceNumber??'not recorded',litres:formatLitres(row.litres)};return filter.includePrices?{...base,price:row.pricePerLitreUsd==null?'Unpriced':formatMoney(row.pricePerLitreUsd),amount:row.totalUsd==null?'Unpriced':formatMoney(row.totalUsd)}:base;}),
+    rows:supplierSummary.rows.map(row=>{const base:DieselReportSupplierRow={date:fuelDayLabel(row.day),batchNumber:row.batchLabel,invoice:row.invoiceNumber??'not recorded',litres:formatLitres(row.litres)};return filter.includePrices?{...base,price:row.pricePerLitreUsd==null?'Unpriced':formatMoney(row.pricePerLitreUsd),amount:row.totalUsd==null?'Unpriced':formatMoney(row.totalUsd)}:base;}),
   }:null;
   const scopeLabel0=scoped?`${scoped.batchNumber} · Invoice ${scoped.invoiceNumber??'not recorded'}`:destinationFilter?'Batches that supplied the filtered fills':filter.fromDate||filter.toDate?'Batches and fills in the date range':'All batches';
   const scopeLabel=supplierName&&!scoped?`Supplier diesel deliveries · ${supplierName}${filter.fromDate||filter.toDate?` · ${dateRange}`:''}`:filter.fromDate||filter.toDate?`${scopeLabel0} · ${dateRange}`:scopeLabel0;
@@ -115,6 +115,8 @@ export function buildDieselBatchReport({movements,overview,names,filter,exported
     scopeLabel,
     metadata:[
       {label:'Batch',value:scoped?scoped.batchNumber:'All batches'},{label:'Exported',value:exported},
+      // One batch: the batch's own supplier, arrival date and invoice, not the filter below.
+      ...(scoped?[{label:'Batch supplier',value:scoped.supplierName??'Not recorded'},{label:'Arrived',value:fuelDayLabel(localDateKey(scoped.arrivedAt))},{label:'Invoice',value:scoped.invoiceNumber??'Not recorded'}]:[]),
       {label:'Project filter',value:filter.unassigned?'Unassigned only':nameOf(names.projects,filter.projectId)??'All projects'},{label:'Site filter',value:filter.unassigned?'Unassigned only':nameOf(names.companySites,filter.companySiteId)??'All sites'},
       {label:'Station filter',value:nameOf(names.stations,filter.stationId)??'All stations'},{label:'Supplier',value:supplierName??'All suppliers'},{label:'Date range',value:dateRange},{label:'Prices',value:filter.includePrices?'Included':'Excluded'},
     ],

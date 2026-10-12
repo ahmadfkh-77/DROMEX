@@ -117,7 +117,7 @@ export function buildSupplierDeliveriesPdf(input:{supplierId:string;supplierName
       diesel={
         batchCount:summary.batchCount,totalLitres:`${summary.totalLitres.toLocaleString('en-US',{maximumFractionDigits:3})} L`,unpricedNote:summary.unpricedNote,
         amount:filters.includePrices?(summary.pricedAmountUsd==null?'Unpriced':money(summary.pricedAmountUsd)):undefined,
-        rows:summary.rows.map(row=>{const base={date:dayLabel(row.day),batchNumber:row.batchNumber,invoice:row.invoiceNumber??NOT_RECORDED.toLowerCase(),litres:`${row.litres.toLocaleString('en-US',{maximumFractionDigits:3})} L`};return filters.includePrices?{...base,price:row.pricePerLitreUsd==null?'Unpriced':money(row.pricePerLitreUsd),amount:row.totalUsd==null?'Unpriced':money(row.totalUsd)}:base;}),
+        rows:summary.rows.map(row=>{const base={date:dayLabel(row.day),batchNumber:row.batchLabel,invoice:row.invoiceNumber??NOT_RECORDED.toLowerCase(),litres:`${row.litres.toLocaleString('en-US',{maximumFractionDigits:3})} L`};return filters.includePrices?{...base,price:row.pricePerLitreUsd==null?'Unpriced':money(row.pricePerLitreUsd),amount:row.totalUsd==null?'Unpriced':money(row.totalUsd)}:base;}),
       };
     }
   }
