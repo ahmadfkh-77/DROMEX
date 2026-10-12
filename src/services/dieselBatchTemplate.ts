@@ -26,7 +26,7 @@ export function buildDieselBatchReportHtml(report:DieselBatchReport,input:Diesel
     ...(prices?[{header:'Price / L',kind:'amount' as const,cells:everyRow.map(row=>row.price??'')},{header:'Cost',kind:'amount' as const,cells:everyRow.map(row=>row.cost??'')}]:[]),
   ]));
   const sections=report.sections.map(section=>`<section><h2 class="band">${e(section.title)}</h2>${section.destinations.map(destination=>`
-    <div class="dest"><h3><span class="type">${e(destination.typeLabel)}</span><bdi dir="auto">${e(destination.name)}</bdi></h3>
+    <div class="dest"><h3><span class="type">${e(destination.typeLabel)}</span><bdi dir="auto"${destination.typeLabel==='PROJECT'||destination.typeLabel==='SITE'?' class="name"':''}>${e(destination.name)}</bdi></h3>
     <table class="grid${prices?' priced':''}">${gridColgroup}<thead>${head}</thead><tbody>${destination.days.map(day=>`${day.rows.map(row=>`<tr><td>${e(row.date)}</td><td><bdi dir="auto">${e(row.equipment)}</bdi></td><td>${e(row.type)}</td><td><bdi dir="auto">${e(row.source)}</bdi></td><td class="num">${e(row.litres)}</td>${prices?`<td class="num">${e(row.price)}</td><td class="num wrap">${e(row.cost)}</td>`:''}</tr>`).join('')}
       <tr class="daytotal"><td colspan="${span}">Day total · ${e(day.label)}</td><td class="num">${e(day.totalText)}</td>${trail}</tr>`).join('')}
       <tr class="desttotal"><td colspan="${span}">${e(destination.totalLabel)}</td><td class="num">${e(destination.totalText)}</td>${trail}</tr>
@@ -52,7 +52,7 @@ bdi{unicode-bidi:isolate}.num{text-align:right;font-variant-numeric:tabular-nums
 .summary{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #999;margin:10px 0 4px}.summary div{padding:7px 8px;border-left:1px solid #999}.summary div:first-child{border-left:0}.summary .k{font-size:7.5pt;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#444}.summary .v{font-size:13pt;font-weight:800}.summary .shade{background:#E9EEF4}
 .note{font-size:8pt;color:#444;margin:2px 0 0}.alert{border:1.5px solid #B3261E;color:#B3261E;font-weight:700;padding:6px 8px;margin-top:8px}
 .band{font-size:10pt;font-weight:800;letter-spacing:.06em;color:#fff;background:#173F67;padding:5px 8px;margin:14px 0 0;break-after:avoid}
-.dest{break-inside:auto}.dest h3{font-size:10pt;margin:8px 0 0;padding:6px 6px 4px;border-bottom:1.5px solid #173F67;break-after:avoid;overflow-wrap:anywhere}.dest h3 .type{font-size:7.5pt;color:#444;letter-spacing:.06em;margin-right:6px}
+.dest{break-inside:auto}.dest h3{font-size:10pt;margin:8px 0 0;padding:6px 6px 4px;border-bottom:1.5px solid #173F67;break-after:avoid;overflow-wrap:anywhere}.dest h3 .type{font-size:7.5pt;color:#444;letter-spacing:.06em;margin-right:6px}.dest h3 .name{color:#C84B31}
 table.grid{width:100%;border-collapse:collapse;table-layout:fixed}table.grid thead{display:table-header-group}table.grid tr{break-inside:avoid}
 table.grid th{font-size:7.5pt;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#333;text-align:left;padding:5px 6px;border-bottom:1px solid #777;background:#F2F3F5}table.grid th.num{text-align:right}
 table.grid td{padding:5px 6px;border-bottom:1px solid #DDD;vertical-align:top;overflow-wrap:anywhere}

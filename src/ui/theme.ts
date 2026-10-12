@@ -16,6 +16,9 @@ export const colors = {
   result: '#087F8C',
   resultDark: '#04545D',
   resultSoft: '#DDF7F5',
+  /** A project's name and a company site's name share one colour (the brand orange); the words PROJECT and SITE stay beside them so a black and white print still reads. */
+  projectName: '#C84B31',
+  siteName: '#C84B31',
 } as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 } as const;

@@ -77,7 +77,7 @@ export function FuelDayCard({card,footer,onSelectRow,extraGroups=[],headerRight}
         accessibilityLabel={`${row.title}, ${row.tag.text}, ${row.litresText}`}/>)}
     </View>)}
     {card.groups.map((group,index)=><View key={group.key} style={[styles.groupBody,(index>0||extraGroups.some(extra=>extra.rows.length))&&styles.groupDivider]}>
-      {group.type!=='all'?<><Text style={styles.typeLabel}>{typeLabel[group.type]}</Text>{group.type!=='unassigned'?<Text style={styles.destination}>{group.name}</Text>:null}</>:null}
+      {group.type!=='all'?<><Text style={styles.typeLabel}>{typeLabel[group.type]}</Text>{group.type!=='unassigned'?<Text style={[styles.destination,styles.destinationName]}>{group.name}</Text>:null}</>:null}
       {group.rows.map((row,rowIndex)=><RecordRow key={row.id} first={rowIndex===0} title={row.equipmentLabel} time={row.time} detail={row.detail} splitLine={row.cancelled?null:row.splitLine} litresText={formatLitres(row.litres)} cancelled={row.cancelled} onPress={press(row.id)}
         tag={row.cancelled?<CancelledTag reason={row.cancellationReason}/>:<SourceTag source={row.source}/>}
         accessibilityLabel={`${row.equipmentLabel}, ${row.cancelled?'cancelled':row.source.text}, ${formatLitres(row.litres)}`}/>)}
@@ -118,6 +118,8 @@ const styles=StyleSheet.create({
   groupDivider:{borderTopWidth:1,borderTopColor:'#E8DED0'},
   typeLabel:{color:colors.muted,fontSize:11,fontWeight:'900',letterSpacing:1},
   destination:{color:colors.ink,fontSize:14,fontWeight:'900',marginBottom:4},
+  // A project's name and a company site's name share one colour; the words PROJECT and COMPANY SITE stay above them.
+  destinationName:{color:colors.projectName},
   row:{flexDirection:'row',alignItems:'flex-start',gap:12,paddingVertical:8},
   rowDivider:{borderTopWidth:1,borderTopColor:'#EFEAE1',borderStyle:'dashed'},
   equipment:{color:colors.ink,fontSize:14,fontWeight:'800'},

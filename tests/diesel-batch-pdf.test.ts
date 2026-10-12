@@ -50,7 +50,7 @@ describe('Diesel Batch Report PDF',()=>{
   });
   it('keeps Arabic and long names whole: isolated, wrapping, never truncated',()=>{
     const page=html();
-    expect(page).toContain('<bdi dir="auto">مشروع إعادة تأهيل طريق حاصبيا – مرجعيون، المرحلة الثانية</bdi>');
+    expect(page).toContain('<bdi dir="auto" class="name">مشروع إعادة تأهيل طريق حاصبيا – مرجعيون، المرحلة الثانية</bdi>');
     expect(page).toContain('overflow-wrap:anywhere');
     expect(page).not.toMatch(/text-overflow:\s*ellipsis/);
     expect(page).not.toMatch(/white-space:nowrap;[^}]*overflow:hidden/);
