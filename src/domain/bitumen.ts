@@ -1,4 +1,5 @@
 import {localDateKey} from './fuel';
+import type {BitumenAdjustment,BitumenUseRow} from './bitumenUse';
 
 /**
  * Bitumen batches (Phase B). A batch is one delivery of bitumen, tracked in kilograms. Phase B records deliveries, lists the batches,
@@ -39,6 +40,11 @@ export type BitumenOverview={
   usingBatchId:string|null;
   totalRemainingKg:number;
   batches:BitumenBatch[];
+  /** Every use row (uses, reversals, corrections and moves) and the owner's adjustments; empty until asphalt rules are used. */
+  useRows?:BitumenUseRow[];
+  adjustments?:BitumenAdjustment[];
+  /** How many asphalt items are ticked. When it is above zero the figures are estimates and are labelled so. */
+  rulesEnabled?:number;
 };
 
 export const bitumenStatusLabels:Record<BitumenBatchStatus,string>={in_use:'Open · In use',waiting:'Open · Waiting',closed:'Closed',cancelled:'Cancelled'};

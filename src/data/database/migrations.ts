@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 58;
+export const DATABASE_VERSION = 59;
 
 type TableColumn = { name: string };
 
@@ -2162,6 +2162,51 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_bitumen_batches_supplier ON bitumen_batches(supplier_id);
     `);
     currentVersion = 58;
+  }
+
+  if (currentVersion === 58) {
+    // Bitumen use from asphalt loads (Phase C). A rule per ticked item (how much bitumen per how much mix), the rows that record each
+    // load's use of a batch (a use, and later a reversal, correction or move, so nothing is rewritten), and the owner's adjustments of
+    // the real amount left. Purely additive: new tables only. No load, receipt or customer record is touched.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS bitumen_item_rules (
+        item_id TEXT PRIMARY KEY NOT NULL REFERENCES catalog_items(id),
+        is_enabled INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0, 1)),
+        aggregate_kg REAL NOT NULL CHECK (aggregate_kg > 0),
+        bitumen_kg REAL NOT NULL CHECK (bitumen_kg > 0),
+        count_from TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS bitumen_use (
+        id TEXT PRIMARY KEY NOT NULL,
+        load_id TEXT NOT NULL REFERENCES loads(id),
+        batch_id TEXT REFERENCES bitumen_batches(id),
+        kind TEXT NOT NULL CHECK (kind IN ('use', 'correction', 'reversal', 'moved')),
+        kg REAL NOT NULL,
+        mix_kg REAL NOT NULL,
+        rule_aggregate_kg REAL NOT NULL,
+        rule_bitumen_kg REAL NOT NULL,
+        load_number TEXT,
+        load_confirmed_at TEXT,
+        item_name TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_bitumen_use_load ON bitumen_use(load_id);
+      CREATE INDEX IF NOT EXISTS idx_bitumen_use_batch ON bitumen_use(batch_id);
+      CREATE TABLE IF NOT EXISTS bitumen_adjustments (
+        id TEXT PRIMARY KEY NOT NULL,
+        batch_id TEXT NOT NULL REFERENCES bitumen_batches(id),
+        kg REAL NOT NULL,
+        reason TEXT NOT NULL,
+        estimated_before REAL NOT NULL,
+        real_after REAL NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_bitumen_adjustments_batch ON bitumen_adjustments(batch_id);
+    `);
+    currentVersion = 59;
   }
 
 

@@ -133,7 +133,7 @@ export function DromexApp(){
   const[fuelBadge,setFuelBadge]=useState<string|null>(null);const[bitumenBadge,setBitumenBadge]=useState<string|null>(null);const[bitumenBatchId,setBitumenBatchId]=useState<string|null>(null);
   useEffect(()=>{if(screen!=='customers')return;let live=true;void companyHeaderRepository.getProjectCompany().then(value=>{if(live)setProjectCompanyCustomerId(value?.customerId??null);}).catch(()=>{if(live)setProjectCompanyCustomerId(null);});return()=>{live=false;};},[screen,companyHeaderRepository]);
   useEffect(()=>{if(screen!=='home')return;let live=true;void fuelRepository.getBatchOverview().then(value=>{if(live)setFuelBadge(fuelHomeBadge(value));}).catch(()=>{if(live)setFuelBadge(null);});return()=>{live=false;};},[screen,fuelRepository]);
-  useEffect(()=>{if(screen!=='home')return;let live=true;void bitumenRepository.getOverview().then(value=>{if(live)setBitumenBadge(bitumenHomeBadge(value));}).catch(()=>{if(live)setBitumenBadge(null);});return()=>{live=false;};},[screen,bitumenRepository]);
+  useEffect(()=>{if(screen!=='home')return;let live=true;void bitumenRepository.syncUse().catch(()=>null).then(()=>bitumenRepository.getOverview()).then(value=>{if(live)setBitumenBadge(bitumenHomeBadge(value));}).catch(()=>{if(live)setBitumenBadge(null);});return()=>{live=false;};},[screen,bitumenRepository]);
   const[dashboardRange,setDashboardRange]=useState<DashboardRange|null>(null);
   const[correctionLoadId,setCorrectionLoadId]=useState<string|null>(null);
   const[cloudSnapshot,setCloudSnapshot]=useState<CloudAccountSnapshot|null>(null);

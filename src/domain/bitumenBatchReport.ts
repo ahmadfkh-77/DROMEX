@@ -1,6 +1,7 @@
 import {fuelDayLabel} from './fuelBatchViews';
 import {localDateKey} from './fuel';
 import {bitumenStatusLabels,formatKg,formatTons,formatUsd,priceBasisLabels,type BitumenBatch} from './bitumen';
+import {useLinesForBatch,type BitumenAdjustment,type BitumenUseRow} from './bitumenUse';
 
 /**
  * The Bitumen Batch Report: one batch, one A4 page. The facts of the batch, its figures in kg with tons beside them, the delivery
@@ -10,12 +11,19 @@ import {bitumenStatusLabels,formatKg,formatTons,formatUsd,priceBasisLabels,type 
  */
 export type BitumenReportFigure={label:string;kg:string;tons:string;strong:boolean};
 export type BitumenReportHistoryRow={date:string;event:string;kg:string};
+export type BitumenReportUseRow={date:string;load:string;item:string;mix:string;rule:string;kg:string};
+export type BitumenReportAdjustmentRow={date:string;reason:string;kg:string};
 export type BitumenBatchReport={
   batchNumber:string;
   exportedAt:string;
   cancelled:boolean;
   summary:{label:string;value:string}[];
+  /** True when the batch's use is estimated from asphalt rules; the figures and the section say so. */
+  estimated:boolean;
   figures:BitumenReportFigure[];
+  /** The loads that took bitumen from this batch (a cancelled load nets to zero and is not listed); null when there is no use. */
+  use:null|{rows:BitumenReportUseRow[];total:string};
+  adjustments:null|{rows:BitumenReportAdjustmentRow[]};
   detail:{headers:string[];values:string[]};
   /** Present only when prices are included. */
   price:null|{headers:string[];values:string[];lines:{label:string;value:string;strong:boolean}[]};
@@ -29,16 +37,25 @@ export type BitumenBatchReport={
 const signed=(kg:number)=>`${kg>0?'+':kg<0?'−':''}${Math.abs(kg).toLocaleString('en-US',{maximumFractionDigits:3})}`;
 const stamp=(iso:string)=>{const date=new Date(iso);return Number.isNaN(date.getTime())?iso:`${fuelDayLabel(localDateKey(date))}, ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;};
 
-export function buildBitumenBatchReport(batch:BitumenBatch,options:{includePrices:boolean;exportedAt?:string}):BitumenBatchReport{
+export function buildBitumenBatchReport(batch:BitumenBatch,options:{includePrices:boolean;exportedAt?:string;/** Use rows and adjustments of the whole overview; only this batch's are read. */useRows?:readonly BitumenUseRow[];adjustments?:readonly BitumenAdjustment[];estimated?:boolean}):BitumenBatchReport{
   const cancelled=batch.recordStatus==='Cancelled';
   const exportedAt=options.exportedAt??new Date().toISOString();
   const remaining=cancelled?0:batch.remainingKg;
+  const lines=options.useRows?useLinesForBatch(options.useRows,batch.id):[];
+  const adjustmentRows=(options.adjustments??[]).filter(value=>value.batchId===batch.id);
+  const estimated=Boolean(options.estimated)||lines.length>0||adjustmentRows.length>0;
   const figures:BitumenReportFigure[]=[
     {label:'Delivered',kg:formatKg(batch.deliveredKg),tons:cancelled?'not counted':formatTons(batch.deliveredKg),strong:false},
-    {label:'Used',kg:formatKg(batch.usedKg),tons:formatTons(batch.usedKg),strong:false},
-    {label:'Adjustments',kg:formatKg(batch.adjustmentKg),tons:formatTons(batch.adjustmentKg),strong:false},
-    {label:'Remaining',kg:formatKg(remaining),tons:cancelled?'cancelled':formatTons(remaining),strong:!cancelled},
+    {label:estimated?'Est. used':'Used',kg:formatKg(batch.usedKg),tons:estimated&&lines.length?`from ${lines.length} asphalt load${lines.length===1?'':'s'}`:formatTons(batch.usedKg),strong:false},
+    {label:'Adjustments',kg:formatKg(batch.adjustmentKg),tons:adjustmentRows.length?`${adjustmentRows.length} adjustment${adjustmentRows.length===1?'':'s'}`:formatTons(batch.adjustmentKg),strong:false},
+    {label:estimated?'Est. remaining':'Remaining',kg:formatKg(remaining),tons:cancelled?'cancelled':formatTons(remaining),strong:!cancelled},
   ];
+  const dayText=(iso:string)=>fuelDayLabel(localDateKey(new Date(iso)));
+  const use=lines.length?{
+    rows:lines.map(line=>({date:dayText(line.loadConfirmedAt),load:line.loadNumber??'Load',item:line.itemName,mix:formatTons(line.mixKg),rule:`${line.ruleBitumenKg.toLocaleString('en-US',{maximumFractionDigits:3})} kg per ${(line.ruleAggregateKg/1000).toLocaleString('en-US',{maximumFractionDigits:3})} t`,kg:formatKg(line.kg)})),
+    total:formatKg(lines.reduce((sum,line)=>sum+line.kg,0)),
+  }:null;
+  const adjustments=adjustmentRows.length?{rows:adjustmentRows.map(value=>({date:dayText(value.createdAt),reason:value.reason,kg:`${value.kg>0?'+':value.kg<0?'−':''}${Math.abs(value.kg).toLocaleString('en-US',{maximumFractionDigits:3})}`}))}:null;
   // The weighbridge ticket is a column only when it was filled in; so is nothing else that is empty and optional.
   const detailHeaders=['Supplier','Invoice no.',...(batch.ticketNumber?['Weighbridge ticket']:[]),'Recorded'];
   const detailValues=[batch.supplierName??'Not recorded',batch.invoiceNumber??'Not recorded',...(batch.ticketNumber?[batch.ticketNumber]:[]),stamp(batch.createdAt)];
@@ -65,7 +82,7 @@ export function buildBitumenBatchReport(batch:BitumenBatch,options:{includePrice
       {label:'Batch',value:batch.batchNumber},{label:'Supplier',value:batch.supplierName??'Not recorded'},{label:'Grade',value:batch.gradeName},
       {label:'Arrived',value:fuelDayLabel(localDateKey(new Date(batch.arrivedAt)))},{label:'Status',value:bitumenStatusLabels[batch.status]},
     ],
-    figures,detail:{headers:detailHeaders,values:detailValues},price,
+    estimated,figures,use,adjustments,detail:{headers:detailHeaders,values:detailValues},price,
     cancellation:cancelled&&batch.cancelledAt?{when:stamp(batch.cancelledAt),reason:batch.cancellationReason??'Not recorded'}:null,
     history,remainingLabel:formatKg(remaining),pricesIncluded:options.includePrices,
     fileName:`Bitumen-Batch-Report-${batch.batchNumber}.pdf`,

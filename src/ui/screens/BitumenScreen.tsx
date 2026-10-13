@@ -14,6 +14,8 @@ import {useExportHeader} from '../components/useExportHeader';
 import {DatePickerField} from '../components/DatePickerField';
 import {SearchableSelect} from '../components/SearchableSelect';
 import {SegmentedChoice} from '../components/SegmentedChoice';
+import {AdjustCard,AdjustmentsCard,AttentionCard,MoveLoadCard,RulesView,UseFromLoadsCard} from '../components/BitumenUsePanels';
+import type {AttentionItem,BatchLoadUse} from '../../domain/bitumenUse';
 import {colors,radius} from '../theme';
 
 /**
@@ -21,7 +23,7 @@ import {colors,radius} from '../theme';
  * Edit and Cancel (both with a reason), and "Use this batch first". Nothing is used from a batch yet; the asphalt rule that
  * estimates use comes in a later phase. Every recorded fact is kept: a correction keeps its history and a cancelled batch stays visible.
  */
-type Mode={kind:'list'}|{kind:'record'}|{kind:'detail';id:string}|{kind:'edit';id:string};
+type Mode={kind:'list'}|{kind:'record'}|{kind:'rules'}|{kind:'detail';id:string}|{kind:'edit';id:string};
 
 const draftFromBatch=(batch:BitumenBatch):BitumenDeliveryDraft=>({
   recordDate:localDateKey(new Date(batch.arrivedAt)),supplierId:batch.supplierId??'',invoiceNumber:batch.invoiceNumber??'',ticketNumber:batch.ticketNumber??'',gradeId:batch.gradeId??'',
@@ -32,7 +34,9 @@ export function BitumenScreen({repository,onBack,initialBatchId}:{repository:Bit
   const[setup,setSetup]=useState<BitumenSetup|null>(null),[overview,setOverview]=useState<BitumenOverview|null>(null);
   const[mode,setMode]=useState<Mode>(initialBatchId?{kind:'detail',id:initialBatchId}:{kind:'list'});
   const[error,setError]=useState<string|null>(null),[message,setMessage]=useState<string|null>(null),[busy,setBusy]=useState(false);
-  const refresh=useCallback(async()=>{const[nextSetup,nextOverview]=await Promise.all([repository.getSetup(),repository.getOverview()]);setSetup(nextSetup);setOverview(nextOverview);},[repository]);
+  const[attention,setAttention]=useState<AttentionItem[]>([]);
+  // Loads are counted whenever this screen refreshes (and just before the batch in use is switched), so the figures follow the loads.
+  const refresh=useCallback(async()=>{const synced=await repository.syncUse().catch(()=>null);const[nextSetup,nextOverview]=await Promise.all([repository.getSetup(),repository.getOverview()]);setSetup(nextSetup);setOverview(nextOverview);setAttention(synced?.attention??[]);},[repository]);
   useEffect(()=>{void refresh().catch(cause=>setError(cause instanceof Error?cause.message:'Could not load bitumen tracking.'));},[refresh]);
   const run=async(action:()=>Promise<void>,success:string)=>{setBusy(true);setError(null);setMessage(null);try{await action();await refresh();setMessage(success);}catch(cause){setError(cause instanceof Error?cause.message:'That could not be saved.');}finally{setBusy(false);}};
 
@@ -40,6 +44,12 @@ export function BitumenScreen({repository,onBack,initialBatchId}:{repository:Bit
 
   const batch=mode.kind==='detail'||mode.kind==='edit'?overview.batches.find(value=>value.id===mode.id):undefined;
   const back=()=>{setError(null);setMode({kind:'list'});};
+
+  if(mode.kind==='rules'){
+    return <AppPage keyboard><PageHeader eyebrow="Bitumen" title="Asphalt items and rules" onBack={()=>{void refresh();back();}}/>
+      <RulesView repository={repository} onChanged={()=>void refresh()}/>
+    </AppPage>;
+  }
 
   if(mode.kind==='record'){
     return <AppPage keyboard><PageHeader eyebrow="Bitumen" title="Record delivery" onBack={back}/>
@@ -58,7 +68,9 @@ export function BitumenScreen({repository,onBack,initialBatchId}:{repository:Bit
   }
 
   if(mode.kind==='detail'&&batch){
-    return <BatchDetail repository={repository} batch={batch} overview={overview} busy={busy} error={error} message={message} onBack={back} onEdit={()=>{setError(null);setMessage(null);setMode({kind:'edit',id:batch.id});}}
+    return <BatchDetail repository={repository} batch={batch} overview={overview} busy={busy} error={error} message={message} onBack={back}
+      onMoveLoad={(loadId,toBatchId)=>void run(async()=>{await repository.moveLoad(loadId,toBatchId);},'The load now takes its bitumen from the other batch.')}
+      onAdjust={(real,reason)=>void run(async()=>{await repository.adjustBatch(batch.id,real,reason);},'Adjustment saved. The batch shows the real amount left.')} onEdit={()=>{setError(null);setMessage(null);setMode({kind:'edit',id:batch.id});}}
       onUseFirst={()=>Alert.alert(`Use ${batch.batchNumber} first?`,`New bitumen use will be taken from this batch first.\n\nFigures already recorded do not change. You can switch back at any time.`,[{text:'Cancel',style:'cancel'},{text:`Yes, use ${batch.batchNumber} first`,onPress:()=>void run(async()=>{await repository.setUsingBatch(batch.id);},'This batch is now the one in use.')}])}
       onGoBackToOldest={()=>void run(async()=>{await repository.setUsingBatch(null);},'The oldest open batch is in use again.')}
       onCancel={reason=>void run(async()=>{await repository.cancelBatch(batch.id,reason);},'Batch cancelled. It stays on record and is not counted.')}/>;
@@ -69,7 +81,9 @@ export function BitumenScreen({repository,onBack,initialBatchId}:{repository:Bit
     {error?<Feedback kind="error">{error}</Feedback>:null}{message?<Feedback kind="success">{message}</Feedback>:null}
     <View style={styles.tank} accessibilityRole="summary"><Text style={styles.tankLabel}>BITUMEN IN STORAGE</Text><Text style={styles.tankValue}>{formatKg(overview.totalRemainingKg)}</Text><Text style={styles.tankSub}>{open.length} open batch{open.length===1?'':'es'} · {formatTons(overview.totalRemainingKg)}</Text></View>
     <AppButton label="Record bitumen delivery" onPress={()=>{setError(null);setMessage(null);setMode({kind:'record'});}}/>
-    {open.length?open.map(value=><BatchCard key={value.id} batch={value} chosen={overview.usingBatchId===value.id} busy={busy} onOpen={()=>{setError(null);setMessage(null);setMode({kind:'detail',id:value.id});}}
+    <AppButton label="Asphalt items and rules" tone="secondary" onPress={()=>{setError(null);setMessage(null);setMode({kind:'rules'});}}/>
+    <AttentionCard items={attention}/>
+    {open.length?open.map(value=><BatchCard key={value.id} batch={value} estimated={(overview.rulesEnabled??0)>0} chosen={overview.usingBatchId===value.id} busy={busy} onOpen={()=>{setError(null);setMessage(null);setMode({kind:'detail',id:value.id});}}
       onUseFirst={()=>Alert.alert(`Use ${value.batchNumber} first?`,`New bitumen use will be taken from this batch first.\n\nFigures already recorded do not change. You can switch back at any time.`,[{text:'Cancel',style:'cancel'},{text:`Yes, use ${value.batchNumber} first`,onPress:()=>void run(async()=>{await repository.setUsingBatch(value.id);},'This batch is now the one in use.')}])}/>)
       :<EmptyState title="No open bitumen batch" body="Record a bitumen delivery to start one."/>}
     {others.length?<AppCard title="Closed and cancelled batches" hint="Kept on record; cancelled batches are never counted.">
@@ -81,14 +95,14 @@ export function BitumenScreen({repository,onBack,initialBatchId}:{repository:Bit
   </AppPage>;
 }
 
-function BatchCard({batch,chosen,busy,onOpen,onUseFirst}:{batch:BitumenBatch;chosen:boolean;busy:boolean;onOpen:()=>void;onUseFirst:()=>void}){
+function BatchCard({batch,estimated,chosen,busy,onOpen,onUseFirst}:{batch:BitumenBatch;estimated:boolean;chosen:boolean;busy:boolean;onOpen:()=>void;onUseFirst:()=>void}){
   const used=batch.deliveredKg>0?Math.min(1,Math.max(0,batch.usedKg/batch.deliveredKg)):0;
   return <TouchableOpacity style={styles.batch} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`${batch.batchNumber}, ${bitumenStatusLabels[batch.status]}, ${formatKg(batch.remainingKg)} remaining`}>
     <View style={styles.batchTop}>
       <View style={styles.flex}><Text style={styles.batchNumber}>{batch.batchNumber}</Text><Text style={styles.sub}>{batch.supplierName??'No supplier'} · {batch.gradeName} · {new Date(batch.arrivedAt).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</Text></View>
       <Text style={[styles.badge,batch.status==='in_use'&&styles.badgeInUse,batch.status==='waiting'&&styles.badgeWaiting]}>{chosen&&batch.status==='in_use'?'Open · Using now':bitumenStatusLabels[batch.status]}</Text>
     </View>
-    <View style={styles.figures}><Figure label="Delivered" value={formatKg(batch.deliveredKg)}/><Figure label="Used" value={formatKg(batch.usedKg)}/><Figure label="Remaining" value={formatKg(batch.remainingKg)} strong/></View>
+    <View style={styles.figures}><Figure label="Delivered" value={formatKg(batch.deliveredKg)}/><Figure label={estimated?'Est. used':'Used'} value={formatKg(batch.usedKg)}/><Figure label={estimated?'Est. left':'Remaining'} value={formatKg(batch.remainingKg)} strong/></View>
     <View style={styles.bar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><View style={[styles.barFill,{width:`${Math.round(used*100)}%`}]}/></View>
     {batch.status==='waiting'?<AppButton label="Use this batch first" busy={busy} onPress={onUseFirst}/>:null}
   </TouchableOpacity>;
@@ -100,8 +114,10 @@ function Figure({label,value,strong=false}:{label:string;value:string;strong?:bo
 
 function Fact({label,value}:{label:string;value:string}){return <View style={styles.fact}><Text style={styles.sub}>{label}</Text><Text style={styles.factValue}>{value}</Text></View>;}
 
-function BatchDetail({repository,batch,overview,busy,error,message,onBack,onEdit,onUseFirst,onGoBackToOldest,onCancel}:{repository:BitumenRepository;batch:BitumenBatch;overview:BitumenOverview;busy:boolean;error:string|null;message:string|null;onBack:()=>void;onEdit:()=>void;onUseFirst:()=>void;onGoBackToOldest:()=>void;onCancel:(reason:string)=>void}){
+function BatchDetail({repository,batch,overview,busy,error,message,onBack,onEdit,onUseFirst,onGoBackToOldest,onCancel,onMoveLoad,onAdjust}:{repository:BitumenRepository;onMoveLoad:(loadId:string,toBatchId:string)=>void;onAdjust:(real:string,reason:string)=>void;batch:BitumenBatch;overview:BitumenOverview;busy:boolean;error:string|null;message:string|null;onBack:()=>void;onEdit:()=>void;onUseFirst:()=>void;onGoBackToOldest:()=>void;onCancel:(reason:string)=>void}){
   const[cancelOpen,setCancelOpen]=useState(false),[reason,setReason]=useState('');
+  const[sheet,setSheet]=useState<null|{kind:'move';line:BatchLoadUse}|{kind:'adjust'}>(null);
+  const estimated=(overview.rulesEnabled??0)>0||(overview.useRows??[]).some(row=>row.batchId===batch.id);
   const chosen=overview.usingBatchId===batch.id,cancelled=batch.status==='cancelled';
   return <AppPage keyboard><PageHeader eyebrow="Bitumen" title={batch.batchNumber} onBack={onBack}/>
     {error?<Feedback kind="error">{error}</Feedback>:null}{message?<Feedback kind="success">{message}</Feedback>:null}
@@ -114,20 +130,25 @@ function BatchDetail({repository,batch,overview,busy,error,message,onBack,onEdit
       {batch.totalUsd!=null?<Fact label={batch.vatRatePercent?`Total (incl. VAT ${batch.vatRatePercent}%)`:'Total'} value={formatUsd(batch.totalUsd)}/>:null}
       {batch.notes?<Fact label="Notes" value={batch.notes}/>:null}
     </AppCard>
-    <View style={styles.batch}><View style={styles.figures}><Figure label="Delivered" value={formatKg(batch.deliveredKg)}/><Figure label="Used" value={formatKg(batch.usedKg)}/><Figure label="Remaining" value={formatKg(batch.remainingKg)} strong/></View><Text style={styles.sub}>{formatTons(batch.deliveredKg)} delivered. Use from asphalt loads is added in a later step, so nothing has been used yet.</Text></View>
+    <View style={styles.batch}><View style={styles.figures}><Figure label="Delivered" value={formatKg(batch.deliveredKg)}/><Figure label={estimated?'Est. used':'Used'} value={formatKg(batch.usedKg)}/><Figure label={estimated?'Est. left':'Remaining'} value={formatKg(batch.remainingKg)} strong/></View><Text style={styles.sub}>{formatTons(batch.deliveredKg)} delivered.{estimated?' Used and left are estimates from the asphalt rules, not from a weighing.':' Tick asphalt items under Asphalt items and rules to estimate use from loads.'}</Text></View>
+    {sheet?.kind==='move'?<MoveLoadCard line={sheet.line} from={batch} overview={overview} busy={busy} onConfirm={toBatchId=>{onMoveLoad(sheet.line.loadId,toBatchId);setSheet(null);}} onClose={()=>setSheet(null)}/>:null}
+    {sheet?.kind==='adjust'?<AdjustCard batch={batch} busy={busy} onSave={(real,why)=>{onAdjust(real,why);setSheet(null);}} onClose={()=>setSheet(null)}/>:null}
+    <UseFromLoadsCard batch={batch} overview={overview} busy={busy} onMove={line=>setSheet({kind:'move',line})}/>
+    <AdjustmentsCard batch={batch} overview={overview}/>
     {cancelled?<AppCard title="Cancelled" hint={batch.cancelledAt?new Date(batch.cancelledAt).toLocaleString():undefined}><Text style={styles.body}>{batch.cancellationReason}</Text></AppCard>:<>
       {chosen?<AppButton label="Go back to oldest first" tone="secondary" busy={busy} onPress={onGoBackToOldest}/>:batch.status==='waiting'?<AppButton label="Use this batch first" busy={busy} onPress={onUseFirst}/>:null}
+      {!sheet?<AppButton label="Adjust the real amount left" tone="secondary" onPress={()=>setSheet({kind:'adjust'})}/>:null}
       <AppButton label="Edit batch" tone="secondary" onPress={onEdit}/>
       {cancelOpen?<AppCard title="Cancel this batch" hint="It stays on record as Cancelled and is never counted."><AppField label="Reason *" value={reason} onChangeText={setReason} multiline placeholder="Why is it being cancelled?"/><AppButton label="Cancel batch" tone="danger" busy={busy} disabled={!reason.trim()} onPress={()=>onCancel(reason)}/><AppButton label="Keep batch" tone="secondary" onPress={()=>{setCancelOpen(false);setReason('');}}/></AppCard>
         :<AppButton label="Cancel batch" tone="danger" onPress={()=>setCancelOpen(true)}/>}
     </>}
-    <ExportPanel repository={repository} batch={batch}/>
+    <ExportPanel repository={repository} batch={batch} overview={overview}/>
     {batch.correctionHistory.length?<AppCard title="Correction history">{batch.correctionHistory.map((entry,index)=><View key={`${entry.at}-${index}`} style={styles.history}><Text style={styles.sub}>{new Date(entry.at).toLocaleString()} · {entry.reason}</Text>{entry.changes.map(change=><Text key={change.field} style={styles.body}>{change.field}: {change.before} → {change.after}</Text>)}</View>)}</AppCard>:null}
   </AppPage>;
 }
 
 /** Export PDF for one batch: without prices (the default) or with prices, under the chosen Header company. */
-function ExportPanel({repository,batch}:{repository:BitumenRepository;batch:BitumenBatch}){
+function ExportPanel({repository,batch,overview}:{repository:BitumenRepository;batch:BitumenBatch;overview:BitumenOverview}){
   const[prices,setPrices]=useState<'without'|'with'>('without'),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[done,setDone]=useState<string|null>(null);
   const{picker,resolve}=useExportHeader(null);
   const run=async()=>{
@@ -135,7 +156,7 @@ function ExportPanel({repository,batch}:{repository:BitumenRepository;batch:Bitu
     try{
       const[chosen,identity]=await Promise.all([resolve(),repository.getCompanyIdentity()]);
       const company=chosen?{name:chosen.list.companyName,logoUri:chosen.list.logoUri,contactLine:chosen.list.contactLine}:identity;
-      await exportAndShareBitumenBatchReport(buildBitumenBatchReport(batch,{includePrices:prices==='with'}),company);
+      await exportAndShareBitumenBatchReport(buildBitumenBatchReport(batch,{includePrices:prices==='with',useRows:overview.useRows,adjustments:overview.adjustments,estimated:(overview.rulesEnabled??0)>0}),company);
       setDone('Bitumen Batch Report ready to share.');
     }catch(cause){setError(cause instanceof Error?cause.message:'The PDF could not be created.');}
     finally{setBusy(false);}

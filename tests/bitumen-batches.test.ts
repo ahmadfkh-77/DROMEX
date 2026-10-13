@@ -54,7 +54,7 @@ describe('migration 58',()=>{
     const {db}=await setup();
     expect(DATABASE_VERSION).toBeGreaterThanOrEqual(58);
     const tables=(db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'bitumen_%'").all() as {name:string}[]).map(value=>value.name).sort();
-    expect(tables).toEqual(['bitumen_batch_counters','bitumen_batches','bitumen_grades','bitumen_settings']);
+    expect(tables).toEqual(expect.arrayContaining(['bitumen_batch_counters','bitumen_batches','bitumen_grades','bitumen_settings']));
     expect((db.raw.prepare('SELECT name FROM bitumen_grades ORDER BY name').all() as {name:string}[]).map(value=>value.name)).toEqual(['60/70','80/100','Emulsion','MC-70']);
     expect((db.raw.prepare('SELECT COUNT(*) c FROM bitumen_batches').get() as {c:number}).c).toBe(0);
   });
