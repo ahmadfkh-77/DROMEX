@@ -176,7 +176,7 @@ describe('the Header company picker is on every export that can have one',()=>{
       const used=sourceFiles('src/ui').some(file=>read(file).includes(name));
       if(used){const callers=sourceFiles('src/ui').filter(file=>read(file).includes(name));for(const file of callers)expect(/<HeaderCompanyPicker|useExportHeader/.test(read(file))).toBe(false);}
     }
-  });
+ },30000);// it reads every UI source file, which takes longer as the app grows
   it('lets the shared Diesel export panel offer it for every Diesel report',()=>{
     expect(read('src/ui/components/fuel/DieselPdfExportPanel.tsx')).toContain('useExportHeader(filters.projectId||projectId)');
   });

@@ -39,7 +39,8 @@ async recordFill(draft:FuelFillDraft){
   // A diesel tank fill after tracking started draws from batches: its price and cost come from the batch prices.
   const startedAt=await batchTrackingStart(this.db),tracked=source==='tank'&&fuelType==='diesel'&&startedAt!=null&&confirmedAt>=startedAt;
   let chosenBatchId:string|null=null;
-  if(tracked&&draft.batchId?.trim()){const overview=await loadBatchOverview(this.db),chosen=overview?.batches.find(v=>v.id===draft.batchId&&(v.status==='in_use'||v.status==='waiting'));if(!chosen)throw new Error('Choose an open diesel batch.');chosenBatchId=chosen.id;}
+  // A fill with no batch picked draws from the batch the owner chose to use first (Phase A); with none chosen it draws from the oldest open batch.
+  if(tracked){const overview=await loadBatchOverview(this.db),wanted=draft.batchId?.trim()||overview?.usingBatchId||'';if(wanted){const chosen=overview?.batches.find(v=>v.id===wanted&&(v.status==='in_use'||v.status==='waiting'));if(!chosen)throw new Error('Choose an open diesel batch.');chosenBatchId=chosen.id;}}
   const values=tracked?{pricePerLitreUsd:null,consumptionCostUsd:null}:calculateFuelFillCost(litres,draft.pricePerLitreUsd),current=setup.currentFuelPrice,isOverride=source==='tank'&&values.pricePerLitreUsd!=null&&current!=null&&cents(values.pricePerLitreUsd)!==cents(current.pricePerLitreUsd);
   if(isOverride&&!draft.priceOverrideReason.trim())throw new Error('Enter a reason for overriding the current fuel price.');
   const priceHistoryId=source==='tank'&&values.pricePerLitreUsd!=null&&!isOverride?current?.id??null:null;
@@ -199,6 +200,14 @@ async getBatchOverview():Promise<DieselBatchOverview>{
   if(overview)return overview;
   return{started:false,startedAt:null,tankLitres:(await this.getOverview()).currentBalanceLitres,overfillAlert:false,outstandingShortfallLitres:0,batches:[],fills:{},adjustments:[],changes:[]};
 }
+// Phase A. Only an open batch can be chosen. Nothing recorded is changed: each fill keeps the batch it drew from.
+async setUsingDieselBatch(batchId:string|null):Promise<DieselBatchOverview>{
+  const overview=await loadBatchOverview(this.db);
+  if(!overview)throw new Error('Diesel batches have not been started.');
+  if(batchId){const open=overview.batches.find(value=>value.id===batchId&&(value.status==='in_use'||value.status==='waiting'));if(!open)throw new Error('Choose a batch that is still open.');}
+  await this.db.runAsync("UPDATE fuel_batch_settings SET using_batch_id = ? WHERE id = 'batches'",batchId);
+  return this.getBatchOverview();
+}
 async startDieselBatches(draft:StartDieselBatchesDraft):Promise<BatchDetail|null>{
   if(await batchTrackingStart(this.db))throw new Error('Diesel batch tracking has already started.');
   const dip=draft.dipLitres.trim()?validateGaugeLitres(draft.dipLitres):null,price=validateFuelPrice(draft.pricePerLitreUsd);
@@ -276,7 +285,8 @@ async cancelBatch(batchId:string,reason:string):Promise<void>{
 async previewTankFill(draft:TankFillPreviewDraft):Promise<TankFillPreviewResult|null>{
   const litres=validatePositiveLitres(draft.litres),input=await loadAllocationInput(this.db);
   if(!input)return null;
-  return previewFromState(input,{litres,preferredBatchId:draft.batchId.trim()||null,at:timestampForDate(draft.recordDate)});
+  const usingBatchId=(await loadBatchOverview(this.db))?.usingBatchId??null;
+  return previewFromState(input,{litres,preferredBatchId:draft.batchId.trim()||usingBatchId,at:timestampForDate(draft.recordDate)});
 }
 
 // DEC-505. Saved fuel stations are deactivated and reactivated, never deleted, so a fill always keeps its station.

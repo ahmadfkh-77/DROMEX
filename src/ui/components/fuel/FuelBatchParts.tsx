@@ -16,8 +16,9 @@ export function SourceTag({source}:{source:FillSource}){
   return <Text style={[styles.tag,source.kind==='tank_batch'&&styles.tagTank,source.kind==='station'&&styles.tagStation,(source.kind==='before'||source.kind==='gasoline')&&styles.tagBefore]}>{source.text}</Text>;
 }
 
-export function BatchStatusBadge({status}:{status:BatchStatus}){
-  return <Text style={[styles.badge,status==='in_use'&&styles.badgeInUse,status==='waiting'&&styles.badgeWaiting,status==='closed'&&styles.badgeClosed,status==='cancelled'&&styles.badgeCancelled]} accessibilityLabel={`Status ${batchStatusLabels[status]}`}>{batchStatusLabels[status]}</Text>;
+export function BatchStatusBadge({status,chosen=false}:{status:BatchStatus;/** True when the owner chose this batch to use first. */chosen?:boolean}){
+  const label=chosen&&status==='in_use'?'Open · Using now':batchStatusLabels[status];
+  return <Text style={[styles.badge,status==='in_use'&&styles.badgeInUse,status==='waiting'&&styles.badgeWaiting,status==='closed'&&styles.badgeClosed,status==='cancelled'&&styles.badgeCancelled]} accessibilityLabel={`Status ${label}`}>{label}</Text>;
 }
 
 export function SectionTitle({title,detail}:{title:string;detail?:string}){

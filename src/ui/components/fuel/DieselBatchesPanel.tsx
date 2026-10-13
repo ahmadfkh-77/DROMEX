@@ -32,13 +32,15 @@ type Props={
   onOpenBatch:(batch:BatchDetail)=>void;
   onOpenHistory:()=>void;
   onStart:(draft:StartDieselBatchesDraft)=>Promise<void>;
+  /** Phase A. Chooses the open batch new fills draw from first, or null to go back to the oldest open batch first. */
+  onSetUsingBatch:(batchId:string|null)=>Promise<void>;
   onExport:(filter:DieselExportFilter,includePrices:boolean,company?:{name:string;logoUri:string|null;contactLine:string|null})=>Promise<void>;
 };
 type Source='all'|'tank'|'station';
 type Status='all'|'open'|'closed'|'cancelled';
 const RECENT_DAYS=10;
 
-export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKnownBalance,lastDipAt,onRecordFill,onRecordDelivery,onOpenBatch,onOpenHistory,onStart,onExport}:Props){
+export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKnownBalance,lastDipAt,onRecordFill,onRecordDelivery,onOpenBatch,onOpenHistory,onStart,onSetUsingBatch,onExport}:Props){
   const[open,setOpen]=useState<Set<string>>(new Set());
   const[supplierId,setSupplierId]=useState(''),[projectId,setProjectId]=useState(''),[companySiteId,setCompanySiteId]=useState(''),[stationId,setStationId]=useState(''),[source,setSource]=useState<Source>('all'),[status,setStatus]=useState<Status>('all'),[fromDate,setFromDate]=useState(''),[toDate,setToDate]=useState(''),[search,setSearch]=useState('');
   const toggle=(key:string)=>setOpen(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});
@@ -107,8 +109,8 @@ export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKn
     {supplierId||fromDate||toDate?<Text style={styles.rangeNote}>In these filters: {batches.filter(batch=>batch.status!=='cancelled').length} batch{batches.filter(batch=>batch.status!=='cancelled').length===1?'':'es'} · {formatLitres(batches.filter(batch=>batch.status!=='cancelled').reduce((sum,batch)=>sum+batch.deliveredLitres,0))} delivered · {formatLitres(batches.filter(batch=>batch.status!=='cancelled').reduce((sum,batch)=>sum+batch.filledLitres,0))} filled</Text>:null}
 
     {showTank?<>
-      <SectionTitle title="Open batches" detail={`${openBatches.length} · oldest first`}/>
-      {openBatches.length?openBatches.map(batch=><BatchCard key={batch.id} batch={batch} firstOpen={overview.batches.find(value=>value.status==='in_use')} onPress={()=>onOpenBatch(batch)}/>)
+      <SectionTitle title="Open batches" detail={`${openBatches.length} · ${overview.usingBatchId?'using batch first':'oldest first'}`}/>
+      {openBatches.length?openBatches.map(batch=><BatchCard key={batch.id} batch={batch} firstOpen={overview.batches.find(value=>value.status==='in_use')} usingBatchId={overview.usingBatchId??null} onPress={()=>onOpenBatch(batch)} onSetUsingBatch={onSetUsingBatch}/>)
         :<EmptyState title="No open batch" body={chips.length?'No open batch matches these filters.':'Record a diesel delivery to start one.'}/>}
 
       <GroupHeader title="Closed batches" summary={`${closedBatches.length} · ${formatLitres(closedBatches.filter(batch=>batch.status==='closed').reduce((sum,batch)=>sum+batch.deliveredLitres,0))} delivered`} open={open.has('closed')} onToggle={()=>toggle('closed')}/>
@@ -142,14 +144,18 @@ export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKn
   </View>;
 }
 
-function BatchCard({batch,firstOpen,onPress}:{batch:BatchDetail;firstOpen:BatchDetail|undefined;onPress:()=>void}){
+function BatchCard({batch,firstOpen,usingBatchId,onPress,onSetUsingBatch}:{batch:BatchDetail;firstOpen:BatchDetail|undefined;usingBatchId:string|null;onPress:()=>void;onSetUsingBatch:(batchId:string|null)=>Promise<void>}){
+  const[busy,setBusy]=useState(false),[failed,setFailed]=useState<string|null>(null);
+  const chosen=usingBatchId===batch.id;
+  const change=(batchId:string|null)=>{setBusy(true);setFailed(null);onSetUsingBatch(batchId).catch(cause=>setFailed(cause instanceof Error?cause.message:'Could not change the batch in use.')).finally(()=>setBusy(false));};
+  const useFirst=()=>Alert.alert(`Use ${batch.batchNumber} first?`,`New diesel fills will draw from this batch first.\n\n${firstOpen&&firstOpen.id!==batch.id?`${firstOpen.batchNumber} keeps its ${formatLitres(firstOpen.remainingLitres)}. It is used only when the batch in use runs out, or if you pick it for a fill.\n\n`:''}Fills already recorded do not change. You can switch back at any time.`,[{text:'Cancel',style:'cancel'},{text:`Yes, use ${batch.batchNumber} first`,onPress:()=>change(batch.id)}]);
   const available=batch.deliveredLitres+Math.max(batch.adjustmentLitres,0);
   const used=Math.min(1,Math.max(0,available>0?(available-batch.remainingLitres)/available:1));
   const note=batch.adjustmentLitres!==0?`Includes ${formatLitres(batch.adjustmentLitres)} dip adjustment`:batch.status==='waiting'&&firstOpen?`Starts after ${firstOpen.batchNumber} is used up`:null;
   return <TouchableOpacity style={styles.batch} onPress={onPress} accessibilityRole="button" accessibilityLabel={`${batch.batchNumber}, ${batch.status==='in_use'?'open, in use':'open, waiting'}, ${formatLitres(batch.remainingLitres)} remaining`}>
     <View style={styles.batchTop}>
       <View style={styles.flex}><Text style={styles.batchNumber}>{batch.batchNumber}{batch.kind==='opening'?' · Opening stock':''}</Text><Text style={styles.sub}>{batch.kind==='opening'?(batch.openingBasis==='calculated'?'Calculated (no dip reading)':'From a dip reading'):`${batch.supplierName??'No supplier'} · Invoice ${batch.invoiceNumber??'not recorded'}`} · Arrived {fuelDayLabel(localDateKey(batch.arrivedAt))}</Text></View>
-      <BatchStatusBadge status={batch.status}/>
+      <BatchStatusBadge status={batch.status} chosen={chosen}/>
     </View>
     <View style={styles.figures}>
       <Figure label="Delivered" value={formatLitres(batch.deliveredLitres)}/>
@@ -158,6 +164,8 @@ function BatchCard({batch,firstOpen,onPress}:{batch:BatchDetail;firstOpen:BatchD
     </View>
     <View style={styles.bar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><View style={[styles.barFill,{width:`${Math.round(used*100)}%`}]}/></View>
     {note?<Text style={[styles.sub,batch.adjustmentLitres!==0&&styles.amber]}>{note}</Text>:null}
+    {chosen?<AppButton label="Go back to oldest first" tone="secondary" busy={busy} onPress={()=>change(null)}/>:batch.status==='waiting'?<AppButton label="Use this batch first" busy={busy} onPress={useFirst}/>:null}
+    {failed?<Text style={styles.amber}>{failed}</Text>:null}
   </TouchableOpacity>;
 }
 

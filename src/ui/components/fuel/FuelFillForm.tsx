@@ -105,7 +105,7 @@ export function FuelFillForm({setup,batchOverview,draft,onChange,lockedProjectId
     {kind==='tank_batch'?<Step number={2} title="Batch">
       {options.length?<>
         <SearchableSelect label="Batch *" options={options} selectedId={draft.batchId||oldest} onSelect={id=>onChange({...draft,batchId:id===oldest?'':id})} placeholder="Select batch"/>
-        <Text style={styles.hint}>Pre-selected automatically. You can change it to another open batch.</Text>
+        <Text style={styles.hint}>{batchOverview.usingBatchId?'Using batch. Pick another batch only if this fill should come from it.':'Pre-selected automatically. You can change it to another open batch.'}</Text>
       </>:<View style={styles.empty}>
         <Text style={styles.emptyTitle}>No open batch</Text>
         <Text style={styles.emptyBody}>No diesel batch has diesel left. Record a diesel delivery to start one. This fill is still saved, with an Overfill Alert.</Text>

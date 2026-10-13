@@ -67,7 +67,7 @@ describe('Screen D · day cards',()=>{
   });
   it('never relies on colour alone: tags and badges carry their words',()=>{
     expect(parts).toContain('{source.text}');
-    expect(parts).toContain('{batchStatusLabels[status]}');
+    expect(parts).toContain('batchStatusLabels[status]');expect(parts).toContain('{label}');
   });
   it('lines numbers up and keeps group headers at least 48 pt tall',()=>{
     expect(parts).toContain("fontVariant:['tabular-nums']");

@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 56;
+export const DATABASE_VERSION = 57;
 
 type TableColumn = { name: string };
 
@@ -2095,6 +2095,13 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_load_company_name_updates_at ON load_company_name_updates(updated_at DESC);
     `);
     currentVersion = 56;
+  }
+
+  if (currentVersion === 56) {
+    // Using batch (diesel). The owner can choose which open batch new fills draw from first. One nullable column on the existing
+    // single-row settings table; empty means "oldest open batch first", exactly as before. No existing row or record is changed.
+    await addColumnIfMissing(db, 'fuel_batch_settings', 'using_batch_id', 'TEXT');
+    currentVersion = 57;
   }
 
 

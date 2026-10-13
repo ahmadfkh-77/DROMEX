@@ -3,7 +3,7 @@ import type {SQLiteDatabase} from 'expo-sqlite';
 import {localDateKey} from '../../domain/fuel';
 import {
   allocateDieselBatches,fillCost,formatBatchNumber,previewTankFill,
-  type AllocationChange,type AllocationInput,type AllocationNoteLine,type AllocationResult,type BatchCorrectionEntry,type BatchDetail,type BatchInput,type DieselBatchOverview,type FillBatchInfo,type TankFillPreviewResult,
+  applyUsingBatch,type AllocationChange,type AllocationInput,type AllocationNoteLine,type AllocationResult,type BatchCorrectionEntry,type BatchDetail,type BatchInput,type DieselBatchOverview,type FillBatchInfo,type TankFillPreviewResult,
 } from '../../domain/fuelBatches';
 
 /**
@@ -126,9 +126,11 @@ export async function loadBatchOverview(db:SQLiteDatabase):Promise<DieselBatchOv
   const totals=new Map(totalRows.map(row=>[row.id,row.final_total_usd_cents==null?null:row.final_total_usd_cents/100]));
   const events=await db.getAllAsync<EventRow>('SELECT * FROM fuel_allocation_events ORDER BY id');
   const changes:AllocationChange[]=events.map(event=>({id:event.id,movementId:event.movement_id,causedByMovementId:event.caused_by_movement_id,before:JSON.parse(event.before_json),after:JSON.parse(event.after_json),createdAt:event.created_at}));
+  const settings=await db.getFirstAsync<{using_batch_id:string|null}>("SELECT using_batch_id FROM fuel_batch_settings WHERE id='batches'");
+  const using=applyUsingBatch(result.batches.map(summary=>toDetail(rows.get(summary.id)!,summary,totals)),settings?.using_batch_id??null);
   return {
-    started:true,startedAt:state.startedAt,tankLitres:result.tankLitres,overfillAlert:result.overfillAlert,outstandingShortfallLitres:result.outstandingShortfallLitres,
-    batches:result.batches.map(summary=>toDetail(rows.get(summary.id)!,summary,totals)),
+    started:true,usingBatchId:using.usingBatchId,startedAt:state.startedAt,tankLitres:result.tankLitres,overfillAlert:result.overfillAlert,outstandingShortfallLitres:result.outstandingShortfallLitres,
+    batches:using.batches,
     fills,
     adjustments:result.adjustments.map(adjustment=>({...adjustment,batchNumber:rows.get(adjustment.batchId)?.batch_number??''})),
     changes,

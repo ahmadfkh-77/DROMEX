@@ -257,6 +257,8 @@ export type AllocationChange = { id: number; movementId: string; causedByMovemen
 export type AllocationNoteLine = { batch: string | null; litres: number; kind: PortionKind | 'shortfall' };
 export type DieselBatchOverview = {
   started: boolean;
+  /** The open batch the owner chose to draw from first, or null when fills simply draw from the oldest open batch. */
+  usingBatchId?: string | null;
   startedAt: string | null;
   /** The sum of the batches' remaining litres once tracking has started; the ledger balance before that. */
   tankLitres: number;
@@ -268,6 +270,25 @@ export type DieselBatchOverview = {
   adjustments: AdjustmentDetail[];
   changes: AllocationChange[];
 };
+/**
+ * Phase A. "Use this batch first". The owner may name one open batch that new fills draw from first (for example a new delivery while
+ * a little is left in the old one). The choice is honoured only while that batch is still open: when it is empty, closed or cancelled,
+ * fills fall back to the oldest open batch. It changes how the batches are labelled and listed, never an amount, and it affects only
+ * fills recorded after it was chosen, because each fill stores the batch it drew from.
+ */
+export function applyUsingBatch<T extends { id: string; status: BatchStatus }>(batches: T[], requestedId: string | null): { batches: T[]; usingBatchId: string | null } {
+  const isOpen = (batch: T) => batch.status === 'in_use' || batch.status === 'waiting';
+  const chosen = requestedId ? batches.find((batch) => batch.id === requestedId && isOpen(batch)) : undefined;
+  if (!chosen) return { batches, usingBatchId: null };
+  const first = batches.find(isOpen);
+  if (!first || first.id === chosen.id) return { batches: batches.map((batch) => (batch.id === chosen.id ? { ...batch, status: 'in_use' as const } : batch)), usingBatchId: chosen.id };
+  const relabelled = batches.map((batch) => (batch.id === chosen.id ? { ...batch, status: 'in_use' as const } : batch.status === 'in_use' ? { ...batch, status: 'waiting' as const } : batch));
+  const moved = relabelled.find((batch) => batch.id === chosen.id)!;
+  const without = relabelled.filter((batch) => batch.id !== chosen.id);
+  const at = without.findIndex((batch) => batch.id === first.id);
+  return { batches: [...without.slice(0, at), moved, ...without.slice(at)], usingBatchId: chosen.id };
+}
+
 /** DEC-506. What the Edit Batch screen sends. Supplier, invoice and price are free; litres and date need a reason. */
 export type BatchEditDraft = { supplierId: string; invoiceNumber: string; pricePerLitreUsd: string; litres: string; recordDate: string; reason: string };
 
