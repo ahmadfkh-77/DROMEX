@@ -6,6 +6,7 @@ import type {BusinessDocument} from '../domain/businessDocuments'; import {build
 import type {DieselBatchReport} from '../domain/dieselBatchReport'; import {buildDieselBatchReportHtml} from './dieselBatchTemplate';
 import {buildLoadHistoryHtml,type LoadHistoryPdf} from './loadHistoryTemplate';
 import {buildWasteHistoryHtml,type WasteHistoryPdf} from './wasteHistoryTemplate';
+import type {BitumenBatchReport} from '../domain/bitumenBatchReport';import {buildBitumenBatchHtml} from './bitumenBatchTemplate';
 import type {SupplierDeliveriesPdf} from '../domain/supplierDeliveriesPdf'; import {buildSupplierDeliveriesHtml} from './supplierDeliveriesTemplate';
 type PdfPageSize={width:number;height:number};
 export function loadDocumentPageSize(kind:LoadDocumentKind,paper:PaperWidth):PdfPageSize{return {width:paper==='58'?176:244,height:kind==='receipt'?(paper==='58'?500:450):(paper==='58'?640:560)};}
@@ -37,6 +38,8 @@ export async function exportAndShareTotals(input:Omit<TotalsPdf,'logo'>&{logoUri
 export async function exportAndShareDieselBatchReport(report:DieselBatchReport,company:{name:string;logoUri:string|null;contactLine:string|null}){if(report.empty&&!report.supplier?.rows.length)throw new Error('No fills or deliveries match these filters, so there is nothing to export.');const logo=await imageUriToDataUrl(company.logoUri);return saveAndShare(buildDieselBatchReportHtml(report,{companyName:company.name,logo,contactLine:company.contactLine}),report.fileName,'Share Diesel Batch Report');}
 /** DEC-506. Shares the PDF of what one supplier delivered, under the chosen header company. */
 export async function exportAndShareSupplierDeliveries(report:SupplierDeliveriesPdf,company:{name:string;logoUri:string|null;contactLine:string|null}){if(report.empty)throw new Error('No deliveries match these filters, so there is nothing to export.');const logo=await imageUriToDataUrl(company.logoUri).catch(()=>null);return saveAndShare(buildSupplierDeliveriesHtml({companyName:company.name,logo,contactLine:company.contactLine,report}),report.fileName,'Share Supplier Totals');}
+/** Shares the Bitumen Batch Report (one batch) under the chosen Header company. */
+export async function exportAndShareBitumenBatchReport(report:BitumenBatchReport,company:{name:string;logoUri:string|null;contactLine:string|null}){const logo=await imageUriToDataUrl(company.logoUri).catch(()=>null);return saveAndShare(buildBitumenBatchHtml(report,{companyName:company.name,logo,contactLine:company.contactLine}),report.fileName,'Share Bitumen Batch Report');}
 /** Shares the Waste Dump History PDF (days, projects, drivers, period totals) under the chosen Header company. */
 export async function exportAndShareWasteHistory(input:Omit<WasteHistoryPdf,'logo'>&{logoUri:string|null;fileName:string}){if(!input.history.days.length)throw new Error('No waste dumps match these filters, so there is nothing to export.');const logo=await imageUriToDataUrl(input.logoUri).catch(()=>null);return saveAndShare(buildWasteHistoryHtml({...input,logo}),input.fileName,'Share Waste Dump History');}
 /** Phase 5. Shares the Load History PDF for the filters on screen. Active loads only, under the chosen Header company. */

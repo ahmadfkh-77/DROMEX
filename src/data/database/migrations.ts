@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 57;
+export const DATABASE_VERSION = 58;
 
 type TableColumn = { name: string };
 
@@ -2102,6 +2102,66 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     // single-row settings table; empty means "oldest open batch first", exactly as before. No existing row or record is changed.
     await addColumnIfMissing(db, 'fuel_batch_settings', 'using_batch_id', 'TEXT');
     currentVersion = 57;
+  }
+
+  if (currentVersion === 57) {
+    // Bitumen batches (Phase B). A batch is one delivery of bitumen in kilograms, numbered BIT-YYYY-NNNNN, with its supplier, grade,
+    // invoice, weighbridge ticket and a snapshot of its price. Purely additive: new tables only, so no existing record is touched.
+    // Grades are a short editable list, seeded once. The asphalt rule and the use of bitumen come in a later phase.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS bitumen_grades (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL UNIQUE,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT OR IGNORE INTO bitumen_grades (id, name, name_key, is_active, created_at, updated_at) VALUES
+        ('bitumen_grade_60_70', '60/70', '60/70', 1, '2026-10-13T00:00:00.000Z', '2026-10-13T00:00:00.000Z'),
+        ('bitumen_grade_80_100', '80/100', '80/100', 1, '2026-10-13T00:00:00.000Z', '2026-10-13T00:00:00.000Z'),
+        ('bitumen_grade_mc_70', 'MC-70', 'mc-70', 1, '2026-10-13T00:00:00.000Z', '2026-10-13T00:00:00.000Z'),
+        ('bitumen_grade_emulsion', 'Emulsion', 'emulsion', 1, '2026-10-13T00:00:00.000Z', '2026-10-13T00:00:00.000Z');
+      CREATE TABLE IF NOT EXISTS bitumen_batch_counters (
+        year INTEGER PRIMARY KEY NOT NULL,
+        next_number INTEGER NOT NULL CHECK (next_number > 0)
+      );
+      CREATE TABLE IF NOT EXISTS bitumen_settings (
+        id TEXT PRIMARY KEY NOT NULL CHECK (id = 'bitumen'),
+        using_batch_id TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS bitumen_batches (
+        id TEXT PRIMARY KEY NOT NULL,
+        batch_number TEXT NOT NULL UNIQUE,
+        year INTEGER NOT NULL,
+        sequence INTEGER NOT NULL,
+        arrived_at TEXT NOT NULL,
+        delivered_kg REAL NOT NULL CHECK (delivered_kg > 0),
+        grade_id TEXT REFERENCES bitumen_grades(id),
+        grade_name TEXT NOT NULL,
+        supplier_id TEXT REFERENCES suppliers(id),
+        supplier_name TEXT,
+        invoice_number TEXT,
+        ticket_number TEXT,
+        price_basis TEXT CHECK (price_basis IN ('per_ton', 'per_kg', 'whole')),
+        price_usd_cents INTEGER,
+        vat_basis_points INTEGER,
+        subtotal_usd_cents INTEGER,
+        total_usd_cents INTEGER,
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled')),
+        cancellation_reason TEXT,
+        cancelled_at TEXT,
+        correction_history_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (year, sequence)
+      );
+      CREATE INDEX IF NOT EXISTS idx_bitumen_batches_arrived ON bitumen_batches(arrived_at);
+      CREATE INDEX IF NOT EXISTS idx_bitumen_batches_supplier ON bitumen_batches(supplier_id);
+    `);
+    currentVersion = 58;
   }
 
 
