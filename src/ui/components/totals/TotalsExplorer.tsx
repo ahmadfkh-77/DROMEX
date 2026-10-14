@@ -178,7 +178,10 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
       const fuel=includeFuel&&fuelChoiceShown?await loadFuelFills!({fromDate:filters.fromDate,toDate:filters.toDate}):undefined;
       // Project Totals (not on a records level): the customer and supplier boxes and every Active load behind the totals.
       const projectScope=scope.kind==='project'&&!atRecords;
-      const [current,company,history,projectLoads,customers]=await Promise.all([totals.getCompanyTotals(nodeFilters),profiles.getCompanySettings(),atRecords?totals.listRecords(nodeFilters,5000):Promise.resolve(undefined),projectScope?totals.listRecords(nodeFilters,5000):Promise.resolve([] as CompanyTotalsRecord[]),projectScope?profiles.listCustomers():Promise.resolve([])]);
+      // Company Totals (not on a records level): every Active load behind the totals is listed after the materials.
+      const summaryScope=scope.kind==='company'&&!atRecords;
+      const onlyCustomer=summaryScope&&filters.customerKeys.length===1?customerChoices.find(choice=>choice.key===filters.customerKeys[0])?.name??null:null;
+      const [current,company,history,projectLoads,customers]=await Promise.all([totals.getCompanyTotals(nodeFilters),profiles.getCompanySettings(),atRecords?totals.listRecords(nodeFilters,5000):Promise.resolve(undefined),projectScope||summaryScope?totals.listRecords(nodeFilters,5000):Promise.resolve([] as CompanyTotalsRecord[]),projectScope?profiles.listCustomers():Promise.resolve([])]);
       // Phase 1. The chosen Header company changes only the name, logo and contact line; every figure stays as calculated.
       const header=headers?await headers.resolveHeader(headerKind):null;
       const printed=header?customizedListHeader(header,headerCustom):null;
@@ -193,12 +196,12 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
         ...(filters.supplierKey&&!level.supplier?[`Supplier: ${label(choices.suppliers,filters.supplierKey)}`]:[]),
         ...(filters.unitKey?[`Unit: ${label(choices.units,filters.unitKey)}`]:[]),
         ...(filters.seriesId?[`Series: ${label(seriesChoices,filters.seriesId)}`]:[]),
-        ...(customerFilterLabel(filters.customerKeys,customerChoices)?[customerFilterLabel(filters.customerKeys,customerChoices)!]:[]),
+        ...(!onlyCustomer&&customerFilterLabel(filters.customerKeys,customerChoices)?[customerFilterLabel(filters.customerKeys,customerChoices)!]:[]),
         ...(filters.view!=='all'?[filters.view==='delivered'?'Delivered only':'Used only']:[]),
         ...(filters.inclusion!=='all'?[`Document status: ${inclusionFilterLabels[filters.inclusion]}`]:[])];
-      const title=atRecords?'Loads History':scope.kind==='project'?'Project Totals':'Company Totals';
-      const parts=[level.material?.name,scope.kind==='project'?scope.projectName:level.project?.name,level.supplier?.key?level.supplier.name:undefined];
-      await exportAndShareTotals({companyName:printed?.companyName||company.companyName,logoUri:printed?printed.logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,fuel,data:current,records:history,issuedTo:issuedTo(level.supplier,history),contactLine,project,
+      const title=atRecords?'Loads History':scope.kind==='project'?'Project Totals':onlyCustomer?'Totals':'Company Totals';
+      const parts=[onlyCustomer,level.material?.name,scope.kind==='project'?scope.projectName:level.project?.name,level.supplier?.key?level.supplier.name:undefined];
+      await exportAndShareTotals({companyName:printed?.companyName||company.companyName,logoUri:printed?printed.logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,fuel,data:current,records:history,loads:summaryScope?projectLoads:undefined,customerName:onlyCustomer,issuedTo:issuedTo(level.supplier,history),contactLine,project,
         fileName:{scopeName:parts.filter(Boolean).join(' ')||null,fromDate:filters.fromDate,toDate:filters.toDate}});
       setExportMessage({kind:'success',text:`${title} PDF ready to share, ${includePrices?'with recorded prices':'without prices'}.`});
     }catch(cause){setExportMessage({kind:'error',text:cause instanceof Error?cause.message:'The PDF could not be created.'});}
