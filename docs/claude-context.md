@@ -795,6 +795,14 @@ values on its next save.
 - **Not yet accepted.** The Owner will test it on 2026-10-10. An own-company customer already overwritten with the plant's
   name keeps it until the Project Company name is saved.
 
+## Build 39 — DROMEX 0.23.0, Android version code 39 (built 2026-10-17, not yet accepted)
+
+- **Artifact**: `output/DROMEX-0.23.0-build39.apk` (84,461,074 bytes, SHA-256 `0e9a268d566b9985dfb19e567fe19ab0e8da231b0dc4b8490ba915dbe3286e7f`), package `com.dromex.management`, versionCode 39, versionName 0.23.0. EAS build `408ed80e-06e4-43cc-bab2-70e92bb4b89d` (profile `preview`, account drofk12), built from commit `63b40b5`.
+- **Signing**: certificate SHA-256 `a4b21ecf…33e8`, the same as build 37, so it installs in place over earlier builds and keeps the data.
+- **Contents**: everything under "Unreleased work after build 38" below, including migrations 57 to 64 (the last is closing a batch by hand, DEC-516). Database version 64.
+- **Status**: awaiting the Owner's phone testing. `output/*.apk` is git-ignored; the earlier accepted installer `output/DROMEX-0.20.0-build28.apk` is unchanged.
+- **Commits not pushed at the time of writing**: `cfde1d5`, `9d38268`, `63b40b5` (and this note).
+
 ## Unreleased work after build 38 — feature branch, no build made (2026-10-15 to 2026-10-17)
 
 - **Branch**: `feature/android-receipts-history-pdfs`. Source version is still 0.22.0 / version code 38; no APK was built, and the Owner wants these updates collected and built together at the end. Nothing here is merged into `main`.
