@@ -795,6 +795,17 @@ values on its next save.
 - **Not yet accepted.** The Owner will test it on 2026-10-10. An own-company customer already overwritten with the plant's
   name keeps it until the Project Company name is saved.
 
+## Unreleased work after build 38 — feature branch, no build made (2026-10-15 to 2026-10-17)
+
+- **Branch**: `feature/android-receipts-history-pdfs`. Source version is still 0.22.0 / version code 38; no APK was built, and the Owner wants these updates collected and built together at the end. Nothing here is merged into `main`.
+- **Migrations 57 to 62** (all additive except 62, which rebuilds two tables): 57 diesel batch to use first; 58 bitumen batches; 59 bitumen use from asphalt loads; 60 Stock items, batches and use (DEC-510); 61 account VAT choice (DEC-511); 62 waste dumps at a project or company site (DEC-514).
+- **Commits, oldest first**: `8bfa796` (57), `e1ed22e` (58), `60bd567` (59), `5380d23` Company Totals PDF lists loads, `fd1fd01` fuel price with five decimals (DEC-509), `9ff3f45` Stock (60), `28e6714` VAT (61), `60a26c9` New Supplier Load in four steps (DEC-512), `ae5ac99` Create sheet (DEC-513), `64fd1a5` this file's build 32 note, `f799fce` VAT change on a saved load, `acecff4` waste dumps by Location (62).
+- **Tests**: 179 files, 2,368 tests green; typecheck clean after the waste Location work.
+- **Behaviour changes to know about**: VAT is no longer added automatically (DEC-511); receipts hide VAT lines for a load without VAT; a fuel correction keeps the saved VAT; supplier loads and the Create sheet look different; waste screens ask for a Location.
+- **Not built yet**: Stock usage rules and Stock reports (OQ-168), a production batch (OQ-169). The earlier mockups for these are in `output/` and are untracked.
+- **Owner rules kept**: no APK without approval; push only on request (the branch was pushed on 2026-10-17 up to `64fd1a5`); explicit paths when staging; `output/arabic-header-sample.html` is never staged.
+- **Not yet accepted.** Physical-device review of every item above is pending.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:
