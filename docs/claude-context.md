@@ -779,6 +779,22 @@ values on its next save.
   JavaScript bundle contains "Use as Project Company" and no "that day" headings.
 - **Not yet accepted.** Physical-device review and the in-place install over build 30 are pending.
 
+## Release — DROMEX 0.22.0, Android build 32 (2026-10-10)
+
+- **Why**: saving the Plant Company in Company Settings overwrote the own-company customer's name and details, so the
+  customer carried the plant's name. Build 32 adds DEC-508: the customer is named from the Project Company setup
+  (a Company name field for the own-company customer), and Company Settings only creates that customer when none
+  exists. Builds 30 and 31 are superseded.
+- **Branch**: `feature/android-receipts-history-pdfs`. Commits `c034b98` (DEC-508) and `ef0ebeb` (release: version code 32).
+  Not pushed at the time of the build; not merged into `main`.
+- **Tests**: 154 files, 2,067 tests green; typecheck clean.
+- **EAS build**: `b5fcc539-cdc4-429b-87c4-a13614467dd3`, eas-cli 24.7.0; profile `preview`, APK, account `drofk12`. Remote
+  credentials reused unchanged, so it should install in place.
+- **Artifact**: `output/DROMEX-0.22.0-build32.apk`, 84,114,294 bytes (~80 MB). SHA-256:
+  `130f405b2887cdcca8da172f043f84a68281ab5f69eb466024937c3849850283`. Ignored by `output/*.apk` and untracked (DEC-396).
+- **Not yet accepted.** The Owner will test it on 2026-10-10. An own-company customer already overwritten with the plant's
+  name keeps it until the Project Company name is saved.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:
