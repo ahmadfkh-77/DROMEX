@@ -1,3 +1,4 @@
+import type { AccountVatDraft } from '../../domain/accountVat';
 import type {
   CompanySettings,
   CompanySettingsDraft,
@@ -20,6 +21,8 @@ export interface ProfileRepository {
   listCustomers(): Promise<Customer[]>;
   createCustomer(draft: CustomerDraft): Promise<Customer>;
   setCustomerActive(id: string, isActive: boolean): Promise<Customer>;
+  /** Changes a customer's account VAT. It only sets where new records start; records already saved keep their VAT. */
+  setCustomerVat(id: string, draft: AccountVatDraft): Promise<Customer>;
   getCompanySettings(): Promise<CompanySettings>;
   saveCompanySettings(draft: CompanySettingsDraft): Promise<CompanySettings>;
   /** DEC-397. Owns the document-header values only; it can never alter company identity. */

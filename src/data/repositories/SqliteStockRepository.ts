@@ -1,8 +1,9 @@
+import {accountVatFromRow,resolveVatRate,validateAccountVat} from '../../domain/accountVat';
 import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {localDateKey} from '../../domain/fuel';
 import {
-  buildStockItemOverview,calculateStockPrice,formatStockBatchNumber,formatStockQuantity,planStockUse,stockPrefix,STOCK_EPSILON,validateStockQuantity,validateVatRate,
+  buildStockItemOverview,calculateStockPrice,formatStockBatchNumber,formatStockQuantity,planStockUse,stockPrefix,STOCK_EPSILON,validateStockQuantity,
   type StockBatch,type StockBatchBase,type StockBatchDraft,type StockBatchEditDraft,type StockCatalogItem,type StockCorrectionEntry,type StockOverview,type StockPriceBasis,type StockSetup,type StockUseDraft,type StockUseRecord,type StockUseRow,
 } from '../../domain/stock';
 import type {StockRepository} from './StockRepository';
@@ -46,7 +47,7 @@ export class SqliteStockRepository implements StockRepository{
 
   async getSetup():Promise<StockSetup>{
     const[suppliers,items,units,stocked,tax]=await Promise.all([
-      this.db.getAllAsync<{id:string;name:string}>('SELECT id,name FROM suppliers WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
+      this.db.getAllAsync<{id:string;name:string;vat_mode:string|null;vat_rate_basis_points:number|null}>('SELECT id,name,vat_mode,vat_rate_basis_points FROM suppliers WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
       this.db.getAllAsync<{id:string;name:string;category_name:string;unit_id:string|null;symbol:string|null}>(`SELECT i.id,i.name,c.name category_name,i.default_unit_id unit_id,u.symbol FROM catalog_items i JOIN categories c ON c.id=i.category_id LEFT JOIN measurement_units u ON u.id=i.default_unit_id AND u.is_active=1 WHERE i.is_active=1 ORDER BY c.name COLLATE NOCASE,i.name COLLATE NOCASE`),
       this.db.getAllAsync<{id:string;name:string;symbol:string}>('SELECT id,name,symbol FROM measurement_units WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
       this.db.getAllAsync<{item_id:string}>('SELECT item_id FROM stock_items WHERE is_active=1'),
@@ -54,7 +55,7 @@ export class SqliteStockRepository implements StockRepository{
     ]);
     const inStock=new Set(stocked.map(row=>row.item_id));
     return {
-      suppliers,units,vatRatePercent:(tax?.rate??0)/100,
+      suppliers:suppliers.map(row=>({id:row.id,name:row.name,vat:accountVatFromRow(row.vat_mode,row.vat_rate_basis_points)})),units,vatRatePercent:(tax?.rate??0)/100,
       catalogItems:items.map((row):StockCatalogItem=>({id:row.id,name:row.name,categoryName:row.category_name,unitId:row.symbol?row.unit_id:null,unitSymbol:row.symbol,inStock:inStock.has(row.id)})),
     };
   }
@@ -91,9 +92,10 @@ export class SqliteStockRepository implements StockRepository{
       supplier=(await this.db.getFirstAsync<{id:string;name:string}>('SELECT id,name FROM suppliers WHERE id=? AND is_active=1',supplierId))??null;
       if(!supplier)throw new Error('Select an active supplier, or leave it empty.');
     }
-    const vatRate=draft.vat?validateVatRate(draft.vatRate):0;
+    const tax=await this.db.getFirstAsync<{rate:number}>("SELECT vat_rate_basis_points rate FROM tax_settings WHERE id='tax'");
+    const vatRate=resolveVatRate(validateAccountVat(draft.vat),(tax?.rate??0)/100);
     const price=calculateStockPrice(quantity,draft.priceBasis,draft.price,vatRate);
-    return {supplier,price,vatPercent:draft.vat&&price.priceUsd!=null?vatRate:null};
+    return {supplier,price,vatPercent:vatRate>0&&price.priceUsd!=null?vatRate:null};
   }
 
   async recordBatch(draft:StockBatchDraft):Promise<StockBatch>{

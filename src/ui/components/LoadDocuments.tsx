@@ -69,7 +69,7 @@ export function LoadDocuments({ data, isDraft, kind, paper: controlledPaper }: {
             {data.enteredQuantity ? <><Line label="Entered" value={data.enteredQuantity} /><Line label="Conversion" value={data.conversionRule ?? '—'} /></> : null}
             <Line label="Quantity" value={data.convertedQuantity == null ? '—' : `${data.convertedQuantity} ${data.outputUnitSymbol ?? ''}`} />
             <Line label="Unit price" value={data.unitPriceUsd == null ? 'Unpriced' : formatUsd(data.unitPriceUsd)} />
-            {data.unitPriceUsd != null ? <><Line label="Subtotal" value={formatUsd(data.subtotalUsd)} /><Line label="VAT rate" value={`${data.vatRatePercent ?? 0}%`} /><Line label="VAT amount" value={formatUsd(data.vatAmountUsd)} /><Line label="Final total" value={formatUsd(data.finalTotalUsd)} strong /></> : null}
+            {data.unitPriceUsd != null ? <><Line label="Subtotal" value={formatUsd(data.subtotalUsd)} />{(data.vatRatePercent ?? 0) > 0 ? <><Line label="VAT rate" value={`${data.vatRatePercent}%`} /><Line label="VAT amount" value={formatUsd(data.vatAmountUsd)} /></> : null}<Line label="Final total" value={formatUsd(data.finalTotalUsd)} strong /></> : null}
           </>
         ) : (
           <>

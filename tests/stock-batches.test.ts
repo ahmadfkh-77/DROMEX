@@ -3,7 +3,7 @@ import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {DATABASE_VERSION} from '../src/data/database/migrations';
 import {SqliteStockRepository} from '../src/data/repositories/SqliteStockRepository';
 import {
-  calculateStockPrice,formatStockBatchNumber,planStockUse,previewStockPrice,stockPrefix,validateStockQuantity,validateVatRate,
+  calculateStockPrice,formatStockBatchNumber,planStockUse,previewStockPrice,stockPrefix,validateStockQuantity,
   type StockBatch,type StockBatchDraft,type StockUseDraft,
 } from '../src/domain/stock';
 import {SEED_TIME,SqliteTestDatabase,migratedDatabaseWithProject} from './support/sqliteTestDatabase';
@@ -20,14 +20,16 @@ const clock=(local:string)=>vi.setSystemTime(new Date(local));
 async function setup(){
   const db=await migratedDatabaseWithProject(databases);
   db.raw.exec(`
+    INSERT OR REPLACE INTO tax_settings (id,vat_rate_basis_points,updated_at) VALUES ('tax',1100,'${SEED_TIME}');
     INSERT INTO suppliers (id,name,is_active,created_at,updated_at) VALUES ('gulf','Gulf Lubricants',1,'${SEED_TIME}','${SEED_TIME}');
+    INSERT INTO suppliers (id,name,is_active,vat_mode,created_at,updated_at) VALUES ('taxed','Taxed Supplier',1,'universal','${SEED_TIME}','${SEED_TIME}');
     INSERT INTO categories (id,name,created_at,updated_at) VALUES ('cat_stock','Materials','${SEED_TIME}','${SEED_TIME}');
     INSERT INTO catalog_items (id,category_id,name,default_unit_id,quarry_enabled,is_active,created_at,updated_at) VALUES ('oil','cat_stock','Engine oil','unit_kg',1,1,'${SEED_TIME}','${SEED_TIME}');
     INSERT INTO catalog_items (id,category_id,name,default_unit_id,quarry_enabled,is_active,created_at,updated_at) VALUES ('cement','cat_stock','Cement',NULL,1,1,'${SEED_TIME}','${SEED_TIME}');
     INSERT INTO catalog_items (id,category_id,name,default_unit_id,quarry_enabled,is_active,created_at,updated_at) VALUES ('off','cat_stock','Retired item','unit_kg',1,0,'${SEED_TIME}','${SEED_TIME}');
   `);
   const repository=new SqliteStockRepository(db as never);
-  const draft=(extra:Partial<StockBatchDraft>={}):StockBatchDraft=>({itemId:'oil',unitId:'',recordDate:'2026-10-12',supplierId:'gulf',invoiceNumber:'INV-1',quantity:'20',priceBasis:'per_unit',price:'',vat:false,vatRate:'',notes:'',...extra});
+  const draft=(extra:Partial<StockBatchDraft>={}):StockBatchDraft=>({itemId:'oil',unitId:'',recordDate:'2026-10-12',supplierId:'gulf',invoiceNumber:'INV-1',quantity:'20',priceBasis:'per_unit',price:'',vat:{mode:'none',ratePercent:''},notes:'',...extra});
   const use=(extra:Partial<StockUseDraft>={}):StockUseDraft=>({itemId:'oil',quantity:'3',usedOn:'2026-10-16',note:'',...extra});
   return {db,repository,draft,use};
 }
@@ -51,9 +53,10 @@ describe('the numbers, prices and the plan (pure)',()=>{
     expect(calculateStockPrice(20,'whole','300',0)).toMatchObject({subtotalUsd:300,totalUsd:300});
     expect(calculateStockPrice(20,'per_unit','',11)).toEqual({priceUsd:null,subtotalUsd:null,vatAmountUsd:null,totalUsd:null});
     expect(()=>calculateStockPrice(20,'per_unit','1.234',0)).toThrow('two decimals');
-    expect(previewStockPrice({quantity:'20',priceBasis:'per_unit',price:'18.5',vat:false,vatRate:''})?.totalUsd).toBe(370);
-    expect(previewStockPrice({quantity:'20',priceBasis:'per_unit',price:'18.5',vat:true,vatRate:'abc'})).toBeNull();
-    expect(validateVatRate('11')).toBe(11);expect(()=>validateVatRate('101')).toThrow('0 to 100');expect(()=>validateVatRate('')).toThrow('0 to 100');
+    expect(previewStockPrice({quantity:'20',priceBasis:'per_unit',price:'18.5',vat:{mode:'none',ratePercent:''}},11)?.totalUsd).toBe(370);
+    expect(previewStockPrice({quantity:'20',priceBasis:'per_unit',price:'18.5',vat:{mode:'universal',ratePercent:''}},11)?.totalUsd).toBe(410.7);
+    expect(previewStockPrice({quantity:'20',priceBasis:'per_unit',price:'18.5',vat:{mode:'custom',ratePercent:'5'}},11)?.totalUsd).toBe(388.5);
+    expect(previewStockPrice({quantity:'20',priceBasis:'per_unit',price:'18.5',vat:{mode:'custom',ratePercent:'abc'}},11)).toBeNull();
   });
   it('takes from the oldest batch first and carries on into the next',()=>{
     const batch=(id:string,day:string,remaining:number):StockBatch=>({id,itemId:'oil',batchNumber:id,arrivedAt:`${day}T08:00:00.000Z`,supplierId:null,supplierName:null,invoiceNumber:null,notes:null,quantity:remaining,usedQuantity:0,remainingQuantity:remaining,priceBasis:null,priceUsd:null,vatRatePercent:null,subtotalUsd:null,totalUsd:null,priced:false,status:'waiting',recordStatus:'Active',cancellationReason:null,cancelledAt:null,correctionHistory:[],createdAt:'x'});
@@ -100,11 +103,19 @@ describe('adding items and recording batches',()=>{
     const {repository,draft}=await setup();
     const plain=await repository.recordBatch(draft({price:'18.5'}));
     expect(plain).toMatchObject({priceUsd:18.5,subtotalUsd:370,totalUsd:370,vatRatePercent:null,priced:true});
-    const withVat=await repository.recordBatch(draft({price:'18.5',vat:true,vatRate:'11'}));
+    const withVat=await repository.recordBatch(draft({price:'18.5',vat:{mode:'universal',ratePercent:''}}));
     expect(withVat).toMatchObject({subtotalUsd:370,totalUsd:410.7,vatRatePercent:11});
-    const noPriceVat=await repository.recordBatch(draft({vat:true,vatRate:'11'}));
+    const noPriceVat=await repository.recordBatch(draft({vat:{mode:'universal',ratePercent:''}}));
     expect(noPriceVat).toMatchObject({priced:false,vatRatePercent:null,totalUsd:null});
-    await expect(repository.recordBatch(draft({price:'5',vat:true,vatRate:''}))).rejects.toThrow('VAT must be');
+    await expect(repository.recordBatch(draft({price:'5',vat:{mode:'custom',ratePercent:''}}))).rejects.toThrow('VAT must be');
+  });
+  it('applies Own % and starts a new batch from the supplier account',async()=>{
+    const {repository,draft}=await setup();
+    const own=await repository.recordBatch(draft({price:'18.5',vat:{mode:'custom',ratePercent:'5'}}));
+    expect(own).toMatchObject({subtotalUsd:370,totalUsd:388.5,vatRatePercent:5});
+    const suppliers=(await repository.getSetup()).suppliers;
+    expect(suppliers.find(value=>value.id==='gulf')?.vat).toEqual({mode:'none',ratePercent:null});
+    expect(suppliers.find(value=>value.id==='taxed')?.vat).toEqual({mode:'universal',ratePercent:null});
   });
   it('rejects a bad form without saving anything',async()=>{
     const {db,repository,draft}=await setup();
@@ -202,10 +213,10 @@ describe('editing and cancelling a batch',()=>{
 });
 
 describe('the database',()=>{
-  it('is at version 60 with the stock tables and queues every change for sync',async()=>{
+  it('is migrated with the stock tables and queues every change for sync',async()=>{
     const {db,repository,draft,use}=await setup();
-    expect(DATABASE_VERSION).toBe(60);
-    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(60);
+    expect(DATABASE_VERSION).toBeGreaterThanOrEqual(60);
+    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(DATABASE_VERSION);
     const tables=(db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'stock_%' ORDER BY name").all() as {name:string}[]).map(row=>row.name);
     expect(tables).toEqual(['stock_batches','stock_items','stock_use']);
     const batch=await repository.recordBatch(draft());
@@ -243,7 +254,7 @@ describe('the Stock screen and Home',()=>{
     expect(screen).toContain('Nothing else in Stock yet');
   });
   it('offers No VAT by default, an optional price and the Catalog when an item is missing',()=>{
-    expect(screen).toContain("{id:'no',label:'No VAT'},{id:'yes',label:'Add VAT'}");
+    expect(screen).toContain('<VatChoiceControl value={draft.vat}');expect(screen).toContain('No VAT is added unless you choose it.');expect(screen).toContain('startingVatChoice(setup.suppliers.find(value=>value.id===id)?.vat)');
     expect(screen).toContain('Price (optional)');expect(screen).toContain('Supplier (optional)');
     expect(screen).toContain('Not in the list? Add it in the Catalog first');expect(screen).toContain('onPress={onOpenCatalog}');
   });

@@ -1,3 +1,5 @@
+import {choiceForRate,resolveVatRate,startingVatChoice} from '../../domain/accountVat';
+import {VatChoiceControl} from '../components/AccountVatControl';
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {Alert,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
@@ -25,9 +27,9 @@ import {colors,radius} from '../theme';
  */
 type Mode={kind:'list'}|{kind:'record'}|{kind:'rules'}|{kind:'detail';id:string}|{kind:'edit';id:string};
 
-const draftFromBatch=(batch:BitumenBatch):BitumenDeliveryDraft=>({
+const draftFromBatch=(batch:BitumenBatch,universal:number):BitumenDeliveryDraft=>({
   recordDate:localDateKey(new Date(batch.arrivedAt)),supplierId:batch.supplierId??'',invoiceNumber:batch.invoiceNumber??'',ticketNumber:batch.ticketNumber??'',gradeId:batch.gradeId??'',
-  kg:String(batch.deliveredKg),priceBasis:batch.priceBasis??'per_ton',price:batch.priceUsd==null?'':String(batch.priceUsd),vat:batch.vatRatePercent!=null&&batch.vatRatePercent>0,notes:batch.notes??'',
+  kg:String(batch.deliveredKg),priceBasis:batch.priceBasis??'per_ton',price:batch.priceUsd==null?'':String(batch.priceUsd),vat:choiceForRate(batch.vatRatePercent,universal),notes:batch.notes??'',
 });
 
 export function BitumenScreen({repository,onBack,initialBatchId}:{repository:BitumenRepository;onBack:()=>void;initialBatchId?:string|null}){
@@ -62,7 +64,7 @@ export function BitumenScreen({repository,onBack,initialBatchId}:{repository:Bit
   if(mode.kind==='edit'&&batch){
     return <AppPage keyboard><PageHeader eyebrow="Bitumen" title={`Edit ${batch.batchNumber}`} onBack={()=>setMode({kind:'detail',id:batch.id})}/>
       {error?<Feedback kind="error">{error}</Feedback>:null}
-      <DeliveryForm setup={setup} initial={draftFromBatch(batch)} busy={busy} submitLabel="Save changes" asksReason onAddGrade={async name=>{const grade=await repository.addGrade(name);await refresh();return grade;}}
+      <DeliveryForm setup={setup} initial={draftFromBatch(batch,setup.vatRatePercent)} busy={busy} submitLabel="Save changes" asksReason onAddGrade={async name=>{const grade=await repository.addGrade(name);await refresh();return grade;}}
         onSubmit={(draft,reason)=>{void run(async()=>{await repository.editBatch(batch.id,{...draft,reason:reason??''});setMode({kind:'detail',id:batch.id});},'Batch updated. The earlier values are kept in its history.');}}/>
     </AppPage>;
   }
@@ -173,11 +175,12 @@ function DeliveryForm({setup,initial,busy,submitLabel,asksReason=false,onSubmit,
   const[draft,setDraft]=useState<BitumenDeliveryDraft>(initial),[reason,setReason]=useState(''),[newGrade,setNewGrade]=useState(''),[gradeError,setGradeError]=useState<string|null>(null);
   const set=<K extends keyof BitumenDeliveryDraft>(key:K,value:BitumenDeliveryDraft[K])=>setDraft(current=>({...current,[key]:value}));
   const preview=useMemo(()=>previewBitumenPrice(draft,setup.vatRatePercent),[draft,setup.vatRatePercent]);
+  const vatRate=resolveVatRate(draft.vat,setup.vatRatePercent);
   const kg=Number(draft.kg.replace(',','.'));
   const basisUnit=draft.priceBasis==='per_ton'?'per ton':draft.priceBasis==='per_kg'?'per kg':'for the whole batch';
   return <>
     <AppCard title="1 · Supplier">
-      <SearchableSelect label="Supplier *" options={setup.suppliers.map(value=>({id:value.id,label:value.name}))} selectedId={draft.supplierId} onSelect={id=>set('supplierId',id)} placeholder="Select supplier"/>
+      <SearchableSelect label="Supplier *" options={setup.suppliers.map(value=>({id:value.id,label:value.name}))} selectedId={draft.supplierId} onSelect={id=>setDraft(current=>({...current,supplierId:id,vat:asksReason?current.vat:startingVatChoice(setup.suppliers.find(value=>value.id===id)?.vat)}))} placeholder="Select supplier"/>
       <DatePickerField label="Date *" value={draft.recordDate} onChange={value=>set('recordDate',value)} maxDate={localDateKey(new Date())}/>
       <AppField label="Invoice no. (optional)" value={draft.invoiceNumber} onChangeText={value=>set('invoiceNumber',value)}/>
       <AppField label="Weighbridge ticket (optional)" value={draft.ticketNumber} onChangeText={value=>set('ticketNumber',value)}/>
@@ -193,8 +196,8 @@ function DeliveryForm({setup,initial,busy,submitLabel,asksReason=false,onSubmit,
     <AppCard title="3 · Price (optional)" hint="Left empty, it is saved as Unpriced, never as zero.">
       <SegmentedChoice label="Price basis" options={(['per_ton','per_kg','whole'] as BitumenPriceBasis[]).map(id=>({id,label:priceBasisLabels[id]}))} selectedId={draft.priceBasis} onSelect={id=>set('priceBasis',id)}/>
       <AppField label={`Price ${basisUnit} (USD)`} value={draft.price} onChangeText={value=>set('price',value)} keyboardType="decimal-pad" placeholder="For example 610"/>
-      <SegmentedChoice label="VAT" options={[{id:'no',label:'No VAT'},{id:'yes',label:`VAT ${setup.vatRatePercent}%`}]} selectedId={draft.vat?'yes':'no'} onSelect={id=>set('vat',id==='yes')}/>
-      {preview&&preview.totalUsd!=null?<View style={styles.totals}><Fact label="Subtotal" value={formatUsd(preview.subtotalUsd??0)}/>{draft.vat?<Fact label={`VAT ${setup.vatRatePercent}%`} value={formatUsd(preview.vatAmountUsd??0)}/>:null}<Fact label="Total" value={formatUsd(preview.totalUsd)}/></View>:null}
+      <VatChoiceControl value={draft.vat} onChange={vat=>set('vat',vat)} universalRatePercent={setup.vatRatePercent} hint="No VAT is added unless you choose it."/>
+      {preview&&preview.totalUsd!=null?<View style={styles.totals}><Fact label="Subtotal" value={formatUsd(preview.subtotalUsd??0)}/>{vatRate>0?<Fact label={`VAT ${vatRate}%`} value={formatUsd(preview.vatAmountUsd??0)}/>:null}<Fact label="Total" value={formatUsd(preview.totalUsd)}/></View>:null}
       <AppField label="Notes (optional)" value={draft.notes} onChangeText={value=>set('notes',value)} multiline/>
     </AppCard>
     {asksReason?<AppCard title="Reason" hint="Needed when the quantity or the date changes. The old values are kept in the batch's history."><AppField label="Reason" value={reason} onChangeText={setReason} multiline/></AppCard>:null}

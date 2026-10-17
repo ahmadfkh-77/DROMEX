@@ -1,3 +1,4 @@
+import {accountVatFromRow,resolveVatRate,validateAccountVat} from '../../domain/accountVat';
 import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {localDateKey} from '../../domain/fuel';
@@ -53,11 +54,11 @@ export class SqliteBitumenRepository implements BitumenRepository{
 
   async getSetup():Promise<BitumenSetup>{
     const[suppliers,grades,tax]=await Promise.all([
-      this.db.getAllAsync<{id:string;name:string}>('SELECT id,name FROM suppliers WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
+      this.db.getAllAsync<{id:string;name:string;vat_mode:string|null;vat_rate_basis_points:number|null}>('SELECT id,name,vat_mode,vat_rate_basis_points FROM suppliers WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
       this.db.getAllAsync<{id:string;name:string;is_active:number}>('SELECT id,name,is_active FROM bitumen_grades ORDER BY is_active DESC,name COLLATE NOCASE'),
       this.db.getFirstAsync<{rate:number}>("SELECT vat_rate_basis_points rate FROM tax_settings WHERE id='tax'"),
     ]);
-    return {suppliers,grades:grades.map((row):BitumenGrade=>({id:row.id,name:row.name,isActive:row.is_active===1})),vatRatePercent:(tax?.rate??0)/100};
+    return {suppliers:suppliers.map(row=>({id:row.id,name:row.name,vat:accountVatFromRow(row.vat_mode,row.vat_rate_basis_points)})),grades:grades.map((row):BitumenGrade=>({id:row.id,name:row.name,isActive:row.is_active===1})),vatRatePercent:(tax?.rate??0)/100};
   }
 
   async getOverview():Promise<BitumenOverview>{
@@ -99,8 +100,9 @@ export class SqliteBitumenRepository implements BitumenRepository{
     if(!supplier)throw new Error('Select an active supplier.');
     const grade=setup.grades.find(value=>value.id===draft.gradeId);
     if(!grade)throw new Error('Select a bitumen grade.');
-    const price=calculateBitumenPrice(kg,draft.priceBasis,draft.price,draft.vat?setup.vatRatePercent:0);
-    return {kg,supplier,grade,price,vatPercent:draft.vat&&price.priceUsd!=null?setup.vatRatePercent:null,arrivedAt:timestampForDate(draft.recordDate)};
+    const vatRate=resolveVatRate(validateAccountVat(draft.vat),setup.vatRatePercent);
+    const price=calculateBitumenPrice(kg,draft.priceBasis,draft.price,vatRate);
+    return {kg,supplier,grade,price,vatPercent:vatRate>0&&price.priceUsd!=null?vatRate:null,arrivedAt:timestampForDate(draft.recordDate)};
   }
 
   async recordDelivery(draft:BitumenDeliveryDraft):Promise<BitumenBatch>{

@@ -9,7 +9,7 @@ const conversion: ConversionOption = {
   outputQuantity: 1, decimalPlaces: 3, isActive: true,
 };
 const baseOptions: LoadSetupOptions = {
-  customers: [{ id: 'outside', type: 'company', name: 'Outside Customer', phone: null, email: null, address: null, taxVatNumber: null, notes: null, isOwnCompany: false, isActive: true, mergedIntoId: null, createdAt: '', updatedAt: '' }],
+  customers: [{ id: 'outside', type: 'company', name: 'Outside Customer', phone: null, email: null, address: null, taxVatNumber: null, notes: null, isOwnCompany: false, isActive: true, mergedIntoId: null, vat: { mode: 'none', ratePercent: null }, createdAt: '', updatedAt: '' }],
   items: [{ id: 'asphalt', name: 'Asphalt', internalCode: null, categoryName: 'Produced', defaultPriceUsd: 90, defaultUnitId: 'unit_ton' }],
   projects: [], units: [{id:'unit_piece',name:'Piece',symbol:'pc',isActive:true}], conversions: [conversion],
   drivers: [{ id: 'driver_1', name: 'Ali', phone: null, licenseNumber: null, notes: null, isActive: true, role: 'driver' }],

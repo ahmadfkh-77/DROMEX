@@ -140,7 +140,7 @@ describe('fuel types and corrections in SQLite', () => {
     const { repository } = await setup();
     const created = await repository.recordDelivery(delivery());
     expect(created.finalTotalUsd).toBeNull();
-    const corrected = await repository.correctDelivery(created.id, { ...delivery({ pricePerLitreUsd: '1.00' }), correctionReason: 'Invoice arrived' });
+    const corrected = await repository.correctDelivery(created.id, { ...delivery({ pricePerLitreUsd: '1.00' }), vat: { mode: 'universal', ratePercent: '' }, correctionReason: 'Invoice arrived' });
     expect(corrected.finalTotalUsd).toBe(111);
     expect(corrected.paymentStatus).toBe('Unpaid');
   });
@@ -155,7 +155,7 @@ describe('fuel types and corrections in SQLite', () => {
 
   it('allows reducing a delivery below what was paid and reports Overpaid', async () => {
     const { database, repository } = await setup();
-    const created = await repository.recordDelivery(delivery({ litres: '100', pricePerLitreUsd: '1.00' }));
+    const created = await repository.recordDelivery(delivery({ litres: '100', pricePerLitreUsd: '1.00', vat: { mode: 'universal', ratePercent: '' } }));
     database.raw.exec(`INSERT INTO payment_entries (id,target_type,fuel_movement_id,amount_usd_cents,payment_date,status,created_at) VALUES ('pay','fuelDelivery','${created.id}',11100,'2026-08-29','Active','2026-08-29T00:00:00Z');`);
     const corrected = await repository.correctDelivery(created.id, { ...delivery({ litres: '10', pricePerLitreUsd: '1.00' }), correctionReason: 'Wrong quantity' });
     expect(corrected.finalTotalUsd).toBe(11.1);

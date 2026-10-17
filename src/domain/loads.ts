@@ -1,3 +1,4 @@
+import {noVatChoice,validateAccountVat,type VatChoice} from './accountVat';
 import type { CompanySettings, Customer } from './profiles';
 import type { SignerDisplay, SignerSnapshot } from './documentSigners';
 import type { TruckCrewRole } from './people';
@@ -127,6 +128,8 @@ export type ProjectDraft = {
 };
 
 export type LoadDraft = {
+  /** The VAT choice for this load: No VAT (the start), Universal or Own %. It starts from the customer's account and can be changed here. */
+  vat: VatChoice;
   recordDate:string;
   customerId: string;
   projectId: string;
@@ -150,6 +153,7 @@ export type LoadDraft = {
 };
 
 export const emptyLoadDraft: LoadDraft = {
+  vat: noVatChoice,
   recordDate:localLoadDate(),customerId: '', projectId: '', destinationAddress: '', itemId: '', driverId: '', truckId: '', driverName: '',
   truckPlate: '', quantityMethod: 'weighbridge', requestedQuantityKg: '', emptyWeightKg: '', fullWeightKg: '',
   conversionId: '', directQuantity: '', directUnitId: '', unitPriceUsd: '', notes: '', driverSignaturePaths: [],
@@ -450,6 +454,7 @@ export function validateLoadDraft(draft: LoadDraft, options: LoadSetupOptions): 
     const priceText=draft.unitPriceUsd.trim().replace(',', '.');const price = Number(priceText);
     if (!/^\d+(\.\d{1,2})?$/.test(priceText)||!Number.isFinite(price) || price < 0) issues.push('Unit price must be zero or more with no more than two decimals.');
   }
+  if (draft.vat?.mode === 'custom') { try { validateAccountVat(draft.vat); } catch { issues.push('The VAT rate on the price must be a percentage from 0 to 100.'); } }
   if (!options.companySettings.companyName.trim()) issues.push('Save the required company name in Settings.');
   return issues;
 }

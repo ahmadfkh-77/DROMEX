@@ -26,7 +26,7 @@ const seed=(db:SqliteTestDatabase)=>db.raw.exec(`
   INSERT INTO categories (id,name,created_at,updated_at) VALUES ('cat_stock','Materials','${SEED_TIME}','${SEED_TIME}');
   INSERT INTO catalog_items (id,category_id,name,default_unit_id,quarry_enabled,is_active,created_at,updated_at) VALUES ('oil','cat_stock','Engine oil','unit_kg',1,1,'${SEED_TIME}','${SEED_TIME}');
 `);
-const draft=(extra:Partial<StockBatchDraft>={}):StockBatchDraft=>({itemId:'oil',unitId:'',recordDate:'2026-10-12',supplierId:'gulf',invoiceNumber:'INV-1',quantity:'20',priceBasis:'per_unit',price:'18.5',vat:true,vatRate:'11',notes:'',...extra});
+const draft=(extra:Partial<StockBatchDraft>={}):StockBatchDraft=>({itemId:'oil',unitId:'',recordDate:'2026-10-12',supplierId:'gulf',invoiceNumber:'INV-1',quantity:'20',priceBasis:'per_unit',price:'18.5',vat:{mode:'universal',ratePercent:''},notes:'',...extra});
 
 describe('backup and restore of Stock',()=>{
   it('counts stock in the backup preview and every counted table exists',async()=>{
@@ -40,7 +40,7 @@ describe('backup and restore of Stock',()=>{
     const db=await migratedDatabaseWithProject(open);seed(db);
     const repository=new SqliteStockRepository(db as never);
     await repository.recordBatch(draft({recordDate:'2026-10-03',quantity:'4'}));
-    await repository.recordBatch(draft({recordDate:'2026-10-12',quantity:'50',price:'',vat:false,vatRate:''}));
+    await repository.recordBatch(draft({recordDate:'2026-10-12',quantity:'50',price:'',vat:{mode:'none',ratePercent:''}}));
     const first=await repository.recordUse({itemId:'oil',quantity:'10',usedOn:'2026-10-16',note:'Loader service'});
     const second=await repository.recordUse({itemId:'oil',quantity:'3',usedOn:'2026-10-16',note:'Typed twice'});
     await repository.cancelUse(second.groupId,'Entered twice');
@@ -53,17 +53,17 @@ describe('backup and restore of Stock',()=>{
     expect((await after.getSetup()).catalogItems.find(item=>item.id==='oil')?.inStock).toBe(true);
 
     vi.setSystemTime(new Date('2026-10-17T09:00:00'));
-    const next=await after.recordBatch(draft({recordDate:'2026-10-17',quantity:'5',price:'',vat:false,vatRate:''}));
+    const next=await after.recordBatch(draft({recordDate:'2026-10-17',quantity:'5',price:'',vat:{mode:'none',ratePercent:''}}));
     expect(next.batchNumber).toBe('ENG-0003');
   });
 
   it('never reuses a cancelled batch number after a restore',async()=>{
     const db=await migratedDatabaseWithProject(open);seed(db);
     const repository=new SqliteStockRepository(db as never);
-    const batch=await repository.recordBatch(draft({price:'',vat:false,vatRate:''}));
+    const batch=await repository.recordBatch(draft({price:'',vat:{mode:'none',ratePercent:''}}));
     await repository.cancelBatch(batch.id,'Entered twice');
     const after=new SqliteStockRepository(copyOf(db) as never);
-    await after.recordBatch(draft({price:'',vat:false,vatRate:''}));
+    await after.recordBatch(draft({price:'',vat:{mode:'none',ratePercent:''}}));
     expect((await after.getOverview()).items[0]!.batches.map(value=>[value.batchNumber,value.status])).toEqual([['ENG-0001','cancelled'],['ENG-0002','in_use']]);
   });
 
@@ -76,6 +76,6 @@ describe('backup and restore of Stock',()=>{
     expect((db.raw.prepare('SELECT COUNT(*) c FROM projects').get() as {c:number}).c).toBe(loads);
     expect((db.raw.prepare('SELECT COUNT(*) c FROM stock_items').get() as {c:number}).c).toBe(0);
     const repository=new SqliteStockRepository(db as never);
-    expect((await repository.recordBatch(draft({price:'',vat:false,vatRate:''}))).batchNumber).toBe('ENG-0001');
+    expect((await repository.recordBatch(draft({price:'',vat:{mode:'none',ratePercent:''}}))).batchNumber).toBe('ENG-0001');
   });
 });

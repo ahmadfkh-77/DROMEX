@@ -19,6 +19,7 @@ const existingCustomer: Customer = {
   isOwnCompany: false,
   isActive: true,
   mergedIntoId: null,
+  vat: { mode: 'none', ratePercent: null },
   createdAt: '2026-08-11T00:00:00.000Z',
   updatedAt: '2026-08-11T00:00:00.000Z',
 };

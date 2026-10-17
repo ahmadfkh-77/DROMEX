@@ -110,8 +110,10 @@ export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper
     if(record.unitPriceUsd!=null){
       doc.line('');
       labelled(doc,'Subtotal',`$${record.subtotalUsd?.toFixed(2)}`);
-      labelled(doc,'VAT rate',`${record.vatRatePercent??0}%`);
-      labelled(doc,'VAT amount',`$${record.vatAmountUsd?.toFixed(2)}`);
+      if((record.vatRatePercent??0)>0){
+        labelled(doc,'VAT rate',`${record.vatRatePercent}%`);
+        labelled(doc,'VAT amount',`$${record.vatAmountUsd?.toFixed(2)}`);
+      }
       doc.line(divider(columns));
       labelled(doc,'Final total',`$${record.finalTotalUsd?.toFixed(2)}`,true);
     }

@@ -1,3 +1,5 @@
+import {choiceForRate,resolveVatRate,startingVatChoice} from '../../domain/accountVat';
+import {VatChoiceControl} from '../components/AccountVatControl';
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
@@ -22,9 +24,9 @@ type Mode={kind:'list'}|{kind:'add';itemId:string}|{kind:'item';id:string}|{kind
 
 const dayLabel=(iso:string)=>new Date(iso).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
-const draftFromBatch=(batch:StockBatch):StockBatchDraft=>({
+const draftFromBatch=(batch:StockBatch,universal:number):StockBatchDraft=>({
   ...emptyStockBatch,itemId:batch.itemId,recordDate:localDateKey(new Date(batch.arrivedAt)),supplierId:batch.supplierId??'',invoiceNumber:batch.invoiceNumber??'',quantity:String(batch.quantity),
-  priceBasis:batch.priceBasis??'per_unit',price:batch.priceUsd==null?'':String(batch.priceUsd),vat:batch.vatRatePercent!=null,vatRate:batch.vatRatePercent==null?'':String(batch.vatRatePercent),notes:batch.notes??'',
+  priceBasis:batch.priceBasis??'per_unit',price:batch.priceUsd==null?'':String(batch.priceUsd),vat:choiceForRate(batch.vatRatePercent,universal),notes:batch.notes??'',
 });
 
 export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCatalog,fuelBadge,bitumenBadge}:{repository:StockRepository;onBack:()=>void;onOpenFuel:()=>void;onOpenBitumen:()=>void;onOpenCatalog:()=>void;fuelBadge?:string|null;bitumenBadge?:string|null}){
@@ -43,7 +45,7 @@ export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCa
   const batch=batchItem?.batches.find(value=>mode.kind!=='list'&&mode.kind!=='add'&&value.id===mode.id);
 
   if(mode.kind==='add'){
-    const initial={...emptyStockBatch,itemId:mode.itemId,vatRate:String(setup.vatRatePercent)};
+    const initial={...emptyStockBatch,itemId:mode.itemId};
     return <AppPage keyboard><PageHeader eyebrow="Stock" title="Add batch" onBack={()=>go(mode.itemId&&overview.items.some(value=>value.itemId===mode.itemId)?{kind:'item',id:mode.itemId}:{kind:'list'})}/>
       {error?<Feedback kind="error">{error}</Feedback>:null}
       <BatchForm setup={setup} initial={initial} busy={busy} submitLabel="Save batch" itemLocked={Boolean(mode.itemId&&overview.items.some(value=>value.itemId===mode.itemId))} onOpenCatalog={onOpenCatalog}
@@ -54,7 +56,7 @@ export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCa
   if(mode.kind==='edit'&&batch&&batchItem){
     return <AppPage keyboard><PageHeader eyebrow={batchItem.itemName} title={`Edit ${batch.batchNumber}`} onBack={()=>go({kind:'batch',id:batch.id})}/>
       {error?<Feedback kind="error">{error}</Feedback>:null}
-      <BatchForm setup={setup} initial={draftFromBatch(batch)} busy={busy} submitLabel="Save changes" asksReason itemLocked unitSymbol={batchItem.unitSymbol} onOpenCatalog={onOpenCatalog}
+      <BatchForm setup={setup} initial={draftFromBatch(batch,setup.vatRatePercent)} busy={busy} submitLabel="Save changes" asksReason itemLocked unitSymbol={batchItem.unitSymbol} onOpenCatalog={onOpenCatalog}
         onSubmit={(draft,reason)=>{void run(async()=>{await repository.editBatch(batch.id,{...draft,reason:reason??''});setMode({kind:'batch',id:batch.id});},'Batch updated. The earlier values are kept in its history.');}}/>
     </AppPage>;
   }
@@ -174,7 +176,8 @@ function BatchForm({setup,initial,busy,submitLabel,asksReason=false,itemLocked=f
   const chosen=setup.catalogItems.find(value=>value.id===draft.itemId);
   const needsUnit=!itemLocked&&Boolean(chosen)&&!chosen!.inStock&&!chosen!.unitSymbol;
   const unit=unitSymbol??(chosen?.unitSymbol??setup.units.find(value=>value.id===draft.unitId)?.symbol??'');
-  const preview=useMemo(()=>previewStockPrice(draft),[draft]);
+  const preview=useMemo(()=>previewStockPrice(draft,setup.vatRatePercent),[draft,setup.vatRatePercent]);
+  const vatRate=resolveVatRate(draft.vat,setup.vatRatePercent);
   const basisUnit=draft.priceBasis==='per_unit'?`per ${unit||'unit'}`:'for the whole batch';
   return <>
     <AppCard title="1 · Item">
@@ -187,7 +190,7 @@ function BatchForm({setup,initial,busy,submitLabel,asksReason=false,itemLocked=f
       </>}
     </AppCard>
     <AppCard title="2 · Delivery">
-      <SearchableSelect label="Supplier (optional)" options={setup.suppliers.map(value=>({id:value.id,label:value.name}))} selectedId={draft.supplierId} onSelect={id=>set('supplierId',id)} placeholder="Select supplier" allowClear/>
+      <SearchableSelect label="Supplier (optional)" options={setup.suppliers.map(value=>({id:value.id,label:value.name}))} selectedId={draft.supplierId} onSelect={id=>setDraft(current=>({...current,supplierId:id,vat:asksReason?current.vat:startingVatChoice(setup.suppliers.find(value=>value.id===id)?.vat)}))} placeholder="Select supplier" allowClear/>
       <DatePickerField label="Date *" value={draft.recordDate} onChange={value=>set('recordDate',value)} maxDate={localDateKey(new Date())}/>
       <AppField label={`Quantity${unit?` (${unit})`:''} *`} value={draft.quantity} onChangeText={value=>set('quantity',value)} keyboardType="decimal-pad"/>
       <AppField label="Invoice no. (optional)" value={draft.invoiceNumber} onChangeText={value=>set('invoiceNumber',value)}/>
@@ -195,9 +198,8 @@ function BatchForm({setup,initial,busy,submitLabel,asksReason=false,itemLocked=f
     <AppCard title="3 · Price (optional)" hint="Left empty, it is saved as Unpriced, never as zero. VAT is added only if you choose it.">
       <SegmentedChoice label="Price basis" options={(['per_unit','whole'] as StockPriceBasis[]).map(id=>({id,label:priceBasisLabels[id]}))} selectedId={draft.priceBasis} onSelect={id=>set('priceBasis',id)}/>
       <AppField label={`Price ${basisUnit} (USD)`} value={draft.price} onChangeText={value=>set('price',value)} keyboardType="decimal-pad"/>
-      <SegmentedChoice label="VAT" options={[{id:'no',label:'No VAT'},{id:'yes',label:'Add VAT'}]} selectedId={draft.vat?'yes':'no'} onSelect={id=>setDraft(current=>({...current,vat:id==='yes',vatRate:id==='yes'&&!current.vatRate.trim()?String(setup.vatRatePercent):current.vatRate}))}/>
-      {draft.vat?<AppField label="VAT rate for this batch (%)" value={draft.vatRate} onChangeText={value=>set('vatRate',value)} keyboardType="decimal-pad"/>:null}
-      {preview&&preview.totalUsd!=null?<View style={styles.totals}><Fact label="Subtotal" value={formatUsd(preview.subtotalUsd??0)}/>{draft.vat?<Fact label={`VAT ${draft.vatRate}%`} value={formatUsd(preview.vatAmountUsd??0)}/>:null}<Fact label="Total" value={formatUsd(preview.totalUsd)}/></View>:null}
+      <VatChoiceControl value={draft.vat} onChange={vat=>set('vat',vat)} universalRatePercent={setup.vatRatePercent} hint="No VAT is added unless you choose it."/>
+      {preview&&preview.totalUsd!=null?<View style={styles.totals}><Fact label="Subtotal" value={formatUsd(preview.subtotalUsd??0)}/>{vatRate>0?<Fact label={`VAT ${vatRate}%`} value={formatUsd(preview.vatAmountUsd??0)}/>:null}<Fact label="Total" value={formatUsd(preview.totalUsd)}/></View>:null}
       <AppField label="Notes (optional)" value={draft.notes} onChangeText={value=>set('notes',value)} multiline/>
     </AppCard>
     {asksReason?<AppCard title="Reason" hint="Needed when the quantity or the date changes. The old values are kept in the batch's history."><AppField label="Reason" value={reason} onChangeText={setReason} multiline/></AppCard>:null}

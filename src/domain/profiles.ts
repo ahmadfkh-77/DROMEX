@@ -1,3 +1,5 @@
+import type { AccountVat, AccountVatDraft } from './accountVat';
+
 export type CustomerType = 'individual' | 'company';
 
 export type CustomerDraft = {
@@ -8,6 +10,8 @@ export type CustomerDraft = {
   address?: string;
   taxVatNumber?: string;
   notes?: string;
+  /** Account VAT. Left out, the customer starts as No VAT. */
+  vat?: AccountVatDraft;
 };
 
 export type Customer = {
@@ -22,6 +26,8 @@ export type Customer = {
   isOwnCompany: boolean;
   isActive: boolean;
   mergedIntoId: string | null;
+  /** Account VAT: new loads for this customer start from it. Every existing customer is No VAT. */
+  vat: AccountVat;
   createdAt: string;
   updatedAt: string;
 };

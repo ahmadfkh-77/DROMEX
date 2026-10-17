@@ -16,7 +16,7 @@ async function setup(){
   const db=await migratedDatabaseWithProject(databases);
   db.raw.exec(`INSERT INTO suppliers (id,name,is_active,created_at,updated_at) VALUES ('khayat','Khayat <Al> Sabouri',1,'${SEED_TIME}','${SEED_TIME}');`);
   const repository=new SqliteBitumenRepository(db as never);
-  const draft=(extra:Partial<BitumenDeliveryDraft>={}):BitumenDeliveryDraft=>({recordDate:'2026-10-13',supplierId:'khayat',invoiceNumber:'55912',ticketNumber:'T-8841',gradeId:'bitumen_grade_60_70',kg:'8000',priceBasis:'per_ton',price:'610',vat:false,notes:'',...extra});
+  const draft=(extra:Partial<BitumenDeliveryDraft>={}):BitumenDeliveryDraft=>({recordDate:'2026-10-13',supplierId:'khayat',invoiceNumber:'55912',ticketNumber:'T-8841',gradeId:'bitumen_grade_60_70',kg:'8000',priceBasis:'per_ton',price:'610',vat:{mode:'none',ratePercent:''},notes:'',...extra});
   const deliver=(extra:Partial<BitumenDeliveryDraft>={})=>{vi.setSystemTime(new Date('2026-10-13T09:40:00'));return repository.recordDelivery(draft(extra));};
   return {repository,deliver,draft};
 }

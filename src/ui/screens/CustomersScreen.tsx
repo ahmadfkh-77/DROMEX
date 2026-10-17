@@ -17,6 +17,8 @@ import type { CompanyTotalsRepository } from '../../data/repositories/CompanyTot
 import type { RecordSnapshot } from '../../domain/businessDocuments';
 import type { FinancialOverview } from '../../domain/financials';
 import { CustomerDeliveries } from '../components/customers/CustomerDeliveries';
+import { AccountVatCard } from '../components/AccountVatControl';
+import type { AccountVatDraft } from '../../domain/accountVat';
 import {
   findPotentialCustomerDuplicates,
   type Customer,
@@ -79,6 +81,8 @@ export function CustomersScreen({
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<Customer | null>(null);
+  const [companyVat, setCompanyVat] = useState(0);
+  useEffect(() => { void repository.getCompanySettings().then((settings) => setCompanyVat(settings.vatRatePercent)).catch(() => undefined); }, [repository]);
   const pendingCustomerId = useRef(initialCustomerId ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -150,6 +154,17 @@ export function CustomersScreen({
       setSelected(created);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not create customer.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveVat(customer: Customer, vat: AccountVatDraft): Promise<void> {
+    setBusy(true);
+    try {
+      const updated = await repository.setCustomerVat(customer.id, vat);
+      await refresh();
+      setSelected(updated);
     } finally {
       setBusy(false);
     }
@@ -242,6 +257,8 @@ export function CustomersScreen({
             </TouchableOpacity>
           ) : null}
         </View>
+
+        <AccountVatCard key={`${selected.id}-${selected.vat.mode}-${selected.vat.ratePercent}`} vat={selected.vat} universalRatePercent={companyVat} busy={busy} onSave={(vat) => saveVat(selected, vat)} />
 
         {totals && onOpenRecord ? <CustomerDeliveries customer={{ id: selected.id, name: selected.name }} totals={totals} profiles={repository} onOpenRecord={onOpenRecord} onOpenPayments={() => setShowCustomerFinancials(true)} /> : null}
 

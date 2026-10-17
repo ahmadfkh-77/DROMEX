@@ -1,5 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { accountVatBasisPoints, accountVatFromRow, noAccountVat, validateAccountVat, type AccountVatDraft } from '../../domain/accountVat';
+
 import type {
   CompanySettings,
   CompanySettingsDraft,
@@ -32,6 +34,8 @@ type CustomerRow = {
   tax_vat_number: string | null;
   notes: string | null;
   is_own_company: number;
+  vat_mode?: string | null;
+  vat_rate_basis_points?: number | null;
   is_active: number;
   merged_into_id: string | null;
   created_at: string;
@@ -91,6 +95,7 @@ function rowToCustomer(row: CustomerRow): Customer {
     isOwnCompany: row.is_own_company === 1,
     isActive: row.is_active === 1,
     mergedIntoId: row.merged_into_id,
+    vat: accountVatFromRow(row.vat_mode, row.vat_rate_basis_points),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -124,6 +129,7 @@ export class SqliteProfileRepository implements ProfileRepository {
       isOwnCompany: false,
       isActive: true,
       mergedIntoId: null,
+      vat: validateAccountVat(draft.vat),
       createdAt: now,
       updatedAt: now,
     };
@@ -133,6 +139,18 @@ export class SqliteProfileRepository implements ProfileRepository {
       await this.enqueue('customer', customer.id, customer);
     });
     return customer;
+  }
+
+  async setCustomerVat(id: string, draft: AccountVatDraft): Promise<Customer> {
+    const vat = validateAccountVat(draft);
+    const current = await this.db.getFirstAsync<CustomerRow>('SELECT * FROM customers WHERE id = ?', id);
+    if (!current) throw new Error('Customer was not found.');
+    const now = new Date().toISOString();
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync('UPDATE customers SET vat_mode = ?, vat_rate_basis_points = ?, updated_at = ? WHERE id = ?', vat.mode, accountVatBasisPoints(vat), now, id);
+      await this.enqueue('customer', id, { ...rowToCustomer(current), vat, updatedAt: now });
+    });
+    return { ...rowToCustomer(current), vat, updatedAt: now };
   }
 
   async setCustomerActive(id: string, isActive: boolean): Promise<Customer> {
@@ -282,6 +300,7 @@ export class SqliteProfileRepository implements ProfileRepository {
           isOwnCompany: true,
           isActive: true,
           mergedIntoId: null,
+          vat: noAccountVat,
           createdAt: now,
           updatedAt: now,
         };
@@ -369,8 +388,8 @@ export class SqliteProfileRepository implements ProfileRepository {
     await this.db.runAsync(
       `INSERT INTO customers (
         id, customer_type, name, phone, email, address, tax_vat_number, notes,
-        is_own_company, is_active, merged_into_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        is_own_company, is_active, merged_into_id, vat_mode, vat_rate_basis_points, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       customer.id,
       customer.type,
       customer.name,
@@ -382,6 +401,8 @@ export class SqliteProfileRepository implements ProfileRepository {
       customer.isOwnCompany ? 1 : 0,
       customer.isActive ? 1 : 0,
       customer.mergedIntoId,
+      customer.vat.mode,
+      accountVatBasisPoints(customer.vat),
       customer.createdAt,
       customer.updatedAt,
     );

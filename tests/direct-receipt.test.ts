@@ -28,7 +28,7 @@ describe('direct-quantity receipt SQLite integration',()=>{
       INSERT INTO truck_profiles (id,plate,is_active,created_at,updated_at) VALUES ('truck','B123',1,'${now}','${now}');
     `);
     const repository=new SqliteLoadRepository(db as never);
-    const saved=await repository.confirmLoad({...emptyLoadDraft,customerId:'customer',destinationAddress:'Beirut',itemId:'pipe',driverId:'driver',driverName:'Ali',truckId:'truck',truckPlate:'B123',quantityMethod:'direct',directQuantity:'50',directUnitId:'unit_piece',unitPriceUsd:'4.25'});
+    const saved=await repository.confirmLoad({...emptyLoadDraft,vat:{mode:'universal',ratePercent:''},customerId:'customer',destinationAddress:'Beirut',itemId:'pipe',driverId:'driver',driverName:'Ali',truckId:'truck',truckPlate:'B123',quantityMethod:'direct',directQuantity:'50',directUnitId:'unit_piece',unitPriceUsd:'4.25'});
     expect(saved).toMatchObject({quantityMethod:'direct',billedQuantity:50,outputUnitSymbol:'pc',emptyWeightKg:null,fullWeightKg:null,netWeightKg:null,subtotalUsd:212.5,finalTotalUsd:235.88});
     expect(db.raw.prepare('SELECT quantity_method,direct_quantity,direct_unit_symbol FROM loads WHERE id=?').get(saved.id)).toMatchObject({quantity_method:'direct',direct_quantity:50,direct_unit_symbol:'pc'});
   });

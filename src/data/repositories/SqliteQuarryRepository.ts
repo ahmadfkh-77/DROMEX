@@ -1,3 +1,4 @@
+import {accountVatBasisPoints,accountVatFromRow,validateAccountVat} from '../../domain/accountVat';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { DriverProfile, Project, TruckProfile } from '../../domain/loads';
 import {
@@ -75,7 +76,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
 
   async getSetup():Promise<QuarrySetup>{
     const [suppliers,projects,items,units,drivers,trucks,tax,siteRows]=await Promise.all([
-      this.db.getAllAsync<{id:string;name:string;phone:string|null;email:string|null;address:string|null;tax_vat_number:string|null;notes:string|null;is_active:number}>('SELECT * FROM suppliers WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
+      this.db.getAllAsync<{id:string;name:string;phone:string|null;email:string|null;address:string|null;tax_vat_number:string|null;notes:string|null;is_active:number;vat_mode:string|null;vat_rate_basis_points:number|null}>('SELECT * FROM suppliers WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
       this.db.getAllAsync<{id:string;customer_id:string;customer_name:string;name:string;location:string;status:'active'|'completed';notes:string|null;start_date:string|null;end_date:string|null}>("SELECT p.*,c.name customer_name FROM projects p JOIN customers c ON c.id=p.customer_id WHERE p.status='active' AND p.is_archived=0 ORDER BY p.name COLLATE NOCASE"),
       this.db.getAllAsync<{id:string;name:string;internal_code:string|null;category_name:string;default_unit_id:string|null}>('SELECT i.id,i.name,i.internal_code,i.default_unit_id,c.name category_name FROM catalog_items i JOIN categories c ON c.id=i.category_id WHERE i.is_active=1 AND i.quarry_enabled=1 AND c.is_active=1 ORDER BY c.name COLLATE NOCASE,i.name COLLATE NOCASE'),
       this.db.getAllAsync<{id:string;name:string;symbol:string}>('SELECT id,name,symbol FROM measurement_units WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
@@ -84,7 +85,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
       this.db.getFirstAsync<{vat_rate_basis_points:number}>("SELECT vat_rate_basis_points FROM tax_settings WHERE id='tax'"),
       this.db.getAllAsync<{id:string;name:string;is_active:number;created_at:string;updated_at:string}>('SELECT id,name,is_active,created_at,updated_at FROM company_sites ORDER BY name COLLATE NOCASE'),
     ]);
-    return{suppliers:suppliers.map(r=>({id:r.id,name:r.name,phone:r.phone,email:r.email,address:r.address,taxVatNumber:r.tax_vat_number,notes:r.notes,isActive:r.is_active===1})),
+    return{suppliers:suppliers.map(r=>({id:r.id,name:r.name,phone:r.phone,email:r.email,address:r.address,taxVatNumber:r.tax_vat_number,notes:r.notes,isActive:r.is_active===1,vat:accountVatFromRow(r.vat_mode,r.vat_rate_basis_points)})),
       projects:projects.map((r):Project=>({id:r.id,customerId:r.customer_id,customerName:r.customer_name,name:r.name,location:r.location,status:r.status,notes:r.notes,startDate:r.start_date,endDate:r.end_date})),
       items:items.map(r=>({id:r.id,name:r.name,internalCode:r.internal_code,categoryName:r.category_name,defaultUnitId:r.default_unit_id})),
       units,drivers:drivers.map((r):DriverProfile=>({id:r.id,name:r.name,phone:r.phone,licenseNumber:r.license_number,notes:r.notes,isActive:r.is_active===1,role:'driver'})),
@@ -96,16 +97,18 @@ export class SqliteQuarryRepository implements QuarryRepository {
   async createSupplier(draft:SupplierDraft):Promise<Supplier>{
     const name=draft.name.trim().replace(/\s+/g,' ');if(!name)throw new Error('Supplier name is required.');
     const id=makeId('supplier'),now=new Date().toISOString();
-    const supplier:Supplier={id,name,phone:clean(draft.phone??''),email:clean(draft.email??''),address:clean(draft.address??''),taxVatNumber:clean(draft.taxVatNumber??''),notes:clean(draft.notes??''),isActive:true};
-    await this.db.withTransactionAsync(async()=>{await this.db.runAsync('INSERT INTO suppliers (id,name,phone,email,address,tax_vat_number,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',id,name,supplier.phone,supplier.email,supplier.address,supplier.taxVatNumber,supplier.notes,now,now);await this.enqueue('supplier',id,supplier);});
+    const supplier:Supplier={id,name,phone:clean(draft.phone??''),email:clean(draft.email??''),address:clean(draft.address??''),taxVatNumber:clean(draft.taxVatNumber??''),notes:clean(draft.notes??''),isActive:true,vat:validateAccountVat(draft.vat)};
+    await this.db.withTransactionAsync(async()=>{await this.db.runAsync('INSERT INTO suppliers (id,name,phone,email,address,tax_vat_number,notes,vat_mode,vat_rate_basis_points,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',id,name,supplier.phone,supplier.email,supplier.address,supplier.taxVatNumber,supplier.notes,supplier.vat.mode,accountVatBasisPoints(supplier.vat),now,now);await this.enqueue('supplier',id,supplier);});
     return supplier;
   }
 
   async updateSupplier(id:string,draft:SupplierDraft):Promise<Supplier>{
     const name=draft.name.trim().replace(/\s+/g,' ');if(!name)throw new Error('Supplier name is required.');const now=new Date().toISOString();
+    const vatChange=draft.vat?validateAccountVat(draft.vat):null;
     const result=await this.db.runAsync('UPDATE suppliers SET name=?,phone=?,email=?,address=?,tax_vat_number=?,notes=?,updated_at=? WHERE id=?',name,clean(draft.phone??''),clean(draft.email??''),clean(draft.address??''),clean(draft.taxVatNumber??''),clean(draft.notes??''),now,id);if(!result.changes)throw new Error('Supplier was not found.');
-    const row=await this.db.getFirstAsync<{id:string;name:string;phone:string|null;email:string|null;address:string|null;tax_vat_number:string|null;notes:string|null;is_active:number}>('SELECT * FROM suppliers WHERE id=?',id);if(!row)throw new Error('Supplier was not found after saving.');
-    const supplier:Supplier={id:row.id,name:row.name,phone:row.phone,email:row.email,address:row.address,taxVatNumber:row.tax_vat_number,notes:row.notes,isActive:row.is_active===1};await this.enqueue('supplier',id,{...supplier,updatedAt:now});return supplier;
+    if(vatChange)await this.db.runAsync('UPDATE suppliers SET vat_mode=?,vat_rate_basis_points=? WHERE id=?',vatChange.mode,accountVatBasisPoints(vatChange),id);
+    const row=await this.db.getFirstAsync<{id:string;name:string;phone:string|null;email:string|null;address:string|null;tax_vat_number:string|null;notes:string|null;is_active:number;vat_mode:string|null;vat_rate_basis_points:number|null}>('SELECT * FROM suppliers WHERE id=?',id);if(!row)throw new Error('Supplier was not found after saving.');
+    const supplier:Supplier={id:row.id,name:row.name,phone:row.phone,email:row.email,address:row.address,taxVatNumber:row.tax_vat_number,notes:row.notes,isActive:row.is_active===1,vat:accountVatFromRow(row.vat_mode,row.vat_rate_basis_points)};await this.enqueue('supplier',id,{...supplier,updatedAt:now});return supplier;
   }
 
   async confirmPurchase(draft:QuarryPurchaseDraft):Promise<QuarryPurchase>{

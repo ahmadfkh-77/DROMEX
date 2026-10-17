@@ -1,3 +1,4 @@
+import {noVatChoice,resolveVatRate,type AccountVat,type VatChoice} from './accountVat';
 import {localDateKey} from './fuel';
 import type {BitumenAdjustment,BitumenUseRow} from './bitumenUse';
 
@@ -13,13 +14,13 @@ export type BitumenBatchStatus='in_use'|'waiting'|'closed'|'cancelled';
 export type BitumenRecordStatus='Active'|'Cancelled';
 
 export type BitumenGrade={id:string;name:string;isActive:boolean};
-export type BitumenSupplier={id:string;name:string};
+export type BitumenSupplier={id:string;name:string;/** The supplier's account VAT, where a new delivery starts. */vat?:AccountVat};
 export type BitumenSetup={suppliers:BitumenSupplier[];grades:BitumenGrade[];vatRatePercent:number};
 
 /** What the Record delivery form sends. Quantity and price are text so the form can show what was typed. */
-export type BitumenDeliveryDraft={recordDate:string;supplierId:string;invoiceNumber:string;ticketNumber:string;gradeId:string;kg:string;priceBasis:BitumenPriceBasis;price:string;vat:boolean;notes:string};
+export type BitumenDeliveryDraft={recordDate:string;supplierId:string;invoiceNumber:string;ticketNumber:string;gradeId:string;kg:string;priceBasis:BitumenPriceBasis;price:string;vat:VatChoice;notes:string};
 export type BitumenEditDraft=BitumenDeliveryDraft&{reason:string};
-export const emptyBitumenDelivery:BitumenDeliveryDraft={recordDate:localDateKey(new Date()),supplierId:'',invoiceNumber:'',ticketNumber:'',gradeId:'',kg:'',priceBasis:'per_ton',price:'',vat:false,notes:''};
+export const emptyBitumenDelivery:BitumenDeliveryDraft={recordDate:localDateKey(new Date()),supplierId:'',invoiceNumber:'',ticketNumber:'',gradeId:'',kg:'',priceBasis:'per_ton',price:'',vat:noVatChoice,notes:''};
 
 export type BitumenCorrectionEntry={at:string;reason:string;changes:{field:string;before:string;after:string}[]};
 
@@ -84,7 +85,7 @@ export function calculateBitumenPrice(kg:number,basis:BitumenPriceBasis,priceTex
 
 /** The same figures as above for a form that is being filled in: null while the quantity or price is not yet valid. */
 export function previewBitumenPrice(draft:Pick<BitumenDeliveryDraft,'kg'|'priceBasis'|'price'|'vat'>,vatRatePercent:number){
-  try{return calculateBitumenPrice(validatePositiveKg(draft.kg),draft.priceBasis,draft.price,draft.vat?vatRatePercent:0);}catch{return null;}
+  try{return calculateBitumenPrice(validatePositiveKg(draft.kg),draft.priceBasis,draft.price,resolveVatRate(draft.vat,vatRatePercent));}catch{return null;}
 }
 
 /**

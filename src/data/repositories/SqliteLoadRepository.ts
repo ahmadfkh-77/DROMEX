@@ -1,3 +1,4 @@
+import { resolveVatRate, validateAccountVat } from '../../domain/accountVat';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import {
@@ -476,7 +477,8 @@ export class SqliteLoadRepository implements LoadRepository {
     const item = options.items.find((value) => value.id === draft.itemId)!;
     const conversion = options.conversions.find((value) => value.id === draft.conversionId);
     const directUnit = options.units.find((value) => value.id === draft.directUnitId);
-    const calculation = calculateLoad(draft, conversion, options.companySettings.vatRatePercent);
+    const vatRate = resolveVatRate(validateAccountVat(draft.vat), options.companySettings.vatRatePercent);
+    const calculation = calculateLoad(draft, conversion, vatRate);
     if (calculation.convertedQuantity == null || calculation.billedQuantity == null || (draft.quantityMethod === 'weighbridge' && calculation.netWeightKg == null)) throw new Error('Load calculations are incomplete.');
     if (draft.quantityMethod === 'direct' && !directUnit) throw new Error('The direct quantity unit is unavailable.');
     if (draft.quantityMethod === 'weighbridge' && !conversion) throw new Error('The selected conversion is unavailable.');
@@ -518,7 +520,7 @@ export class SqliteLoadRepository implements LoadRepository {
         retainedConversion.id, isDirect && !directConverted ? 'Direct quantity' : retainedConversion.name,
         isDirect && !directConverted ? ENTERED_DIRECTLY : `${retainedConversion.inputQuantity} ${retainedConversion.inputUnitSymbol} = ${retainedConversion.outputQuantity} ${retainedConversion.outputUnitSymbol}`,
         isDirect && !directConverted ? directUnit!.symbol : retainedConversion.outputUnitSymbol, calculation.convertedQuantity, calculation.billedQuantity, price == null ? null : Math.round(price * 100),
-        calculation.subtotalUsd == null ? null : Math.round(calculation.subtotalUsd * 100), price == null ? null : Math.round(options.companySettings.vatRatePercent * 100),
+        calculation.subtotalUsd == null ? null : Math.round(calculation.subtotalUsd * 100), price == null ? null : Math.round(vatRate * 100),
         calculation.vatAmountUsd == null ? null : Math.round(calculation.vatAmountUsd * 100), calculation.finalTotalUsd == null ? null : Math.round(calculation.finalTotalUsd * 100),
         paymentStatus, clean(draft.notes), options.companySettings.companyName, options.companySettings.address,
         options.companySettings.phone, options.companySettings.email, options.companySettings.taxVatNumber, options.companySettings.receiptFooter, options.companySettings.logoUri,

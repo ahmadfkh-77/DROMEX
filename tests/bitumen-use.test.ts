@@ -29,7 +29,7 @@ async function setup(){
   `);
   db.raw.exec('PRAGMA foreign_keys=OFF;');
   const repository=new SqliteBitumenRepository(db as never);
-  const draft=(extra:Partial<BitumenDeliveryDraft>={}):BitumenDeliveryDraft=>({recordDate:'2026-10-12',supplierId:'khayat',invoiceNumber:'1',ticketNumber:'',gradeId:'bitumen_grade_60_70',kg:'20000',priceBasis:'per_ton',price:'',vat:false,notes:'',...extra});
+  const draft=(extra:Partial<BitumenDeliveryDraft>={}):BitumenDeliveryDraft=>({recordDate:'2026-10-12',supplierId:'khayat',invoiceNumber:'1',ticketNumber:'',gradeId:'bitumen_grade_60_70',kg:'20000',priceBasis:'per_ton',price:'',vat:{mode:'none',ratePercent:''},notes:'',...extra});
   const deliver=(local:string,extra:Partial<BitumenDeliveryDraft>={})=>{clock(local);return repository.recordDelivery(draft({recordDate:local.slice(0,10),...extra}));};
   let n=0;
   const addLoad=(id:string,confirmedAt:string,netKg:number,extra:{itemId?:string;status?:string;direct?:{quantity:number;unit:string};billed?:{quantity:number;unit:string}}={})=>{

@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 60;
+export const DATABASE_VERSION = 61;
 
 type TableColumn = { name: string };
 
@@ -2268,6 +2268,17 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_stock_use_group ON stock_use(group_id);
     `);
     currentVersion = 60;
+  }
+
+  if (currentVersion === 60) {
+    // Account VAT. Every customer and supplier gets its own VAT choice: No VAT, Universal (the Company Settings rate, followed as it changes) or
+    // Own % (a rate kept in vat_rate_basis_points). Every existing account starts as No VAT, and nothing already recorded is touched: loads,
+    // supplier loads and fuel purchases keep the VAT they were saved with.
+    await addColumnIfMissing(db, 'customers', 'vat_mode', "TEXT NOT NULL DEFAULT 'none' CHECK (vat_mode IN ('none', 'universal', 'custom'))");
+    await addColumnIfMissing(db, 'customers', 'vat_rate_basis_points', 'INTEGER CHECK (vat_rate_basis_points IS NULL OR vat_rate_basis_points BETWEEN 0 AND 10000)');
+    await addColumnIfMissing(db, 'suppliers', 'vat_mode', "TEXT NOT NULL DEFAULT 'none' CHECK (vat_mode IN ('none', 'universal', 'custom'))");
+    await addColumnIfMissing(db, 'suppliers', 'vat_rate_basis_points', 'INTEGER CHECK (vat_rate_basis_points IS NULL OR vat_rate_basis_points BETWEEN 0 AND 10000)');
+    currentVersion = 61;
   }
 
 

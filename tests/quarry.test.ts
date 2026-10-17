@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { calculateQuarryPurchase, emptyQuarryPurchaseDraft, groupQuarryPurchases, quarryDailyCounters, validateQuarryPurchase, type QuarryPurchase, type QuarrySetup } from '../src/domain/quarry';
+import { calculateQuarryPurchase, emptyQuarryPurchaseDraft, groupQuarryPurchases, quarryDailyCounters, validateQuarryPurchase, vatFieldsForSupplier, type QuarryPurchase, type QuarrySetup } from '../src/domain/quarry';
 
 const setup: QuarrySetup = {
-  suppliers: [{ id:'s1',name:'Main Quarry',phone:null,email:null,address:null,taxVatNumber:null,notes:null,isActive:true }],
+  suppliers: [{ id:'s1',name:'Main Quarry',phone:null,email:null,address:null,taxVatNumber:null,notes:null,isActive:true,vat:{mode:'none',ratePercent:null} }],
   projects: [{id:'p1',customerId:'c1',customerName:'DROMEX',name:'Mountain Road',location:'Aley',status:'active',notes:null}],
   items: [{ id:'i1',name:'Aggregate',internalCode:null,categoryName:'Quarry' }],
   units: [{id:'unit_m3',name:'Cubic metre',symbol:'m³'}],
@@ -13,7 +13,7 @@ const setup: QuarrySetup = {
 
 describe('quarry purchases',()=>{
   it('calculates subtotal, universal VAT, and final total',()=>{
-    const result=calculateQuarryPurchase({...emptyQuarryPurchaseDraft,quantityCubicMetres:'10',unitPriceUsd:'20'},11);
+    const result=calculateQuarryPurchase({...emptyQuarryPurchaseDraft,vatMode:'company',quantityCubicMetres:'10',unitPriceUsd:'20'},11);
     expect(result).toEqual({subtotalUsd:200,vatRatePercent:11,vatAmountUsd:22,finalTotalUsd:222});
   });
   it('leaves VAT empty for quantity-only purchases',()=>{
@@ -31,7 +31,7 @@ describe('quarry purchases',()=>{
     expect(validateQuarryPurchase({...supplierDelivery,supplierTruckPlate:'SUP-77'},setup)).toEqual([]);
   });
   it('rejects stale project references and excessive price decimals',()=>{const valid={...emptyQuarryPurchaseDraft,supplierId:'s1',itemId:'i1',quantityCubicMetres:'12',driverId:'d1',truckId:'t1'};expect(validateQuarryPurchase({...valid,projectId:'missing'},setup)).toContain('Select a valid project. Only active projects can receive supplier loads.');expect(validateQuarryPurchase({...valid,unitPriceUsd:'10.999'},setup)).toContain('Price must be zero or more with no more than two decimals.');});
-  it('supports whole-delivery prices and VAT-inclusive quotes',()=>{expect(calculateQuarryPurchase({...emptyQuarryPurchaseDraft,quantityCubicMetres:'20',unitPriceUsd:'111',priceBasis:'whole',vatInclusive:true},11)).toEqual({subtotalUsd:100,vatRatePercent:11,vatAmountUsd:11,finalTotalUsd:111});});
+  it('supports whole-delivery prices and VAT-inclusive quotes',()=>{expect(calculateQuarryPurchase({...emptyQuarryPurchaseDraft,vatMode:'company',quantityCubicMetres:'20',unitPriceUsd:'111',priceBasis:'whole',vatInclusive:true},11)).toEqual({subtotalUsd:100,vatRatePercent:11,vatAmountUsd:11,finalTotalUsd:111});});
   it('groups purchase history by supplier then linked project with unlinked purchases last',()=>{
     const purchase=(id:string,supplierId:string,supplierName:string,projectId:string|null,projectName:string|null)=>({id,supplierId,supplierName,projectId,projectName} as QuarryPurchase);
     const groups=groupQuarryPurchases([purchase('3','b','Beta Quarry',null,null),purchase('2','a','Alpha Quarry','p2','Zahle Road'),purchase('1','a','Alpha Quarry','p1','Aley Road'),purchase('4','a','Alpha Quarry',null,null)]);
@@ -47,4 +47,25 @@ describe('quarry purchases',()=>{
     expect(counters[1]).toMatchObject({truckPlate:'654321',tripCount:1,totalQuantityCubicMetres:22});
   });
   it('groups supplier deliveries by optional supplier plate',()=>{const purchase=(id:string,time:string,plate:string)=>({id,confirmedAt:`2026-08-27T${time}:00`,projectId:'p1',projectName:'Mountain Road',supplierId:'s1',supplierName:'Main Quarry',itemId:'i1',itemName:'Aggregate',deliveryMethod:'supplier',driverId:'system',driverName:'Supplier Delivering',truckId:'system',truckPlate:plate,quantityCubicMetres:20,status:'Active'} as QuarryPurchase);const counters=quarryDailyCounters([purchase('one','08:00',''),purchase('two','09:00',''),purchase('three','10:00','SUP-1')],'2026-08-27');expect(counters).toHaveLength(2);expect(counters.find(value=>!value.truckPlate)).toMatchObject({deliveryMethod:'supplier',tripCount:2,totalQuantityCubicMetres:40});});
+});
+
+describe('the VAT a new supplier load starts with',()=>{
+  it('is No VAT by default, so no VAT is added unless chosen',()=>{
+    expect(emptyQuarryPurchaseDraft.vatMode).toBe('none');
+    expect(calculateQuarryPurchase({...emptyQuarryPurchaseDraft,quantityCubicMetres:'10',unitPriceUsd:'20'},11)).toEqual({subtotalUsd:200,vatRatePercent:0,vatAmountUsd:0,finalTotalUsd:200});
+  });
+  it('starts from the supplier account: No VAT, Universal (the Company rate) or the account\'s own rate',()=>{
+    expect(vatFieldsForSupplier(undefined)).toEqual({vatMode:'none',customVatRatePercent:''});
+    expect(vatFieldsForSupplier({mode:'none',ratePercent:null})).toEqual({vatMode:'none',customVatRatePercent:''});
+    expect(vatFieldsForSupplier({mode:'universal',ratePercent:null})).toEqual({vatMode:'company',customVatRatePercent:''});
+    expect(vatFieldsForSupplier({mode:'custom',ratePercent:5})).toEqual({vatMode:'custom',customVatRatePercent:'5'});
+    const universal={...emptyQuarryPurchaseDraft,...vatFieldsForSupplier({mode:'universal',ratePercent:null}),quantityCubicMetres:'10',unitPriceUsd:'20'};
+    expect(calculateQuarryPurchase(universal,11)).toMatchObject({vatRatePercent:11,vatAmountUsd:22,finalTotalUsd:222});
+    const own={...emptyQuarryPurchaseDraft,...vatFieldsForSupplier({mode:'custom',ratePercent:5}),quantityCubicMetres:'10',unitPriceUsd:'20'};
+    expect(calculateQuarryPurchase(own,11)).toMatchObject({vatRatePercent:5,vatAmountUsd:10,finalTotalUsd:210});
+  });
+  it('takes the supplier\'s VAT when a supplier is picked on the new load form',()=>{
+    const screen=require('node:fs').readFileSync('src/ui/screens/QuarryPurchasesScreen.tsx','utf8') as string;
+    expect(screen).toContain('...vatFieldsForSupplier(setup.suppliers.find((supplier)=>supplier.id===v)?.vat)');
+  });
 });

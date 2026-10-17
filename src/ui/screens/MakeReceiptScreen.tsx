@@ -21,6 +21,8 @@ import { SegmentedChoice } from '../components/SegmentedChoice';
 import { GroupedSearchableSelect } from '../components/GroupedSearchableSelect';
 import { DatePickerField, todayIso } from '../components/DatePickerField';
 import { useReducedMotion } from '../components/ExpandableMenu';
+import { accountVatLabel, resolveVatRate, startingVatChoice } from '../../domain/accountVat';
+import { VatChoiceControl } from '../components/AccountVatControl';
 import { colors } from '../theme';
 
 export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId, seriesRepository, onOpenCompanySetups, headers }: { repository: LoadRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null;
@@ -78,7 +80,8 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
     setSetupStatus('loading'); setSetupError(null);
     void Promise.all([repository.getSetupOptions(), repository.getDraft()]).then(([nextOptions, saved]) => {
       if (!mountedRef.current) return;
-      let next = saved ?? emptyLoadDraft;
+      let next = saved ? { ...emptyLoadDraft, ...saved } : emptyLoadDraft;
+      if (saved && !saved.vat) next = { ...next, vat: startingVatChoice(nextOptions.customers.find((value) => value.id === next.customerId)?.vat) };
       if (initialProjectId && !next.projectId) { const selected = nextOptions.projects.find((project) => project.id === initialProjectId); if (selected) next = { ...next, projectId: selected.id, customerId: selected.customerId, destinationAddress: '' }; }
       setOptions(nextOptions); setDraft(next); setEntryModes(next); setLoaded(true); setSetupStatus('ready');
     }).catch((cause) => {
@@ -115,7 +118,9 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   // Phase 2. Only conversions that start from the entered unit can apply to a direct quantity.
   const directConversions = (options?.conversions ?? []).filter((value) => value.inputUnitId === draft.directUnitId);
   const itemGroups = useMemo(() => { const grouped = new Map<string, LoadSetupOptions['items']>(); for (const value of options?.items ?? []) grouped.set(value.categoryName, [...(grouped.get(value.categoryName) ?? []), value]); return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([categoryName, values]) => ({ id: categoryName, label: categoryName, options: values.sort((a, b) => a.name.localeCompare(b.name)).map((value) => ({ id: value.id, label: value.name, detail: value.internalCode ?? undefined })) })); }, [options?.items]);
-  const calculation = useMemo(() => calculateLoad(draft, conversion, options?.companySettings.vatRatePercent ?? 0), [conversion, draft, options?.companySettings.vatRatePercent]);
+  const universalVat = options?.companySettings.vatRatePercent ?? 0;
+  const vatRate = resolveVatRate(draft.vat, universalVat);
+  const calculation = useMemo(() => calculateLoad(draft, conversion, vatRate), [conversion, draft, vatRate]);
   useEffect(() => { if (!loaded) return; if (reducedMotion) { calculationMotion.setValue(1); return; } calculationMotion.setValue(.96); const animation = Animated.spring(calculationMotion, { toValue: 1, speed: 24, bounciness: 2, useNativeDriver: true }); animation.start(); return () => animation.stop(); }, [calculation.billedQuantity, calculation.finalTotalUsd, calculation.netWeightKg, calculationMotion, loaded, reducedMotion]);
 
   const customer = options?.customers.find((value) => value.id === draft.customerId); const item = options?.items.find((value) => value.id === draft.itemId);
@@ -124,8 +129,8 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   const destinationIssues = issues.filter((issue) => /customer|project|destination/i.test(issue)); const loadIssues = issues.filter((issue) => /item|driver|truck|weight|quantity/i.test(issue)); const valueIssues = issues.filter((issue) => /conversion|price/i.test(issue)); const otherIssues = issues.filter((issue) => ![...destinationIssues, ...loadIssues, ...valueIssues].includes(issue));
 
   function update<K extends keyof LoadDraft>(key: K, value: LoadDraft[K]) { setDraft((current) => ({ ...current, [key]: value })); setIssues([]); }
-  function selectCustomer(id: string) { animateLayout(); setDraft((current) => { const currentProject = options?.projects.find((value) => value.id === current.projectId); return { ...current, customerId: id, projectId: currentProject?.customerId === id ? current.projectId : '' }; }); setIssues([]); }
-  function selectProject(id: string) { animateLayout(); const selected = options?.projects.find((value) => value.id === id); setDraft((current) => ({ ...current, projectId: id, customerId: selected?.customerId ?? current.customerId, destinationAddress: selected ? '' : current.destinationAddress })); setIssues([]); }
+  function selectCustomer(id: string) { animateLayout(); setDraft((current) => { const currentProject = options?.projects.find((value) => value.id === current.projectId); return { ...current, customerId: id, projectId: currentProject?.customerId === id ? current.projectId : '', vat: current.customerId === id ? current.vat : startingVatChoice(options?.customers.find((value) => value.id === id)?.vat) }; }); setIssues([]); }
+  function selectProject(id: string) { animateLayout(); const selected = options?.projects.find((value) => value.id === id); setDraft((current) => ({ ...current, projectId: id, customerId: selected?.customerId ?? current.customerId, destinationAddress: selected ? '' : current.destinationAddress, vat: selected && selected.customerId !== current.customerId ? startingVatChoice(options?.customers.find((value) => value.id === selected.customerId)?.vat) : current.vat })); setIssues([]); }
   function selectItem(id: string) { const selected = options?.items.find((value) => value.id === id); setDraft((current) => ({ ...current, itemId: id, directUnitId: current.directUnitId || selected?.defaultUnitId || '', unitPriceUsd: selected?.defaultPriceUsd == null ? current.unitPriceUsd : String(selected.defaultPriceUsd) })); }
   function selectDriver(id: string) { const selected = options?.drivers.find((value) => value.id === id); setDraft((current) => ({ ...current, driverId: id, driverName: selected?.name ?? '' })); }
   function selectTruck(id: string) { const selected = options?.trucks.find((value) => value.id === id); setDraft((current) => ({ ...current, truckId: id, truckPlate: selected?.plate ?? '' })); }
@@ -269,10 +274,11 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
               </>
             )}
             <AppField label={`Price per ${draft.quantityMethod === 'direct' ? (conversion ? `converted unit (${conversion.outputUnitSymbol})` : (directUnit?.symbol || 'unit')) : 'converted unit'} USD (optional)`} value={draft.unitPriceUsd} onChangeText={(value) => update('unitPriceUsd', value)} keyboardType="decimal-pad" />
+            <VatChoiceControl value={draft.vat} onChange={(vat) => update('vat', vat)} universalRatePercent={universalVat} hint={customer ? `${customer.name} is set to ${accountVatLabel(customer.vat, universalVat)}. No VAT is added unless you choose it.` : 'No VAT is added unless you choose it.'} />
             <Animated.View style={{ transform: [{ scale: calculationMotion }] }}>
               <View style={styles.metricRow}>
                 <MetricCard label="Subtotal" value={formatUsd(calculation.subtotalUsd)} />
-                <MetricCard label={`VAT ${options.companySettings.vatRatePercent}%`} value={formatUsd(calculation.vatAmountUsd)} />
+                {vatRate > 0 ? <MetricCard label={`VAT ${vatRate}%`} value={formatUsd(calculation.vatAmountUsd)} /> : null}
                 <MetricCard label="Final total" value={formatUsd(calculation.finalTotalUsd)} accent />
               </View>
             </Animated.View>

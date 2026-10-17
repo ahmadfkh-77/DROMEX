@@ -1,3 +1,4 @@
+import {noVatChoice,resolveVatRate,validateAccountVat,type AccountVat,type VatChoice} from './accountVat';
 import {localDateKey} from './fuel';
 
 /**
@@ -13,7 +14,7 @@ export type StockBatchStatus='in_use'|'waiting'|'closed'|'cancelled';
 export type StockRecordStatus='Active'|'Cancelled';
 
 export type StockUnit={id:string;name:string;symbol:string};
-export type StockSupplier={id:string;name:string};
+export type StockSupplier={id:string;name:string;/** The supplier's account VAT, where a new batch starts. */vat?:AccountVat};
 /** A Catalog item that can be added to Stock. `unitId` is its default unit; an item without one asks for a unit the first time. */
 export type StockCatalogItem={id:string;name:string;categoryName:string;unitId:string|null;unitSymbol:string|null;inStock:boolean};
 export type StockSetup={suppliers:StockSupplier[];catalogItems:StockCatalogItem[];units:StockUnit[];vatRatePercent:number};
@@ -21,10 +22,10 @@ export type StockSetup={suppliers:StockSupplier[];catalogItems:StockCatalogItem[
 /** What the Add batch form sends. Quantity and price are text so the form can show what was typed. */
 export type StockBatchDraft={
   itemId:string;/** Only used the first time an item is added to Stock, when it has no default unit. */unitId:string;
-  recordDate:string;supplierId:string;invoiceNumber:string;quantity:string;priceBasis:StockPriceBasis;price:string;vat:boolean;vatRate:string;notes:string;
+  recordDate:string;supplierId:string;invoiceNumber:string;quantity:string;priceBasis:StockPriceBasis;price:string;/** No VAT (the start), Universal or Own %. It starts from the supplier's account. */vat:VatChoice;notes:string;
 };
 export type StockBatchEditDraft=StockBatchDraft&{reason:string};
-export const emptyStockBatch:StockBatchDraft={itemId:'',unitId:'',recordDate:localDateKey(new Date()),supplierId:'',invoiceNumber:'',quantity:'',priceBasis:'per_unit',price:'',vat:false,vatRate:'',notes:''};
+export const emptyStockBatch:StockBatchDraft={itemId:'',unitId:'',recordDate:localDateKey(new Date()),supplierId:'',invoiceNumber:'',quantity:'',priceBasis:'per_unit',price:'',vat:noVatChoice,notes:''};
 export type StockUseDraft={itemId:string;quantity:string;usedOn:string;note:string};
 export const emptyStockUse:StockUseDraft={itemId:'',quantity:'',usedOn:localDateKey(new Date()),note:''};
 
@@ -86,11 +87,6 @@ export function validateStockPrice(value:string):number|null{
   if(!Number.isFinite(parsed)||parsed<0||!/^\d+([.,]\d{1,2})?$/.test(value.trim()))throw new Error('Price must be zero or greater with no more than two decimals.');
   return parsed;
 }
-export function validateVatRate(value:string):number{
-  const parsed=decimal(value);
-  if(!value.trim()||!Number.isFinite(parsed)||parsed<0||parsed>100||!/^\d+([.,]\d{1,2})?$/.test(value.trim()))throw new Error('VAT must be a percentage from 0 to 100.');
-  return parsed;
-}
 
 /**
  * Subtotal, VAT and total of a delivery. The price is per unit or for the whole batch. No price means Unpriced: the amounts are null and
@@ -105,8 +101,8 @@ export function calculateStockPrice(quantity:number,basis:StockPriceBasis,priceT
 }
 
 /** The same figures for a form being filled in: null while the quantity, price or VAT is not yet valid. */
-export function previewStockPrice(draft:Pick<StockBatchDraft,'quantity'|'priceBasis'|'price'|'vat'|'vatRate'>){
-  try{return calculateStockPrice(validateStockQuantity(draft.quantity),draft.priceBasis,draft.price,draft.vat?validateVatRate(draft.vatRate):0);}catch{return null;}
+export function previewStockPrice(draft:Pick<StockBatchDraft,'quantity'|'priceBasis'|'price'|'vat'>,universalRatePercent:number){
+  try{return calculateStockPrice(validateStockQuantity(draft.quantity),draft.priceBasis,draft.price,resolveVatRate(validateAccountVat(draft.vat),universalRatePercent));}catch{return null;}
 }
 
 export const formatStockQuantity=(quantity:number,symbol:string)=>`${quantity.toLocaleString('en-US',{maximumFractionDigits:3})} ${symbol}`;

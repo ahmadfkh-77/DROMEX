@@ -1,8 +1,9 @@
 import type { DriverProfile, Project, TruckProfile } from './loads';
+import type { AccountVat, AccountVatDraft } from './accountVat';
 import type { CompanySite, FuelDestinationType } from './fuel';
 
-export type Supplier = { id: string; name: string; phone: string | null; email: string | null; address: string | null; taxVatNumber: string | null; notes: string | null; isActive: boolean };
-export type SupplierDraft = { name: string; phone?: string; email?: string; address?: string; taxVatNumber?: string; notes?: string };
+export type Supplier = { id: string; name: string; phone: string | null; email: string | null; address: string | null; taxVatNumber: string | null; notes: string | null; isActive: boolean; /** Account VAT: new records for this supplier start from it. Every existing supplier is No VAT. */ vat: AccountVat };
+export type SupplierDraft = { name: string; phone?: string; email?: string; address?: string; taxVatNumber?: string; notes?: string; /** Account VAT. Left out on a new supplier it is No VAT; left out on an edit it is kept as it is. */ vat?: AccountVatDraft };
 export type SupplierUnit = { id: string; name: string; symbol: string };
 export type QuarryItem = { id: string; name: string; internalCode: string | null; categoryName: string; defaultUnitId?: string | null };
 export type QuarrySetup = { suppliers: Supplier[]; projects: Project[]; items: QuarryItem[]; units: SupplierUnit[]; drivers: DriverProfile[]; trucks: TruckProfile[]; vatRatePercent: number; companySites?: CompanySite[] };
@@ -133,8 +134,15 @@ function summarize(purchases:QuarryPurchase[],supplierName:(p:QuarryPurchase)=>s
 export const emptyQuarryPurchaseDraft: QuarryPurchaseDraft = {
   recordDate:localQuarryDate(),supplierId: '', projectId:'', itemId: '', unitId:'unit_m3', quantityCubicMetres: '', deliveryMethod:'company',
   driverId: '', truckId: '', supplierTruckPlate:'', supplierTicketNumber: '', priceBasis:'per_unit', unitPriceUsd: '',
-  vatMode:'company',customVatRatePercent:'',vatInclusive:false,notes: '', photos: [],
+  vatMode:'none',customVatRatePercent:'',vatInclusive:false,notes: '', photos: [],
 };
+
+/** The VAT fields a new load starts with for a supplier's account: No VAT, the Company rate (Universal) or the account's own rate. No supplier means No VAT. */
+export function vatFieldsForSupplier(vat:AccountVat|null|undefined):{vatMode:SupplierVatMode;customVatRatePercent:string}{
+  if(vat?.mode==='universal')return {vatMode:'company',customVatRatePercent:''};
+  if(vat?.mode==='custom'&&vat.ratePercent!=null)return {vatMode:'custom',customVatRatePercent:String(vat.ratePercent)};
+  return {vatMode:'none',customVatRatePercent:''};
+}
 
 function localQuarryDate(date=new Date()){return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
 

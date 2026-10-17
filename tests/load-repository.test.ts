@@ -16,7 +16,7 @@ class TestDatabase {
 }
 
 const baseDraft: LoadDraft = {
-  recordDate: '2026-08-25', customerId: 'customer_1', projectId: '', destinationAddress: 'Beirut site',
+  vat: { mode: 'universal', ratePercent: '' }, recordDate: '2026-08-25', customerId: 'customer_1', projectId: '', destinationAddress: 'Beirut site',
   itemId: 'item_1', driverId: 'driver_1', truckId: 'truck_1', driverName: 'Ali Driver', truckPlate: 'B123',
   quantityMethod: 'weighbridge', requestedQuantityKg: '', emptyWeightKg: '10000', fullWeightKg: '30000',
   conversionId: 'conversion_kg_ton', directQuantity: '', directUnitId: '', unitPriceUsd: '50', notes: 'Original notes', driverSignaturePaths: [],

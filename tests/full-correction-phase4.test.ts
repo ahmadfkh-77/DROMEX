@@ -42,7 +42,7 @@ async function setup(){
   await signers.setDeliverySigner({signerId:owner.id,display:'name_with_signature'});
   const kgM3=await loads.createConversion({name:'Kilograms to cubic metre',inputUnitId:'unit_kg',outputUnitId:'unit_m3',inputQuantity:1000,outputQuantity:0.4167,decimalPlaces:3});
   const tonM3=await loads.createConversion({name:'Ton to cubic metre',inputUnitId:'unit_ton',outputUnitId:'unit_m3',inputQuantity:1,outputQuantity:0.4167,decimalPlaces:3});
-  const weighed:LoadDraft={...emptyLoadDraft,recordDate:'2026-08-20',customerId:'customer',projectId:'road',itemId:'asphalt',driverId:'driver',driverName:'Omar',truckId:'truck',truckPlate:'B123',quantityMethod:'weighbridge',emptyWeightKg:'10000',fullWeightKg:'29500',conversionId:'conversion_kg_ton',unitPriceUsd:'180',notes:'Original',driverSignaturePaths:[DRIVER_STROKE]};
+  const weighed:LoadDraft={...emptyLoadDraft,vat:{mode:'universal',ratePercent:''},recordDate:'2026-08-20',customerId:'customer',projectId:'road',itemId:'asphalt',driverId:'driver',driverName:'Omar',truckId:'truck',truckPlate:'B123',quantityMethod:'weighbridge',emptyWeightKg:'10000',fullWeightKg:'29500',conversionId:'conversion_kg_ton',unitPriceUsd:'180',notes:'Original',driverSignaturePaths:[DRIVER_STROKE]};
   const load=await loads.confirmLoad(weighed);
   const context=()=>loads.getCorrectionContext(load.id);
   const base=(l:ConfirmedLoad=load)=>correctionBaseline(l);

@@ -21,7 +21,7 @@ async function setup(){
     INSERT INTO suppliers (id,name,is_active,created_at,updated_at) VALUES ('other','Other Supplier',1,'${SEED_TIME}','${SEED_TIME}');
   `);
   const repository=new SqliteBitumenRepository(db as never);
-  const draft=(extra:Partial<BitumenDeliveryDraft>={}):BitumenDeliveryDraft=>({recordDate:'2026-10-12',supplierId:'khayat',invoiceNumber:'55870',ticketNumber:'T-1',gradeId:'bitumen_grade_60_70',kg:'20000',priceBasis:'per_ton',price:'610',vat:false,notes:'',...extra});
+  const draft=(extra:Partial<BitumenDeliveryDraft>={}):BitumenDeliveryDraft=>({recordDate:'2026-10-12',supplierId:'khayat',invoiceNumber:'55870',ticketNumber:'T-1',gradeId:'bitumen_grade_60_70',kg:'20000',priceBasis:'per_ton',price:'610',vat:{mode:'none',ratePercent:''},notes:'',...extra});
   const deliver=(local:string,extra:Partial<BitumenDeliveryDraft>={})=>{clock(local);return repository.recordDelivery(draft({recordDate:local.slice(0,10),...extra}));};
   return {db,repository,deliver,draft};
 }
@@ -45,7 +45,7 @@ describe('the numbers and prices (pure)',()=>{
     expect(calculateBitumenPrice(8000,'per_ton','',11)).toEqual({priceUsd:null,subtotalUsd:null,vatAmountUsd:null,totalUsd:null,pricePerTonUsd:null});
     expect(calculateBitumenPrice(8000,'per_ton','0',0)).toMatchObject({totalUsd:0});
     expect(()=>calculateBitumenPrice(8000,'per_ton','1.234',0)).toThrow('two decimals');
-    expect(previewBitumenPrice({kg:'x',priceBasis:'per_ton',price:'610',vat:false},11)).toBeNull();
+    expect(previewBitumenPrice({kg:'x',priceBasis:'per_ton',price:'610',vat:{mode:'none',ratePercent:''}},11)).toBeNull();
   });
 });
 
@@ -63,7 +63,7 @@ describe('migration 58',()=>{
 describe('recording a delivery',()=>{
   it('saves the batch with its number, supplier, grade, invoice, ticket and a price snapshot',async()=>{
     const {deliver,repository}=await setup();
-    const batch=await deliver('2026-10-12T09:00:00',{vat:true});
+    const batch=await deliver('2026-10-12T09:00:00',{vat:{mode:'universal',ratePercent:''}});
     expect(batch).toMatchObject({batchNumber:'BIT-2026-00001',supplierName:'Khayat Al Sabouri',gradeName:'60/70',invoiceNumber:'55870',ticketNumber:'T-1',deliveredKg:20000,usedKg:0,remainingKg:20000,status:'in_use',priceBasis:'per_ton',priceUsd:610,subtotalUsd:12200,priced:true});
     // The VAT rate of the day is saved on the batch (the seeded database has none, so the total equals the subtotal).
     expect(batch.totalUsd).toBe(12200);

@@ -1,3 +1,4 @@
+import {noVatChoice,type AccountVat,type VatChoice} from './accountVat';
 export type FuelMovementType='gauge'|'delivery'|'fill';
 // DEC-392. Diesel is the stored, balanced fuel; gasoline is fill-only and never affects the tank.
 export type FuelType='diesel'|'gasoline';
@@ -19,7 +20,7 @@ export type FuelCorrectionChange={field:string;originalValue:string|null;newValu
 export type FuelCorrectionEntry={correctedAt:string;correctedBy:string;reason:string;changes:FuelCorrectionChange[]};
 export type FuelMovementStatus='Active'|'Cancelled';
 export type FuelEquipmentType='machine'|'truck';
-export type FuelOption={id:string;name:string;detail?:string;startDate?:string;endDate?:string|null};
+export type FuelOption={id:string;name:string;detail?:string;startDate?:string;endDate?:string|null;/** A supplier's account VAT, so a new purchase can start from it. */vat?:AccountVat};
 export type FuelPriceRecord={id:string;fuelType:FuelType;pricePerLitreUsd:number;effectiveAt:string;changedBy:string;reason:string|null;createdAt:string};
 export type FuelBatchTracking={started:boolean;startedAt:string|null};
 export type FuelSetup={fuelStations:FuelStation[];batchTracking:FuelBatchTracking;suppliers:FuelOption[];machines:FuelOption[];trucks:FuelOption[];equipment:FuelOption[];projects:FuelOption[];companySites:CompanySite[];vatRatePercent:number;currentFuelPrice:FuelPriceRecord|null;fuelPriceHistory:FuelPriceRecord[];fuelPrices:Record<FuelType,{current:FuelPriceRecord|null;history:FuelPriceRecord[]}>};
@@ -27,15 +28,16 @@ export type FuelMovement={fuelSource?:FuelSource|null;fuelStationId?:string|null
 export type FuelOverview={currentBalanceLitres:number;hasKnownBalance:boolean;latestGauge:FuelMovement|null;movements:FuelMovement[]};
 export type ProjectEquipmentFuelUsage={equipmentId:string|null;equipmentName:string;totalLitres:number;totalCostUsd:number;unpricedLitres:number;fillCount:number;fills:FuelMovement[]};
 export type FuelMovementFilters={projectId?:string;equipmentId?:string;type?:FuelMovementType|'all';status?:FuelMovementStatus|'all';fromDate?:string;toDate?:string};
-export type FuelDeliveryDraft={recordDate:string;litres:string;supplierId:string;ticketNumber:string;pricePerLitreUsd:string;updateCurrentPrice:boolean;notes:string};
+export type FuelDeliveryDraft={recordDate:string;litres:string;supplierId:string;ticketNumber:string;pricePerLitreUsd:string;updateCurrentPrice:boolean;notes:string;/** No VAT (the start), Universal or Own %. It starts from the supplier's account. Left out, it is No VAT. */vat?:VatChoice};
 // destinationType and companySiteId are optional so a draft saved before DEC-438 still resolves:
 // its destination is derived from projectId.
 export type FuelFillDraft={fuelSource?:FuelSource;stationId?:string;receiptNumber?:string;batchId?:string;recordDate:string;fuelType:FuelType;litres:string;equipmentType:FuelEquipmentType;equipmentId:string;destinationType?:FuelDestinationType;projectId:string;companySiteId?:string;odometerReading:string;pricePerLitreUsd:string;priceOverrideReason:string;notes:string};
 export type FuelGaugeDraft={recordDate:string;actualLitres:string;reason:string;notes:string};
 export type FuelPriceDraft={fuelType:FuelType;pricePerLitreUsd:string;reason:string};
 export type FuelFillCorrectionDraft=FuelFillDraft&{correctionReason:string};
-export type FuelDeliveryCorrectionDraft=Omit<FuelDeliveryDraft,'updateCurrentPrice'>&{correctionReason:string};
-export const emptyFuelDelivery:FuelDeliveryDraft={recordDate:localDateKey(new Date()),litres:'',supplierId:'',ticketNumber:'',pricePerLitreUsd:'',updateCurrentPrice:true,notes:''};
+/** Left out, a correction keeps the VAT the delivery was saved with. */
+export type FuelDeliveryCorrectionDraft=Omit<FuelDeliveryDraft,'updateCurrentPrice'|'vat'>&{vat?:VatChoice;correctionReason:string};
+export const emptyFuelDelivery:FuelDeliveryDraft={recordDate:localDateKey(new Date()),litres:'',supplierId:'',ticketNumber:'',pricePerLitreUsd:'',updateCurrentPrice:true,notes:'',vat:noVatChoice};
 export const emptyFuelFill:FuelFillDraft={fuelSource:'tank',stationId:'',receiptNumber:'',batchId:'',recordDate:localDateKey(new Date()),fuelType:'diesel',litres:'',equipmentType:'machine',equipmentId:'',destinationType:'unassigned',projectId:'',companySiteId:'',odometerReading:'',pricePerLitreUsd:'',priceOverrideReason:'',notes:''};
 export const emptyFuelGauge:FuelGaugeDraft={recordDate:localDateKey(new Date()),actualLitres:'',reason:'',notes:''};
 export const emptyFuelPrice:FuelPriceDraft={fuelType:'diesel',pricePerLitreUsd:'',reason:''};
