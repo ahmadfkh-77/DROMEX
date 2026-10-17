@@ -13,6 +13,10 @@ export interface StockRepository{
   cancelBatch(id:string,reason:string):Promise<StockBatch>;
   /** Records a use by hand, taken from the oldest open batches first. Fails when there is not enough in stock for that day. */
   recordUse(draft:StockUseDraft):Promise<StockUseRecord>;
+  /** Closes an open batch by hand, even with some left, on a chosen day and with a reason. The leftover is kept with the closure. */
+  closeBatch(batchId:string,closedOn:string,reason:string):Promise<StockOverview>;
+  /** Reopens a batch that was closed by hand, with a reason. Uses counted before stay where they are. */
+  reopenBatch(batchId:string,reason:string):Promise<StockOverview>;
   /** The company printed on a report when no Header company was picked, read from Company Settings like the receipts. */
   getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>;
   /** The items a rule can watch, the units, the Stock materials a rule can list, and the rules saved so far with every version. */

@@ -14,7 +14,7 @@ export type BitumenRule={itemId:string;itemName:string;enabled:boolean;aggregate
 
 /** A load as the counting sees it. `mixKg` is the weight of the mix, or null when it cannot be known. */
 export type UseLoad={id:string;itemId:string;itemName:string;loadNumber:string|null;confirmedAt:string;active:boolean;mixKg:number|null};
-export type UseBatch={id:string;arrivedDay:string;active:boolean;deliveredKg:number;adjustmentKg:number};
+export type UseBatch={id:string;arrivedDay:string;active:boolean;deliveredKg:number;adjustmentKg:number;/** When the Owner closed this batch by hand. A load confirmed after it is never taken from this batch. */closedAt?:string|null};
 
 export type UseRowInput={
   loadId:string;batchId:string|null;kind:BitumenUseKind;kg:number;mixKg:number;ruleAggregateKg:number;ruleBitumenKg:number;
@@ -101,7 +101,7 @@ export function reconcileBitumenUse(input:ReconcileInput):ReconcileResult{
       const note=history.length?(history.some(row=>row.kind==='reversal')&&existingNet<=USE_EPSILON?'Load counted again':'Load corrected'):null;
       let need=delta;
       const day=localDateKey(new Date(load.confirmedAt));
-      const eligible=batches.filter(batch=>batch.arrivedDay<=day&&(remaining.get(batch.id)??0)>USE_EPSILON);
+      const eligible=batches.filter(batch=>batch.arrivedDay<=day&&(!batch.closedAt||load.confirmedAt<=batch.closedAt)&&(remaining.get(batch.id)??0)>USE_EPSILON);
       const order=[...eligible.filter(batch=>batch.id===input.usingBatchId),...eligible.filter(batch=>batch.id!==input.usingBatchId)];
       for(const batch of order){
         if(need<=USE_EPSILON)break;

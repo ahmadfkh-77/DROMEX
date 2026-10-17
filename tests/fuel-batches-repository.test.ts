@@ -493,3 +493,51 @@ describe('the company shown on the Diesel Batch Report',()=>{
     expect(await repository.getCompanyIdentity()).toEqual({name:'Fakih Asphalt',logoUri:null,contactLine:'+961 70 123 456'});
   });
 });
+
+describe('closing a diesel batch by hand',()=>{
+  it('closes a batch that still has diesel, sets the leftover aside, and draws later fills from the next batch',async()=>{
+    const {repository,deliver,fill,start}=await setup();
+    await deliver('2026-09-20T09:00:00',1000,'1.00');await start('2026-10-01T09:00:00');
+    await deliver('2026-10-05T09:00:00',2000,'1.10');
+    await fill('2026-10-06T09:00:00',300);
+    const old=await batch(repository,'DSL-2026-00001');
+    expect(old).toMatchObject({remainingLitres:700,status:'in_use'});
+    clock('2026-10-07T10:00:00');
+    const closed=await repository.closeDieselBatch(old.id,'2026-10-07','Tank changed');
+    expect(closed.batches.find(value=>value.id===old.id)).toMatchObject({status:'closed',remainingLitres:0,closedLeftoverLitres:700,closure:{leftover:700,reason:'Tank changed'}});
+    expect(closed.batches.find(value=>value.batchNumber==='DSL-2026-00002')!.status).toBe('in_use');
+    expect(closed.tankLitres).toBe(2000);
+    await fill('2026-10-08T09:00:00',100);
+    const overview=await repository.getBatchOverview();
+    expect(overview.batches.find(value=>value.id===old.id)).toMatchObject({filledLitres:300});
+    expect(overview.batches.find(value=>value.batchNumber==='DSL-2026-00002')).toMatchObject({filledLitres:100,remainingLitres:1900});
+  });
+  it('lets a fill made before the closing stay with the closed batch, and reopens the batch with a reason',async()=>{
+    const {repository,deliver,fill,start}=await setup();
+    await deliver('2026-09-20T09:00:00',1000,'1.00');await start('2026-10-01T09:00:00');
+    await deliver('2026-10-05T09:00:00',2000,'1.10');
+    const old=await batch(repository,'DSL-2026-00001');
+    clock('2026-10-07T10:00:00');
+    await repository.closeDieselBatch(old.id,'2026-10-07','Tank changed');
+    await fill('2026-10-06T09:00:00',300);
+    expect(await batch(repository,'DSL-2026-00001')).toMatchObject({filledLitres:300,closedLeftoverLitres:700,status:'closed'});
+    clock('2026-10-09T10:00:00');
+    const reopened=(await repository.reopenDieselBatch(old.id,'Closed the wrong tank')).batches.find(value=>value.id===old.id)!;
+    expect(reopened).toMatchObject({status:'in_use',remainingLitres:700,closure:null});
+    expect(reopened.closureHistory).toHaveLength(1);
+    // The closure keeps what the Owner saw when closing (1,000 L); the fill was entered afterwards with an earlier date, so the batch now shows 700 L.
+    expect(reopened.closureHistory![0]).toMatchObject({leftover:1000,reopenReason:'Closed the wrong tank'});
+  });
+  it('refuses without a reason, twice, for a future day, and when nothing was closed',async()=>{
+    const {repository,deliver,start}=await setup();
+    await deliver('2026-09-20T09:00:00',1000,'1.00');await start('2026-10-01T09:00:00');
+    await deliver('2026-10-05T09:00:00',2000,'1.10');
+    const old=await batch(repository,'DSL-2026-00001'),next=await batch(repository,'DSL-2026-00002');
+    clock('2026-10-07T10:00:00');
+    await expect(repository.closeDieselBatch(old.id,'2026-10-07',' ')).rejects.toThrow('reason');
+    await expect(repository.closeDieselBatch(old.id,'2026-10-08','Tank changed')).rejects.toThrow('future');
+    await repository.closeDieselBatch(old.id,'2026-10-07','Tank changed');
+    await expect(repository.closeDieselBatch(old.id,'2026-10-07','Again')).rejects.toThrow('still open');
+    await expect(repository.reopenDieselBatch(next.id,'Oops')).rejects.toThrow('not closed by hand');
+  });
+});

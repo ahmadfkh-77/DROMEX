@@ -234,3 +234,42 @@ describe('the database',()=>{
     expect(kinds.filter(kind=>kind==='stockRule')).toHaveLength(2);expect(kinds.filter(kind=>kind==='stockUse').length).toBe(2);
   });
 });
+
+describe('closing a batch by hand',()=>{
+  const first=async(item:(id:string)=>Promise<any>)=>(await item('cement')).batches.find((value:any)=>value.batchNumber.endsWith('0001'));
+  it('closes a batch with stock left, keeps the leftover, and takes new uses and loads from the next batch',async()=>{
+    const {stock,load,rule,item}=await setup();
+    const one=await first(item);
+    const overview=await stock.closeBatch(one.id,'2026-10-16','Pallet moved to another site');
+    const cement=overview.items.find(value=>value.itemId==='cement')!;
+    expect(cement.batches.find(value=>value.id===one.id)).toMatchObject({status:'closed',remainingQuantity:1000,closure:{leftover:1000,reason:'Pallet moved to another site',closedOn:'2026-10-16'}});
+    expect(cement.totalRemaining).toBe(5000);
+    await stock.recordUse({itemId:'cement',quantity:'100',usedOn:'2026-10-16',note:''});
+    await stock.saveRule(rule());await load('8');await stock.syncUse();
+    const after=await item('cement');
+    expect(after.batches.find(value=>value.id===one.id)).toMatchObject({usedQuantity:0,remainingQuantity:1000,status:'closed'});
+    expect(after.batches.find(value=>value.id!==one.id)).toMatchObject({usedQuantity:100+2800,remainingQuantity:2100,status:'in_use'});
+    await stock.recordUse({itemId:'cement',quantity:'50',usedOn:'2026-10-10',note:'Back-dated'});
+    expect((await first(item))).toMatchObject({usedQuantity:50});
+  });
+  it('reopens a batch with a reason and keeps the closure in its history',async()=>{
+    const {stock,item}=await setup();
+    const one=await first(item);
+    await stock.closeBatch(one.id,'2026-10-16','Wrong batch');
+    const reopened=(await stock.reopenBatch(one.id,'Closed the wrong one')).items.find(value=>value.itemId==='cement')!.batches.find(value=>value.id===one.id)!;
+    expect(reopened).toMatchObject({status:'in_use',closure:null});
+    expect(reopened.closureHistory).toHaveLength(1);
+    expect(reopened.closureHistory[0]).toMatchObject({leftover:1000,reopenReason:'Closed the wrong one'});
+  });
+  it('refuses without a reason, twice, for a future day, for a cancelled batch, and when nothing was closed',async()=>{
+    const {stock,item}=await setup();
+    const one=await first(item);
+    await expect(stock.closeBatch(one.id,'2026-10-16',' ')).rejects.toThrow('reason');
+    await expect(stock.closeBatch(one.id,'2026-10-17','Tank changed')).rejects.toThrow('future');
+    await stock.closeBatch(one.id,'2026-10-16','Tank changed');
+    await expect(stock.closeBatch(one.id,'2026-10-16','Again')).rejects.toThrow('still open');
+    await expect(stock.reopenBatch(one.id,' ')).rejects.toThrow('reason');
+    const two=(await item('cement')).batches.find(value=>value.id!==one.id)!;
+    await expect(stock.reopenBatch(two.id,'Oops')).rejects.toThrow('not closed by hand');
+  });
+});

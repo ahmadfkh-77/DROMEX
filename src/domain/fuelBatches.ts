@@ -1,3 +1,5 @@
+import type { BatchClosure } from './batchClosure';
+
 /**
  * DEC-505. Diesel batches and their derived first-in-first-out allocation.
  *
@@ -38,8 +40,12 @@ export type BatchSummary = {
   adjustmentLitres: number;
   remainingLitres: number;
   status: BatchStatus;
+  /** What was left in the batch when it was closed by hand; null for a batch that was not. */
+  closedLeftoverLitres?: number | null;
 };
-export type AllocationInput = { batches: BatchInput[]; fills: FillInput[]; gauges: GaugeInput[] };
+/** A batch the Owner closed by hand. From `closedAt` on, no fill draws from it and what was left is no longer counted in the tank. */
+export type ClosureInput = { batchId: string; closedAt: string };
+export type AllocationInput = { batches: BatchInput[]; fills: FillInput[]; gauges: GaugeInput[]; closures?: ClosureInput[] };
 export type AllocationResult = {
   batches: BatchSummary[];
   fills: Record<string, FillAllocation>;
@@ -65,17 +71,18 @@ export const batchStatusLabels: Record<BatchStatus, string> = {
   cancelled: 'Cancelled',
 };
 
-type Working = { input: BatchInput; arrived: boolean; remaining: number; filled: number; adjustment: number };
+type Working = { input: BatchInput; arrived: boolean; remaining: number; filled: number; adjustment: number; closedLeftover: number | null };
 type Outstanding = { fillId: string; left: number };
 type Event =
   | { at: string; order: 0; id: string; kind: 'arrival'; batch: Working }
   | { at: string; order: 1; id: string; kind: 'gauge'; gauge: GaugeInput }
-  | { at: string; order: 2; id: string; kind: 'fill'; fill: FillInput };
+  | { at: string; order: 2; id: string; kind: 'fill'; fill: FillInput }
+  | { at: string; order: 3; id: string; kind: 'close'; batch: Working };
 
 export function allocateDieselBatches(input: AllocationInput): AllocationResult {
   const working = new Map<string, Working>();
   const active = input.batches.filter((batch) => batch.status === 'Active').sort((a, b) => a.arrivedAt.localeCompare(b.arrivedAt) || a.batchNumber.localeCompare(b.batchNumber));
-  for (const batch of active) working.set(batch.id, { input: batch, arrived: false, remaining: 0, filled: 0, adjustment: 0 });
+  for (const batch of active) working.set(batch.id, { input: batch, arrived: false, remaining: 0, filled: 0, adjustment: 0, closedLeftover: null });
   const order = active.map((batch) => working.get(batch.id)!);
 
   // Records with the same timestamp keep the order they were supplied in (entry order), never a random one.
@@ -83,6 +90,7 @@ export function allocateDieselBatches(input: AllocationInput): AllocationResult 
     ...order.map((batch): Event => ({ at: batch.input.arrivedAt, order: 0, id: batch.input.id, kind: 'arrival', batch })),
     ...input.gauges.map((gauge): Event => ({ at: gauge.confirmedAt, order: 1, id: gauge.id, kind: 'gauge', gauge })),
     ...input.fills.map((fill): Event => ({ at: fill.confirmedAt, order: 2, id: fill.id, kind: 'fill', fill })),
+    ...(input.closures ?? []).filter((closure) => working.has(closure.batchId)).map((closure): Event => ({ at: closure.closedAt, order: 3, id: closure.batchId, kind: 'close', batch: working.get(closure.batchId)! })),
   ].map((event, index) => ({ event, index })).sort((a, b) => a.event.at.localeCompare(b.event.at) || a.event.order - b.event.order || a.index - b.index).map(({ event }) => event);
 
   const fills: Record<string, FillAllocation> = {};
@@ -104,6 +112,13 @@ export function allocateDieselBatches(input: AllocationInput): AllocationResult 
         batch.filled = round3(batch.filled + take);
         batch.remaining = round3(batch.remaining - take);
         pending.left = round3(pending.left - take);
+      }
+    } else if (event.kind === 'close') {
+      // Closed by hand: what is left is set aside, the batch takes no more fills, and the tank no longer counts it.
+      const batch = event.batch;
+      if (batch.arrived && batch.closedLeftover === null) {
+        batch.closedLeftover = round3(Math.max(0, batch.remaining));
+        batch.remaining = 0;
       }
     } else if (event.kind === 'gauge') {
       const calculated = round3(arrived().reduce((sum, batch) => sum + batch.remaining, 0));
@@ -162,7 +177,8 @@ export function allocateDieselBatches(input: AllocationInput): AllocationResult 
         return { id: batch.id, batchNumber: batch.batchNumber, arrivedAt: batch.arrivedAt, deliveredLitres: batch.deliveredLitres, pricePerLitreUsd: batch.pricePerLitreUsd, filledLitres: 0, adjustmentLitres: 0, remainingLitres: 0, status: 'cancelled' };
       }
       const status: BatchStatus = state.remaining <= EPSILON ? 'closed' : state === firstOpen ? 'in_use' : 'waiting';
-      return { id: batch.id, batchNumber: batch.batchNumber, arrivedAt: batch.arrivedAt, deliveredLitres: batch.deliveredLitres, pricePerLitreUsd: batch.pricePerLitreUsd, filledLitres: state.filled, adjustmentLitres: state.adjustment, remainingLitres: state.remaining, status };
+      const closedLeftoverLitres = state.closedLeftover;
+      return { id: batch.id, batchNumber: batch.batchNumber, arrivedAt: batch.arrivedAt, deliveredLitres: batch.deliveredLitres, pricePerLitreUsd: batch.pricePerLitreUsd, filledLitres: state.filled, adjustmentLitres: state.adjustment, remainingLitres: state.remaining, status, closedLeftoverLitres };
     })
     .sort((a, b) => a.arrivedAt.localeCompare(b.arrivedAt) || a.batchNumber.localeCompare(b.batchNumber));
 
@@ -249,6 +265,10 @@ export type BatchDetail = BatchSummary & {
   openingGaugeMovementId: string | null;
   cancellationReason: string | null;
   cancelledAt: string | null;
+  /** Set while the batch is closed by hand: what was left over, when and why. */
+  closure?: BatchClosure | null;
+  /** Every close and reopen of this batch, oldest first. */
+  closureHistory?: BatchClosure[];
 };
 export type FillBatchInfo = FillAllocation & { cost: FillCost };
 export type AdjustmentDetail = AdjustmentRecord & { batchNumber: string };

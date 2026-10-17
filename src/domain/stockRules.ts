@@ -16,7 +16,7 @@ export type StockRule={id:string;loadItemId:string;loadItemName:string;unitSymbo
 
 /** A confirmed load as counting sees it. `quantity` is in `unitSymbol`, or null when it cannot be known. */
 export type RuleLoad={id:string;itemId:string;itemName:string;loadNumber:string|null;confirmedAt:string;active:boolean;quantity:number|null;unitSymbol:string|null};
-export type RuleBatch={id:string;itemId:string;arrivedDay:string;active:boolean;quantity:number};
+export type RuleBatch={id:string;itemId:string;arrivedDay:string;active:boolean;quantity:number;/** When the Owner closed this batch by hand. A load confirmed after it is never taken from this batch. */closedAt?:string|null};
 export type RuleOverride={loadId:string;stockItemId:string;quantity:number;reason:string;createdAt:string};
 
 /** A row to save, without the id and time the repository adds. */
@@ -91,6 +91,7 @@ export function reconcileStockUse(input:{rules:readonly StockRule[];loads:readon
         for(const batch of batches){
           if(need<=STOCK_EPSILON)break;
           if(batch.itemId!==stockItemId||batch.arrivedDay>day)continue;
+          if(batch.closedAt&&load.confirmedAt>batch.closedAt)continue;
           const take=round3(Math.min(need,remaining.get(batch.id)??0));
           if(take<=STOCK_EPSILON)continue;
           added.push({...base,batchId:batch.id,kind:'use',quantity:take,note});

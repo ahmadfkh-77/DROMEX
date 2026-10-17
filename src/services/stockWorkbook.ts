@@ -20,6 +20,7 @@ export function stockWorkbookSheets(overview:StockOverview,filter:StockReportFil
     for(const batch of scoped.batches){
       const cancelled=batch.recordStatus==='Cancelled';
       const row:WorkbookRow={'Batch ID':batch.id,'Batch Number':batch.batchNumber,'Item ID':item.itemId,Item:item.itemName,Unit:item.unitSymbol,'Date Received':localDateKey(new Date(batch.arrivedAt)),'Supplier ID':batch.supplierId??'',Supplier:batch.supplierName??'','Invoice Number':batch.invoiceNumber??'',Quantity:batch.quantity,'Used To Date':cancelled?null:batch.usedQuantity,Remaining:cancelled?null:batch.remainingQuantity,Status:stockStatusLabels[batch.status],'Cancellation Reason':batch.cancellationReason??'',Notes:batch.notes??''};
+      row['Closed On']=batch.closure?.closedOn??'';row['Left Over When Closed']=batch.closure?batch.closure.leftover:null;row['Closing Reason']=batch.closure?.reason??'';
       if(filter.includePrices){row['Price Basis']=batch.priceBasis??'';row['Price USD']=batch.priceUsd;row['VAT %']=batch.vatRatePercent;row['Subtotal USD']=batch.subtotalUsd;row['Total USD']=batch.totalUsd;}
       batches.push(row);
     }
@@ -30,6 +31,7 @@ export function stockWorkbookSheets(overview:StockOverview,filter:StockReportFil
     {Sheet:'Stock Summary',Column:'Used (Period)',Meaning:'Quantity of the uses dated in the period. Cancelled uses are not counted.'},
     {Sheet:'Stock Summary',Column:'On Hand Now',Meaning:'What is left now in the open batches, whatever the period.'},
     {Sheet:'Batches',Column:'Used To Date / Remaining',Meaning:'The batch\'s own figures to date; empty for a cancelled batch.'},
+    {Sheet:'Batches',Column:'Closed On / Left Over When Closed / Closing Reason',Meaning:'Only for a batch the Owner closed by hand while some was left: the day, what was left, in the unit of the item, and why. Empty for a batch that closed by itself or is still open.'},
     {Sheet:'Batches',Column:'Price USD / VAT % / Total USD',Meaning:'Only with prices included. Empty means Unpriced, never zero. VAT is present only where the batch was saved with VAT.'},
     {Sheet:'Uses',Column:'Quantity',Meaning:'The whole use in the item\'s unit; Batches shows how it was split across batches, oldest first.'},
     {Sheet:'Uses',Column:'Source',Meaning:'By hand, or Load: counted from a confirmed load by a usage rule. Source Detail says which load and the rate it used.'},

@@ -5,6 +5,8 @@ import {
   allocateDieselBatches,fillCost,formatBatchNumber,previewTankFill,
   applyUsingBatch,type AllocationChange,type AllocationInput,type AllocationNoteLine,type AllocationResult,type BatchCorrectionEntry,type BatchDetail,type BatchInput,type DieselBatchOverview,type FillBatchInfo,type TankFillPreviewResult,
 } from '../../domain/fuelBatches';
+import {activeClosure,type BatchClosure} from '../../domain/batchClosure';
+import {loadClosures} from './batchClosures';
 
 /**
  * DEC-505. The SQLite side of diesel batches: which records feed the allocation, the persisted copy of
@@ -43,12 +45,14 @@ async function loadState(db:SQLiteDatabase){
     ORDER BY confirmed_at, created_at, rowid`,startedAt);
   const gaugeRows=await db.getAllAsync<GaugeRow>(`SELECT id,confirmed_at,litres FROM fuel_movements
     WHERE movement_type = 'gauge' AND status = 'Active' AND confirmed_at >= ? ORDER BY confirmed_at, created_at, rowid`,startedAt);
+  const closures=await loadClosures(db,'diesel');
   const input:AllocationInput={
+    closures:closures.filter(closure=>!closure.reopenedAt).map(closure=>({batchId:closure.batchId,closedAt:closure.closedAt})),
     batches:batchRows.map(toBatchInput),
     fills:fillRows.map(row=>({id:row.id,confirmedAt:row.confirmed_at,litres:row.litres,preferredBatchId:row.batch_id})),
     gauges:gaugeRows.map(row=>({id:row.id,confirmedAt:row.confirmed_at,litres:row.litres})),
   };
-  return {startedAt,batchRows,fillRows,input};
+  return {startedAt,batchRows,fillRows,input,closures};
 }
 
 const noteLines=(result:AllocationResult,fillId:string):AllocationNoteLine[]=>{
@@ -108,8 +112,9 @@ export async function recalculateDieselBatches(db:SQLiteDatabase,causedByMovemen
   }
 }
 
-const toDetail=(row:BatchRow,summary:AllocationResult['batches'][number],totals:Map<string,number|null>):BatchDetail=>({
+const toDetail=(row:BatchRow,summary:AllocationResult['batches'][number],totals:Map<string,number|null>,closures:readonly BatchClosure[]):BatchDetail=>({
   ...summary,
+  closure:activeClosure(closures,row.id),closureHistory:closures.filter(closure=>closure.batchId===row.id),
   kind:row.kind,invoiceNumber:row.invoice_number,supplierId:row.supplier_id,supplierName:row.supplier_name,finalTotalUsd:row.delivery_movement_id?(totals.get(row.delivery_movement_id)??null):null,history:parseHistory(row.correction_history_json),openingBasis:row.opening_basis,deliveryMovementId:row.delivery_movement_id,
   openingGaugeMovementId:row.opening_gauge_movement_id,cancellationReason:row.cancellation_reason,cancelledAt:row.cancelled_at,
 });
@@ -127,7 +132,7 @@ export async function loadBatchOverview(db:SQLiteDatabase):Promise<DieselBatchOv
   const events=await db.getAllAsync<EventRow>('SELECT * FROM fuel_allocation_events ORDER BY id');
   const changes:AllocationChange[]=events.map(event=>({id:event.id,movementId:event.movement_id,causedByMovementId:event.caused_by_movement_id,before:JSON.parse(event.before_json),after:JSON.parse(event.after_json),createdAt:event.created_at}));
   const settings=await db.getFirstAsync<{using_batch_id:string|null}>("SELECT using_batch_id FROM fuel_batch_settings WHERE id='batches'");
-  const using=applyUsingBatch(result.batches.map(summary=>toDetail(rows.get(summary.id)!,summary,totals)),settings?.using_batch_id??null);
+  const using=applyUsingBatch(result.batches.map(summary=>toDetail(rows.get(summary.id)!,summary,totals,state.closures)),settings?.using_batch_id??null);
   return {
     started:true,usingBatchId:using.usingBatchId,startedAt:state.startedAt,tankLitres:result.tankLitres,overfillAlert:result.overfillAlert,outstandingShortfallLitres:result.outstandingShortfallLitres,
     batches:using.batches,

@@ -59,7 +59,7 @@ describe('the numbers, prices and the plan (pure)',()=>{
     expect(previewStockPrice({quantity:'20',priceBasis:'per_unit',price:'18.5',vat:{mode:'custom',ratePercent:'abc'}},11)).toBeNull();
   });
   it('takes from the oldest batch first and carries on into the next',()=>{
-    const batch=(id:string,day:string,remaining:number):StockBatch=>({id,itemId:'oil',batchNumber:id,arrivedAt:`${day}T08:00:00.000Z`,supplierId:null,supplierName:null,invoiceNumber:null,notes:null,quantity:remaining,usedQuantity:0,remainingQuantity:remaining,priceBasis:null,priceUsd:null,vatRatePercent:null,subtotalUsd:null,totalUsd:null,priced:false,status:'waiting',recordStatus:'Active',cancellationReason:null,cancelledAt:null,correctionHistory:[],createdAt:'x'});
+    const batch=(id:string,day:string,remaining:number):StockBatch=>({id,itemId:'oil',batchNumber:id,arrivedAt:`${day}T08:00:00.000Z`,supplierId:null,supplierName:null,invoiceNumber:null,notes:null,quantity:remaining,usedQuantity:0,remainingQuantity:remaining,priceBasis:null,priceUsd:null,vatRatePercent:null,subtotalUsd:null,totalUsd:null,priced:false,status:'waiting',recordStatus:'Active',cancellationReason:null,cancelledAt:null,correctionHistory:[],createdAt:'x',closure:null,closureHistory:[]});
     const batches=[batch('B2','2026-10-12',50),batch('B1','2026-10-03',4)];
     expect(planStockUse(batches,10,'2026-10-16','gal')).toEqual([{batchId:'B1',quantity:4},{batchId:'B2',quantity:6}]);
     expect(planStockUse(batches,3,'2026-10-16','gal')).toEqual([{batchId:'B1',quantity:3}]);

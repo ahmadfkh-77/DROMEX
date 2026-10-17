@@ -3,11 +3,12 @@ import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {localDateKey} from '../../domain/fuel';
 import {
-  buildStockItemOverview,calculateStockPrice,formatStockBatchNumber,formatStockQuantity,planStockUse,stockPrefix,STOCK_EPSILON,validateStockQuantity,
+  buildStockItemOverview,calculateStockPrice,formatStockBatchNumber,formatStockQuantity,isOpenStockBatch,planStockUse,stockPrefix,STOCK_EPSILON,validateStockQuantity,
   type StockBatch,type StockBatchBase,type StockBatchDraft,type StockBatchEditDraft,type StockCatalogItem,type StockCorrectionEntry,type StockOverview,type StockPriceBasis,type StockSetup,type StockUseDraft,type StockUseRecord,type StockUseRow,
 } from '../../domain/stock';
 import {reconcileStockUse,type RuleBatch,type RuleLoad,type RuleOverride,type StockRule,type StockRuleDraft,type StockRuleLine,type StockRulesSetup,type StockSyncResult} from '../../domain/stockRules';
 import type {StockRepository} from './StockRepository';
+import {activeClosure,insertClosure,loadClosures,reopenClosure} from './batchClosures';
 
 type ItemRow={item_id:string;item_name:string;unit_symbol:string;unit_name:string;prefix:string;next_number:number};
 type BatchRow={
@@ -65,10 +66,12 @@ export class SqliteStockRepository implements StockRepository{
     const items=await this.db.getAllAsync<ItemRow>('SELECT item_id,item_name,unit_symbol,unit_name,prefix,next_number FROM stock_items WHERE is_active=1 ORDER BY item_name COLLATE NOCASE');
     const batches=await this.db.getAllAsync<BatchRow>('SELECT * FROM stock_batches ORDER BY arrived_at,batch_number');
     const uses=(await this.db.getAllAsync<UseDbRow>('SELECT * FROM stock_use ORDER BY created_at,rowid')).map(useFromRow);
+    const closures=await loadClosures(this.db,'stock');
     return {items:items.map(item=>buildStockItemOverview(
       {itemId:item.item_id,itemName:item.item_name,unitSymbol:item.unit_symbol,unitName:item.unit_name,prefix:item.prefix},
       batches.filter(row=>row.item_id===item.item_id).map(baseFromRow),
       uses.filter(row=>row.itemId===item.item_id),
+      closures,
     ))};
   }
 
@@ -269,9 +272,32 @@ export class SqliteStockRepository implements StockRepository{
     await this.enqueue('stockRule',ruleId,{id:ruleId,enabled,updatedAt:now});
   }
 
+  async closeBatch(batchId:string,closedOn:string,reason:string):Promise<StockOverview>{
+    // Loads confirmed so far are counted first, so the leftover shown is what is really left.
+    await this.syncUse();
+    const row=await this.db.getFirstAsync<BatchRow>('SELECT * FROM stock_batches WHERE id=?',batchId);
+    if(!row)throw new Error('The stock batch was not found.');
+    const batch=(await this.getOverview()).items.find(item=>item.itemId===row.item_id)?.batches.find(value=>value.id===batchId);
+    if(!batch)throw new Error('The stock batch was not found.');
+    if(!isOpenStockBatch(batch))throw new Error('Only a batch that is still open can be closed.');
+    await this.db.withTransactionAsync(async()=>{
+      await insertClosure(this.db,'stock',batchId,{closedOn,reason,leftover:batch.remainingQuantity});
+    });
+    return this.getOverview();
+  }
+
+  async reopenBatch(batchId:string,reason:string):Promise<StockOverview>{
+    const row=await this.db.getFirstAsync<BatchRow>('SELECT * FROM stock_batches WHERE id=?',batchId);
+    if(!row)throw new Error('The stock batch was not found.');
+    if(row.status==='Cancelled')throw new Error('A cancelled batch cannot be reopened.');
+    await reopenClosure(this.db,'stock',batchId,reason);
+    return this.getOverview();
+  }
+
   async syncUse():Promise<StockSyncResult>{
     const rules=await this.loadRules();
     if(!rules.length)return{added:0,attention:[]};
+    const closures=await loadClosures(this.db,'stock');
     const[loadRows,batchRows,useRows,overrideRows]=await Promise.all([
       this.db.getAllAsync<{id:string;item_id:string;item_name:string;load_number:string|null;confirmed_at:string;status:string;is_archived:number|null;output_unit_symbol:string|null;billed_quantity:number|null}>('SELECT id,item_id,item_name,load_number,confirmed_at,status,is_archived,output_unit_symbol,billed_quantity FROM loads WHERE item_id IN (SELECT load_item_id FROM stock_rules)'),
       this.db.getAllAsync<{id:string;item_id:string;arrived_at:string;quantity:number;status:string}>('SELECT id,item_id,arrived_at,quantity,status FROM stock_batches'),
@@ -282,7 +308,7 @@ export class SqliteStockRepository implements StockRepository{
       rules,
       loads:loadRows.map((row):RuleLoad=>({id:row.id,itemId:row.item_id,itemName:row.item_name,loadNumber:row.load_number,confirmedAt:row.confirmed_at,active:row.status==='Active'&&row.is_archived!==1,quantity:row.billed_quantity,unitSymbol:row.output_unit_symbol})),
       rows:useRows.map(useFromRow),
-      batches:batchRows.map((row):RuleBatch=>({id:row.id,itemId:row.item_id,arrivedDay:localDateKey(new Date(row.arrived_at)),active:row.status==='Active',quantity:row.quantity})),
+      batches:batchRows.map((row):RuleBatch=>({id:row.id,itemId:row.item_id,arrivedDay:localDateKey(new Date(row.arrived_at)),active:row.status==='Active',quantity:row.quantity,closedAt:activeClosure(closures,row.id)?.closedAt??null})),
       overrides:overrideRows.map((row):RuleOverride=>({loadId:row.load_id,stockItemId:row.stock_item_id,quantity:row.quantity,reason:row.reason,createdAt:row.created_at})),
     });
     if(plan.rows.length){

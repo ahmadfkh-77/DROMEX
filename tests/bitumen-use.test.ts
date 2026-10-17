@@ -213,6 +213,70 @@ describe('the batch report with use',()=>{
   });
 });
 
+describe('closing a batch by hand',()=>{
+  it('closes a batch that still has bitumen, keeps the leftover, and moves new loads to the next batch',async()=>{
+    const {repository,deliver,addLoad,tick,batch}=await setup();
+    await deliver('2026-10-12T09:00:00');await deliver('2026-10-14T08:00:00');await tick();
+    addLoad('l1','2026-10-14T09:00:00',40000);await repository.syncUse();
+    expect(await batch('BIT-2026-00001')).toMatchObject({usedKg:1250,remainingKg:18750,status:'in_use'});
+    clock('2026-10-14T10:00:00');
+    const overview=await repository.closeBatch((await batch('BIT-2026-00001')).id,'2026-10-14','Tank changed');
+    const closed=overview.batches.find(value=>value.batchNumber==='BIT-2026-00001')!;
+    expect(closed.status).toBe('closed');
+    expect(closed.closure).toMatchObject({leftover:18750,reason:'Tank changed',closedOn:'2026-10-14',reopenedAt:null});
+    expect(overview.batches.find(value=>value.batchNumber==='BIT-2026-00002')!.status).toBe('in_use');
+    expect(overview.totalRemainingKg).toBe(20000);
+    addLoad('l2',new Date('2026-10-14T11:00:00').toISOString(),40000);await repository.syncUse();
+    expect(await batch('BIT-2026-00001')).toMatchObject({usedKg:1250,remainingKg:18750,status:'closed'});
+    expect(await batch('BIT-2026-00002')).toMatchObject({usedKg:1250,remainingKg:18750,status:'in_use'});
+  });
+  it('lets a load confirmed before the closing still be counted against the closed batch',async()=>{
+    const {repository,deliver,addLoad,tick,batch}=await setup();
+    await deliver('2026-10-12T09:00:00');await deliver('2026-10-14T08:00:00');
+    clock('2026-10-14T10:00:00');
+    await repository.closeBatch((await batch('BIT-2026-00001')).id,'2026-10-14','Tank changed');
+    await tick();addLoad('early',new Date('2026-10-14T09:00:00').toISOString(),40000);await repository.syncUse();
+    expect(await batch('BIT-2026-00001')).toMatchObject({usedKg:1250,status:'closed'});
+  });
+  it('reopens a batch with a reason and keeps both records in its history',async()=>{
+    const {repository,deliver,batch}=await setup();
+    await deliver('2026-10-12T09:00:00');await deliver('2026-10-14T08:00:00');
+    clock('2026-10-14T10:00:00');
+    const id=(await batch('BIT-2026-00001')).id;
+    await repository.closeBatch(id,'2026-10-14','Tank changed');
+    const reopened=(await repository.reopenBatch(id,'Closed the wrong tank')).batches.find(value=>value.id===id)!;
+    expect(reopened.closure).toBeNull();expect(reopened.status).toBe('in_use');
+    expect(reopened.closureHistory).toHaveLength(1);
+    expect(reopened.closureHistory[0]).toMatchObject({leftover:20000,reopenReason:'Closed the wrong tank'});
+    await repository.closeBatch(id,'2026-10-14','Changed again');
+    expect((await batch('BIT-2026-00001')).closureHistory).toHaveLength(2);
+  });
+  it('refuses without a reason, twice, for a future day, for a cancelled batch, and when nothing was closed',async()=>{
+    const {repository,deliver,batch}=await setup();
+    await deliver('2026-10-12T09:00:00');await deliver('2026-10-13T09:00:00');
+    clock('2026-10-14T10:00:00');
+    const first=(await batch('BIT-2026-00001')).id,second=(await batch('BIT-2026-00002')).id;
+    await expect(repository.closeBatch(first,'2026-10-14','  ')).rejects.toThrow('reason');
+    await expect(repository.closeBatch(first,'2026-10-15','Tank changed')).rejects.toThrow('future');
+    await repository.closeBatch(first,'2026-10-14','Tank changed');
+    await expect(repository.closeBatch(first,'2026-10-14','Again')).rejects.toThrow('still open');
+    await expect(repository.reopenBatch(second,'Oops')).rejects.toThrow('not closed by hand');
+    await expect(repository.reopenBatch(first,' ')).rejects.toThrow('reason');
+    await repository.cancelBatch(second,'Wrong delivery');
+    await expect(repository.closeBatch(second,'2026-10-14','x')).rejects.toThrow('still open');
+  });
+  it('clears the batch chosen to use first when that batch is closed',async()=>{
+    const {repository,deliver,batch}=await setup();
+    await deliver('2026-10-12T09:00:00');await deliver('2026-10-13T09:00:00');
+    clock('2026-10-14T10:00:00');
+    const second=(await batch('BIT-2026-00002')).id;
+    await repository.setUsingBatch(second);
+    const overview=await repository.closeBatch(second,'2026-10-14','Done with it');
+    expect(overview.usingBatchId).toBeNull();
+    expect(overview.batches.find(value=>value.batchNumber==='BIT-2026-00001')!.status).toBe('in_use');
+  });
+});
+
 describe('the screens',()=>{
   const fsRead=(path:string)=>require('node:fs').readFileSync(path,'utf8') as string;
   it('offer the rules, the real-amount adjustment, moving a load and the attention list, and count loads when they open',()=>{

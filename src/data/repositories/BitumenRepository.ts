@@ -12,6 +12,10 @@ export interface BitumenRepository{
   cancelBatch(id:string,reason:string):Promise<BitumenBatch>;
   /** Chooses the open batch to use first, or null to go back to the oldest open batch first. */
   setUsingBatch(batchId:string|null):Promise<BitumenOverview>;
+  /** Closes an open batch by hand, even with some left, on a chosen day and with a reason. The leftover is kept with the closure. */
+  closeBatch(batchId:string,closedOn:string,reason:string):Promise<BitumenOverview>;
+  /** Reopens a batch that was closed by hand, with a reason. Loads counted before stay where they are. */
+  reopenBatch(batchId:string,reason:string):Promise<BitumenOverview>;
   /** The company printed on the batch report when no Header company was picked, read from Company Settings like the receipts. */
   getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>;
   /** The items a rule can be set for, the load-number series that group them, and the rules saved so far. */

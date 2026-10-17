@@ -1,3 +1,4 @@
+import {activeClosure,type BatchClosure} from './batchClosure';
 import {noVatChoice,resolveVatRate,validateAccountVat,type AccountVat,type VatChoice} from './accountVat';
 import {localDateKey} from './fuel';
 
@@ -37,6 +38,10 @@ export type StockBatch={
   priceBasis:StockPriceBasis|null;priceUsd:number|null;vatRatePercent:number|null;subtotalUsd:number|null;totalUsd:number|null;priced:boolean;
   status:StockBatchStatus;recordStatus:StockRecordStatus;
   cancellationReason:string|null;cancelledAt:string|null;correctionHistory:StockCorrectionEntry[];createdAt:string;
+  /** Set while the batch is closed by hand: what was left over, when and why. The batch is then Closed even though some stock was left. */
+  closure:BatchClosure|null;
+  /** Every close and reopen of this batch, oldest first. */
+  closureHistory:BatchClosure[];
 };
 
 /** One row of the use table: a use takes quantity out of a batch, a reversal puts it back (negative quantity). */
@@ -115,18 +120,18 @@ export const formatUsd=(value:number)=>`$${value.toLocaleString('en-US',{minimum
 export const stockPriceText=(batch:Pick<StockBatch,'priceBasis'|'priceUsd'>,symbol:string)=>batch.priceUsd==null||!batch.priceBasis?'Unpriced':batch.priceBasis==='whole'?`${formatUsd(batch.priceUsd)} as a whole`:`${formatUsd(batch.priceUsd)} / ${symbol}`;
 export const isOpenStockBatch=(batch:Pick<StockBatch,'status'>)=>batch.status==='in_use'||batch.status==='waiting';
 
-export type StockBatchBase=Omit<StockBatch,'status'|'remainingQuantity'|'usedQuantity'>;
+export type StockBatchBase=Omit<StockBatch,'status'|'remainingQuantity'|'usedQuantity'|'closure'|'closureHistory'>;
 
 /**
  * Sets each batch's used and remaining figures and its status, and groups the use rows into records. An active batch is open while it has
  * stock left; the first open one (by arrival, then number) is in use. A cancelled batch is kept and labelled Cancelled.
  */
-export function buildStockItemOverview(item:{itemId:string;itemName:string;unitSymbol:string;unitName:string;prefix:string},batches:readonly StockBatchBase[],rows:readonly StockUseRow[]):StockItemOverview{
+export function buildStockItemOverview(item:{itemId:string;itemName:string;unitSymbol:string;unitName:string;prefix:string},batches:readonly StockBatchBase[],rows:readonly StockUseRow[],closures:readonly BatchClosure[]=[]):StockItemOverview{
   const used=new Map<string,number>();
   for(const row of rows)used.set(row.batchId,round3((used.get(row.batchId)??0)+row.quantity));
   const sorted=[...batches].sort((a,b)=>a.arrivedAt.localeCompare(b.arrivedAt)||a.batchNumber.localeCompare(b.batchNumber));
-  const withFigures=sorted.map(batch=>({...batch,usedQuantity:used.get(batch.id)??0,remainingQuantity:round3(batch.quantity-(used.get(batch.id)??0))}));
-  const isOpen=(batch:{recordStatus:StockRecordStatus;remainingQuantity:number})=>batch.recordStatus==='Active'&&batch.remainingQuantity>STOCK_EPSILON;
+  const withFigures=sorted.map(batch=>({...batch,usedQuantity:used.get(batch.id)??0,remainingQuantity:round3(batch.quantity-(used.get(batch.id)??0)),closure:activeClosure(closures,batch.id),closureHistory:closures.filter(closure=>closure.batchId===batch.id)}));
+  const isOpen=(batch:{recordStatus:StockRecordStatus;remainingQuantity:number;closure:BatchClosure|null})=>batch.recordStatus==='Active'&&batch.remainingQuantity>STOCK_EPSILON&&!batch.closure;
   const first=withFigures.find(isOpen);
   const list:StockBatch[]=withFigures.map(batch=>({...batch,status:batch.recordStatus==='Cancelled'?'cancelled':!isOpen(batch)?'closed':batch===first?'in_use':'waiting'}));
   const open=list.filter(isOpenStockBatch);
@@ -166,7 +171,7 @@ export type StockUseLine={batchId:string;quantity:number};
  * the use can supply it. Throws when the stock on hand on that day cannot cover the quantity; nothing is ever taken from thin air.
  */
 export function planStockUse(batches:readonly StockBatch[],quantity:number,usedOn:string,unitSymbol:string):StockUseLine[]{
-  const usable=batches.filter(batch=>batch.recordStatus==='Active'&&batch.remainingQuantity>STOCK_EPSILON&&localDateKey(new Date(batch.arrivedAt))<=usedOn)
+  const usable=batches.filter(batch=>batch.recordStatus==='Active'&&batch.remainingQuantity>STOCK_EPSILON&&localDateKey(new Date(batch.arrivedAt))<=usedOn&&(!batch.closure||usedOn<batch.closure.closedOn))
     .sort((a,b)=>a.arrivedAt.localeCompare(b.arrivedAt)||a.batchNumber.localeCompare(b.batchNumber));
   const available=round3(usable.reduce((sum,batch)=>sum+batch.remainingQuantity,0));
   if(quantity>available+STOCK_EPSILON)throw new Error(`Only ${formatStockQuantity(available,unitSymbol)} is in stock for that day. Record a delivery first, or enter a smaller quantity.`);

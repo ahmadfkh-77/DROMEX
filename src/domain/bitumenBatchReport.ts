@@ -28,6 +28,8 @@ export type BitumenBatchReport={
   /** Present only when prices are included. */
   price:null|{headers:string[];values:string[];lines:{label:string;value:string;strong:boolean}[]};
   cancellation:null|{when:string;reason:string};
+  /** Set while the batch is closed by hand: the day, what was left over and why. */
+  closure:null|{closedOn:string;leftover:string;reason:string};
   history:BitumenReportHistoryRow[];
   remainingLabel:string;
   pricesIncluded:boolean;
@@ -76,6 +78,10 @@ export function buildBitumenBatchReport(batch:BitumenBatch,options:{includePrice
     history.push({date:fuelDayLabel(localDateKey(new Date(entry.at))),event:`Corrected: ${entry.changes.map(change=>`${change.field} ${change.before} → ${change.after}`).join('; ')} · reason: ${entry.reason}`,kg:''});
   }
   if(cancelled&&batch.cancelledAt)history.push({date:fuelDayLabel(localDateKey(new Date(batch.cancelledAt))),event:'Batch cancelled',kg:signed(-batch.deliveredKg)});
+  for(const entry of batch.closureHistory??[]){
+    history.push({date:fuelDayLabel(entry.closedOn),event:`Closed by hand with ${formatKg(entry.leftover)} left · reason: ${entry.reason}`,kg:''});
+    if(entry.reopenedAt)history.push({date:fuelDayLabel(localDateKey(new Date(entry.reopenedAt))),event:`Reopened · reason: ${entry.reopenReason??''}`,kg:''});
+  }
   return {
     batchNumber:batch.batchNumber,exportedAt,cancelled,
     summary:[
@@ -84,6 +90,7 @@ export function buildBitumenBatchReport(batch:BitumenBatch,options:{includePrice
     ],
     estimated,figures,use,adjustments,detail:{headers:detailHeaders,values:detailValues},price,
     cancellation:cancelled&&batch.cancelledAt?{when:stamp(batch.cancelledAt),reason:batch.cancellationReason??'Not recorded'}:null,
+    closure:batch.closure?{closedOn:fuelDayLabel(batch.closure.closedOn),leftover:formatKg(batch.closure.leftover),reason:batch.closure.reason}:null,
     history,remainingLabel:formatKg(remaining),pricesIncluded:options.includePrices,
     fileName:`Bitumen-Batch-Report-${batch.batchNumber}.pdf`,
   };

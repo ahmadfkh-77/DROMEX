@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 63;
+export const DATABASE_VERSION = 64;
 
 type TableColumn = { name: string };
 
@@ -2393,6 +2393,29 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_stock_use_overrides_load ON stock_use_overrides(load_id, stock_item_id, created_at);
     `);
     currentVersion = 63;
+  }
+
+  if (currentVersion === 63) {
+    // Close a batch by hand. Bitumen, Diesel and Stock batches normally close only when they run out; the Owner can now close one that still
+    // has a little left, with a reason, so the next batch takes over. The leftover is kept in the closure row, never deleted, and a closure
+    // is reopened by stamping reopened_at (the row stays as history). Purely additive: one new table, no existing record is touched.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS batch_closures (
+        id TEXT PRIMARY KEY NOT NULL,
+        batch_kind TEXT NOT NULL CHECK (batch_kind IN ('bitumen', 'diesel', 'stock')),
+        batch_id TEXT NOT NULL,
+        closed_on TEXT NOT NULL,
+        closed_at TEXT NOT NULL,
+        leftover REAL NOT NULL CHECK (leftover >= 0),
+        reason TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        reopened_at TEXT,
+        reopen_reason TEXT
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_batch_closures_open ON batch_closures(batch_kind, batch_id) WHERE reopened_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_batch_closures_batch ON batch_closures(batch_kind, batch_id);
+    `);
+    currentVersion = 64;
   }
 
 

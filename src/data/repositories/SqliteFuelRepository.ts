@@ -4,6 +4,7 @@ import {applyFuelLedger,fuelPriceFromStored,fuelPriceToStored,calculateFuelDeliv
 import {batchLitresIssue,type BatchCorrectionChange,type BatchEditDraft,type BatchDetail,type StartDieselBatchesDraft,TankFillPreviewDraft,TankFillPreviewResult,DieselBatchOverview} from '../../domain/fuelBatches';
 import {appendBatchHistory,updateOpeningBatchDetails,assertDeliveryDateAllowsBatch,batchTrackingStart,cancelBatchOfDelivery,cancelOpeningBatch,createDeliveryBatch,findBatch,loadAllocationInput,loadBatchOverview,previewFromState,recalculateDieselBatches,startTracking,syncBatchWithDelivery} from './dieselBatches';
 import type {FuelRepository} from './FuelRepository';
+import {insertClosure,reopenClosure} from './batchClosures';
 type Row={id:string;movement_type:'gauge'|'delivery'|'fill';fuel_type:FuelType|null;correction_history_json:string|null;confirmed_at:string;litres:number;previous_balance_litres:number|null;difference_litres:number|null;supplier_id:string|null;supplier_name:string|null;equipment_type:'machine'|'truck';equipment_id:string|null;truck_profile_id:string|null;equipment_name:string|null;project_id:string|null;project_name:string|null;destination_type?:FuelDestinationType|null;company_site_id?:string|null;company_site_name?:string|null;company_site_is_active?:number|null;fuel_source?:'tank'|'station'|null;fuel_station_id?:string|null;fuel_station_name?:string|null;batch_id?:string|null;ticket_number:string|null;odometer_reading:string|null;reason:string|null;notes:string|null;fuel_price_history_id:string|null;price_per_litre_usd_cents:number|null;price_override_reason:string|null;consumption_cost_usd_cents:number|null;subtotal_usd_cents:number|null;vat_rate_basis_points:number|null;vat_amount_usd_cents:number|null;final_total_usd_cents:number|null;payment_status:string;status:'Active'|'Cancelled';cancellation_reason:string|null;cancelled_at:string|null};
 type PriceRow={id:string;fuel_type:FuelType|null;price_per_litre_usd_cents:number;effective_at:string;changed_by:string;reason:string|null;created_at:string};
 type SiteRow={id:string;name:string;name_key:string;is_active:number;created_at:string;updated_at:string};
@@ -209,6 +210,31 @@ async setUsingDieselBatch(batchId:string|null):Promise<DieselBatchOverview>{
   if(!overview)throw new Error('Diesel batches have not been started.');
   if(batchId){const open=overview.batches.find(value=>value.id===batchId&&(value.status==='in_use'||value.status==='waiting'));if(!open)throw new Error('Choose a batch that is still open.');}
   await this.db.runAsync("UPDATE fuel_batch_settings SET using_batch_id = ? WHERE id = 'batches'",batchId);
+  return this.getBatchOverview();
+}
+// Close a batch by hand, even with some diesel left. The leftover is kept with the closure and no longer counted in the tank; fills made
+// after it draw from the next batch. The allocation is rebuilt from the records, as for any correction.
+async closeDieselBatch(batchId:string,closedOn:string,reason:string):Promise<DieselBatchOverview>{
+  const overview=await loadBatchOverview(this.db);
+  if(!overview)throw new Error('Diesel batches have not been started.');
+  const batch=overview.batches.find(value=>value.id===batchId);
+  if(!batch)throw new Error('The diesel batch was not found.');
+  if(batch.status!=='in_use'&&batch.status!=='waiting')throw new Error('Only a batch that is still open can be closed.');
+  await this.db.withTransactionAsync(async()=>{
+    await insertClosure(this.db,'diesel',batchId,{closedOn,reason,leftover:batch.remainingLitres});
+    await this.db.runAsync("UPDATE fuel_batch_settings SET using_batch_id = NULL WHERE id = 'batches' AND using_batch_id = ?",batchId);
+    await recalculateDieselBatches(this.db,null);
+  });
+  return this.getBatchOverview();
+}
+async reopenDieselBatch(batchId:string,reason:string):Promise<DieselBatchOverview>{
+  const row=await findBatch(this.db,batchId);
+  if(!row)throw new Error('The diesel batch was not found.');
+  if(row.status==='Cancelled')throw new Error('A cancelled batch cannot be reopened.');
+  await this.db.withTransactionAsync(async()=>{
+    await reopenClosure(this.db,'diesel',batchId,reason);
+    await recalculateDieselBatches(this.db,null);
+  });
   return this.getBatchOverview();
 }
 async startDieselBatches(draft:StartDieselBatchesDraft):Promise<BatchDetail|null>{

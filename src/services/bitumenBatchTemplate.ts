@@ -34,6 +34,7 @@ export function buildBitumenBatchHtml(report:BitumenBatchReport,company:BitumenR
   const use=report.use?`<div class="band">USE FROM ASPHALT LOADS</div><table>${colgroup(useWidths)}<thead><tr><th>Date</th><th>Load</th><th class="num">Mix</th><th>Rule</th><th class="num">Bitumen</th></tr></thead><tbody>${report.use.rows.map(row=>`<tr><td>${e(row.date)}</td><td>${t(row.load)}<div class="muted">${t(row.item)}</div></td><td class="num">${e(row.mix)}</td><td>${e(row.rule)}</td><td class="num">${e(row.kg)}</td></tr>`).join('')}<tr class="tot"><td colspan="4">Estimated use</td><td class="num">${e(report.use.total)}</td></tr></tbody></table>`:'';
   const adjustments=report.adjustments?`<div class="band">ADJUSTMENTS</div><table>${colgroup(columnWidths([{header:'Date',cells:report.adjustments.rows.map(row=>row.date)},{header:'Reason',cells:report.adjustments.rows.map(row=>row.reason)},{header:'Kg',kind:'number',cells:report.adjustments.rows.map(row=>row.kg)}]))}<thead><tr><th>Date</th><th>Reason</th><th class="num">Kg</th></tr></thead><tbody>${report.adjustments.rows.map(row=>`<tr><td>${e(row.date)}</td><td>${t(row.reason)}</td><td class="num">${e(row.kg)}</td></tr>`).join('')}</tbody></table>`:'';
   const cancellation=report.cancellation?`<div class="band">WHY IT WAS CANCELLED</div><table>${colgroup([24,76])}<tbody><tr><td><b>Cancelled</b></td><td>${e(report.cancellation.when)}</td></tr><tr><td><b>Reason</b></td><td>${t(report.cancellation.reason)}</td></tr></tbody></table>`:'';
+  const closure=report.closure?`<div class="band">CLOSED BY HAND</div><table>${colgroup([24,76])}<tbody><tr><td><b>Closed</b></td><td>${e(report.closure.closedOn)}</td></tr><tr><td><b>Left over</b></td><td>${e(report.closure.leftover)}</td></tr><tr><td><b>Reason</b></td><td>${t(report.closure.reason)}</td></tr></tbody></table>`:'';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Bitumen Batch Report</title><style>
     @page{size:A4;margin:12mm 11mm 16mm;@bottom-left{content:"${css(running)}";font-size:7.5pt;color:#5A6570}@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:7.5pt;color:#5A6570}}
     @media screen{body{max-width:210mm;margin:0 auto;padding:12mm}}
@@ -58,6 +59,7 @@ export function buildBitumenBatchHtml(report:BitumenBatchReport,company:BitumenR
     <div class="head"><div>${company.logo?`<img class="logo" src="${company.logo}" alt=""/>`:''}<div class="brand">${t(company.companyName)}</div>${company.contactLine?`<div class="contact">${t(company.contactLine)}</div>`:''}</div>
       <div class="head-right"><h1>Bitumen Batch Report</h1><div class="when">${e(when(report.exportedAt))}${report.pricesIncluded?' · with prices':''}</div>${report.cancelled?'<div class="stamp">CANCELLED</div>':''}</div></div>
     <div class="summary">${summary}</div>
+    ${closure}
     ${cancellation}
     <div class="band">BATCH FIGURES${report.estimated?' (ESTIMATED USE)':''}</div><div class="figs">${figures}</div>
     <div class="band">DELIVERY DETAIL</div>${detail}

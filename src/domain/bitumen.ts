@@ -1,6 +1,7 @@
 import {noVatChoice,resolveVatRate,type AccountVat,type VatChoice} from './accountVat';
 import {localDateKey} from './fuel';
 import type {BitumenAdjustment,BitumenUseRow} from './bitumenUse';
+import {activeClosure,type BatchClosure} from './batchClosure';
 
 /**
  * Bitumen batches (Phase B). A batch is one delivery of bitumen, tracked in kilograms. Phase B records deliveries, lists the batches,
@@ -35,6 +36,10 @@ export type BitumenBatch={
   priced:boolean;
   status:BitumenBatchStatus;recordStatus:BitumenRecordStatus;
   cancellationReason:string|null;cancelledAt:string|null;correctionHistory:BitumenCorrectionEntry[];createdAt:string;
+  /** Set while the batch is closed by hand: what was left over, when and why. The batch is then Closed even though some bitumen was left. */
+  closure:BatchClosure|null;
+  /** Every close and reopen of this batch, oldest first. */
+  closureHistory:BatchClosure[];
 };
 export type BitumenOverview={
   /** The open batch the owner chose to use first, or null when the oldest open batch is the one in use. */
@@ -93,10 +98,10 @@ export function previewBitumenPrice(draft:Pick<BitumenDeliveryDraft,'kg'|'priceB
  * arrival, then number) is in use. A batch that was cancelled is kept and labelled Cancelled. Phase B has no use yet, so the used
  * figure is always passed in as 0 by the repository.
  */
-export function buildBitumenOverview(batches:Omit<BitumenBatch,'status'|'remainingKg'>[],usingBatchId:string|null):BitumenOverview{
+export function buildBitumenOverview(batches:Omit<BitumenBatch,'status'|'remainingKg'|'closure'|'closureHistory'>[],usingBatchId:string|null,closures:readonly BatchClosure[]=[]):BitumenOverview{
   const sorted=[...batches].sort((a,b)=>a.arrivedAt.localeCompare(b.arrivedAt)||a.batchNumber.localeCompare(b.batchNumber));
-  const withRemaining=sorted.map(batch=>({...batch,remainingKg:round3(batch.deliveredKg+batch.adjustmentKg-batch.usedKg)}));
-  const isOpen=(batch:{recordStatus:BitumenRecordStatus;remainingKg:number})=>batch.recordStatus==='Active'&&batch.remainingKg>BIT_EPSILON;
+  const withRemaining=sorted.map(batch=>({...batch,remainingKg:round3(batch.deliveredKg+batch.adjustmentKg-batch.usedKg),closure:activeClosure(closures,batch.id),closureHistory:closures.filter(closure=>closure.batchId===batch.id)}));
+  const isOpen=(batch:{recordStatus:BitumenRecordStatus;remainingKg:number;closure:BatchClosure|null})=>batch.recordStatus==='Active'&&batch.remainingKg>BIT_EPSILON&&!batch.closure;
   const first=withRemaining.find(isOpen);
   let list:BitumenBatch[]=withRemaining.map(batch=>({...batch,status:batch.recordStatus==='Cancelled'?'cancelled':!isOpen(batch)?'closed':batch===first?'in_use':'waiting'}));
   // The owner's choice is honoured only while that batch is still open; otherwise the oldest open batch is in use.

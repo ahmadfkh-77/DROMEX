@@ -11,6 +11,7 @@ import {
   type BitumenAdjustment,type BitumenRule,type BitumenRuleDraft,type BitumenUseRow,type BitumenUseSetup,type SyncResult,type UseBatch,type UseLoad,type UseRowInput,
 } from '../../domain/bitumenUse';
 import type {BitumenRepository} from './BitumenRepository';
+import {insertClosure,loadClosures,reopenClosure} from './batchClosures';
 
 type UseDbRow={id:string;load_id:string;batch_id:string|null;kind:BitumenUseRow['kind'];kg:number;mix_kg:number;rule_aggregate_kg:number;rule_bitumen_kg:number;load_number:string|null;load_confirmed_at:string|null;item_name:string;note:string|null;created_at:string};
 const useFromRow=(row:UseDbRow):BitumenUseRow=>({id:row.id,loadId:row.load_id,batchId:row.batch_id,kind:row.kind,kg:row.kg,mixKg:row.mix_kg,ruleAggregateKg:row.rule_aggregate_kg,ruleBitumenKg:row.rule_bitumen_kg,loadNumber:row.load_number,loadConfirmedAt:row.load_confirmed_at??row.created_at,itemName:row.item_name,note:row.note,createdAt:row.created_at});
@@ -37,7 +38,7 @@ function timestampForDate(input:string):string{
   return value.toISOString();
 }
 
-function fromRow(row:Row):Omit<BitumenBatch,'status'|'remainingKg'>{
+function fromRow(row:Row):Omit<BitumenBatch,'status'|'remainingKg'|'closure'|'closureHistory'>{
   const priced=row.price_usd_cents!=null&&row.total_usd_cents!=null&&row.price_basis!=null;
   const price=row.price_usd_cents==null?null:row.price_usd_cents/100;
   return {
@@ -70,7 +71,8 @@ export class SqliteBitumenRepository implements BitumenRepository{
     const used=new Map<string,number>(),adjusted=new Map<string,number>();
     for(const row of useRows)if(row.batchId)used.set(row.batchId,round3((used.get(row.batchId)??0)+row.kg));
     for(const adjustment of adjustments)adjusted.set(adjustment.batchId,round3((adjusted.get(adjustment.batchId)??0)+adjustment.kg));
-    const overview=buildBitumenOverview(rows.map(fromRow).map(batch=>({...batch,usedKg:used.get(batch.id)??0,adjustmentKg:adjusted.get(batch.id)??0})),settings?.using_batch_id??null);
+    const closures=await loadClosures(this.db,'bitumen');
+    const overview=buildBitumenOverview(rows.map(fromRow).map(batch=>({...batch,usedKg:used.get(batch.id)??0,adjustmentKg:adjusted.get(batch.id)??0})),settings?.using_batch_id??null,closures);
     return {...overview,useRows,adjustments,rulesEnabled:enabled?.count??0};
   }
 
@@ -218,7 +220,7 @@ export class SqliteBitumenRepository implements BitumenRepository{
     if(!loadRows.length)return {added:0,attention:[]};
     const loads:UseLoad[]=loadRows.map(row=>({id:row.id,itemId:row.item_id,itemName:row.item_name,loadNumber:row.load_number??row.transaction_number,confirmedAt:row.confirmed_at,active:row.status==='Active'&&(row.is_archived??0)===0,
       mixKg:mixKgForLoad({quantityMethod:row.quantity_method??'weighbridge',netWeightKg:row.net_weight_kg,directQuantity:row.direct_quantity,directUnitSymbol:row.direct_unit_symbol,billedQuantity:row.billed_quantity,outputUnitSymbol:row.output_unit_symbol})}));
-    const batches:UseBatch[]=overview.batches.map(batch=>({id:batch.id,arrivedDay:localDateKey(new Date(batch.arrivedAt)),active:batch.recordStatus==='Active',deliveredKg:batch.deliveredKg,adjustmentKg:batch.adjustmentKg}));
+    const batches:UseBatch[]=overview.batches.map(batch=>({id:batch.id,arrivedDay:localDateKey(new Date(batch.arrivedAt)),active:batch.recordStatus==='Active',deliveredKg:batch.deliveredKg,adjustmentKg:batch.adjustmentKg,closedAt:batch.closure?.closedAt??null}));
     const {rows,attention}=reconcileBitumenUse({rules:setup.rules,loads,existing:overview.useRows??[],batches,usingBatchId:overview.usingBatchId??null});
     if(rows.length)await this.insertUseRows(rows);
     return {added:rows.length,attention};
@@ -269,6 +271,27 @@ export class SqliteBitumenRepository implements BitumenRepository{
       await this.db.runAsync('INSERT INTO bitumen_adjustments (id,batch_id,kg,reason,estimated_before,real_after,created_at) VALUES (?,?,?,?,?,?,?)',id,batchId,difference,text,batch.remainingKg,round3(real),now);
       await this.enqueue(batchId,{id:batchId,adjustment:difference,reason:text});
     });
+    return this.getOverview();
+  }
+
+  async closeBatch(batchId:string,closedOn:string,reason:string):Promise<BitumenOverview>{
+    // Loads confirmed so far are counted first, so the leftover shown is what is really left.
+    await this.syncUse();
+    const batch=(await this.getOverview()).batches.find(value=>value.id===batchId);
+    if(!batch)throw new Error('The bitumen batch was not found.');
+    if(!isOpenBatch(batch))throw new Error('Only a batch that is still open can be closed.');
+    await this.db.withTransactionAsync(async()=>{
+      await insertClosure(this.db,'bitumen',batchId,{closedOn,reason,leftover:batch.remainingKg});
+      await this.db.runAsync("UPDATE bitumen_settings SET using_batch_id=NULL WHERE id='bitumen' AND using_batch_id=?",batchId);
+    });
+    return this.getOverview();
+  }
+
+  async reopenBatch(batchId:string,reason:string):Promise<BitumenOverview>{
+    const batch=(await this.getOverview()).batches.find(value=>value.id===batchId);
+    if(!batch)throw new Error('The bitumen batch was not found.');
+    if(batch.recordStatus==='Cancelled')throw new Error('A cancelled batch cannot be reopened.');
+    await reopenClosure(this.db,'bitumen',batchId,reason);
     return this.getOverview();
   }
 

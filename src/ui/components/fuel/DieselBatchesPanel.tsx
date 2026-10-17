@@ -29,7 +29,7 @@ type Props={
   lastDipAt:string|null;
   onRecordFill:()=>void;
   onRecordDelivery:()=>void;
-  onOpenBatch:(batch:BatchDetail)=>void;
+  onOpenBatch:(batch:BatchDetail,closing?:boolean)=>void;
   onOpenHistory:()=>void;
   onStart:(draft:StartDieselBatchesDraft)=>Promise<void>;
   /** Phase A. Chooses the open batch new fills draw from first, or null to go back to the oldest open batch first. */
@@ -110,7 +110,7 @@ export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKn
 
     {showTank?<>
       <SectionTitle title="Open batches" detail={`${openBatches.length} · ${overview.usingBatchId?'using batch first':'oldest first'}`}/>
-      {openBatches.length?openBatches.map(batch=><BatchCard key={batch.id} batch={batch} firstOpen={overview.batches.find(value=>value.status==='in_use')} usingBatchId={overview.usingBatchId??null} onPress={()=>onOpenBatch(batch)} onSetUsingBatch={onSetUsingBatch}/>)
+      {openBatches.length?openBatches.map(batch=><BatchCard key={batch.id} batch={batch} firstOpen={overview.batches.find(value=>value.status==='in_use')} usingBatchId={overview.usingBatchId??null} onPress={()=>onOpenBatch(batch)} onCloseBatch={()=>onOpenBatch(batch,true)} onSetUsingBatch={onSetUsingBatch}/>)
         :<EmptyState title="No open batch" body={chips.length?'No open batch matches these filters.':'Record a diesel delivery to start one.'}/>}
 
       <GroupHeader title="Closed batches" summary={`${closedBatches.length} · ${formatLitres(closedBatches.filter(batch=>batch.status==='closed').reduce((sum,batch)=>sum+batch.deliveredLitres,0))} delivered`} open={open.has('closed')} onToggle={()=>toggle('closed')}/>
@@ -144,7 +144,7 @@ export function DieselBatchesPanel({setup,overview,movements,ledgerBalance,hasKn
   </View>;
 }
 
-function BatchCard({batch,firstOpen,usingBatchId,onPress,onSetUsingBatch}:{batch:BatchDetail;firstOpen:BatchDetail|undefined;usingBatchId:string|null;onPress:()=>void;onSetUsingBatch:(batchId:string|null)=>Promise<void>}){
+function BatchCard({batch,firstOpen,usingBatchId,onPress,onCloseBatch,onSetUsingBatch}:{batch:BatchDetail;firstOpen:BatchDetail|undefined;usingBatchId:string|null;onPress:()=>void;onCloseBatch:()=>void;onSetUsingBatch:(batchId:string|null)=>Promise<void>}){
   const[busy,setBusy]=useState(false),[failed,setFailed]=useState<string|null>(null);
   const chosen=usingBatchId===batch.id;
   const change=(batchId:string|null)=>{setBusy(true);setFailed(null);onSetUsingBatch(batchId).catch(cause=>setFailed(cause instanceof Error?cause.message:'Could not change the batch in use.')).finally(()=>setBusy(false));};
@@ -165,6 +165,7 @@ function BatchCard({batch,firstOpen,usingBatchId,onPress,onSetUsingBatch}:{batch
     <View style={styles.bar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><View style={[styles.barFill,{width:`${Math.round(used*100)}%`}]}/></View>
     {note?<Text style={[styles.sub,batch.adjustmentLitres!==0&&styles.amber]}>{note}</Text>:null}
     {chosen?<AppButton label="Go back to oldest first" tone="secondary" busy={busy} onPress={()=>change(null)}/>:batch.status==='waiting'?<AppButton label="Use this batch first" busy={busy} onPress={useFirst}/>:null}
+    <AppButton label="Close this batch" tone="secondary" onPress={onCloseBatch}/>
     {failed?<Text style={styles.amber}>{failed}</Text>:null}
   </TouchableOpacity>;
 }

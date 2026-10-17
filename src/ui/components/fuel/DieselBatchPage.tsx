@@ -8,6 +8,7 @@ import {formatLitres,formatMoney} from '../../../domain/fuelFillForm';
 import {colors,radius} from '../../theme';
 import {AppButton,AppField,EmptyState,Feedback} from '../AppPrimitives';
 import {BatchStatusBadge,FuelDayCard,SectionTitle} from './FuelBatchParts';
+import {CloseBatchCard,ClosureCard,ReopenBatchCard} from '../BatchClosureCards';
 
 /**
  * DEC-505, Screen C of the approved design: one batch, its four figures, its details, where its diesel
@@ -21,11 +22,20 @@ type Props={
   onRecordFill:(batch:BatchDetail)=>void;
   onCancel:(batch:BatchDetail,reason:string)=>Promise<void>;
   onEdit?:(batch:BatchDetail)=>void;
+  /** Close a batch by hand, even with diesel left, and reopen it. The leftover is set aside and kept with the reason. */
+  onCloseBatch?:(batch:BatchDetail,closedOn:string,reason:string)=>Promise<void>;
+  onReopenBatch?:(batch:BatchDetail,reason:string)=>Promise<void>;
+  startClosing?:boolean;
   exportAction?:React.ReactNode;
 };
 
-export function DieselBatchPage({batch,overview,movements,onBack,onRecordFill,onCancel,onEdit,exportAction}:Props){
+export function DieselBatchPage({batch,overview,movements,onBack,onRecordFill,onCancel,onEdit,onCloseBatch,onReopenBatch,startClosing=false,exportAction}:Props){
   const[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
+  const[sheet,setSheet]=useState<null|'close'|'reopen'>(startClosing&&(batch.status==='in_use'||batch.status==='waiting')?'close':null);
+  const act=async(action:()=>Promise<void>)=>{setBusy(true);setError(null);try{await action();setSheet(null);}catch(cause){setError(cause instanceof Error?cause.message:'That could not be saved.');}finally{setBusy(false);}};
+  const nextOpen=overview.batches.find(value=>value.id!==batch.id&&(value.status==='in_use'||value.status==='waiting'));
+  const nextText=batch.status!=='in_use'?'The batch in use does not change.':nextOpen?`Next in use: ${nextOpen.batchNumber}. Fills after this draw from it.`:'No other batch is open. Record a delivery to continue.';
+  const closure=batch.closure?{...batch.closure,leftover:batch.closedLeftoverLitres??batch.closure.leftover}:null;
   const rows=useMemo(()=>buildFillRows(movements,overview,{batchId:batch.id}),[batch.id,movements,overview]);
   const days=groupFillsByDay(rows,{byDestination:true});
   const totals=batchDestinationTotals(rows);
@@ -59,6 +69,11 @@ export function DieselBatchPage({batch,overview,movements,onBack,onRecordFill,on
     {overview.overfillAlert&&open?<View style={styles.overfill} accessibilityRole="alert"><Text style={styles.overfillText}>Overfill Alert on the tank: {formatLitres(overview.outstandingShortfallLitres)} filled with no diesel left in any batch.</Text></View>:null}
 
     {open?<AppButton label="Record Fill" tone="primary" onPress={()=>onRecordFill(batch)}/>:null}
+    {error&&sheet?<Feedback kind="error">{error}</Feedback>:null}
+    {sheet==='close'&&onCloseBatch?<CloseBatchCard batchLabel={batch.batchNumber} leftoverText={`${formatLitres(batch.remainingLitres)} are left in this batch. They are set aside and no longer counted in the tank.`} nextText={nextText} busy={busy} onConfirm={(closedOn,why)=>void act(()=>onCloseBatch(batch,closedOn,why))} onClose={()=>setSheet(null)}/>:null}
+    {sheet==='reopen'&&onReopenBatch?<ReopenBatchCard batchLabel={batch.batchNumber} busy={busy} onConfirm={why=>void act(()=>onReopenBatch(batch,why))} onClose={()=>setSheet(null)}/>:null}
+    <ClosureCard closure={closure} history={batch.closureHistory??[]} format={formatLitres} busy={busy} onReopen={sheet||!onReopenBatch?undefined:()=>setSheet('reopen')}/>
+    {open&&!sheet&&onCloseBatch?<AppButton label="Close this batch" tone="secondary" onPress={()=>setSheet('close')}/>:null}
 
     <View style={styles.card}>
       <SectionTitle title="Batch details"/>
