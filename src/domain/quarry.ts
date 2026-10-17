@@ -137,6 +137,12 @@ export const emptyQuarryPurchaseDraft: QuarryPurchaseDraft = {
   vatMode:'none',customVatRatePercent:'',vatInclusive:false,notes: '', photos: [],
 };
 
+/** The four steps of the New Supplier Load form. */
+export const quarryEntrySteps=['Who and where','What arrived','Price (optional)','Review and save'] as const;
+const stepRules:RegExp[]=[/^Select a supplier|project|company site|record date/i,/item|unit|quantity|pieces|length|diameter|weight|driver|truck/i,/price|vat/i];
+/** The checks that belong to one step (1 to 3), so Next only stops for what that step asks. The last step has none of its own. */
+export function quarryStepIssues(step:number,issues:readonly string[]):string[]{const rule=stepRules[step-1];return rule?issues.filter(message=>rule.test(message)):[];}
+
 /** The VAT fields a new load starts with for a supplier's account: No VAT, the Company rate (Universal) or the account's own rate. No supplier means No VAT. */
 export function vatFieldsForSupplier(vat:AccountVat|null|undefined):{vatMode:SupplierVatMode;customVatRatePercent:string}{
   if(vat?.mode==='universal')return {vatMode:'company',customVatRatePercent:''};
