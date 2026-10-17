@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 61;
+export const DATABASE_VERSION = 62;
 
 type TableColumn = { name: string };
 
@@ -2279,6 +2279,71 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'suppliers', 'vat_mode', "TEXT NOT NULL DEFAULT 'none' CHECK (vat_mode IN ('none', 'universal', 'custom'))");
     await addColumnIfMissing(db, 'suppliers', 'vat_rate_basis_points', 'INTEGER CHECK (vat_rate_basis_points IS NULL OR vat_rate_basis_points BETWEEN 0 AND 10000)');
     currentVersion = 61;
+  }
+
+  if (currentVersion === 61) {
+    // Waste dump Location. A waste dump and a driver counter belong to a Location: a project or a company site. Both tables held a NOT NULL
+    // project_id, so each is rebuilt with project_id optional beside a new company_site_id (exactly one of the two is set, enforced by a CHECK).
+    // Every existing row is copied across unchanged with its project and a NULL site, so no dump, counter or total moves. A dump at a site keeps
+    // the site's name as it was when counted. Foreign keys are suspended for the swap and the rebuild runs outside any transaction, as in the
+    // foundations rebuild; replaying the step rebuilds the tables again from their own current rows, so it is safe to re-run.
+    await db.execAsync('PRAGMA foreign_keys = OFF;');
+    await db.execAsync(`
+      DROP TABLE IF EXISTS waste_dumps_loc;
+      CREATE TABLE waste_dumps_loc (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT REFERENCES projects(id),
+        company_site_id TEXT REFERENCES company_sites(id),
+        company_site_name TEXT,
+        work_date TEXT NOT NULL,
+        dumped_at TEXT NOT NULL,
+        material_type TEXT,
+        dump_location TEXT,
+        truck_profile_id TEXT REFERENCES truck_profiles(id),
+        truck_plate TEXT,
+        driver_profile_id TEXT REFERENCES driver_profiles(id),
+        driver_name TEXT,
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled')),
+        cancellation_reason TEXT,
+        cancelled_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK ((project_id IS NOT NULL AND company_site_id IS NULL) OR (project_id IS NULL AND company_site_id IS NOT NULL))
+      );
+      INSERT INTO waste_dumps_loc (id, project_id, company_site_id, company_site_name, work_date, dumped_at, material_type, dump_location, truck_profile_id, truck_plate, driver_profile_id, driver_name, notes, status, cancellation_reason, cancelled_at, created_at, updated_at)
+        SELECT id, project_id, NULL, NULL, work_date, dumped_at, material_type, dump_location, truck_profile_id, truck_plate, driver_profile_id, driver_name, notes, status, cancellation_reason, cancelled_at, created_at, updated_at FROM waste_dumps;
+      DROP TABLE waste_dumps;
+      ALTER TABLE waste_dumps_loc RENAME TO waste_dumps;
+      CREATE INDEX IF NOT EXISTS idx_waste_dumps_project_date ON waste_dumps(project_id, work_date DESC, dumped_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_waste_dumps_site_date ON waste_dumps(company_site_id, work_date DESC, dumped_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_waste_dumps_status ON waste_dumps(status, dumped_at DESC);
+
+      DROP TABLE IF EXISTS waste_counter_presets_loc;
+      CREATE TABLE waste_counter_presets_loc (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT REFERENCES projects(id),
+        company_site_id TEXT REFERENCES company_sites(id),
+        driver_profile_id TEXT NOT NULL REFERENCES driver_profiles(id),
+        truck_profile_id TEXT NOT NULL REFERENCES truck_profiles(id),
+        material_type TEXT,
+        dump_location TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK ((project_id IS NOT NULL AND company_site_id IS NULL) OR (project_id IS NULL AND company_site_id IS NOT NULL))
+      );
+      INSERT INTO waste_counter_presets_loc (id, project_id, company_site_id, driver_profile_id, truck_profile_id, material_type, dump_location, notes, created_at, updated_at)
+        SELECT id, project_id, NULL, driver_profile_id, truck_profile_id, material_type, dump_location, notes, created_at, updated_at FROM waste_counter_presets;
+      DROP TABLE waste_counter_presets;
+      ALTER TABLE waste_counter_presets_loc RENAME TO waste_counter_presets;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_waste_counter_presets_project_unique ON waste_counter_presets(project_id, driver_profile_id, truck_profile_id) WHERE project_id IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_waste_counter_presets_site_unique ON waste_counter_presets(company_site_id, driver_profile_id, truck_profile_id) WHERE company_site_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_waste_counter_presets_project ON waste_counter_presets(project_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_waste_counter_presets_site ON waste_counter_presets(company_site_id, updated_at DESC);
+    `);
+    await db.execAsync('PRAGMA foreign_keys = ON;');
+    currentVersion = 62;
   }
 
 

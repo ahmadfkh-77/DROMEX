@@ -1,5 +1,5 @@
 import {fuelDayLabel} from './fuelBatchViews';
-import type {WasteDump} from './waste';
+import {wasteLocationOf,type WasteDump,type WasteLocationType} from './waste';
 
 /**
  * Waste dump history grouped the way Fuel history groups by day: one group per day, newest first, with the day total; inside a
@@ -40,7 +40,8 @@ export function wasteRangeLabel(range: WasteRange): string {
 }
 
 export type WasteDriverLine = { key: string; name: string; count: number };
-export type WasteProjectBlock = { projectId: string; projectName: string; location: string | null; drivers: WasteDriverLine[]; total: number };
+/** One Location in the history: a project or a company site. `projectName` holds the location's name and `projectId` is null at a site. */
+export type WasteProjectBlock = { locationKey: string; locationType: WasteLocationType; projectId: string | null; projectName: string; location: string | null; drivers: WasteDriverLine[]; total: number };
 export type WasteDayGroup = { day: string; label: string; total: number; projects: WasteProjectBlock[] };
 export type WasteHistory = {
   range: WasteRange;
@@ -61,21 +62,24 @@ const driverName = (row: WasteHistoryRow) => row.driverName?.trim() || NO_DRIVER
 function blocks(rows: readonly WasteHistoryRow[]): WasteProjectBlock[] {
   const projects = new Map<string, { block: WasteProjectBlock; drivers: Map<string, WasteDriverLine> }>();
   for (const row of rows) {
-    const entry = projects.get(row.projectId) ?? { block: { projectId: row.projectId, projectName: row.projectName, location: row.projectLocation?.trim() || null, drivers: [], total: 0 }, drivers: new Map() };
+    const where = wasteLocationOf(row);
+    const entry = projects.get(where.key) ?? { block: { locationKey: where.key, locationType: where.type, projectId: row.projectId, projectName: where.name, location: row.projectLocation?.trim() || null, drivers: [], total: 0 }, drivers: new Map() };
     const line = entry.drivers.get(driverKey(row)) ?? { key: driverKey(row), name: driverName(row), count: 0 };
     line.count += 1;
     // A driver whose name was typed on some dumps and not on others keeps the name that was typed.
     if (line.name === NO_DRIVER && driverName(row) !== NO_DRIVER) line.name = driverName(row);
     entry.drivers.set(line.key, line);
     entry.block.total += 1;
-    projects.set(row.projectId, entry);
+    projects.set(where.key, entry);
   }
   return [...projects.values()].map(({ block, drivers }) => ({ ...block, drivers: [...drivers.values()].sort((a, b) => b.count - a.count || byName(a.name, b.name)) }))
     .sort((a, b) => byName(a.projectName, b.projectName));
 }
 
-export function buildWasteHistory(rows: readonly WasteHistoryRow[], range: WasteRange, projectId?: string): WasteHistory {
-  const inScope = rows.filter((row) => row.workDate >= range.fromDate && row.workDate <= range.toDate && (!projectId || row.projectId === projectId));
+/** `scope` is a Location key (`project:<id>` or `site:<id>`); a bare project id still works. */
+export function buildWasteHistory(rows: readonly WasteHistoryRow[], range: WasteRange, scope?: string): WasteHistory {
+  const key = scope && !scope.includes(':') ? `project:${scope}` : scope;
+  const inScope = rows.filter((row) => row.workDate >= range.fromDate && row.workDate <= range.toDate && (!key || wasteLocationOf(row).key === key));
   const active = inScope.filter((row) => row.status === 'Active');
   const days = new Map<string, WasteHistoryRow[]>();
   for (const row of active) days.set(row.workDate, [...(days.get(row.workDate) ?? []), row]);

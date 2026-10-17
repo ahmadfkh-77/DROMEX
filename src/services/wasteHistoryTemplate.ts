@@ -13,7 +13,7 @@ export type WasteHistoryPdf = {
   logo: string | null;
   contactLine: string | null;
   generatedAt: string;
-  /** "All projects" or the project's name. */
+  /** "All locations" or the name of the one project or company site. */
   projectLabel: string;
   periodLabel: string;
   history: WasteHistory;
@@ -37,8 +37,9 @@ export function wasteDriverWidths(drivers: readonly WasteDriverLine[]): number[]
   ]);
 }
 
-function projectBlock(block: WasteProjectBlock, totalLabel: string): string {
-  return `<div class="proj"><div class="proj-top"><span class="ty">PROJECT</span><span class="pname">${t(block.projectName)}</span></div>
+function projectBlock(block: WasteProjectBlock): string {
+  const totalLabel = block.locationType === 'company_site' ? 'Site total' : 'Project total';
+  return `<div class="proj"><div class="proj-top"><span class="ty">${block.locationType === 'company_site' ? 'COMPANY SITE' : 'PROJECT'}</span><span class="pname">${t(block.projectName)}</span></div>
     ${block.location ? `<div class="loc">${t(block.location)}</div>` : ''}
     <table>${colgroup(wasteDriverWidths(block.drivers))}<thead><tr><th>Driver</th><th class="num">Dumps</th></tr></thead><tbody>${block.drivers.map((driver) => `<tr><td>${t(driver.name)}</td><td class="num">${driver.count}</td></tr>`).join('')}<tr class="tot"><td>${e(totalLabel)}</td><td class="num">${block.total}</td></tr></tbody></table></div>`;
 }
@@ -50,8 +51,8 @@ function driversTable(drivers: readonly WasteDriverLine[], totalLabel: string, t
 export function buildWasteHistoryHtml(input: WasteHistoryPdf): string {
   const history = input.history;
   const days = history.days.map((day) => `<section class="block"><div class="block-bar"><span class="block-name">${e(day.label)}</span><span class="block-total">${e(dumpsText(day.total))}</span></div>
-      <div class="block-body">${day.projects.map((block) => projectBlock(block, 'Project total')).join('')}</div></section>`).join('');
-  const periodProjects = history.periodProjects.map((block) => projectBlock(block, 'Project total')).join('');
+      <div class="block-body">${day.projects.map((block) => projectBlock(block)).join('')}</div></section>`).join('');
+  const periodProjects = history.periodProjects.map((block) => projectBlock(block)).join('');
   const running = `${input.companyName} · Waste Dump History · Export only, no records changed`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>Waste Dump History</title><style>
     @page{size:A4;margin:12mm 11mm 16mm;@bottom-left{content:"${css(running)}";font-size:7.5pt;color:#5A6570}@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:7.5pt;color:#5A6570}}
@@ -82,7 +83,7 @@ export function buildWasteHistoryHtml(input: WasteHistoryPdf): string {
   </style></head><body>
     <div class="head"><div>${input.logo ? `<img class="logo" src="${input.logo}" alt=""/>` : ''}<div class="brand">${t(input.companyName)}</div>${input.contactLine ? `<div class="contact">${t(input.contactLine)}</div>` : ''}</div>
       <div class="head-right"><h1>Waste Dump History</h1><div class="when">${e(stamp(input.generatedAt))}</div></div></div>
-    <div class="summary"><div><span class="label">Period</span><b>${t(input.periodLabel)}</b></div><div><span class="label">Project</span><b>${t(input.projectLabel)}</b></div><div><span class="label">Days</span><b>${history.days.length}</b></div><div><span class="label">Dumps counted</span><b>${history.total}</b></div></div>
+    <div class="summary"><div><span class="label">Period</span><b>${t(input.periodLabel)}</b></div><div><span class="label">Location</span><b>${t(input.projectLabel)}</b></div><div><span class="label">Days</span><b>${history.days.length}</b></div><div><span class="label">Dumps counted</span><b>${history.total}</b></div></div>
     ${history.days.length ? `<div class="band">DAY BY DAY, NEWEST FIRST</div>${days}
     <div class="band">PERIOD TOTALS PER DRIVER</div>
     <div class="card">${periodProjects}</div>
