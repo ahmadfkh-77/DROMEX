@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 59;
+export const DATABASE_VERSION = 60;
 
 type TableColumn = { name: string };
 
@@ -2207,6 +2207,67 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_bitumen_adjustments_batch ON bitumen_adjustments(batch_id);
     `);
     currentVersion = 59;
+  }
+
+  if (currentVersion === 59) {
+    // Stock items and batches (Stock, Phase 1). Any Catalog item can be added to Stock; a batch is one delivery of it, in the unit the item
+    // was added with, and a use is recorded by hand against the oldest open batches. A use is never rewritten: cancelling it adds
+    // reversal rows. Bitumen and diesel keep their own tables. Purely additive: new tables only, so no existing record is touched.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS stock_items (
+        item_id TEXT PRIMARY KEY NOT NULL REFERENCES catalog_items(id),
+        item_name TEXT NOT NULL,
+        unit_symbol TEXT NOT NULL,
+        unit_name TEXT NOT NULL,
+        prefix TEXT NOT NULL UNIQUE,
+        next_number INTEGER NOT NULL DEFAULT 1 CHECK (next_number > 0),
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS stock_batches (
+        id TEXT PRIMARY KEY NOT NULL,
+        item_id TEXT NOT NULL REFERENCES stock_items(item_id),
+        batch_number TEXT NOT NULL UNIQUE,
+        sequence INTEGER NOT NULL,
+        arrived_at TEXT NOT NULL,
+        quantity REAL NOT NULL CHECK (quantity > 0),
+        supplier_id TEXT REFERENCES suppliers(id),
+        supplier_name TEXT,
+        invoice_number TEXT,
+        price_basis TEXT CHECK (price_basis IN ('per_unit', 'whole')),
+        price_usd_cents INTEGER,
+        vat_basis_points INTEGER,
+        subtotal_usd_cents INTEGER,
+        total_usd_cents INTEGER,
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled')),
+        cancellation_reason TEXT,
+        cancelled_at TEXT,
+        correction_history_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (item_id, sequence)
+      );
+      CREATE INDEX IF NOT EXISTS idx_stock_batches_item ON stock_batches(item_id, arrived_at);
+      CREATE INDEX IF NOT EXISTS idx_stock_batches_supplier ON stock_batches(supplier_id);
+      CREATE TABLE IF NOT EXISTS stock_use (
+        id TEXT PRIMARY KEY NOT NULL,
+        group_id TEXT NOT NULL,
+        item_id TEXT NOT NULL REFERENCES stock_items(item_id),
+        batch_id TEXT NOT NULL REFERENCES stock_batches(id),
+        kind TEXT NOT NULL CHECK (kind IN ('use', 'reversal')),
+        quantity REAL NOT NULL,
+        used_on TEXT NOT NULL,
+        note TEXT,
+        reason TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_stock_use_batch ON stock_use(batch_id);
+      CREATE INDEX IF NOT EXISTS idx_stock_use_item ON stock_use(item_id, used_on);
+      CREATE INDEX IF NOT EXISTS idx_stock_use_group ON stock_use(group_id);
+    `);
+    currentVersion = 60;
   }
 
 
