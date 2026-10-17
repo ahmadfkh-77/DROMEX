@@ -44,7 +44,18 @@ const decimal=(value:string)=>Number(value.trim().replace(',','.'));
 const decimalFormat=(value:string)=>/^\d+([.,]\d+)?$/.test(value.trim());
 export function validatePositiveLitres(value:string):number{const parsed=decimal(value);if(!decimalFormat(value)||!Number.isFinite(parsed)||parsed<=0)throw new Error('Litres must be a number greater than zero.');return parsed;}
 export function validateGaugeLitres(value:string):number{const parsed=decimal(value);if(!decimalFormat(value)||!Number.isFinite(parsed)||parsed<0)throw new Error('Actual gauge litres must be a number zero or greater.');return parsed;}
-export function validateFuelPrice(value:string,required=false):number|null{if(!value.trim()){if(required)throw new Error('Fuel price per litre is required.');return null;}const parsed=decimal(value);if(!Number.isFinite(parsed)||parsed<0||!/^\d+([.,]\d{1,2})?$/.test(value.trim()))throw new Error('Price per litre must be zero or greater with no more than two decimals.');return parsed;}
+/** A fuel price per litre keeps up to five decimals (1.43550). Money totals are still rounded to cents. */
+export const FUEL_PRICE_DECIMALS=5;
+export function validateFuelPrice(value:string,required=false):number|null{if(!value.trim()){if(required)throw new Error('Fuel price per litre is required.');return null;}const parsed=decimal(value);if(!Number.isFinite(parsed)||parsed<0||!/^\d+([.,]\d{1,5})?$/.test(value.trim()))throw new Error('Price per litre must be zero or greater with no more than five decimals.');return parsed;}
+/**
+ * The price columns are named `..._usd_cents` and hold the price in cents. Fractions of a cent are kept (1.43550 per litre
+ * is stored as 143.55), so older whole-cent prices are unchanged and need no migration.
+ */
+export const fuelPriceToStored=(pricePerLitreUsd:number):number=>Math.round(pricePerLitreUsd*100000)/1000;
+export const fuelPriceFromStored=(storedCents:number):number=>Math.round(storedCents*1000)/100000;
+/** A price per litre with at least two decimals and no padding zeros beyond them: 1.44, 1.4355, 1.43551. */
+export function formatFuelPrice(pricePerLitreUsd:number):string{return pricePerLitreUsd.toFixed(FUEL_PRICE_DECIMALS).replace(/(\.\d{2}\d*?)0+$/,'$1');}
+export const formatFuelPriceUsd=(pricePerLitreUsd:number):string=>`$${formatFuelPrice(pricePerLitreUsd)}`;
 export function calculateFuelDelivery(litres:number,priceText:string,vatRatePercent:number){const price=validateFuelPrice(priceText);if(price==null)return{pricePerLitreUsd:null,subtotalUsd:null,vatAmountUsd:null,finalTotalUsd:null};const subtotal=Math.round(litres*price*100)/100;const vat=Math.round(subtotal*vatRatePercent)/100;return{pricePerLitreUsd:price,subtotalUsd:subtotal,vatAmountUsd:vat,finalTotalUsd:Math.round((subtotal+vat)*100)/100};}
 export function calculateFuelFillCost(litres:number,priceText:string):{pricePerLitreUsd:number|null;consumptionCostUsd:number|null}{const price=validateFuelPrice(priceText);return{pricePerLitreUsd:price,consumptionCostUsd:price==null?null:Math.round(litres*price*100)/100};}
 

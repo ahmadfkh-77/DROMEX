@@ -1,7 +1,7 @@
 import {useMemo,useState} from 'react';
 import {Alert,ScrollView,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
-import {localDateKey,type FuelMovement} from '../../../domain/fuel';
+import {formatFuelPriceUsd,localDateKey,type FuelMovement} from '../../../domain/fuel';
 import type {BatchDetail,DieselBatchOverview} from '../../../domain/fuelBatches';
 import {batchDestinationTotals,buildFillRows,fuelDayLabel,groupFillsByDay} from '../../../domain/fuelBatchViews';
 import {formatLitres,formatMoney} from '../../../domain/fuelFillForm';
@@ -65,7 +65,7 @@ export function DieselBatchPage({batch,overview,movements,onBack,onRecordFill,on
       <Detail label="Supplier" value={batch.supplierName??'No supplier'} muted={!batch.supplierName}/>
       <Detail label="Invoice number" value={batch.invoiceNumber??'Not recorded'}/>
       <Detail label="Arrival date" value={fuelDayLabel(localDateKey(batch.arrivedAt))}/>
-      <Detail label="Price per litre" value={batch.pricePerLitreUsd==null?'Unpriced':formatMoney(batch.pricePerLitreUsd)} muted={batch.pricePerLitreUsd==null}/>
+      <Detail label="Price per litre" value={batch.pricePerLitreUsd==null?'Unpriced':formatFuelPriceUsd(batch.pricePerLitreUsd)} muted={batch.pricePerLitreUsd==null}/>
       <Detail label="Fuel type" value="Diesel"/>
       {onEdit&&batch.status!=='cancelled'?<AppButton label="Edit Batch" tone="secondary" onPress={()=>onEdit(batch)}/>:null}
       {!batch.supplierName&&batch.status!=='cancelled'?<Text style={styles.sub}>Add the supplier and invoice number whenever you have them.</Text>:null}

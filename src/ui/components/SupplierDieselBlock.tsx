@@ -1,5 +1,6 @@
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
+import {formatFuelPriceUsd} from '../../domain/fuel';
 import type {SupplierDieselSummary} from '../../domain/supplierDiesel';
 import {colors} from '../theme';
 
@@ -24,7 +25,7 @@ export function SupplierDieselBlock({diesel,onOpenBatch}:{diesel:SupplierDieselS
       <View style={styles.rowCopy}>
         <Text style={styles.day}>{row.day}</Text>
         <Text style={styles.batch}>{row.batchNumber}{row.opening?<Text style={styles.tag}>  opening stock  </Text>:null}</Text>
-        <Text style={styles.detail}>Invoice {row.invoiceNumber??'not recorded'} · {row.pricePerLitreUsd==null?'Unpriced':`$${row.pricePerLitreUsd.toFixed(2)} / L`}</Text>
+        <Text style={styles.detail}>Invoice {row.invoiceNumber??'not recorded'} · {row.pricePerLitreUsd==null?'Unpriced':`${formatFuelPriceUsd(row.pricePerLitreUsd)} / L`}</Text>
       </View>
       <View style={styles.rowRight}><Text style={styles.rowLitres}>{litres(row.litres)} L</Text>{onOpenBatch?<Text style={styles.open}>Open ›</Text>:null}</View>
     </TouchableOpacity>)}

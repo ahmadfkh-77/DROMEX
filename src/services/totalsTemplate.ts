@@ -1,6 +1,6 @@
 import type {CompanyTotalsRecord} from '../data/repositories/CompanyTotalsRepository';
 import {buildMaterialTree,treeTotals,unitDifferences,type CompanyTotalsData,type MaterialNode,type RecordedValue,type UnitMeasures} from '../domain/companyTotals';
-import {fuelTypeLabels} from '../domain/fuel';
+import {formatFuelPriceUsd,fuelPriceFromStored,fuelTypeLabels} from '../domain/fuel';
 import {breakAfterHyphens,colgroup,columnWidths,type ColumnSpec} from './pdfColumns';
 import {formatTotalQuantity,summarizeFuelFills,type ProjectFuelFill} from '../domain/projectTotals';
 import {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
@@ -91,7 +91,7 @@ function fuelBlock(fills:ProjectFuelFill[],index:number,prices:boolean):string{
     type.equipment.map(item=>`<tr><td class="indent">${t(item.equipmentName)}</td><td class="num">${e(formatTotalQuantity(item.litres,'L'))}</td><td class="num">${plural(item.recordCount,'fill')}</td></tr>`).join('')).join('');
   const fillRows=fills.map(fill=>`<tr><td class="nowrap">${e(formatDay(localDay(fill.confirmedAt)))}<div class="muted">${e(localTime(fill.confirmedAt))}</div></td><td>${t(fill.equipmentName)}</td>
     <td>${e(fuelTypeLabels[fill.fuelType])}</td><td class="num">${e(formatTotalQuantity(fill.litres,'L'))}</td>
-    ${prices?`<td class="num">${fill.pricePerLitreCents==null?'<span class="missing">No price recorded</span>':`${e(formatCents(fill.pricePerLitreCents))} / L`}</td><td class="num">${fill.costCents==null?'':e(formatCents(fill.costCents))}</td>`:''}</tr>`).join('');
+    ${prices?`<td class="num">${fill.pricePerLitreCents==null?'<span class="missing">No price recorded</span>':`${e(formatFuelPriceUsd(fuelPriceFromStored(fill.pricePerLitreCents)))} / L`}</td><td class="num">${fill.costCents==null?'':e(formatCents(fill.costCents))}</td>`:''}</tr>`).join('');
   return `<section class="block" data-kind="fuel">
     <div class="block-bar"><span class="block-index">${index}</span><span class="block-name">Fuel used on this project</span><span class="block-figures">${bar}</span></div>
     <div class="block-body">

@@ -1,6 +1,6 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
-import {localDateKey} from '../../domain/fuel';
+import {fuelPriceFromStored,localDateKey} from '../../domain/fuel';
 import {
   allocateDieselBatches,fillCost,formatBatchNumber,previewTankFill,
   applyUsingBatch,type AllocationChange,type AllocationInput,type AllocationNoteLine,type AllocationResult,type BatchCorrectionEntry,type BatchDetail,type BatchInput,type DieselBatchOverview,type FillBatchInfo,type TankFillPreviewResult,
@@ -31,7 +31,7 @@ export async function batchTrackingStart(db:SQLiteDatabase):Promise<string|null>
   return row?.started_at??null;
 }
 
-const toBatchInput=(row:BatchRow):BatchInput=>({id:row.id,batchNumber:row.batch_number,arrivedAt:row.arrived_at,deliveredLitres:row.delivered_litres,pricePerLitreUsd:row.price_per_litre_usd_cents==null?null:row.price_per_litre_usd_cents/100,status:row.status});
+const toBatchInput=(row:BatchRow):BatchInput=>({id:row.id,batchNumber:row.batch_number,arrivedAt:row.arrived_at,deliveredLitres:row.delivered_litres,pricePerLitreUsd:row.price_per_litre_usd_cents==null?null:fuelPriceFromStored(row.price_per_litre_usd_cents),status:row.status});
 
 async function loadState(db:SQLiteDatabase){
   const startedAt=await batchTrackingStart(db);
@@ -96,7 +96,7 @@ export async function recalculateDieselBatches(db:SQLiteDatabase,causedByMovemen
     if(!allocation)continue;
     const cost=fillCost(allocation,result.batches);
     const costCents=cost.fullyPriced&&cost.costUsd!=null?cents(cost.costUsd):null;
-    const priceCents=costCents==null?null:Math.round(costCents/row.litres);
+    const priceCents=costCents==null?null:Math.round(costCents/row.litres*1000)/1000;
     if(costCents!==row.consumption_cost_usd_cents||priceCents!==row.price_per_litre_usd_cents)
       await db.runAsync('UPDATE fuel_movements SET price_per_litre_usd_cents = ?, consumption_cost_usd_cents = ?, fuel_price_history_id = NULL, price_override_reason = NULL WHERE id = ?',priceCents,costCents,row.id);
     const previous=before.get(row.id);

@@ -2,7 +2,7 @@ import {useEffect,useState,type ReactNode} from 'react';
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import type {FuelRepository} from '../../../data/repositories/FuelRepository';
-import {type FuelFillDraft,type FuelSetup,type FuelSource} from '../../../domain/fuel';
+import {formatFuelPrice,fuelPriceToStored,type FuelFillDraft,type FuelSetup,type FuelSource} from '../../../domain/fuel';
 import type {DieselBatchOverview,TankFillPreviewResult} from '../../../domain/fuelBatches';
 import {fillFormHelper,fillFormKind,fillFormReady,formatLitres,formatMoney,openBatchOptions,overfillMessage,stationFillPreviewLines,tankFillPreviewLines,type PreviewLine} from '../../../domain/fuelFillForm';
 import {colors,radius} from '../../theme';
@@ -57,7 +57,7 @@ export function FuelFillForm({setup,batchOverview,draft,onChange,lockedProjectId
     if(next===source)return;
     onChange(next==='station'
       ?{...draft,fuelSource:'station',batchId:'',pricePerLitreUsd:'',priceOverrideReason:''}
-      :{...draft,fuelSource:'tank',stationId:'',receiptNumber:'',pricePerLitreUsd:currentPrice==null?'':currentPrice.toFixed(2),priceOverrideReason:''});
+      :{...draft,fuelSource:'tank',stationId:'',receiptNumber:'',pricePerLitreUsd:currentPrice==null?'':formatFuelPrice(currentPrice),priceOverrideReason:''});
     setAddingStation(false);setStationError(null);
   };
   const saveStation=async()=>{
@@ -69,7 +69,7 @@ export function FuelFillForm({setup,batchOverview,draft,onChange,lockedProjectId
 
   const priceNumber=Number(draft.pricePerLitreUsd.trim().replace(',','.'));
   const plainCost=draft.pricePerLitreUsd.trim()&&Number.isFinite(priceNumber)&&Number.isFinite(litresNumber)&&litresNumber>0?Math.round(litresNumber*priceNumber*100)/100:null;
-  const needsOverride=kind==='tank_plain'&&currentPrice!=null&&Number.isFinite(priceNumber)&&draft.pricePerLitreUsd.trim()!==''&&Math.round(priceNumber*100)!==Math.round(currentPrice*100);
+  const needsOverride=kind==='tank_plain'&&currentPrice!=null&&Number.isFinite(priceNumber)&&draft.pricePerLitreUsd.trim()!==''&&fuelPriceToStored(priceNumber)!==fuelPriceToStored(currentPrice);
 
   const stationLines=kind==='station'&&Number.isFinite(litresNumber)&&litresNumber>0&&equipment&&draft.stationId
     ?stationFillPreviewLines({stationName:activeStations.find(station=>station.id===draft.stationId)?.name??'Saved station',litres:litresNumber,tankLitres:batchOverview.tankLitres,equipmentName:equipment.name,destinationType})
@@ -145,7 +145,7 @@ export function FuelFillForm({setup,batchOverview,draft,onChange,lockedProjectId
     {overfill?<View style={styles.alert} accessibilityRole="alert"><Text style={styles.alertText}>{overfill}</Text></View>:null}
     {stationLines?<Preview lines={stationLines} tone="neutral"/>:null}
     {kind==='tank_plain'?(plainCost!=null
-      ?<Preview tone="neutral" lines={[{label:'Fill cost',note:`${formatLitres(litresNumber)} × ${priceNumber.toFixed(2)}/L`,value:formatMoney(plainCost),kind:'total'}]}/>
+      ?<Preview tone="neutral" lines={[{label:'Fill cost',note:`${formatLitres(litresNumber)} × ${formatFuelPrice(priceNumber)}/L`,value:formatMoney(plainCost),kind:'total'}]}/>
       :<Feedback kind="warning">No price entered: this fill will be saved as Unpriced and listed separately in reports.</Feedback>):null}
 
     <AppButton label="Save Fill" tone="primary" busy={busy} disabled={!fillFormReady(draft,kind)} onPress={onSave}/>

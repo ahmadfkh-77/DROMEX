@@ -1,4 +1,4 @@
-import {localDateKey,type FuelMovement} from './fuel';
+import {formatFuelPriceUsd,localDateKey,type FuelMovement} from './fuel';
 import {batchStatusLabels,type BatchDetail,type DieselBatchOverview} from './fuelBatches';
 import {buildFillRows,fuelDayLabel,groupFillsByDay,type DayFillRow} from './fuelBatchViews';
 import {costSummaryLabel,formatLitres,formatMoney} from './fuelFillForm';
@@ -67,10 +67,10 @@ export function buildDieselBatchReport({movements,overview,names,filter,exported
 
   const price=(row:DayFillRow):{price:string;cost:string}=>{
     const movement=byId.get(row.id)!;
-    if(scoped){const value=scoped.pricePerLitreUsd;return value==null?{price:'Unpriced',cost:'Unpriced'}:{price:formatMoney(value),cost:formatMoney(Math.round(row.litres*value*100)/100)};}
+    if(scoped){const value=scoped.pricePerLitreUsd;return value==null?{price:'Unpriced',cost:'Unpriced'}:{price:formatFuelPriceUsd(value),cost:formatMoney(Math.round(row.litres*value*100)/100)};}
     const batchInfo=overview.fills[row.id];
-    if(batchInfo)return {price:batchInfo.cost.fullyPriced&&batchInfo.cost.costUsd!=null?formatMoney(Math.round(batchInfo.cost.costUsd/movement.litres*100)/100):'Unpriced',cost:costSummaryLabel(batchInfo.cost)};
-    return {price:movement.pricePerLitreUsd==null?'Unpriced':formatMoney(movement.pricePerLitreUsd),cost:movement.consumptionCostUsd==null?'Unpriced':formatMoney(movement.consumptionCostUsd)};
+    if(batchInfo)return {price:batchInfo.cost.fullyPriced&&batchInfo.cost.costUsd!=null?formatFuelPriceUsd(Math.round(batchInfo.cost.costUsd/movement.litres*100000)/100000):'Unpriced',cost:costSummaryLabel(batchInfo.cost)};
+    return {price:movement.pricePerLitreUsd==null?'Unpriced':formatFuelPriceUsd(movement.pricePerLitreUsd),cost:movement.consumptionCostUsd==null?'Unpriced':formatMoney(movement.consumptionCostUsd)};
   };
 
   const sections:DieselReportSection[]=[];
@@ -101,7 +101,7 @@ export function buildDieselBatchReport({movements,overview,names,filter,exported
     name:supplierName,totalLitres:formatLitres(supplierSummary.totalLitres),batchCount:supplierSummary.batchCount,unpricedNote:supplierSummary.unpricedNote,
     cancelledNote:supplierSummary.cancelledCount?`${supplierSummary.cancelledCount} cancelled batch${supplierSummary.cancelledCount===1?'':'es'} not counted`:null,
     amount:filter.includePrices?(supplierSummary.pricedAmountUsd==null?'Unpriced':formatMoney(supplierSummary.pricedAmountUsd)):undefined,
-    rows:supplierSummary.rows.map(row=>{const base:DieselReportSupplierRow={date:fuelDayLabel(row.day),batchNumber:row.batchLabel,invoice:row.invoiceNumber??'not recorded',litres:formatLitres(row.litres)};return filter.includePrices?{...base,price:row.pricePerLitreUsd==null?'Unpriced':formatMoney(row.pricePerLitreUsd),amount:row.totalUsd==null?'Unpriced':formatMoney(row.totalUsd)}:base;}),
+    rows:supplierSummary.rows.map(row=>{const base:DieselReportSupplierRow={date:fuelDayLabel(row.day),batchNumber:row.batchLabel,invoice:row.invoiceNumber??'not recorded',litres:formatLitres(row.litres)};return filter.includePrices?{...base,price:row.pricePerLitreUsd==null?'Unpriced':formatFuelPriceUsd(row.pricePerLitreUsd),amount:row.totalUsd==null?'Unpriced':formatMoney(row.totalUsd)}:base;}),
   }:null;
   const scopeLabel0=scoped?`${scoped.batchNumber} · Invoice ${scoped.invoiceNumber??'not recorded'}`:destinationFilter?'Batches that supplied the filtered fills':filter.fromDate||filter.toDate?'Batches and fills in the date range':'All batches';
   const scopeLabel=supplierName&&!scoped?`Supplier diesel deliveries · ${supplierName}${filter.fromDate||filter.toDate?` · ${dateRange}`:''}`:filter.fromDate||filter.toDate?`${scopeLabel0} · ${dateRange}`:scopeLabel0;

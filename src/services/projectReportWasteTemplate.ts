@@ -1,4 +1,4 @@
-import {fuelTypeLabels} from '../domain/fuel';
+import {formatFuelPriceUsd,fuelTypeLabels} from '../domain/fuel';
 import {loadNumberLabel} from '../domain/loadNumberSeries';
 import {customResourcesHtml,DAILY_REPORT_SECTIONS_CSS,supervisorSignoffHtml,supplierLoadsHtml} from './dailyReportSectionsTemplate';
 import {clockTime,dumpsByTruck,dumpsSummaryLine,orderedDumps} from '../domain/wasteDumpList';
@@ -178,7 +178,7 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
   const wasteGroups=[...waste.reduce((map,dump)=>{const key=`${dump.dumpLocation}\u0000${dump.materialType}`;const prior=map.get(key);map.set(key,{location:dump.dumpLocation,material:dump.materialType,count:(prior?.count??0)+1});return map;},new Map<string,{location:string;material:string;count:number}>()).values()];
   const materialRows=report.materials.map(material=>`<tr><td>${e(material.movement==='used'?'Used':'Transported')}</td><td>${e(material.itemName)}</td><td class="number">${fmt(material.quantity)}</td><td>${e(material.unitSymbol)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">No materials recorded</td></tr>';
   const loadRows=loads.map(load=>`<tr><td>${breakAfterHyphens(e(loadNumberLabel(load.loadNumber)))}</td><td>${breakAfterHyphens(e(load.transactionNumber))}</td><td>${e(load.itemName)}</td><td class="number">${fmt(load.quantity)} ${e(load.unitSymbol)}</td><td>${e(load.driverName)}</td><td>${e(load.truckPlate)}</td>${includePrices?`<td class="number">${load.finalTotalUsd==null?'Unpriced':`$${load.finalTotalUsd.toFixed(2)}`}</td>`:''}</tr>`).join('')||`<tr><td colspan="${includePrices?7:6}" class="empty">No project-linked loads for this date</td></tr>`;
-  const fuelRows=fuel.map(fill=>`<tr><td>${new Date(fill.confirmedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</td><td>${e(fill.equipmentName)}</td><td>${e(fuelTypeLabels[fill.fuelType])}</td><td class="number">${fmt(fill.litres)} L</td>${includePrices?`<td class="number">${fill.pricePerLitreUsd==null?'Unpriced':`$${fill.pricePerLitreUsd.toFixed(2)}/L`}</td><td class="number">${fill.consumptionCostUsd==null?'&mdash;':`$${fill.consumptionCostUsd.toFixed(2)}`}</td>`:''}<td>${display(fill.odometerReading)}</td></tr>`).join('')||`<tr><td colspan="${includePrices?7:5}" class="empty">No project-linked fuel fills for this date</td></tr>`;
+  const fuelRows=fuel.map(fill=>`<tr><td>${new Date(fill.confirmedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</td><td>${e(fill.equipmentName)}</td><td>${e(fuelTypeLabels[fill.fuelType])}</td><td class="number">${fmt(fill.litres)} L</td>${includePrices?`<td class="number">${fill.pricePerLitreUsd==null?'Unpriced':`${formatFuelPriceUsd(fill.pricePerLitreUsd)}/L`}</td><td class="number">${fill.consumptionCostUsd==null?'&mdash;':`$${fill.consumptionCostUsd.toFixed(2)}`}</td>`:''}<td>${display(fill.odometerReading)}</td></tr>`).join('')||`<tr><td colspan="${includePrices?7:5}" class="empty">No project-linked fuel fills for this date</td></tr>`;
   const fuelLitres=fuel.reduce((sum,fill)=>sum+fill.litres,0),fuelCost=fuel.reduce((sum,fill)=>sum+(fill.consumptionCostUsd??0),0),unpricedFuel=fuel.filter(fill=>fill.consumptionCostUsd==null).reduce((sum,fill)=>sum+fill.litres,0);
   // Every dump on its own line, in time order and numbered, with a line per truck above it. Notes print as typed.
   const truckRows=dumpsByTruck(waste).map(truck=>`<tr><td>${display(truck.truckPlate)}</td><td>${display(truck.driverName)}</td><td class="number">${truck.count}</td><td>${e(truck.first)}</td><td>${e(truck.last)}</td></tr>`).join('');
@@ -198,7 +198,7 @@ export function buildProjectReportHtmlWithWaste(report:DailyProjectReport,projec
     {header:'Equipment',cells:fuel.map(fill=>fill.equipmentName)},
     {header:'Fuel type',cells:fuel.map(fill=>fuelTypeLabels[fill.fuelType])},
     {header:'Litres',kind:'number',cells:fuel.map(fill=>`${fmt(fill.litres)} L`)},
-    ...(includePrices?[{header:'Price',kind:'amount' as const,cells:fuel.map(fill=>fill.pricePerLitreUsd==null?'Unpriced':`$${fill.pricePerLitreUsd.toFixed(2)}/L`)},{header:'Cost',kind:'amount' as const,cells:fuel.map(fill=>fill.consumptionCostUsd==null?'—':`$${fill.consumptionCostUsd.toFixed(2)}`)}]:[]),
+    ...(includePrices?[{header:'Price',kind:'amount' as const,cells:fuel.map(fill=>fill.pricePerLitreUsd==null?'Unpriced':`${formatFuelPriceUsd(fill.pricePerLitreUsd)}/L`)},{header:'Cost',kind:'amount' as const,cells:fuel.map(fill=>fill.consumptionCostUsd==null?'—':`$${fill.consumptionCostUsd.toFixed(2)}`)}]:[]),
     {header:'Odometer',cells:fuel.map(fill=>String(fill.odometerReading??'—'))},
   ]));
   const trucks=dumpsByTruck(waste),dumpsInOrder=orderedDumps(waste);
