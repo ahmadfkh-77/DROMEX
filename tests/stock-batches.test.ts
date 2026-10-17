@@ -218,7 +218,7 @@ describe('the database',()=>{
     expect(DATABASE_VERSION).toBeGreaterThanOrEqual(60);
     expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(DATABASE_VERSION);
     const tables=(db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'stock_%' ORDER BY name").all() as {name:string}[]).map(row=>row.name);
-    expect(tables).toEqual(['stock_batches','stock_items','stock_use']);
+    expect(tables).toEqual(['stock_batches','stock_items','stock_rule_versions','stock_rules','stock_use','stock_use_overrides']);
     const batch=await repository.recordBatch(draft());
     const record=await repository.recordUse(use());
     await repository.cancelUse(record.groupId,'x');

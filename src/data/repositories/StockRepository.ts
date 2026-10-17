@@ -1,3 +1,4 @@
+import type {StockRule,StockRuleDraft,StockRulesSetup,StockSyncResult} from '../../domain/stockRules';
 import type {StockBatch,StockBatchDraft,StockBatchEditDraft,StockOverview,StockSetup,StockUseDraft,StockUseRecord} from '../../domain/stock';
 
 /** Stock (Phase 1): any Catalog item as stock, its delivery batches, and hand-recorded use. UI calls this; SQLite persists it. */
@@ -14,6 +15,15 @@ export interface StockRepository{
   recordUse(draft:StockUseDraft):Promise<StockUseRecord>;
   /** The company printed on a report when no Header company was picked, read from Company Settings like the receipts. */
   getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>;
+  /** The items a rule can watch, the units, the Stock materials a rule can list, and the rules saved so far with every version. */
+  getRulesSetup():Promise<StockRulesSetup>;
+  /** Creates a rule, or (with a rule id) adds a new version of it from a date. Loads already counted keep the amounts they were counted with. */
+  saveRule(draft:StockRuleDraft):Promise<StockRule>;
+  setRuleEnabled(ruleId:string,enabled:boolean):Promise<void>;
+  /** Counts new loads, reverses cancelled ones and applies corrections and typed amounts. Safe to run any time and as often as wanted. */
+  syncUse():Promise<StockSyncResult>;
+  /** Records the real amount one load used of one material, with a reason; the rule itself is not changed. */
+  adjustLoadUse(loadId:string,stockItemId:string,quantity:string,reason:string):Promise<void>;
   /** Cancels a recorded use with a reason by adding reversal rows; the original rows stay as history. */
   cancelUse(groupId:string,reason:string):Promise<void>;
 }

@@ -14,6 +14,8 @@ import {DatePickerField} from '../components/DatePickerField';
 import {SearchableSelect} from '../components/SearchableSelect';
 import {SegmentedChoice} from '../components/SegmentedChoice';
 import {StockExportPanel} from '../components/StockExportPanel';
+import {itemRuleTexts,StockRuleForm,StockRulesList} from '../components/StockRulesView';
+import type {StockAttention,StockRule,StockRuleDraft,StockRulesSetup} from '../../domain/stockRules';
 import {colors,radius} from '../theme';
 
 /**
@@ -21,7 +23,7 @@ import {colors,radius} from '../theme';
  * button. An item is added by recording its first batch. An item page shows its batches (oldest used first), Record use, and the uses
  * recorded; a batch can be edited or cancelled with a reason, and a use can be cancelled with a reason. Nothing recorded is rewritten.
  */
-type Mode={kind:'list'}|{kind:'report'}|{kind:'add';itemId:string}|{kind:'item';id:string}|{kind:'batch';id:string}|{kind:'edit';id:string};
+type Mode={kind:'list'}|{kind:'report'}|{kind:'rules'}|{kind:'rule';ruleId:string}|{kind:'add';itemId:string}|{kind:'item';id:string}|{kind:'batch';id:string}|{kind:'edit';id:string};
 
 const dayLabel=(iso:string)=>new Date(iso).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
@@ -32,18 +34,23 @@ const draftFromBatch=(batch:StockBatch,universal:number):StockBatchDraft=>({
 
 export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCatalog,fuelBadge,bitumenBadge}:{repository:StockRepository;onBack:()=>void;onOpenFuel:()=>void;onOpenBitumen:()=>void;onOpenCatalog:()=>void;fuelBadge?:string|null;bitumenBadge?:string|null}){
   const[setup,setSetup]=useState<StockSetup|null>(null),[overview,setOverview]=useState<StockOverview|null>(null);
+  const[rulesSetup,setRulesSetup]=useState<StockRulesSetup|null>(null),[attention,setAttention]=useState<StockAttention[]>([]);
   const[mode,setMode]=useState<Mode>({kind:'list'});
   const[error,setError]=useState<string|null>(null),[message,setMessage]=useState<string|null>(null),[busy,setBusy]=useState(false);
-  const refresh=useCallback(async()=>{const[nextSetup,nextOverview]=await Promise.all([repository.getSetup(),repository.getOverview()]);setSetup(nextSetup);setOverview(nextOverview);},[repository]);
+  // Loads are counted whenever this screen refreshes, so the figures follow the loads (a failure here never hides Stock).
+  const refresh=useCallback(async()=>{const synced=await repository.syncUse().catch(()=>null);const[nextSetup,nextOverview,nextRules]=await Promise.all([repository.getSetup(),repository.getOverview(),repository.getRulesSetup()]);setSetup(nextSetup);setOverview(nextOverview);setRulesSetup(nextRules);setAttention(synced?.attention??[]);},[repository]);
   useEffect(()=>{void refresh().catch(cause=>setError(cause instanceof Error?cause.message:'Could not load Stock.'));},[refresh]);
   const run=async(action:()=>Promise<void>,success:string):Promise<boolean>=>{setBusy(true);setError(null);setMessage(null);try{await action();await refresh();setMessage(success);return true;}catch(cause){setError(cause instanceof Error?cause.message:'That could not be saved.');return false;}finally{setBusy(false);}};
   const go=(next:Mode)=>{setError(null);setMessage(null);setMode(next);};
 
-  if(!setup||!overview)return <AppPage><PageHeader eyebrow="Stock" title="Stock" onBack={onBack}/>{error?<Feedback kind="error">{error}</Feedback>:<Text style={styles.muted}>Loading stock…</Text>}</AppPage>;
+  if(!setup||!overview||!rulesSetup)return <AppPage><PageHeader eyebrow="Stock" title="Stock" onBack={onBack}/>{error?<Feedback kind="error">{error}</Feedback>:<Text style={styles.muted}>Loading stock…</Text>}</AppPage>;
 
   const item=mode.kind==='item'?overview.items.find(value=>value.itemId===mode.id):undefined;
   const batchItem=mode.kind==='batch'||mode.kind==='edit'?overview.items.find(value=>value.batches.some(batch=>batch.id===mode.id)):undefined;
-  const batch=batchItem?.batches.find(value=>mode.kind!=='list'&&mode.kind!=='add'&&mode.kind!=='report'&&value.id===mode.id);
+  const batch=batchItem?.batches.find(value=>mode.kind!=='list'&&mode.kind!=='add'&&mode.kind!=='report'&&mode.kind!=='rules'&&mode.kind!=='rule'&&value.id===mode.id);
+
+  const materialOf=(itemId:string|null)=>overview.items.find(value=>value.itemId===itemId);
+  const ruleSub=(itemId:string)=>{const texts=itemRuleTexts(itemId,rulesSetup.rules);return texts.length?texts.join(' · '):'inventory only';};
 
   if(mode.kind==='add'){
     const initial={...emptyStockBatch,itemId:mode.itemId};
@@ -67,25 +74,42 @@ export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCa
       onCancel={reason=>void run(async()=>{await repository.cancelBatch(batch.id,reason);},'Batch cancelled. It stays on record and is not counted.')}/>;
   }
 
+  if(mode.kind==='rules'){
+    return <AppPage keyboard><PageHeader eyebrow="Stock" title="Usage rules" onBack={()=>go({kind:'list'})}/>{message?<Feedback kind="success">{message}</Feedback>:null}
+      <StockRulesList setup={rulesSetup} busy={busy} error={error} onBack={()=>go({kind:'list'})} onNew={()=>go({kind:'rule',ruleId:''})} onEdit={ruleId=>go({kind:'rule',ruleId})}
+        onToggle={(rule:StockRule)=>{void run(async()=>{await repository.setRuleEnabled(rule.id,!rule.enabled);},rule.enabled?'Rule turned off. Loads already counted keep their materials.':'Rule turned on.');}}/>
+    </AppPage>;
+  }
+
+  if(mode.kind==='rule'){
+    const rule=mode.ruleId?rulesSetup.rules.find(value=>value.id===mode.ruleId)??null:null;
+    return <AppPage keyboard><PageHeader eyebrow="Usage rules" title={rule?rule.loadItemName:'New rule'} onBack={()=>go({kind:'rules'})}/>
+      <StockRuleForm key={mode.ruleId||'new'} setup={rulesSetup} rule={rule} busy={busy} error={error} onBack={()=>go({kind:'rules'})}
+        onSave={(draft:StockRuleDraft)=>{void run(async()=>{await repository.saveRule(draft);setMode({kind:'rules'});},rule?'Rule change saved. It applies from the date you chose.':'Rule saved. Loads from the chosen date are counted.');}}/>
+    </AppPage>;
+  }
+
   if(mode.kind==='report'){
     return <AppPage keyboard><PageHeader eyebrow="Stock" title="Stock report" onBack={()=>go({kind:'list'})}/><StockExportPanel repository={repository} overview={overview}/></AppPage>;
   }
 
   if(mode.kind==='item'&&item){
-    return <ItemPage repository={repository} overview={overview} item={item} busy={busy} error={error} message={message} onBack={()=>go({kind:'list'})} onAddBatch={()=>go({kind:'add',itemId:item.itemId})} onOpenBatch={id=>go({kind:'batch',id})}
+    return <ItemPage repository={repository} overview={overview} item={item} ruleTexts={itemRuleTexts(item.itemId,rulesSetup.rules)} attention={attention.filter(value=>value.stockItemId===item.itemId)} onOpenRules={()=>go({kind:'rules'})} onAdjust={(loadId,quantity,reason)=>run(async()=>{await repository.adjustLoadUse(loadId,item.itemId,quantity,reason);},'Real amount saved. The rule is not changed.')} busy={busy} error={error} message={message} onBack={()=>go({kind:'list'})} onAddBatch={()=>go({kind:'add',itemId:item.itemId})} onOpenBatch={id=>go({kind:'batch',id})}
       onUse={draft=>run(async()=>{await repository.recordUse(draft);},'Use recorded. The stock was taken from the oldest open batch first.')}
       onCancelUse={(groupId,reason)=>run(async()=>{await repository.cancelUse(groupId,reason);},'Use cancelled. The stock is back in its batches.')}/>;
   }
 
   return <AppPage><PageHeader eyebrow="Stock" title="Stock" onBack={onBack}/>
     {error?<Feedback kind="error">{error}</Feedback>:null}{message?<Feedback kind="success">{message}</Feedback>:null}
+    {attention.length?<AppCard title={`Needs attention · ${attention.length}`} hint="These loads were made. Nothing was blocked.">{attention.map((value,index)=><View key={`${value.loadId}-${value.stockItemId}-${index}`} style={styles.attention}><Text style={styles.batchNumber}>{materialOf(value.stockItemId)?.itemName??'Material'} · Load {value.loadNumber??''}</Text><Text style={styles.sub}>{value.kind==='short'?`Short by ${formatStockQuantity(value.quantity,materialOf(value.stockItemId)?.unitSymbol??'')}. ${value.note}`:value.note}</Text></View>)}</AppCard>:null}
     <AppCard>
       <StockRow title="Bitumen" sub={bitumenBadge??'Batches in kg'} value={null} onPress={onOpenBitumen}/>
       <StockRow title="Fuel" sub={fuelBadge??'Diesel batches'} value={null} onPress={onOpenFuel}/>
-      {overview.items.map(value=><StockRow key={value.itemId} title={value.itemName} sub={`${value.batches.filter(isOpenStockBatch).length} open batch${value.batches.filter(isOpenStockBatch).length===1?'':'es'} · inventory only`} value={formatStockQuantity(value.totalRemaining,value.unitSymbol)} onPress={()=>go({kind:'item',id:value.itemId})}/>)}
+      {overview.items.map(value=><StockRow key={value.itemId} title={value.itemName} sub={`${value.batches.filter(isOpenStockBatch).length} open batch${value.batches.filter(isOpenStockBatch).length===1?'':'es'} · ${ruleSub(value.itemId)}`} value={formatStockQuantity(value.totalRemaining,value.unitSymbol)} onPress={()=>go({kind:'item',id:value.itemId})}/>)}
     </AppCard>
     {!overview.items.length?<EmptyState title="Nothing else in Stock yet" body="Press Add to bring in any item from your Catalog and record its batches."/>:null}
     <AppButton label="+ Add" onPress={()=>go({kind:'add',itemId:''})}/>
+    <AppButton label="Usage rules" tone="secondary" onPress={()=>go({kind:'rules'})}/>
     {overview.items.length?<AppButton label="Stock report (PDF or Excel)" tone="secondary" onPress={()=>go({kind:'report'})}/>:null}
   </AppPage>;
 }
@@ -97,14 +121,16 @@ function StockRow({title,sub,value,onPress}:{title:string;sub:string;value:strin
   </TouchableOpacity>;
 }
 
-function ItemPage({repository,overview,item,busy,error,message,onBack,onAddBatch,onOpenBatch,onUse,onCancelUse}:{repository:StockRepository;overview:StockOverview;item:StockItemOverview;busy:boolean;error:string|null;message:string|null;onBack:()=>void;onAddBatch:()=>void;onOpenBatch:(id:string)=>void;onUse:(draft:StockUseDraft)=>Promise<boolean>;onCancelUse:(groupId:string,reason:string)=>Promise<boolean>}){
+function ItemPage({repository,overview,item,ruleTexts,attention,onOpenRules,onAdjust,busy,error,message,onBack,onAddBatch,onOpenBatch,onUse,onCancelUse}:{repository:StockRepository;overview:StockOverview;item:StockItemOverview;ruleTexts:string[];attention:StockAttention[];onOpenRules:()=>void;onAdjust:(loadId:string,quantity:string,reason:string)=>Promise<boolean>;busy:boolean;error:string|null;message:string|null;onBack:()=>void;onAddBatch:()=>void;onOpenBatch:(id:string)=>void;onUse:(draft:StockUseDraft)=>Promise<boolean>;onCancelUse:(groupId:string,reason:string)=>Promise<boolean>}){
   const[use,setUse]=useState<StockUseDraft>({...emptyStockUse,itemId:item.itemId});
   const open=item.batches.filter(isOpenStockBatch),others=item.batches.filter(value=>!isOpenStockBatch(value)).reverse();
   const[cancelling,setCancelling]=useState<string|null>(null),[reason,setReason]=useState('');
   return <AppPage keyboard><PageHeader eyebrow="Stock" title={item.itemName} onBack={onBack}/>
     {error?<Feedback kind="error">{error}</Feedback>:null}{message?<Feedback kind="success">{message}</Feedback>:null}
     <View style={styles.tank} accessibilityRole="summary"><Text style={styles.tankLabel}>ON HAND</Text><Text style={styles.tankValue}>{formatStockQuantity(item.totalRemaining,item.unitSymbol)}</Text><Text style={styles.tankSub}>{open.length} open batch{open.length===1?'':'es'} · inventory only</Text></View>
+    {attention.map((value,index)=><Feedback key={`${value.loadId}-${index}`} kind="warning">Load {value.loadNumber??''}: {value.kind==='short'?`short by ${formatStockQuantity(value.quantity,item.unitSymbol)}. ${value.note}`:value.note}</Feedback>)}
     <AppButton label="Add batch" onPress={onAddBatch}/>
+    <AppCard title="Usage rule">{ruleTexts.length?ruleTexts.map(text=><Text key={text} style={styles.body}>{text}</Text>):<Text style={styles.muted}>Inventory only. You record its use by hand.</Text>}<AppButton label="Usage rules" tone="secondary" onPress={onOpenRules}/></AppCard>
     <AppCard title="Record use" hint="Taken from the oldest open batch first, then the next one.">
       <AppField label={`Amount used (${item.unitSymbol}) *`} value={use.quantity} onChangeText={quantity=>setUse(current=>({...current,quantity}))} keyboardType="decimal-pad"/>
       <DatePickerField label="Date *" value={use.usedOn} onChange={usedOn=>setUse(current=>({...current,usedOn}))} maxDate={localDateKey(new Date())}/>
@@ -119,7 +145,7 @@ function ItemPage({repository,overview,item,busy,error,message,onBack,onAddBatch
       </TouchableOpacity>)}
     </AppCard>:null}
     <AppCard title="Uses recorded" hint="Cancelling a use puts the stock back and keeps the record.">
-      {item.uses.length?item.uses.map(record=><UseRow key={record.groupId} record={record} unit={item.unitSymbol} cancelling={cancelling===record.groupId} reason={reason} busy={busy}
+      {item.uses.length?item.uses.map(record=><UseRow key={record.groupId} record={record} unit={item.unitSymbol} onAdjust={(quantity,reason)=>onAdjust(record.loadId??'',quantity,reason)} cancelling={cancelling===record.groupId} reason={reason} busy={busy}
         onAskCancel={()=>{setCancelling(record.groupId);setReason('');}} onKeep={()=>{setCancelling(null);setReason('');}} onReason={setReason}
         onConfirm={()=>{void onCancelUse(record.groupId,reason).then(done=>{if(done){setCancelling(null);setReason('');}});}}/>)
         :<Text style={styles.muted}>No use recorded yet.</Text>}
@@ -128,12 +154,18 @@ function ItemPage({repository,overview,item,busy,error,message,onBack,onAddBatch
   </AppPage>;
 }
 
-function UseRow({record,unit,cancelling,reason,busy,onAskCancel,onKeep,onReason,onConfirm}:{record:StockUseRecord;unit:string;cancelling:boolean;reason:string;busy:boolean;onAskCancel:()=>void;onKeep:()=>void;onReason:(value:string)=>void;onConfirm:()=>void}){
-  const cancelled=record.status==='Cancelled';
+function UseRow({record,unit,cancelling,reason,busy,onAskCancel,onKeep,onReason,onConfirm,onAdjust}:{record:StockUseRecord;unit:string;cancelling:boolean;reason:string;busy:boolean;onAskCancel:()=>void;onKeep:()=>void;onReason:(value:string)=>void;onConfirm:()=>void;onAdjust:(quantity:string,reason:string)=>Promise<boolean>}){
+  const cancelled=record.status==='Cancelled',fromLoad=record.source==='load';
+  const[adjusting,setAdjusting]=useState(false),[real,setReal]=useState(''),[why,setWhy]=useState('');
+  const rate=fromLoad&&record.loadQuantity!=null&&record.ruleAmount!=null&&record.rulePerQuantity!=null?`${record.loadQuantity.toLocaleString('en-US',{maximumFractionDigits:3})} ${record.loadUnit??''} × ${record.ruleAmount.toLocaleString('en-US',{maximumFractionDigits:3})} per ${record.rulePerQuantity.toLocaleString('en-US',{maximumFractionDigits:3})} ${record.loadUnit??''}`:null;
   return <View style={styles.useRow}>
-    <View style={styles.useTop}><View style={styles.flex}><Text style={[styles.batchNumber,cancelled&&styles.struck]}>{formatStockQuantity(record.quantity,unit)}</Text><Text style={styles.sub}>{record.usedOn}{record.note?` · ${record.note}`:''}</Text></View>{cancelled?<Text style={[styles.badge,styles.badgeCancelled]}>Cancelled</Text>:null}</View>
+    <View style={styles.useTop}><View style={styles.flex}><Text style={[styles.batchNumber,cancelled&&styles.struck]}>{fromLoad?`Load ${record.loadNumber??''}`:formatStockQuantity(record.quantity,unit)}</Text><Text style={styles.sub}>{record.usedOn}{record.note?` · ${record.note}`:''}</Text></View>{fromLoad?<Text style={[styles.badge,styles.badgeWaiting]}>From a load</Text>:null}{cancelled?<Text style={[styles.badge,styles.badgeCancelled]}>Cancelled</Text>:null}</View>
+    {fromLoad?<Text style={[styles.body,cancelled&&styles.struck]}>{formatStockQuantity(record.quantity,unit)}{rate?` · ${rate}`:''}</Text>:null}
+    {record.adjustedReason?<Text style={styles.sub}>Adjusted: {record.adjustedReason}</Text>:null}
     {record.lines.map(line=><Text key={line.batchId} style={styles.sub}>{line.batchNumber}: {formatStockQuantity(line.quantity,unit)}</Text>)}
     {cancelled?<Text style={styles.sub}>Reason: {record.cancellationReason}</Text>
+      :fromLoad?(adjusting?<View style={styles.cancelBox}><AppField label={`Real amount used (${unit}) *`} value={real} onChangeText={setReal} keyboardType="decimal-pad" placeholder={String(record.quantity)}/><AppField label="Reason *" value={why} onChangeText={setWhy} multiline placeholder="Why is it different from the rule?"/><AppButton label="Save the real amount" busy={busy} disabled={!real.trim()||!why.trim()} onPress={()=>{void onAdjust(real,why).then(done=>{if(done){setAdjusting(false);setReal('');setWhy('');}});}}/><AppButton label="Keep the rule's amount" tone="secondary" onPress={()=>setAdjusting(false)}/></View>
+        :<><AppButton label="Adjust the real amount" tone="secondary" onPress={()=>setAdjusting(true)}/><Text style={styles.sub}>To remove it, cancel the load.</Text></>)
       :cancelling?<View style={styles.cancelBox}><AppField label="Reason *" value={reason} onChangeText={onReason} multiline placeholder="Why is it being cancelled?"/><AppButton label="Cancel this use" tone="danger" busy={busy} disabled={!reason.trim()} onPress={onConfirm}/><AppButton label="Keep it" tone="secondary" onPress={onKeep}/></View>
       :<AppButton label="Cancel this use" tone="secondary" onPress={onAskCancel}/>}
   </View>;
@@ -254,4 +286,5 @@ const styles=StyleSheet.create({
   useRow:{gap:6,paddingVertical:10,borderTopWidth:1,borderTopColor:colors.line},
   useTop:{flexDirection:'row',alignItems:'flex-start',gap:10},
   cancelBox:{gap:8},
+  attention:{gap:2,paddingVertical:8,borderTopWidth:1,borderTopColor:colors.line},
 });

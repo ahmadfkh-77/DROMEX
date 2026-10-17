@@ -129,6 +129,21 @@ describe('the PDF',()=>{
   });
 });
 
+describe('the page header matches the other exports',()=>{
+  it('prints the logo, company and contact on the left, and the title with its scope and period on the right, like the Diesel and Waste reports',async()=>{
+    const {overview}=await build();
+    const html=buildStockReportHtml(buildStockReport(overview,filter({itemId:'cement',fromDate:'2026-10-10',toDate:'2026-10-16'}),'2026-10-16T09:00:00.000Z'),{companyName:'Plant Co',logo:'data:image/png;base64,AAAA',contactLine:'Saida · 03 111 222'});
+    const head=html.slice(html.indexOf('<div class="head">'),html.indexOf('<div class="summary">'));
+    expect(head).toContain('<img class="logo" src="data:image/png;base64,AAAA" alt=""/>');expect(head).toContain('<div class="brand"><span dir="auto">Plant Co</span></div>');expect(head).toContain('<div class="contact"><span dir="auto">Saida · 03 111 222</span></div>');
+    expect(head).toContain('<h1>Stock Report</h1>');expect(head).toContain('<div class="scope"><span dir="auto">Cement</span> · ');
+    expect(html).toContain('@bottom-left{content:"Plant Co · Stock Report · Cement"');expect(html).toContain('Page " counter(page) " of " counter(pages)');
+  });
+  it('takes the company from the same Header company picker as the other exports, not a company of its own',()=>{
+    const panel=read('src/ui/components/StockExportPanel.tsx'),waste=read('src/ui/components/WasteHistoryView.tsx');
+    for(const source of [panel,waste]){expect(source).toContain('useExportHeader(');expect(source).toContain('{picker}');expect(source).toContain('chosen.list.companyName');expect(source).toContain('chosen.list.logoUri');expect(source).toContain('chosen.list.contactLine');}
+  });
+});
+
 describe('the Excel workbook',()=>{
   const sheets=(overview:StockOverview,extra:Partial<StockReportFilter>={})=>stockWorkbookSheets(overview,filter(extra),{name:'Plant Co'},'2026-10-16T09:00:00.000Z');
   it('has a sheet of totals, batches and uses with stable ids and numeric quantities',async()=>{

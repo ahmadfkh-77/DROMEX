@@ -40,9 +40,14 @@ export type StockBatch={
 };
 
 /** One row of the use table: a use takes quantity out of a batch, a reversal puts it back (negative quantity). */
-export type StockUseRow={id:string;groupId:string;itemId:string;batchId:string;kind:'use'|'reversal';quantity:number;usedOn:string;note:string|null;reason:string|null;createdAt:string};
+export type StockUseSource='manual'|'load';
+/** What a use row remembers when a rule counted it from a load: the load, how much of it, and the rule version and amounts it was counted with. */
+export type StockUseLoadFields={source?:StockUseSource;loadId?:string|null;loadNumber?:string|null;loadQuantity?:number|null;loadUnit?:string|null;ruleId?:string|null;ruleVersionId?:string|null;rulePerQuantity?:number|null;ruleAmount?:number|null};
+export type StockUseRow={id:string;groupId:string;itemId:string;batchId:string;kind:'use'|'reversal';quantity:number;usedOn:string;note:string|null;reason:string|null;createdAt:string}&StockUseLoadFields;
 export type StockUseRecord={
   groupId:string;itemId:string;usedOn:string;quantity:number;note:string|null;createdAt:string;
+  /** By hand, or counted from a load by a usage rule (then the load, its quantity and the rate used are set). */
+  source:StockUseSource;loadId:string|null;loadNumber:string|null;loadQuantity:number|null;loadUnit:string|null;rulePerQuantity:number|null;ruleAmount:number|null;adjustedReason:string|null;
   lines:{batchId:string;batchNumber:string;quantity:number}[];
   status:StockRecordStatus;cancellationReason:string|null;
 };
@@ -134,11 +139,16 @@ export function buildStockItemOverview(item:{itemId:string;itemName:string;unitS
     const perBatch=new Map<string,number>();
     for(const row of groupRows)perBatch.set(row.batchId,round3((perBatch.get(row.batchId)??0)+row.quantity));
     const gross=round3(groupRows.filter(row=>row.kind==='use').reduce((sum,row)=>sum+row.quantity,0));
-    return {
-      groupId,itemId:first.itemId,usedOn:first.usedOn,quantity:gross,note:first.note,createdAt:first.createdAt,
-      lines:groupRows.filter(row=>row.kind==='use').map(row=>({batchId:row.batchId,batchNumber:numbers.get(row.batchId)??'',quantity:row.quantity})),
-      status:reversals.length?'Cancelled':'Active',cancellationReason:reversals[0]?.reason??null,
-    };
+    const isLoad=groupRows.some(row=>row.source==='load');
+    const net=round3(groupRows.reduce((sum,row)=>sum+row.quantity,0));
+    const adjusted=[...groupRows].reverse().find(row=>(row.note??'').startsWith('Adjusted: '));
+    const common={groupId,itemId:first.itemId,usedOn:first.usedOn,note:first.note,createdAt:first.createdAt,source:(isLoad?'load':'manual') as StockUseSource,loadId:first.loadId??null,loadNumber:first.loadNumber??null,loadQuantity:first.loadQuantity??null,loadUnit:first.loadUnit??null,rulePerQuantity:first.rulePerQuantity??null,ruleAmount:first.ruleAmount??null,adjustedReason:adjusted?.note?.slice('Adjusted: '.length)??null};
+    if(isLoad){
+      // A load's rows are a running account: counting, corrections and reversals net to what is taken now.
+      const cancelled=net<=STOCK_EPSILON;
+      return {...common,note:null,quantity:cancelled?gross:net,lines:[...perBatch.entries()].filter(([,value])=>value>STOCK_EPSILON).map(([batchId,value])=>({batchId,batchNumber:numbers.get(batchId)??'',quantity:value})),status:cancelled?'Cancelled':'Active',cancellationReason:cancelled?(reversals.at(-1)?.note??'Load cancelled'):null};
+    }
+    return {...common,quantity:gross,lines:groupRows.filter(row=>row.kind==='use').map(row=>({batchId:row.batchId,batchNumber:numbers.get(row.batchId)??'',quantity:row.quantity})),status:reversals.length?'Cancelled':'Active',cancellationReason:reversals[0]?.reason??null};
   }).sort((a,b)=>b.usedOn.localeCompare(a.usedOn)||b.createdAt.localeCompare(a.createdAt));
   return {
     ...item,

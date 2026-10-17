@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 62;
+export const DATABASE_VERSION = 63;
 
 type TableColumn = { name: string };
 
@@ -2344,6 +2344,55 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     `);
     await db.execAsync('PRAGMA foreign_keys = ON;');
     currentVersion = 62;
+  }
+
+  if (currentVersion === 62) {
+    // Stock usage rules. A rule belongs to one item delivered on receipts (for example Ready-mix C30) and lists the Stock materials one unit of
+    // it uses (7 cement bags, 0.45 t sand per 1 m3). A rule is never edited in place: each change is a new dated version, so loads already
+    // counted keep the amounts they were counted with. Each confirmed load of that item takes its materials out of Stock, oldest batch first;
+    // the rows say which load, which rule version and which amounts, and a cancelled or corrected load is reversed or adjusted by more rows,
+    // never by rewriting one. The owner can type the real amount of one load (an override with a reason). Purely additive: new tables, and new
+    // columns on stock_use that default to a use recorded by hand, so no existing record is touched.
+    await addColumnIfMissing(db, 'stock_use', 'source', "TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'load'))");
+    await addColumnIfMissing(db, 'stock_use', 'load_id', 'TEXT REFERENCES loads(id)');
+    await addColumnIfMissing(db, 'stock_use', 'load_number', 'TEXT');
+    await addColumnIfMissing(db, 'stock_use', 'load_quantity', 'REAL');
+    await addColumnIfMissing(db, 'stock_use', 'load_unit', 'TEXT');
+    await addColumnIfMissing(db, 'stock_use', 'rule_id', 'TEXT');
+    await addColumnIfMissing(db, 'stock_use', 'rule_version_id', 'TEXT');
+    await addColumnIfMissing(db, 'stock_use', 'rule_per_quantity', 'REAL');
+    await addColumnIfMissing(db, 'stock_use', 'rule_amount', 'REAL');
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS idx_stock_use_load ON stock_use(load_id);
+      CREATE TABLE IF NOT EXISTS stock_rules (
+        id TEXT PRIMARY KEY NOT NULL,
+        load_item_id TEXT NOT NULL UNIQUE REFERENCES catalog_items(id),
+        load_item_name TEXT NOT NULL,
+        unit_symbol TEXT NOT NULL,
+        is_enabled INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS stock_rule_versions (
+        id TEXT PRIMARY KEY NOT NULL,
+        rule_id TEXT NOT NULL REFERENCES stock_rules(id),
+        effective_from TEXT NOT NULL,
+        per_quantity REAL NOT NULL CHECK (per_quantity > 0),
+        lines_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_stock_rule_versions_rule ON stock_rule_versions(rule_id, effective_from);
+      CREATE TABLE IF NOT EXISTS stock_use_overrides (
+        id TEXT PRIMARY KEY NOT NULL,
+        load_id TEXT NOT NULL REFERENCES loads(id),
+        stock_item_id TEXT NOT NULL REFERENCES stock_items(item_id),
+        quantity REAL NOT NULL CHECK (quantity >= 0),
+        reason TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_stock_use_overrides_load ON stock_use_overrides(load_id, stock_item_id, created_at);
+    `);
+    currentVersion = 63;
   }
 
 

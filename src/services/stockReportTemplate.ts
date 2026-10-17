@@ -50,7 +50,7 @@ export function buildStockReportHtml(report:StockReport,company:StockReportCompa
     .head{display:flex;justify-content:space-between;align-items:flex-start;gap:6mm;border-bottom:2px solid #C84B31;padding-bottom:4mm;margin-bottom:3mm}
     .logo{max-width:40mm;max-height:18mm;object-fit:contain;display:block;margin-bottom:1.5mm}
     .brand{font-size:11pt;font-weight:700;color:#173F67;overflow-wrap:anywhere}.contact{font-size:8pt;color:#444;margin-top:.5mm;overflow-wrap:anywhere}
-    h1{font-size:18pt;color:#173F67;margin:0;text-align:right}.head-right{text-align:right}.when{color:#5A6570;font-size:8.5pt;margin-top:1mm}
+    h1{font-size:18pt;color:#173F67;margin:0;text-align:right}.head-right{text-align:right}.scope{color:#17212B;font-size:9pt;font-weight:700;margin-top:.5mm}.when{color:#5A6570;font-size:8.5pt;margin-top:1mm}
     .summary{display:flex;gap:2.5mm;margin:0 0 3mm}.summary div{flex:1;min-width:0;border:1px solid #E3DBCD;border-radius:2mm;background:#FBF9F4;padding:2mm 3mm}
     .summary .label{display:block;color:#5A6570;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.summary b{font-size:9pt;overflow-wrap:anywhere}
     .band{background:#173F67;color:#FFF8ED;font-weight:700;letter-spacing:.6px;padding:1.6mm 3mm;margin:4mm 0 2mm;border-radius:1.6mm;break-after:avoid;font-size:8.5pt}
@@ -63,7 +63,7 @@ export function buildStockReportHtml(report:StockReport,company:StockReportCompa
     .note{color:#5A6570;font-size:7.5pt;margin:2mm 0 0}
   </style></head><body>
     <div class="head"><div>${company.logo?`<img class="logo" src="${company.logo}" alt=""/>`:''}<div class="brand">${t(company.companyName)}</div>${company.contactLine?`<div class="contact">${t(company.contactLine)}</div>`:''}</div>
-      <div class="head-right"><h1>${e(report.title)}</h1><div class="when">${e(when(report.exportedAt))}${report.pricesIncluded?' · with prices':''}</div></div></div>
+      <div class="head-right"><h1>${e(report.title)}</h1><div class="scope">${t(report.scopeLabel)} · ${e(report.rangeLabel)}</div><div class="when">${e(when(report.exportedAt))}${report.pricesIncluded?' · with prices':''}</div></div></div>
     <div class="summary">${summary}</div>
     ${summaryTable}
     ${sections}

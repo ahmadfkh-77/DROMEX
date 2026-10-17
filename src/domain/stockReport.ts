@@ -43,8 +43,13 @@ export function stockItemInRange(item:StockItemOverview,filter:Pick<StockReportF
   return {batches,uses,received,used};
 }
 
-/** Where a use came from, in words. Uses recorded by hand are the only kind until rules count loads. */
-export const stockUseSource=(_use:StockUseRecord):string=>'By hand';
+const amount=(value:number)=>value.toLocaleString('en-US',{maximumFractionDigits:3});
+/** Where a use came from, in words: by hand, or counted from a load by a usage rule, with the rate it used and any real amount typed. */
+export function stockUseSource(use:StockUseRecord):string{
+  if(use.source!=='load')return 'By hand';
+  const rate=use.loadQuantity!=null&&use.ruleAmount!=null&&use.rulePerQuantity!=null?` · ${amount(use.loadQuantity)} ${use.loadUnit??''} × ${amount(use.ruleAmount)} per ${amount(use.rulePerQuantity)}`:'';
+  return `Load ${use.loadNumber??''}${rate}${use.adjustedReason?` (adjusted: ${use.adjustedReason})`:''}`;
+}
 
 function batchRow(batch:StockBatch,unit:string,includePrices:boolean):StockReportBatchRow{
   const cancelled=batch.recordStatus==='Cancelled';

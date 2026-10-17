@@ -23,7 +23,7 @@ export function stockWorkbookSheets(overview:StockOverview,filter:StockReportFil
       if(filter.includePrices){row['Price Basis']=batch.priceBasis??'';row['Price USD']=batch.priceUsd;row['VAT %']=batch.vatRatePercent;row['Subtotal USD']=batch.subtotalUsd;row['Total USD']=batch.totalUsd;}
       batches.push(row);
     }
-    for(const use of scoped.uses)uses.push({'Use ID':use.groupId,Date:use.usedOn,'Item ID':item.itemId,Item:item.itemName,Unit:item.unitSymbol,Quantity:round3(use.quantity),Source:stockUseSource(use),Batches:use.lines.map(line=>`${line.batchNumber}: ${line.quantity}`).join('; '),Status:use.status==='Cancelled'?'Cancelled':'Counted','Cancellation Reason':use.cancellationReason??'',Note:use.note??''});
+    for(const use of scoped.uses)uses.push({'Use ID':use.groupId,Date:use.usedOn,'Item ID':item.itemId,Item:item.itemName,Unit:item.unitSymbol,Quantity:round3(use.quantity),Source:use.source==='load'?'Load':'By hand','Load Number':use.loadNumber,'Load Quantity':use.loadQuantity,'Load Unit':use.loadUnit,'Rule Amount':use.ruleAmount,'Rule Per Quantity':use.rulePerQuantity,'Source Detail':stockUseSource(use),'Adjusted Reason':use.adjustedReason??'',Batches:use.lines.map(line=>`${line.batchNumber}: ${line.quantity}`).join('; '),Status:use.status==='Cancelled'?'Cancelled':'Counted','Cancellation Reason':use.cancellationReason??'',Note:use.note??''});
   }
   const dictionary:WorkbookRow[]=[
     {Sheet:'Stock Summary',Column:'Received (Period)',Meaning:'Quantity of the batches that arrived in the period, in the item\'s own unit. Cancelled batches are not counted.'},
@@ -32,7 +32,8 @@ export function stockWorkbookSheets(overview:StockOverview,filter:StockReportFil
     {Sheet:'Batches',Column:'Used To Date / Remaining',Meaning:'The batch\'s own figures to date; empty for a cancelled batch.'},
     {Sheet:'Batches',Column:'Price USD / VAT % / Total USD',Meaning:'Only with prices included. Empty means Unpriced, never zero. VAT is present only where the batch was saved with VAT.'},
     {Sheet:'Uses',Column:'Quantity',Meaning:'The whole use in the item\'s unit; Batches shows how it was split across batches, oldest first.'},
-    {Sheet:'Uses',Column:'Source',Meaning:'Where the use came from: By hand.'},
+    {Sheet:'Uses',Column:'Source',Meaning:'By hand, or Load: counted from a confirmed load by a usage rule. Source Detail says which load and the rate it used.'},
+    {Sheet:'Uses',Column:'Load Quantity / Rule Amount / Rule Per Quantity',Meaning:'For a use from a load: the quantity of the load, and the amount of this material the rule takes for each Rule Per Quantity of it, as it was when the load was counted.'},
     {Sheet:'All sheets',Column:'Unit',Meaning:'Every item keeps its own unit. Quantities of different items are never added together.'},
   ];
   const info:WorkbookRow[]=[{Metric:'Report',Value:filter.itemId?'Stock Report':'Stock Summary'},{Metric:'Company',Value:company.name},{Metric:'Scope',Value:filter.itemId?items[0]?.itemName??'Item':'All Stock'},{Metric:'Period',Value:stockRangeLabel(filter)},{Metric:'Prices',Value:filter.includePrices?'Included':'Excluded'},{Metric:'Exported At',Value:exportedAt}];

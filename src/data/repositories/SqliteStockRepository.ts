@@ -6,6 +6,7 @@ import {
   buildStockItemOverview,calculateStockPrice,formatStockBatchNumber,formatStockQuantity,planStockUse,stockPrefix,STOCK_EPSILON,validateStockQuantity,
   type StockBatch,type StockBatchBase,type StockBatchDraft,type StockBatchEditDraft,type StockCatalogItem,type StockCorrectionEntry,type StockOverview,type StockPriceBasis,type StockSetup,type StockUseDraft,type StockUseRecord,type StockUseRow,
 } from '../../domain/stock';
+import {reconcileStockUse,type RuleBatch,type RuleLoad,type RuleOverride,type StockRule,type StockRuleDraft,type StockRuleLine,type StockRulesSetup,type StockSyncResult} from '../../domain/stockRules';
 import type {StockRepository} from './StockRepository';
 
 type ItemRow={item_id:string;item_name:string;unit_symbol:string;unit_name:string;prefix:string;next_number:number};
@@ -14,14 +15,14 @@ type BatchRow={
   price_basis:StockPriceBasis|null;price_usd_cents:number|null;vat_basis_points:number|null;subtotal_usd_cents:number|null;total_usd_cents:number|null;notes:string|null;
   status:'Active'|'Cancelled';cancellation_reason:string|null;cancelled_at:string|null;correction_history_json:string|null;created_at:string;updated_at:string;
 };
-type UseDbRow={id:string;group_id:string;item_id:string;batch_id:string;kind:'use'|'reversal';quantity:number;used_on:string;note:string|null;reason:string|null;created_at:string};
+type UseDbRow={id:string;group_id:string;item_id:string;batch_id:string;kind:'use'|'reversal';quantity:number;used_on:string;note:string|null;reason:string|null;created_at:string;source?:string|null;load_id?:string|null;load_number?:string|null;load_quantity?:number|null;load_unit?:string|null;rule_id?:string|null;rule_version_id?:string|null;rule_per_quantity?:number|null;rule_amount?:number|null};
 
 const makeId=()=>`stock_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
 const clean=(value:string)=>value.trim().replace(/\s+/g,' ')||null;
 const cents=(value:number)=>Math.round(value*100);
 const round3=(value:number)=>Math.round(value*1000)/1000;
 const parseHistory=(value:string|null):StockCorrectionEntry[]=>{try{const parsed=JSON.parse(value??'[]');return Array.isArray(parsed)?parsed as StockCorrectionEntry[]:[];}catch{return [];}};
-const useFromRow=(row:UseDbRow):StockUseRow=>({id:row.id,groupId:row.group_id,itemId:row.item_id,batchId:row.batch_id,kind:row.kind,quantity:row.quantity,usedOn:row.used_on,note:row.note,reason:row.reason,createdAt:row.created_at});
+const useFromRow=(row:UseDbRow):StockUseRow=>({id:row.id,groupId:row.group_id,itemId:row.item_id,batchId:row.batch_id,kind:row.kind,quantity:row.quantity,usedOn:row.used_on,note:row.note,reason:row.reason,createdAt:row.created_at,source:row.source==='load'?'load':'manual',loadId:row.load_id??null,loadNumber:row.load_number??null,loadQuantity:row.load_quantity??null,loadUnit:row.load_unit??null,ruleId:row.rule_id??null,ruleVersionId:row.rule_version_id??null,rulePerQuantity:row.rule_per_quantity??null,ruleAmount:row.rule_amount??null});
 
 /** The chosen date at the current time of day, so batches of one day keep the order they were entered in. */
 function timestampForDate(input:string,what='Record date'):string{
@@ -80,7 +81,7 @@ export class SqliteStockRepository implements StockRepository{
     return found;
   }
 
-  private async enqueue(entity:'stockBatch'|'stockUse',id:string,payload:unknown){
+  private async enqueue(entity:'stockBatch'|'stockUse'|'stockRule',id:string,payload:unknown){
     await this.db.runAsync('INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES (?,?,?,?,?)',entity,id,'upsert',JSON.stringify(payload),new Date().toISOString());
   }
 
@@ -201,6 +202,116 @@ export class SqliteStockRepository implements StockRepository{
     const record=(await this.getOverview()).items.find(value=>value.itemId===item.item_id)?.uses.find(value=>value.groupId===groupId);
     if(!record)throw new Error('The use could not be read back.');
     return record;
+  }
+
+  private async loadRules():Promise<StockRule[]>{
+    const rules=await this.db.getAllAsync<{id:string;load_item_id:string;load_item_name:string;unit_symbol:string;is_enabled:number}>('SELECT id,load_item_id,load_item_name,unit_symbol,is_enabled FROM stock_rules ORDER BY load_item_name COLLATE NOCASE');
+    const versions=await this.db.getAllAsync<{id:string;rule_id:string;effective_from:string;per_quantity:number;lines_json:string;created_at:string}>('SELECT id,rule_id,effective_from,per_quantity,lines_json,created_at FROM stock_rule_versions ORDER BY effective_from,created_at');
+    const parse=(value:string):StockRuleLine[]=>{try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed as StockRuleLine[]:[];}catch{return [];}};
+    return rules.map((rule):StockRule=>({id:rule.id,loadItemId:rule.load_item_id,loadItemName:rule.load_item_name,unitSymbol:rule.unit_symbol,enabled:rule.is_enabled===1,versions:versions.filter(version=>version.rule_id===rule.id).map(version=>({id:version.id,effectiveFrom:version.effective_from,perQuantity:version.per_quantity,lines:parse(version.lines_json),createdAt:version.created_at}))}));
+  }
+
+  async getRulesSetup():Promise<StockRulesSetup>{
+    const[items,units,stocked,bitumen,rules]=await Promise.all([
+      this.db.getAllAsync<{id:string;name:string;category_name:string;unit_id:string|null;symbol:string|null}>('SELECT i.id,i.name,c.name category_name,i.default_unit_id unit_id,u.symbol FROM catalog_items i JOIN categories c ON c.id=i.category_id LEFT JOIN measurement_units u ON u.id=i.default_unit_id AND u.is_active=1 WHERE i.is_active=1 AND i.loads_enabled=1 ORDER BY c.name COLLATE NOCASE,i.name COLLATE NOCASE'),
+      this.db.getAllAsync<{id:string;name:string;symbol:string}>('SELECT id,name,symbol FROM measurement_units WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
+      this.db.getAllAsync<{item_id:string;item_name:string;unit_symbol:string}>('SELECT item_id,item_name,unit_symbol FROM stock_items WHERE is_active=1 ORDER BY item_name COLLATE NOCASE'),
+      this.db.getAllAsync<{item_id:string}>('SELECT item_id FROM bitumen_item_rules WHERE is_enabled=1'),
+      this.loadRules(),
+    ]);
+    const watched=new Set(rules.map(rule=>rule.loadItemId)),bitumenItems=new Set(bitumen.map(row=>row.item_id));
+    return{units,rules,materials:stocked.map(row=>({id:row.item_id,name:row.item_name,unitSymbol:row.unit_symbol})),loadItems:items.map(row=>({id:row.id,name:row.name,categoryName:row.category_name,unitId:row.symbol?row.unit_id:null,unitSymbol:row.symbol,hasRule:watched.has(row.id),bitumen:bitumenItems.has(row.id)}))};
+  }
+
+  async saveRule(draft:StockRuleDraft):Promise<StockRule>{
+    const existing=draft.ruleId?await this.db.getFirstAsync<{id:string;load_item_id:string;unit_symbol:string}>('SELECT id,load_item_id,unit_symbol FROM stock_rules WHERE id=?',draft.ruleId):null;
+    if(draft.ruleId&&!existing)throw new Error('The rule was not found.');
+    const item=await this.db.getFirstAsync<{id:string;name:string}>('SELECT id,name FROM catalog_items WHERE id=? AND is_active=1 AND loads_enabled=1',existing?.load_item_id??draft.loadItemId);
+    if(!item)throw new Error('Select an active item that is delivered on receipts.');
+    if(!existing){
+      if(await this.db.getFirstAsync('SELECT id FROM stock_rules WHERE load_item_id=?',item.id))throw new Error('This item already has a rule. Edit that rule instead.');
+      if(await this.db.getFirstAsync('SELECT item_id FROM bitumen_item_rules WHERE item_id=? AND is_enabled=1',item.id))throw new Error('Bitumen already counts this item from its loads, so a Stock rule cannot also take from it.');
+    }
+    let unitSymbol=existing?.unit_symbol??'';
+    if(!existing){
+      const unit=await this.db.getFirstAsync<{symbol:string}>('SELECT symbol FROM measurement_units WHERE id=? AND is_active=1',draft.unitId);
+      if(!unit)throw new Error('Select the unit the rule is per, for example m³.');
+      unitSymbol=unit.symbol;
+    }
+    const perQuantity=validateStockQuantity(draft.perQuantity,'The quantity the rule is per');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(draft.effectiveFrom)||Number.isNaN(new Date(draft.effectiveFrom).getTime()))throw new Error('Choose the date the rule applies from.');
+    if(!draft.lines.length)throw new Error('Add at least one material to the rule.');
+    const materials=await this.db.getAllAsync<{item_id:string;item_name:string}>('SELECT item_id,item_name FROM stock_items WHERE is_active=1');
+    const seen=new Set<string>(),lines:StockRuleLine[]=[];
+    for(const line of draft.lines){
+      const material=materials.find(value=>value.item_id===line.stockItemId);
+      if(!material)throw new Error('Choose each material from your Stock.');
+      if(seen.has(material.item_id))throw new Error(`${material.item_name} is listed twice in this rule.`);
+      seen.add(material.item_id);
+      lines.push({stockItemId:material.item_id,amount:validateStockQuantity(line.amount,`The amount of ${material.item_name}`)});
+    }
+    const now=new Date().toISOString(),ruleId=existing?.id??makeId(),versionId=makeId();
+    await this.db.withTransactionAsync(async()=>{
+      if(!existing)await this.db.runAsync('INSERT INTO stock_rules (id,load_item_id,load_item_name,unit_symbol,is_enabled,created_at,updated_at) VALUES (?,?,?,?,1,?,?)',ruleId,item.id,item.name,unitSymbol,now,now);
+      else await this.db.runAsync('UPDATE stock_rules SET load_item_name=?,updated_at=? WHERE id=?',item.name,now,ruleId);
+      await this.db.runAsync('INSERT INTO stock_rule_versions (id,rule_id,effective_from,per_quantity,lines_json,created_at) VALUES (?,?,?,?,?,?)',versionId,ruleId,draft.effectiveFrom,perQuantity,JSON.stringify(lines),now);
+      await this.enqueue('stockRule',ruleId,{id:ruleId,loadItemId:item.id,unitSymbol,version:{id:versionId,effectiveFrom:draft.effectiveFrom,perQuantity,lines}});
+    });
+    const saved=(await this.loadRules()).find(rule=>rule.id===ruleId);
+    if(!saved)throw new Error('The rule could not be read back.');
+    return saved;
+  }
+
+  async setRuleEnabled(ruleId:string,enabled:boolean):Promise<void>{
+    const now=new Date().toISOString();
+    const result=await this.db.runAsync('UPDATE stock_rules SET is_enabled=?,updated_at=? WHERE id=?',enabled?1:0,now,ruleId);
+    if(!result.changes)throw new Error('The rule was not found.');
+    await this.enqueue('stockRule',ruleId,{id:ruleId,enabled,updatedAt:now});
+  }
+
+  async syncUse():Promise<StockSyncResult>{
+    const rules=await this.loadRules();
+    if(!rules.length)return{added:0,attention:[]};
+    const[loadRows,batchRows,useRows,overrideRows]=await Promise.all([
+      this.db.getAllAsync<{id:string;item_id:string;item_name:string;load_number:string|null;confirmed_at:string;status:string;is_archived:number|null;output_unit_symbol:string|null;billed_quantity:number|null}>('SELECT id,item_id,item_name,load_number,confirmed_at,status,is_archived,output_unit_symbol,billed_quantity FROM loads WHERE item_id IN (SELECT load_item_id FROM stock_rules)'),
+      this.db.getAllAsync<{id:string;item_id:string;arrived_at:string;quantity:number;status:string}>('SELECT id,item_id,arrived_at,quantity,status FROM stock_batches'),
+      this.db.getAllAsync<UseDbRow>('SELECT * FROM stock_use ORDER BY created_at,rowid'),
+      this.db.getAllAsync<{load_id:string;stock_item_id:string;quantity:number;reason:string;created_at:string}>('SELECT load_id,stock_item_id,quantity,reason,created_at FROM stock_use_overrides'),
+    ]);
+    const plan=reconcileStockUse({
+      rules,
+      loads:loadRows.map((row):RuleLoad=>({id:row.id,itemId:row.item_id,itemName:row.item_name,loadNumber:row.load_number,confirmedAt:row.confirmed_at,active:row.status==='Active'&&row.is_archived!==1,quantity:row.billed_quantity,unitSymbol:row.output_unit_symbol})),
+      rows:useRows.map(useFromRow),
+      batches:batchRows.map((row):RuleBatch=>({id:row.id,itemId:row.item_id,arrivedDay:localDateKey(new Date(row.arrived_at)),active:row.status==='Active',quantity:row.quantity})),
+      overrides:overrideRows.map((row):RuleOverride=>({loadId:row.load_id,stockItemId:row.stock_item_id,quantity:row.quantity,reason:row.reason,createdAt:row.created_at})),
+    });
+    if(plan.rows.length){
+      const now=new Date().toISOString();
+      await this.db.withTransactionAsync(async()=>{
+        for(const row of plan.rows){
+          await this.db.runAsync("INSERT INTO stock_use (id,group_id,item_id,batch_id,kind,quantity,used_on,note,reason,created_at,source,load_id,load_number,load_quantity,load_unit,rule_id,rule_version_id,rule_per_quantity,rule_amount) VALUES (?,?,?,?,?,?,?,?,NULL,?,'load',?,?,?,?,?,?,?,?)",makeId(),row.groupId,row.itemId,row.batchId,row.kind,row.quantity,row.usedOn,row.note,now,row.loadId,row.loadNumber,row.loadQuantity,row.loadUnit,row.ruleId,row.ruleVersionId,row.rulePerQuantity,row.ruleAmount);
+        }
+        for(const groupId of new Set(plan.rows.map(row=>row.groupId)))await this.enqueue('stockUse',groupId,{groupId,source:'load',counted:plan.rows.filter(row=>row.groupId===groupId).map(row=>({batchId:row.batchId,quantity:row.quantity,kind:row.kind}))});
+      });
+    }
+    return{added:plan.rows.length,attention:plan.attention};
+  }
+
+  async adjustLoadUse(loadId:string,stockItemId:string,quantity:string,reason:string):Promise<void>{
+    const why=reason.trim();
+    if(!why)throw new Error('Enter a reason for the real amount.');
+    const text=quantity.trim().replace(',','.');
+    const value=Number(text);
+    if(!/^\d+(\.\d+)?$/.test(text)||!Number.isFinite(value))throw new Error('The real amount must be a number, zero or more.');
+    const counted=await this.db.getFirstAsync<{count:number}>("SELECT COUNT(*) count FROM stock_use WHERE load_id=? AND item_id=? AND source='load'",loadId,stockItemId);
+    if(!counted||counted.count<=0)throw new Error('That load has not been counted for this material, so there is nothing to adjust.');
+    const load=await this.db.getFirstAsync<{status:string;is_archived:number|null}>('SELECT status,is_archived FROM loads WHERE id=?',loadId);
+    if(!load||load.status!=='Active'||load.is_archived===1)throw new Error('A cancelled load cannot be adjusted.');
+    const now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync('INSERT INTO stock_use_overrides (id,load_id,stock_item_id,quantity,reason,created_at) VALUES (?,?,?,?,?,?)',makeId(),loadId,stockItemId,Math.round(value*1000)/1000,why,now);
+    });
+    await this.syncUse();
   }
 
   async getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>{
