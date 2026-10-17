@@ -5,7 +5,9 @@ import Svg,{Path} from 'react-native-svg';
 import type {DocumentSignerRepository} from '../../data/repositories/DocumentSignerRepository';
 import type {LoadRepository} from '../../data/repositories/LoadRepository';
 import type {DocumentSigner} from '../../domain/documentSigners';
-import {correctionBaseline,correctionChanges,correctionLocks,correctionToLoadDraft,validateLoadCorrection,type LoadCorrectionContext} from '../../domain/loadCorrection';
+import {correctionBaseline,correctionChanges,correctionLocks,correctionToLoadDraft,correctionVatRate,validateLoadCorrection,type LoadCorrectionContext} from '../../domain/loadCorrection';
+import {choiceForRate} from '../../domain/accountVat';
+import {VatChoiceControl} from './AccountVatControl';
 import {calculateLoad,formatUsd,type ConfirmedLoad,type LoadCorrectionDraft} from '../../domain/loads';
 import {loadNumberLabel} from '../../domain/loadNumberSeries';
 import {truckCrewRoleLabel} from '../../domain/people';
@@ -59,7 +61,10 @@ export function LoadCorrectionForm({repository,signers,selected,onSaved,onChoose
   const issues=useMemo(()=>options?validateLoadCorrection(selected,form,options,context?.activePaymentCents??0):[],[selected,form,options,context?.activePaymentCents]);
   const effective=useMemo(()=>correctionToLoadDraft(selected,form),[selected,form]);
   const conversion=options?.conversions.find(value=>value.id===effective.conversionId);
-  const calculation=useMemo(()=>calculateLoad(effective,conversion,selected.vatRatePercent??0),[effective,conversion,selected.vatRatePercent]);
+  const universalVat=options?.companySettings.vatRatePercent??0;
+  const vatRate=useMemo(()=>{try{return correctionVatRate(selected,form,universalVat);}catch{return selected.vatRatePercent??0;}},[selected,form,universalVat]);
+  const calculation=useMemo(()=>calculateLoad(effective,conversion,vatRate),[effective,conversion,vatRate]);
+  const vatLabel=vatRate>0?`${vatRate}%`:'No VAT';
   const isDirect=selected.quantityMethod==='direct';
 
   function animate(){if(!reducedMotion)LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);}
@@ -163,7 +168,8 @@ export function LoadCorrectionForm({repository,signers,selected,onSaved,onChoose
         {was('Conversion')}{changed.has('Unit')?<Text style={styles.was}>{`unit was ${changes.find(value=>value.field==='Unit')?.originalValue??'—'}, now ${changes.find(value=>value.field==='Unit')?.newValue??'—'}`}</Text>:null}</View>}
       <View style={styles.metricRow}><MetricCard label={`Converted quantity${conversion?` (${conversion.outputUnitSymbol})`:''}`} value={calculation.billedQuantity==null?'—':`${conversion?calculation.billedQuantity.toFixed(conversion.decimalPlaces):calculation.billedQuantity} ${conversion?.outputUnitSymbol??options.units.find(value=>value.id===effective.directUnitId)?.symbol??''}`} result/></View>
       {locks.price?<Locked label="Unit price USD" value={selected.unitPriceUsd==null?'Unpriced':selected.unitPriceUsd.toFixed(2)}/>:<View style={styles.field}><View style={styles.labelRow}><Text style={styles.label}>Unit price USD (blank = Unpriced)</Text><Tag field="Unit price"/></View><AppField label="" value={form.unitPriceUsd} onChangeText={value=>set('unitPriceUsd',value)} keyboardType="decimal-pad"/>{was('Unit price')}</View>}
-      <View style={styles.metricRow}><MetricCard label="Subtotal" value={formatUsd(calculation.subtotalUsd)}/><MetricCard label={`VAT ${selected.vatRatePercent??0}%`} value={formatUsd(calculation.vatAmountUsd)}/><MetricCard label="Final total" value={formatUsd(calculation.finalTotalUsd)} accent/></View>
+      {locks.vat?<Locked label="VAT" value={vatLabel}/>:<View style={styles.field}><View style={styles.labelRow}><Text style={styles.label}>VAT on this load</Text><Tag field="VAT"/></View><VatChoiceControl label="" value={form.vat??choiceForRate(selected.vatRatePercent,universalVat)} onChange={vat=>set('vat',vat)} universalRatePercent={universalVat} hint="Changing VAT needs the correction reason below. The old figures stay in the history."/>{was('VAT')}</View>}
+      <View style={styles.metricRow}><MetricCard label="Subtotal" value={formatUsd(calculation.subtotalUsd)}/>{vatRate>0?<MetricCard label={`VAT ${vatRate}%`} value={formatUsd(calculation.vatAmountUsd)}/>:null}<MetricCard label="Final total" value={formatUsd(calculation.finalTotalUsd)} accent/></View>
       <View style={styles.field}><View style={styles.labelRow}><Text style={styles.label}>Notes</Text><Tag field="Notes"/></View><AppField label="" value={form.notes} onChangeText={value=>set('notes',value)} multiline/>{was('Notes')}</View>
     </Section>
 

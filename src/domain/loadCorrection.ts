@@ -11,6 +11,7 @@ import {
   type LoadSetupOptions,
 } from './loads';
 import { truckCrewRoleLabel } from './people';
+import { noVatChoice, resolveVatRate, validateAccountVat } from './accountVat';
 
 /**
  * Phase 4. Full correction of a confirmed load. Everything about a load can be corrected, but never by editing
@@ -31,7 +32,7 @@ export function loadLocalDate(confirmedAt: string): string {
 
 /** True when a correction uses any of the Phase 4 fields (the full form) rather than the older partial one. */
 export function isFullCorrection(draft: LoadCorrectionDraft): boolean {
-  return [draft.recordDate, draft.customerId, draft.projectId, draft.itemId, draft.driverName, draft.truckId, draft.truckPlate, draft.conversionId, draft.directUnitId, draft.driverSignaturePaths, draft.supplierSignature].some((value) => value !== undefined);
+  return [draft.recordDate, draft.customerId, draft.projectId, draft.itemId, draft.driverName, draft.truckId, draft.truckPlate, draft.conversionId, draft.directUnitId, draft.driverSignaturePaths, draft.supplierSignature, draft.vat].some((value) => value !== undefined);
 }
 
 /** A direct load that did not use a conversion keeps a retained internal conversion that must not be shown or chosen. */
@@ -75,6 +76,7 @@ export function correctionToLoadDraft(selected: ConfirmedLoad, draft: LoadCorrec
   const signatureCleared = draft.driverSignaturePaths === undefined && driverChanged(selected, draft);
   return {
     ...emptyLoadDraft,
+    vat: draft.vat ?? noVatChoice,
     recordDate: draft.recordDate ?? base.recordDate!,
     customerId: draft.customerId ?? base.customerId!,
     projectId: draft.projectId ?? base.projectId!,
@@ -98,10 +100,18 @@ export function correctionToLoadDraft(selected: ConfirmedLoad, draft: LoadCorrec
 }
 
 /** Which fields are locked while the load has active payments: money and attribution never move under a payment. */
-export function correctionLocks(activePaymentCents: number): { customer: boolean; project: boolean; unit: boolean; price: boolean } {
+export function correctionLocks(activePaymentCents: number): { customer: boolean; project: boolean; unit: boolean; price: boolean; vat: boolean } {
   const locked = activePaymentCents > 0;
-  return { customer: locked, project: locked, unit: locked, price: locked };
+  return { customer: locked, project: locked, unit: locked, price: locked, vat: locked };
 }
+
+/** The VAT percentage the corrected load carries: the one chosen in the correction, or else the one it was saved with. */
+export function correctionVatRate(selected: ConfirmedLoad, draft: LoadCorrectionDraft, universalRatePercent: number): number {
+  if (!draft.vat) return selected.vatRatePercent ?? 0;
+  return resolveVatRate(validateAccountVat(draft.vat), universalRatePercent);
+}
+
+const vatText = (rate: number | null | undefined) => (rate != null && rate > 0 ? `${rate}%` : 'No VAT');
 
 const samePrice = (a: string, b: string) => {
   const parse = (value: string) => { const t = value.trim().replace(',', '.'); return t ? Number(t) : null; };
@@ -123,6 +133,7 @@ export function validateLoadCorrection(selected: ConfirmedLoad, draft: LoadCorre
     locks.project && effective.projectId !== base.projectId ? 'project' : null,
     locks.unit && (effective.conversionId !== base.conversionId || effective.directUnitId !== base.directUnitId) ? 'unit' : null,
     locks.price && !samePrice(effective.unitPriceUsd, base.unitPriceUsd) ? 'price' : null,
+    locks.vat && draft.vat && correctionVatRate(selected, draft, options.companySettings.vatRatePercent) !== (selected.vatRatePercent ?? 0) ? 'VAT' : null,
   ].filter((value): value is string => value != null);
   if (moved.length) issues.push(`The ${moved.join(', ')} cannot change while this load has active payments. Cancel the payments first.`);
   return issues;
@@ -143,7 +154,9 @@ export function correctionChanges(selected: ConfirmedLoad, draft: LoadCorrection
   const effective = correctionToLoadDraft(selected, draft);
   const isDirect = selected.quantityMethod === 'direct';
   const conversion = options.conversions.find((value) => value.id === effective.conversionId);
-  const calc = calculateLoad(effective, conversion, selected.vatRatePercent ?? 0);
+  let vatRate = selected.vatRatePercent ?? 0;
+  try { vatRate = correctionVatRate(selected, draft, options.companySettings.vatRatePercent); } catch { /* a bad own rate is reported by validateLoadCorrection */ }
+  const calc = calculateLoad(effective, conversion, vatRate);
   const priceText = effective.unitPriceUsd.trim().replace(',', '.');
   const price = priceText ? Number(priceText) : null;
   const person = options.drivers.find((value) => value.id === effective.driverId);
@@ -165,6 +178,7 @@ export function correctionChanges(selected: ConfirmedLoad, draft: LoadCorrection
   rows.push(['Unit', selected.outputUnitSymbol, correctedUnitSymbol(effective, options)]);
   rows.push(['Conversion', plainDirect(selected) ? 'None' : selected.conversionName ?? 'None', conversion ? conversion.name : 'None']);
   rows.push(['Unit price', selected.unitPriceUsd == null ? null : String(selected.unitPriceUsd), price == null ? null : String(price)]);
+  if (price != null && selected.unitPriceUsd != null) rows.push(['VAT', vatText(selected.vatRatePercent), vatText(vatRate)]);
   rows.push(['Notes', selected.notes, clean(effective.notes)]);
   const before = selected.signaturePaths;
   const after = effective.driverSignaturePaths;

@@ -185,10 +185,10 @@ describe('validation',()=>{
 
 describe('active payments',()=>{
   const pay=(database:SqliteTestDatabase,id:string,cents=50000)=>database.raw.exec(`INSERT INTO payment_entries (id,target_type,load_id,amount_usd_cents,payment_date,status,created_at) VALUES ('p1','load','${id}',${cents},'2026-08-21','Active','${SEED_TIME}')`);
-  it('locks customer, project, unit and price, and leaves everything else correctable',async()=>{
+  it('locks customer, project, unit, price and VAT, and leaves everything else correctable',async()=>{
     const {database,load,correct,kgM3,context}=await setup();
     pay(database,load.id);
-    expect(correctionLocks((await context()).activePaymentCents)).toEqual({customer:true,project:true,unit:true,price:true});
+    expect(correctionLocks((await context()).activePaymentCents)).toEqual({customer:true,project:true,unit:true,price:true,vat:true});
     await expect(correct({customerId:'cust_b',projectId:'other'})).rejects.toThrow('customer, project cannot change while this load has active payments');
     await expect(correct({conversionId:kgM3.id})).rejects.toThrow('unit cannot change');
     await expect(correct({unitPriceUsd:'150'})).rejects.toThrow('price cannot change');

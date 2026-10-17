@@ -70,6 +70,8 @@ export type QuantityMethod = 'weighbridge' | 'direct';
  * means "leave as confirmed", so the older partial form of a correction keeps working unchanged.
  */
 export type LoadFullCorrectionFields = {
+  /** Changes the load's VAT (needs the correction reason). Left out, the load keeps the VAT it was saved with. */
+  vat?: VatChoice;
   /** Local calendar date (yyyy-mm-dd). The time of day of the confirmation is kept. */
   recordDate?: string;
   customerId?: string;

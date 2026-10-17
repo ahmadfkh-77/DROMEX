@@ -37,7 +37,7 @@ import { SqliteProfileRepository } from './SqliteProfileRepository';
 import { issueLoadNumber } from './SqliteLoadNumberSeriesRepository';
 import { deliverySignatureFor, recordSignerEvent } from './SqliteDocumentSignerRepository';
 import { supplierSignatureForNewLoad } from './SqliteCompanyHeaderRepository';
-import { correctionChanges, correctionToLoadDraft, isFullCorrection, loadLocalDate, validateLoadCorrection, type LoadCorrectionContext } from '../../domain/loadCorrection';
+import { correctionChanges, correctionToLoadDraft, correctionVatRate, isFullCorrection, loadLocalDate, validateLoadCorrection, type LoadCorrectionContext } from '../../domain/loadCorrection';
 import type { SignerDisplay, SignerSnapshot } from '../../domain/documentSigners';
 import { parseStoredSignature } from '../../domain/supervisors';
 
@@ -683,7 +683,8 @@ export class SqliteLoadRepository implements LoadRepository {
     const isDirect=selected.quantityMethod==='direct';
     const conversion=options.conversions.find(value=>value.id===effective.conversionId);
     const directUnit=options.units.find(value=>value.id===effective.directUnitId);
-    const calculation=calculateLoad(effective,conversion,selected.vatRatePercent??0);
+    const vatRate=correctionVatRate(selected,draft,options.companySettings.vatRatePercent);
+    const calculation=calculateLoad(effective,conversion,vatRate);
     if(calculation.convertedQuantity==null||calculation.billedQuantity==null||(!isDirect&&calculation.netWeightKg==null))throw new Error('Load calculations are incomplete.');
     const cents=(value:number|null)=>value==null?null:Math.round(value*100);
     const priceText=effective.unitPriceUsd.trim().replace(',','.');const price=priceText?Number(priceText):null;
@@ -712,13 +713,13 @@ export class SqliteLoadRepository implements LoadRepository {
       await this.db.runAsync(`UPDATE loads SET confirmed_at=?,customer_id=?,customer_name=?,project_id=?,project_name=?,project_location=?,destination_address=?,item_id=?,item_name=?,item_code=?,category_name=?,
         driver_name=?,driver_profile_id=?,driver_role=?,truck_plate=?,truck_profile_id=?,requested_quantity_kg=?,empty_weight_kg=?,full_weight_kg=?,net_weight_kg=?,
         conversion_id=?,conversion_name=?,conversion_rule=?,output_unit_symbol=?,converted_quantity=?,billed_quantity=?,direct_quantity=?,direct_unit_id=?,direct_unit_name=?,direct_unit_symbol=?,
-        unit_price_usd_cents=?,subtotal_usd_cents=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,notes=?,signature_json=?,signature_status=?,correction_history_json=?,updated_at=? WHERE id=?`,
+        unit_price_usd_cents=?,subtotal_usd_cents=?,vat_rate_basis_points=?,vat_amount_usd_cents=?,final_total_usd_cents=?,payment_status=?,notes=?,signature_json=?,signature_status=?,correction_history_json=?,updated_at=? WHERE id=?`,
         confirmedAt,customer.id,customer.name,project?.id??null,project?.name??null,project?.location??null,clean(effective.destinationAddress),item.id,item.name,item.internalCode,item.categoryName,
         driverName,crew?.id??null,crew?.role??null,effective.truckPlate.trim().toUpperCase(),effective.truckId||null,
         !isDirect&&effective.requestedQuantityKg.trim()?Number(effective.requestedQuantityKg):null,isDirect?0:Number(effective.emptyWeightKg),isDirect?1:Number(effective.fullWeightKg),isDirect?1:calculation.netWeightKg,
         conversionId,conversionName,conversionRule,outputSymbol,calculation.convertedQuantity,calculation.billedQuantity,
         isDirect?entered:null,isDirect?directUnit!.id:null,isDirect?directUnit!.name:null,isDirect?directUnit!.symbol:null,
-        price==null?null:Math.round(price*100),subtotal,vat,total,paymentStatusValue,clean(effective.notes),signaturePaths.length?JSON.stringify(signaturePaths):null,signaturePaths.length?'Signed':'Unsigned',JSON.stringify(history),now,loadId);
+        price==null?null:Math.round(price*100),subtotal,price==null?null:Math.round(vatRate*100),vat,total,paymentStatusValue,clean(effective.notes),signaturePaths.length?JSON.stringify(signaturePaths):null,signaturePaths.length?'Signed':'Unsigned',JSON.stringify(history),now,loadId);
       if(draft.supplierSignature!==undefined){
         await this.db.runAsync('UPDATE loads SET supplier_signature_json=? WHERE id=?',supplier?JSON.stringify(supplier):null,loadId);
         if(supplier)await recordSignerEvent(this.db,supplier.signerId,'used',now,null,`Delivery Authorization ${row.transaction_number}`);
