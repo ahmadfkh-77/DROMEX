@@ -12,6 +12,8 @@ export interface StockRepository{
   cancelBatch(id:string,reason:string):Promise<StockBatch>;
   /** Records a use by hand, taken from the oldest open batches first. Fails when there is not enough in stock for that day. */
   recordUse(draft:StockUseDraft):Promise<StockUseRecord>;
+  /** The company printed on a report when no Header company was picked, read from Company Settings like the receipts. */
+  getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>;
   /** Cancels a recorded use with a reason by adding reversal rows; the original rows stay as history. */
   cancelUse(groupId:string,reason:string):Promise<void>;
 }

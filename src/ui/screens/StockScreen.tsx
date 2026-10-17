@@ -13,6 +13,7 @@ import {AppButton,AppCard,AppField,AppPage,EmptyState,Feedback,PageHeader} from 
 import {DatePickerField} from '../components/DatePickerField';
 import {SearchableSelect} from '../components/SearchableSelect';
 import {SegmentedChoice} from '../components/SegmentedChoice';
+import {StockExportPanel} from '../components/StockExportPanel';
 import {colors,radius} from '../theme';
 
 /**
@@ -20,7 +21,7 @@ import {colors,radius} from '../theme';
  * button. An item is added by recording its first batch. An item page shows its batches (oldest used first), Record use, and the uses
  * recorded; a batch can be edited or cancelled with a reason, and a use can be cancelled with a reason. Nothing recorded is rewritten.
  */
-type Mode={kind:'list'}|{kind:'add';itemId:string}|{kind:'item';id:string}|{kind:'batch';id:string}|{kind:'edit';id:string};
+type Mode={kind:'list'}|{kind:'report'}|{kind:'add';itemId:string}|{kind:'item';id:string}|{kind:'batch';id:string}|{kind:'edit';id:string};
 
 const dayLabel=(iso:string)=>new Date(iso).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
@@ -42,7 +43,7 @@ export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCa
 
   const item=mode.kind==='item'?overview.items.find(value=>value.itemId===mode.id):undefined;
   const batchItem=mode.kind==='batch'||mode.kind==='edit'?overview.items.find(value=>value.batches.some(batch=>batch.id===mode.id)):undefined;
-  const batch=batchItem?.batches.find(value=>mode.kind!=='list'&&mode.kind!=='add'&&value.id===mode.id);
+  const batch=batchItem?.batches.find(value=>mode.kind!=='list'&&mode.kind!=='add'&&mode.kind!=='report'&&value.id===mode.id);
 
   if(mode.kind==='add'){
     const initial={...emptyStockBatch,itemId:mode.itemId};
@@ -66,8 +67,12 @@ export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCa
       onCancel={reason=>void run(async()=>{await repository.cancelBatch(batch.id,reason);},'Batch cancelled. It stays on record and is not counted.')}/>;
   }
 
+  if(mode.kind==='report'){
+    return <AppPage keyboard><PageHeader eyebrow="Stock" title="Stock report" onBack={()=>go({kind:'list'})}/><StockExportPanel repository={repository} overview={overview}/></AppPage>;
+  }
+
   if(mode.kind==='item'&&item){
-    return <ItemPage item={item} busy={busy} error={error} message={message} onBack={()=>go({kind:'list'})} onAddBatch={()=>go({kind:'add',itemId:item.itemId})} onOpenBatch={id=>go({kind:'batch',id})}
+    return <ItemPage repository={repository} overview={overview} item={item} busy={busy} error={error} message={message} onBack={()=>go({kind:'list'})} onAddBatch={()=>go({kind:'add',itemId:item.itemId})} onOpenBatch={id=>go({kind:'batch',id})}
       onUse={draft=>run(async()=>{await repository.recordUse(draft);},'Use recorded. The stock was taken from the oldest open batch first.')}
       onCancelUse={(groupId,reason)=>run(async()=>{await repository.cancelUse(groupId,reason);},'Use cancelled. The stock is back in its batches.')}/>;
   }
@@ -81,6 +86,7 @@ export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCa
     </AppCard>
     {!overview.items.length?<EmptyState title="Nothing else in Stock yet" body="Press Add to bring in any item from your Catalog and record its batches."/>:null}
     <AppButton label="+ Add" onPress={()=>go({kind:'add',itemId:''})}/>
+    {overview.items.length?<AppButton label="Stock report (PDF or Excel)" tone="secondary" onPress={()=>go({kind:'report'})}/>:null}
   </AppPage>;
 }
 
@@ -91,7 +97,7 @@ function StockRow({title,sub,value,onPress}:{title:string;sub:string;value:strin
   </TouchableOpacity>;
 }
 
-function ItemPage({item,busy,error,message,onBack,onAddBatch,onOpenBatch,onUse,onCancelUse}:{item:StockItemOverview;busy:boolean;error:string|null;message:string|null;onBack:()=>void;onAddBatch:()=>void;onOpenBatch:(id:string)=>void;onUse:(draft:StockUseDraft)=>Promise<boolean>;onCancelUse:(groupId:string,reason:string)=>Promise<boolean>}){
+function ItemPage({repository,overview,item,busy,error,message,onBack,onAddBatch,onOpenBatch,onUse,onCancelUse}:{repository:StockRepository;overview:StockOverview;item:StockItemOverview;busy:boolean;error:string|null;message:string|null;onBack:()=>void;onAddBatch:()=>void;onOpenBatch:(id:string)=>void;onUse:(draft:StockUseDraft)=>Promise<boolean>;onCancelUse:(groupId:string,reason:string)=>Promise<boolean>}){
   const[use,setUse]=useState<StockUseDraft>({...emptyStockUse,itemId:item.itemId});
   const open=item.batches.filter(isOpenStockBatch),others=item.batches.filter(value=>!isOpenStockBatch(value)).reverse();
   const[cancelling,setCancelling]=useState<string|null>(null),[reason,setReason]=useState('');
@@ -118,6 +124,7 @@ function ItemPage({item,busy,error,message,onBack,onAddBatch,onOpenBatch,onUse,o
         onConfirm={()=>{void onCancelUse(record.groupId,reason).then(done=>{if(done){setCancelling(null);setReason('');}});}}/>)
         :<Text style={styles.muted}>No use recorded yet.</Text>}
     </AppCard>
+    <StockExportPanel repository={repository} overview={overview} itemId={item.itemId}/>
   </AppPage>;
 }
 

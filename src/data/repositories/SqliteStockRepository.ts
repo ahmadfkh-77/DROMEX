@@ -203,6 +203,12 @@ export class SqliteStockRepository implements StockRepository{
     return record;
   }
 
+  async getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>{
+    const row=await this.db.getFirstAsync<{company_name:string|null;logo_uri:string|null;address:string|null;phone:string|null;email:string|null}>("SELECT company_name,logo_uri,address,phone,email FROM company_settings WHERE id='company'");
+    const contact=[row?.address,row?.phone,row?.email].map(value=>value?.trim()).filter(Boolean).join(' · ');
+    return{name:row?.company_name?.trim()||'DROMEX',logoUri:row?.logo_uri?.trim()||null,contactLine:contact||null};
+  }
+
   async cancelUse(groupId:string,reason:string):Promise<void>{
     const why=reason.trim();
     if(!why)throw new Error('Enter a reason for cancelling this use.');
