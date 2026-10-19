@@ -815,6 +815,16 @@ values on its next save.
 - **Owner rules kept**: no APK without approval; push only on request (the branch was pushed on 2026-10-17 up to `64fd1a5`); explicit paths when staging; `output/arabic-header-sample.html` is never staged.
 - **Not yet accepted.** Physical-device review of every item above is pending.
 
+## After build 39 — committed on the feature branch, not built (2026-10-19)
+
+- **Source is still 0.23.0 / version code 39.** No APK has been made for these commits, and the Expo free build quota resets on 2026-11-01.
+- **Supplier Load to Stock link** (DEC-517, migration 65): `22166d9` (repository and rules), `cf1d79e` (Stock screens: Add batch switch, loads picker, source line), `157d2c1` (Stock deliveries block on the supplier page and the In Stock tag). One load becomes one batch; a linked load cannot be cancelled until its batch is; the batch keeps its own numbers. Database version 65.
+- **New Supplier Load step 1 as an open form** (`1f111cc`, no migration): WHEN, WHO and WHERE groups, underlined fields through an opt-in `variant="open"`, and one Project / Company Site / Unassigned switch. Steps 2 to 4 still use the striped card.
+- **Supplier truck counters** (`6728427`, no migration): grouped by place with a day summary and place chips; Finish, Resume and Finish all keep a per-day stored preference (`dromex.supplier-counters-finished.v1`) and never touch a Supplier Load; each trip has Edit, which opens the existing reasoned correction.
+- **Tests**: 187 files, 2,475 tests green; typecheck clean.
+- **Not done**: the + Create sheet project dropdown and the draft-conflict fix for Make Receipt (the Owner dropped it; the cause is that a saved receipt draft's project wins over the one just chosen, `MakeReceiptScreen.tsx` line 85); the open-form look for steps 2 to 4; a Company Totals PDF redesign (the Owner chose to keep it as it is).
+- **Not yet accepted.** Physical-device review is pending. Mockups for this work are in `output/` and are untracked.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:

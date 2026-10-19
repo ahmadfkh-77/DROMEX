@@ -24,7 +24,7 @@ The first version shall be phone-first and shall print receipts using a compatib
 ### 3.2 Out of Scope
 
 - Electronic payment collection, transfer, or processing. Payments occur in person; the system only records and tracks them. (Source: Turn 22; status: Confirmed.)
-- Inventory or stock-balance updates derived from quarry deliveries. These records are for quantity and payment tracking only. (Source: Turn 30; status: Confirmed.)
+- Inventory or stock-balance updates derived from quarry deliveries. These records are for quantity and payment tracking only. (Source: Turn 30; status: Confirmed; amended by DEC-517: only when the Owner links a Supplier Load into Stock.)
 - App-specific fingerprint, Face ID, or PIN locking in version one. (Source: Turn 62; status: Confirmed.)
 - Payroll, wages, and employee-attendance management. (Source: Turn 249; status: Confirmed.)
 - Equipment-maintenance scheduling. (Source: Turn 249; status: Confirmed.)
@@ -1209,7 +1209,7 @@ The proposed product is an asphalt-plant management application intended to cent
 - Quarry delivery quantity is manually copied from the supplier ticket/invoice as a positive whole number of cubic metres; decimal quantities are invalid. Measurement units elsewhere remain configurable. (Sources: Turns 27 and 177–178; status: Confirmed.)
 
 ### BR-018
-- Quarry delivery records are for quantity and payment tracking only and shall not modify an inventory or stock balance. (Source: Turn 30; status: Confirmed.)
+- Quarry delivery records are for quantity and payment tracking only and shall not modify an inventory or stock balance. (Source: Turn 30; status: Confirmed; amended by DEC-517: a Supplier Load enters Stock only when the Owner links it, one load to one batch, and a batch recorded in Stock appears on its supplier's page as Stock deliveries.)
 
 ### BR-019
 - Tracked fuel balance starts from the latest physical tank-gauge baseline, adds recorded deliveries, and subtracts recorded equipment fills. Plant fuel consumption is excluded, so the calculated result may differ until the next physical correction. (Sources: Turns 32, 39–41, and 181; status: Confirmed with limitation.)
