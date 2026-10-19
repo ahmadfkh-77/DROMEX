@@ -44,7 +44,11 @@ export type QuarryPurchase = {
 };
 export type QuarryProjectGroup={id:string|null;name:string;purchases:QuarryPurchase[];destinationType?:FuelDestinationType;companySiteId?:string|null};
 export type QuarrySupplierGroup={id:string;name:string;purchases:QuarryPurchase[];projectGroups:QuarryProjectGroup[]};
-export type QuarryDailyCounter={key:string;sourcePurchaseId:string;supplierName:string;projectName:string|null;itemName:string;unitId:string;unitSymbol:string;deliveryMethod:QuarryDeliveryMethod;driverName:string;truckPlate:string;tripCount:number;totalQuantityCubicMetres:number;defaultQuantityCubicMetres:number;lastConfirmedAt:string};
+/** One trip of a daily counter. A cancelled trip stays listed but is left out of the counter's count and total. */
+export type QuarryCounterTrip={id:string;purchaseNumber:string;confirmedAt:string;quantity:number;status:'Active'|'Cancelled'};
+export type QuarryDailyCounter={key:string;sourcePurchaseId:string;supplierName:string;projectName:string|null;itemName:string;unitId:string;unitSymbol:string;deliveryMethod:QuarryDeliveryMethod;driverName:string;truckPlate:string;tripCount:number;totalQuantityCubicMetres:number;defaultQuantityCubicMetres:number;lastConfirmedAt:string;
+  /** Every trip of today for this counter, oldest first, cancelled ones included. */
+  trips:QuarryCounterTrip[]};
 
 export type SupplierMaterialTotal={itemId:string;itemName:string;categoryName:string;unitId:string;unitSymbol:string;quantity:number;deliveries:number;firstDeliveryAt:string;lastDeliveryAt:string;
   /** Pieces added up for this item; 0 when no load of it recorded any. Pieces are never added to the quantity. */
@@ -218,15 +222,25 @@ export function groupQuarryPurchases(purchases:QuarryPurchase[]):QuarrySupplierG
 
 export function quarryDailyCounters(purchases:QuarryPurchase[],workDate:string):QuarryDailyCounter[]{
   const counters=new Map<string,QuarryDailyCounter>();
+  const keyOf=(purchase:QuarryPurchase)=>{
+    const transportKey=purchase.deliveryMethod==='supplier'?`supplier:${purchase.truckPlate.trim().toLocaleLowerCase('en-US')}`:`company:${purchase.driverId}:${purchase.truckId}`;
+    return [purchaseDestination(purchase).key==='__unassigned__'?'':purchaseDestination(purchase).key,purchase.supplierId,purchase.itemId,purchase.unitId,transportKey].join('|');
+  };
+  const tripOf=(purchase:QuarryPurchase):QuarryCounterTrip=>({id:purchase.id,purchaseNumber:purchase.purchaseNumber,confirmedAt:purchase.confirmedAt,quantity:purchase.quantityCubicMetres,status:purchase.status});
   for(const purchase of purchases){
     if(purchase.status!=='Active'||localDate(purchase.confirmedAt)!==workDate)continue;
-    const transportKey=purchase.deliveryMethod==='supplier'?`supplier:${purchase.truckPlate.trim().toLocaleLowerCase('en-US')}`:`company:${purchase.driverId}:${purchase.truckId}`;
-    const key=[purchaseDestination(purchase).key==='__unassigned__'?'':purchaseDestination(purchase).key,purchase.supplierId,purchase.itemId,purchase.unitId,transportKey].join('|');
+    const key=keyOf(purchase);
     const current=counters.get(key);
-    if(!current){counters.set(key,{key,sourcePurchaseId:purchase.id,supplierName:purchase.supplierName,projectName:purchaseDestinationName(purchase),itemName:purchase.itemName,unitId:purchase.unitId,unitSymbol:purchase.unitSymbol,deliveryMethod:purchase.deliveryMethod,driverName:purchase.driverName,truckPlate:purchase.truckPlate,tripCount:1,totalQuantityCubicMetres:purchase.quantityCubicMetres,defaultQuantityCubicMetres:purchase.quantityCubicMetres,lastConfirmedAt:purchase.confirmedAt});continue;}
-    current.tripCount+=1;current.totalQuantityCubicMetres+=purchase.quantityCubicMetres;
+    if(!current){counters.set(key,{key,sourcePurchaseId:purchase.id,supplierName:purchase.supplierName,projectName:purchaseDestinationName(purchase),itemName:purchase.itemName,unitId:purchase.unitId,unitSymbol:purchase.unitSymbol,deliveryMethod:purchase.deliveryMethod,driverName:purchase.driverName,truckPlate:purchase.truckPlate,tripCount:1,totalQuantityCubicMetres:purchase.quantityCubicMetres,defaultQuantityCubicMetres:purchase.quantityCubicMetres,lastConfirmedAt:purchase.confirmedAt,trips:[tripOf(purchase)]});continue;}
+    current.tripCount+=1;current.totalQuantityCubicMetres+=purchase.quantityCubicMetres;current.trips.push(tripOf(purchase));
     if(purchase.confirmedAt>current.lastConfirmedAt){current.sourcePurchaseId=purchase.id;current.defaultQuantityCubicMetres=purchase.quantityCubicMetres;current.lastConfirmedAt=purchase.confirmedAt;}
   }
+  // A cancelled trip is listed under the counter it belonged to, but never counted. A counter whose trips were all cancelled is not shown.
+  for(const purchase of purchases){
+    if(purchase.status!=='Cancelled'||localDate(purchase.confirmedAt)!==workDate)continue;
+    counters.get(keyOf(purchase))?.trips.push(tripOf(purchase));
+  }
+  for(const counter of counters.values())counter.trips.sort((a,b)=>a.confirmedAt.localeCompare(b.confirmedAt));
   return [...counters.values()].sort((a,b)=>b.lastConfirmedAt.localeCompare(a.lastConfirmedAt));
 }
 
