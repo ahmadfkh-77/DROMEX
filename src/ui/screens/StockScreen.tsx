@@ -33,10 +33,10 @@ const draftFromBatch=(batch:StockBatch,universal:number):StockBatchDraft=>({
   priceBasis:batch.priceBasis??'per_unit',price:batch.priceUsd==null?'':String(batch.priceUsd),vat:choiceForRate(batch.vatRatePercent,universal),notes:batch.notes??'',
 });
 
-export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCatalog,onOpenSupplierLoad,fuelBadge,bitumenBadge}:{repository:StockRepository;onBack:()=>void;onOpenFuel:()=>void;onOpenBitumen:()=>void;onOpenCatalog:()=>void;/** Opens one Supplier Load, from the source line of a batch made from it. */onOpenSupplierLoad?:(purchaseId:string,purchaseNumber:string)=>void;fuelBadge?:string|null;bitumenBadge?:string|null}){
+export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCatalog,onOpenSupplierLoad,initialBatchId,fuelBadge,bitumenBadge}:{/** Opens straight to one batch, from the Stock deliveries block on a supplier's page. */initialBatchId?:string|null;repository:StockRepository;onBack:()=>void;onOpenFuel:()=>void;onOpenBitumen:()=>void;onOpenCatalog:()=>void;/** Opens one Supplier Load, from the source line of a batch made from it. */onOpenSupplierLoad?:(purchaseId:string,purchaseNumber:string)=>void;fuelBadge?:string|null;bitumenBadge?:string|null}){
   const[setup,setSetup]=useState<StockSetup|null>(null),[overview,setOverview]=useState<StockOverview|null>(null);
   const[rulesSetup,setRulesSetup]=useState<StockRulesSetup|null>(null),[attention,setAttention]=useState<StockAttention[]>([]);
-  const[mode,setMode]=useState<Mode>({kind:'list'});
+  const[mode,setMode]=useState<Mode>(()=>initialBatchId?{kind:'batch',id:initialBatchId}:{kind:'list'});
   const[error,setError]=useState<string|null>(null),[message,setMessage]=useState<string|null>(null),[busy,setBusy]=useState(false);
   // Loads are counted whenever this screen refreshes, so the figures follow the loads (a failure here never hides Stock).
   const refresh=useCallback(async()=>{const synced=await repository.syncUse().catch(()=>null);const[nextSetup,nextOverview,nextRules]=await Promise.all([repository.getSetup(),repository.getOverview(),repository.getRulesSetup()]);setSetup(nextSetup);setOverview(nextOverview);setRulesSetup(nextRules);setAttention(synced?.attention??[]);},[repository]);
