@@ -158,3 +158,20 @@ describe('after a load is linked',()=>{
     expect(batch.sourcePurchaseId).toBeNull();
   });
 });
+
+describe('showing where a batch came from',()=>{
+  it('puts the load number on a linked batch in the overview, and none on a batch recorded in Stock',async()=>{
+    const {quarry,stock,draft}=await setup();
+    const load=await quarry.confirmPurchase(draft());
+    await stock.recordBatchesFromLoads([load.id]);
+    const typed=await stock.recordBatch({itemId:'cement',unitId:'',recordDate:'2026-10-12',supplierId:'dromex',invoiceNumber:'5120',quantity:'200',priceBasis:'per_unit',price:'',vat:{mode:'none',ratePercent:''},notes:''});
+    const batches=(await stock.getOverview()).items.find(value=>value.itemId==='cement')!.batches;
+    expect(batches.find(value=>value.sourcePurchaseId===load.id)).toMatchObject({batchNumber:'CEM-0001',sourcePurchaseNumber:load.purchaseNumber});
+    expect(batches.find(value=>value.id===typed.id)).toMatchObject({sourcePurchaseId:null,sourcePurchaseNumber:null});
+  });
+  it('is wired on the Stock screen: the Add batch switch, the loads picker, and the source line',()=>{
+    const source=require('node:fs').readFileSync('src/ui/screens/StockScreen.tsx','utf8') as string;
+    for(const text of ['From a Supplier Load','New delivery','recordBatchesFromLoads','listLinkableLoads','Recorded in Stock','From Supplier Load'])expect(source).toContain(text);
+    expect(require('node:fs').readFileSync('src/ui/DromexApp.tsx','utf8')).toContain('onOpenSupplierLoad=');
+  });
+});

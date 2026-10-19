@@ -6,7 +6,7 @@ import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 import type {StockRepository} from '../../data/repositories/StockRepository';
 import {
   emptyStockBatch,emptyStockUse,formatStockQuantity,formatUsd,isOpenStockBatch,previewStockPrice,priceBasisLabels,stockPriceText,stockStatusLabels,
-  type StockBatch,type StockBatchDraft,type StockItemOverview,type StockOverview,type StockPriceBasis,type StockSetup,type StockUseDraft,type StockUseRecord,
+  type StockBatch,type StockBatchDraft,type StockLinkableLoad,type StockItemOverview,type StockOverview,type StockPriceBasis,type StockSetup,type StockUseDraft,type StockUseRecord,
 } from '../../domain/stock';
 import {localDateKey} from '../../domain/fuel';
 import {AppButton,AppCard,AppField,AppPage,EmptyState,Feedback,PageHeader} from '../components/AppPrimitives';
@@ -33,7 +33,7 @@ const draftFromBatch=(batch:StockBatch,universal:number):StockBatchDraft=>({
   priceBasis:batch.priceBasis??'per_unit',price:batch.priceUsd==null?'':String(batch.priceUsd),vat:choiceForRate(batch.vatRatePercent,universal),notes:batch.notes??'',
 });
 
-export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCatalog,fuelBadge,bitumenBadge}:{repository:StockRepository;onBack:()=>void;onOpenFuel:()=>void;onOpenBitumen:()=>void;onOpenCatalog:()=>void;fuelBadge?:string|null;bitumenBadge?:string|null}){
+export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCatalog,onOpenSupplierLoad,fuelBadge,bitumenBadge}:{repository:StockRepository;onBack:()=>void;onOpenFuel:()=>void;onOpenBitumen:()=>void;onOpenCatalog:()=>void;/** Opens one Supplier Load, from the source line of a batch made from it. */onOpenSupplierLoad?:(purchaseId:string,purchaseNumber:string)=>void;fuelBadge?:string|null;bitumenBadge?:string|null}){
   const[setup,setSetup]=useState<StockSetup|null>(null),[overview,setOverview]=useState<StockOverview|null>(null);
   const[rulesSetup,setRulesSetup]=useState<StockRulesSetup|null>(null),[attention,setAttention]=useState<StockAttention[]>([]);
   const[mode,setMode]=useState<Mode>({kind:'list'});
@@ -57,8 +57,9 @@ export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCa
     const initial={...emptyStockBatch,itemId:mode.itemId};
     return <AppPage keyboard><PageHeader eyebrow="Stock" title="Add batch" onBack={()=>go(mode.itemId&&overview.items.some(value=>value.itemId===mode.itemId)?{kind:'item',id:mode.itemId}:{kind:'list'})}/>
       {error?<Feedback kind="error">{error}</Feedback>:null}
-      <BatchForm setup={setup} initial={initial} busy={busy} submitLabel="Save batch" itemLocked={Boolean(mode.itemId&&overview.items.some(value=>value.itemId===mode.itemId))} onOpenCatalog={onOpenCatalog}
-        onSubmit={draft=>{void run(async()=>{const saved=await repository.recordBatch(draft);setMode({kind:'item',id:saved.itemId});},'Batch saved.');}}/>
+      <AddBatch repository={repository} setup={setup} initial={initial} busy={busy} itemLocked={Boolean(mode.itemId&&overview.items.some(value=>value.itemId===mode.itemId))} onOpenCatalog={onOpenCatalog}
+        onSubmit={draft=>{void run(async()=>{const saved=await repository.recordBatch(draft);setMode({kind:'item',id:saved.itemId});},'Batch saved.');}}
+        onLink={loadIds=>{void run(async()=>{const saved=await repository.recordBatchesFromLoads(loadIds);setMode({kind:'item',id:saved[0]!.itemId});},loadIds.length===1?'Batch added from the Supplier Load.':`${loadIds.length} batches added from Supplier Loads.`);}}/>
     </AppPage>;
   }
 
@@ -71,7 +72,7 @@ export function StockScreen({repository,onBack,onOpenFuel,onOpenBitumen,onOpenCa
   }
 
   if(mode.kind==='batch'&&batch&&batchItem){
-    return <BatchDetail key={`${batch.id}-${mode.kind==='batch'&&mode.closing?'close':'view'}`} startClosing={mode.kind==='batch'&&!!mode.closing} onCloseBatch={(closedOn,reason)=>void run(async()=>{await repository.closeBatch(batch.id,closedOn,reason);},'Batch closed. What was left is kept with your reason.')} onReopenBatch={reason=>void run(async()=>{await repository.reopenBatch(batch.id,reason);},'Batch reopened.')} item={batchItem} batch={batch} busy={busy} error={error} message={message} onBack={()=>go({kind:'item',id:batchItem.itemId})} onEdit={()=>go({kind:'edit',id:batch.id})}
+    return <BatchDetail key={`${batch.id}-${mode.kind==='batch'&&mode.closing?'close':'view'}`} startClosing={mode.kind==='batch'&&!!mode.closing} onCloseBatch={(closedOn,reason)=>void run(async()=>{await repository.closeBatch(batch.id,closedOn,reason);},'Batch closed. What was left is kept with your reason.')} onReopenBatch={reason=>void run(async()=>{await repository.reopenBatch(batch.id,reason);},'Batch reopened.')} item={batchItem} batch={batch} busy={busy} error={error} message={message} onOpenSupplierLoad={onOpenSupplierLoad} onBack={()=>go({kind:'item',id:batchItem.itemId})} onEdit={()=>go({kind:'edit',id:batch.id})}
       onCancel={reason=>void run(async()=>{await repository.cancelBatch(batch.id,reason);},'Batch cancelled. It stays on record and is not counted.')}/>;
   }
 
@@ -176,7 +177,7 @@ function BatchCard({batch,unit,onOpen,onCloseBatch}:{batch:StockBatch;unit:strin
   const used=batch.quantity>0?Math.min(1,Math.max(0,batch.usedQuantity/batch.quantity)):0;
   return <TouchableOpacity style={styles.batch} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`${batch.batchNumber}, ${stockStatusLabels[batch.status]}, ${formatStockQuantity(batch.remainingQuantity,unit)} remaining`}>
     <View style={styles.batchTop}>
-      <View style={styles.flex}><Text style={styles.batchNumber}>{batch.batchNumber}</Text><Text style={styles.sub}>{batch.supplierName??'No supplier'} · {dayLabel(batch.arrivedAt)}</Text></View>
+      <View style={styles.flex}><Text style={styles.batchNumber}>{batch.batchNumber}</Text><Text style={styles.sub}>{batch.supplierName??'No supplier'} · {dayLabel(batch.arrivedAt)}</Text>{batch.sourcePurchaseId?<Text style={styles.sub}>From Supplier Load {batch.sourcePurchaseNumber??''}</Text>:null}</View>
       <Text style={[styles.badge,batch.status==='in_use'&&styles.badgeInUse,batch.status==='waiting'&&styles.badgeWaiting]}>{stockStatusLabels[batch.status]}</Text>
     </View>
     <View style={styles.figures}><Figure label="Received" value={formatStockQuantity(batch.quantity,unit)}/><Figure label="Used" value={formatStockQuantity(batch.usedQuantity,unit)}/><Figure label="Remaining" value={formatStockQuantity(batch.remainingQuantity,unit)} strong/></View>
@@ -185,7 +186,7 @@ function BatchCard({batch,unit,onOpen,onCloseBatch}:{batch:StockBatch;unit:strin
   </TouchableOpacity>;
 }
 
-function BatchDetail({item,batch,busy,error,message,onBack,onEdit,onCancel,startClosing,onCloseBatch,onReopenBatch}:{startClosing:boolean;onCloseBatch:(closedOn:string,reason:string)=>void;onReopenBatch:(reason:string)=>void;item:StockItemOverview;batch:StockBatch;busy:boolean;error:string|null;message:string|null;onBack:()=>void;onEdit:()=>void;onCancel:(reason:string)=>void}){
+function BatchDetail({item,batch,busy,error,message,onBack,onEdit,onCancel,startClosing,onCloseBatch,onReopenBatch,onOpenSupplierLoad}:{onOpenSupplierLoad?:(purchaseId:string,purchaseNumber:string)=>void;startClosing:boolean;onCloseBatch:(closedOn:string,reason:string)=>void;onReopenBatch:(reason:string)=>void;item:StockItemOverview;batch:StockBatch;busy:boolean;error:string|null;message:string|null;onBack:()=>void;onEdit:()=>void;onCancel:(reason:string)=>void}){
   const[cancelOpen,setCancelOpen]=useState(false),[reason,setReason]=useState('');
   const[sheet,setSheet]=useState<null|'close'|'reopen'>(startClosing&&isOpenStockBatch(batch)?'close':null);
   const cancelled=batch.status==='cancelled',unit=item.unitSymbol;
@@ -197,6 +198,7 @@ function BatchDetail({item,batch,busy,error,message,onBack,onEdit,onCancel,start
     <AppCard>
       <Text style={[styles.badge,batch.status==='in_use'&&styles.badgeInUse,batch.status==='waiting'&&styles.badgeWaiting,cancelled&&styles.badgeCancelled,{alignSelf:'flex-start'}]}>{stockStatusLabels[batch.status]}</Text>
       <Fact label="Supplier" value={batch.supplierName??'Not recorded'}/><Fact label="Arrived" value={dayLabel(batch.arrivedAt)}/><Fact label="Invoice" value={batch.invoiceNumber??'Not recorded'}/>
+      {batch.sourcePurchaseId?<TouchableOpacity style={styles.fact} disabled={!onOpenSupplierLoad} onPress={()=>onOpenSupplierLoad?.(batch.sourcePurchaseId!,batch.sourcePurchaseNumber??'')} accessibilityRole="button" accessibilityLabel={`Source: Supplier Load ${batch.sourcePurchaseNumber??''}. Open it`}><Text style={styles.sub}>Source</Text><Text style={[styles.factValue,onOpenSupplierLoad&&styles.link]}>From Supplier Load {batch.sourcePurchaseNumber??''}{onOpenSupplierLoad?' ›':''}</Text></TouchableOpacity>:<Fact label="Source" value="Recorded in Stock"/>}
       <Fact label="Price" value={stockPriceText(batch,unit)}/>
       {batch.totalUsd!=null?<Fact label={batch.vatRatePercent?`Total (incl. VAT ${batch.vatRatePercent}%)`:'Total'} value={formatUsd(batch.totalUsd)}/>:null}
       {batch.notes?<Fact label="Notes" value={batch.notes}/>:null}
@@ -216,6 +218,42 @@ function BatchDetail({item,batch,busy,error,message,onBack,onEdit,onCancel,start
     </>}
     {batch.correctionHistory.length?<AppCard title="Correction history">{batch.correctionHistory.map((entry,index)=><View key={`${entry.at}-${index}`} style={styles.history}><Text style={styles.sub}>{new Date(entry.at).toLocaleString()} · {entry.reason}</Text>{entry.changes.map(change=><Text key={change.field} style={styles.body}>{change.field}: {change.before} → {change.after}</Text>)}</View>)}</AppCard>:null}
   </AppPage>;
+}
+
+/**
+ * Add batch. Two ways in: type a new delivery, or link a Supplier Load that is already recorded, so it is not typed again. The loads path lists the
+ * item's loads that are not in Stock yet; each ticked load becomes one batch with its supplier, day, quantity, ticket, price and VAT.
+ */
+function AddBatch({repository,setup,initial,busy,itemLocked,onOpenCatalog,onSubmit,onLink}:{repository:StockRepository;setup:StockSetup;initial:StockBatchDraft;busy:boolean;itemLocked:boolean;onOpenCatalog:()=>void;onSubmit:(draft:StockBatchDraft)=>void;onLink:(loadIds:string[])=>void}){
+  const[way,setWay]=useState<'new'|'loads'>('new');
+  return <>
+    <SegmentedChoice label="How was it delivered?" options={[{id:'new' as const,label:'New delivery'},{id:'loads' as const,label:'From a Supplier Load'}]} selectedId={way} onSelect={setWay} hint={way==='loads'?'Use a delivery you already recorded on Supplier Loads. Nothing is typed again.':undefined}/>
+    {way==='new'?<BatchForm setup={setup} initial={initial} busy={busy} submitLabel="Save batch" itemLocked={itemLocked} onOpenCatalog={onOpenCatalog} onSubmit={onSubmit}/>:<LinkLoads repository={repository} setup={setup} initialItemId={initial.itemId} itemLocked={itemLocked} busy={busy} onLink={onLink}/>}
+  </>;
+}
+
+function LinkLoads({repository,setup,initialItemId,itemLocked,busy,onLink}:{repository:StockRepository;setup:StockSetup;initialItemId:string;itemLocked:boolean;busy:boolean;onLink:(loadIds:string[])=>void}){
+  const[itemId,setItemId]=useState(initialItemId),[loads,setLoads]=useState<StockLinkableLoad[]|null>(null),[picked,setPicked]=useState<ReadonlySet<string>>(()=>new Set()),[loadError,setLoadError]=useState<string|null>(null);
+  useEffect(()=>{let live=true;setPicked(new Set());setLoadError(null);if(!itemId){setLoads(null);return;}setLoads(null);void repository.listLinkableLoads(itemId).then(value=>{if(live)setLoads(value);}).catch(cause=>{if(live)setLoadError(cause instanceof Error?cause.message:'Could not load the Supplier Loads.');});return()=>{live=false;};},[itemId,repository]);
+  const chosen=setup.catalogItems.find(value=>value.id===itemId);
+  const toggle=(id:string)=>setPicked(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next;});
+  const selected=(loads??[]).filter(load=>picked.has(load.id));
+  const units=new Set(selected.map(load=>load.unitSymbol.trim().toLowerCase()));
+  const mixed=units.size>1;
+  return <>
+    <AppCard title="1 · Item">
+      {itemLocked?<Text style={styles.body}>{chosen?.name??'Item'}</Text>:<SearchableSelect label="Item (from your Catalog) *" options={setup.catalogItems.map(value=>({id:value.id,label:value.name,detail:`${value.categoryName}${value.inStock?' · in Stock':''}`}))} selectedId={itemId} onSelect={setItemId} placeholder="Select item"/>}
+    </AppCard>
+    <AppCard title="2 · Supplier Loads" hint="Active loads of this item that are not in Stock yet, oldest first. Tick the ones to add.">
+      {!itemId?<Text style={styles.muted}>Choose an item to see its Supplier Loads.</Text>:loadError?<Feedback kind="error">{loadError}</Feedback>:loads===null?<Text style={styles.muted}>Loading Supplier Loads…</Text>:!loads.length?<Text style={styles.muted}>No Supplier Loads of this item are waiting to be linked.</Text>:loads.map(load=>{const on=picked.has(load.id);return <TouchableOpacity key={load.id} style={[styles.loadRow,on&&styles.loadRowOn,!load.usable&&styles.loadRowOff]} disabled={!load.usable} onPress={()=>toggle(load.id)} accessibilityRole="checkbox" accessibilityState={{checked:on,disabled:!load.usable}} accessibilityLabel={`${load.purchaseNumber}, ${dayLabel(load.arrivedAt)}, ${formatStockQuantity(load.quantity,load.unitSymbol)}`}>
+        <View style={[styles.checkbox,on&&styles.checkboxOn]}>{on?<Text style={styles.checkMark}>✓</Text>:null}</View>
+        <View style={styles.flex}><Text style={styles.batchNumber}>{load.purchaseNumber} · {dayLabel(load.arrivedAt)}</Text><Text style={styles.sub}>{load.supplierName}{load.destinationName?` · ${load.destinationName}`:''}</Text><Text style={styles.sub}>{load.invoiceNumber?`Ticket ${load.invoiceNumber}`:'No ticket'} · {load.priced&&load.totalUsd!=null?formatUsd(load.totalUsd):'Unpriced'}</Text>{!load.usable&&load.unusableReason?<Text style={styles.sub}>{load.unusableReason}</Text>:null}</View>
+        <Text style={styles.factValue}>{formatStockQuantity(load.quantity,load.unitSymbol)}</Text>
+      </TouchableOpacity>;})}
+    </AppCard>
+    {selected.length?<AppCard><Text style={styles.body}>{selected.length} load{selected.length===1?'':'s'} selected → {selected.length} batch{selected.length===1?'':'es'}</Text><Text style={styles.sub}>Copied: supplier, load date, quantity, price and VAT, and the ticket as the invoice number. Nothing to retype; a batch can still be edited afterwards.</Text>{mixed?<Feedback kind="error">These loads are counted in different units. Tick the loads of one unit at a time.</Feedback>:null}</AppCard>:null}
+    <AppButton label={selected.length?`Add ${selected.length} batch${selected.length===1?'':'es'} to Stock`:'Add to Stock'} busy={busy} disabled={!selected.length||mixed} onPress={()=>onLink(selected.map(load=>load.id))}/>
+  </>;
 }
 
 function BatchForm({setup,initial,busy,submitLabel,asksReason=false,itemLocked=false,unitSymbol,onOpenCatalog,onSubmit}:{setup:StockSetup;initial:StockBatchDraft;busy:boolean;submitLabel:string;asksReason?:boolean;itemLocked?:boolean;unitSymbol?:string;onOpenCatalog:()=>void;onSubmit:(draft:StockBatchDraft,reason?:string)=>void}){
@@ -266,6 +304,13 @@ const styles=StyleSheet.create({
   body:{color:colors.ink,fontSize:14,lineHeight:20},
   sub:{color:colors.muted,fontSize:12,lineHeight:17},
   struck:{textDecorationLine:'line-through'},
+  link:{color:colors.brand},
+  loadRow:{flexDirection:'row',alignItems:'flex-start',gap:10,paddingVertical:10,paddingHorizontal:8,borderRadius:radius.md,borderWidth:1.5,borderColor:colors.line,backgroundColor:colors.surface,marginTop:8,minHeight:56},
+  loadRowOn:{borderColor:colors.navy,backgroundColor:'#EEF3F8'},
+  loadRowOff:{opacity:.5},
+  checkbox:{width:24,height:24,borderRadius:7,borderWidth:2,borderColor:'#9AA5B1',alignItems:'center',justifyContent:'center',marginTop:1},
+  checkboxOn:{backgroundColor:colors.navy,borderColor:colors.navy},
+  checkMark:{color:'#FFF',fontSize:14,fontWeight:'900'},
   chevron:{color:colors.navy,fontSize:22,fontWeight:'700'},
   tank:{backgroundColor:colors.navy,borderRadius:radius.lg,padding:16,gap:2},
   tankLabel:{color:'#D5E4EF',fontSize:11,fontWeight:'900',letterSpacing:1.1},

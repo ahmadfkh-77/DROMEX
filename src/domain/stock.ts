@@ -44,6 +44,8 @@ export type StockBatch={
   closureHistory:BatchClosure[];
   /** The Supplier Load this batch was made from, or null when it was recorded in Stock. */
   sourcePurchaseId?:string|null;
+  /** That load's number, for showing where the batch came from. */
+  sourcePurchaseNumber?:string|null;
 };
 
 /** A Supplier Load of an item that is not in Stock yet, offered for linking. `usable` is false when its unit differs from the item's Stock unit. */

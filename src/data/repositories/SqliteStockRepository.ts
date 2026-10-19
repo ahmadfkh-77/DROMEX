@@ -12,7 +12,7 @@ import {activeClosure,insertClosure,loadClosures,reopenClosure} from './batchClo
 
 type ItemRow={item_id:string;item_name:string;unit_symbol:string;unit_name:string;prefix:string;next_number:number};
 type BatchRow={
-  source_purchase_id?:string|null;
+  source_purchase_id?:string|null;source_purchase_number?:string|null;
   id:string;item_id:string;batch_number:string;sequence:number;arrived_at:string;quantity:number;supplier_id:string|null;supplier_name:string|null;invoice_number:string|null;
   price_basis:StockPriceBasis|null;price_usd_cents:number|null;vat_basis_points:number|null;subtotal_usd_cents:number|null;total_usd_cents:number|null;notes:string|null;
   status:'Active'|'Cancelled';cancellation_reason:string|null;cancelled_at:string|null;correction_history_json:string|null;created_at:string;updated_at:string;
@@ -43,7 +43,7 @@ function baseFromRow(row:BatchRow):StockBatchBase{
     id:row.id,itemId:row.item_id,batchNumber:row.batch_number,arrivedAt:row.arrived_at,supplierId:row.supplier_id,supplierName:row.supplier_name,invoiceNumber:row.invoice_number,notes:row.notes,
     quantity:row.quantity,priceBasis:row.price_basis,priceUsd:row.price_usd_cents==null?null:row.price_usd_cents/100,vatRatePercent:row.vat_basis_points==null?null:row.vat_basis_points/100,
     subtotalUsd:row.subtotal_usd_cents==null?null:row.subtotal_usd_cents/100,totalUsd:row.total_usd_cents==null?null:row.total_usd_cents/100,priced,
-    sourcePurchaseId:row.source_purchase_id??null,recordStatus:row.status,cancellationReason:row.cancellation_reason,cancelledAt:row.cancelled_at,correctionHistory:parseHistory(row.correction_history_json),createdAt:row.created_at,
+    sourcePurchaseId:row.source_purchase_id??null,sourcePurchaseNumber:row.source_purchase_number??null,recordStatus:row.status,cancellationReason:row.cancellation_reason,cancelledAt:row.cancelled_at,correctionHistory:parseHistory(row.correction_history_json),createdAt:row.created_at,
   };
 }
 
@@ -67,7 +67,7 @@ export class SqliteStockRepository implements StockRepository{
 
   async getOverview():Promise<StockOverview>{
     const items=await this.db.getAllAsync<ItemRow>('SELECT item_id,item_name,unit_symbol,unit_name,prefix,next_number FROM stock_items WHERE is_active=1 ORDER BY item_name COLLATE NOCASE');
-    const batches=await this.db.getAllAsync<BatchRow>('SELECT * FROM stock_batches ORDER BY arrived_at,batch_number');
+    const batches=await this.db.getAllAsync<BatchRow>('SELECT b.*,p.purchase_number source_purchase_number FROM stock_batches b LEFT JOIN quarry_purchases p ON p.id=b.source_purchase_id ORDER BY b.arrived_at,b.batch_number');
     const uses=(await this.db.getAllAsync<UseDbRow>('SELECT * FROM stock_use ORDER BY created_at,rowid')).map(useFromRow);
     const closures=await loadClosures(this.db,'stock');
     return {items:items.map(item=>buildStockItemOverview(
