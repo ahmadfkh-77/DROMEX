@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 64;
+export const DATABASE_VERSION = 65;
 
 type TableColumn = { name: string };
 
@@ -2416,6 +2416,17 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_batch_closures_batch ON batch_closures(batch_kind, batch_id);
     `);
     currentVersion = 64;
+  }
+
+  if (currentVersion === 64) {
+    // Link a Stock batch to the Supplier Load it came from, so a delivery recorded on Supplier Loads can be put into Stock without typing it again.
+    // The batch keeps its own saved numbers (a later correction of the load does not change it). A load links once: the unique index covers
+    // active batches only, so cancelling the batch frees the load to be linked again. Purely additive: one nullable column and one index.
+    await addColumnIfMissing(db, 'stock_batches', 'source_purchase_id', 'TEXT REFERENCES quarry_purchases(id)');
+    await db.execAsync(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_batches_source_purchase ON stock_batches(source_purchase_id) WHERE source_purchase_id IS NOT NULL AND status = 'Active';
+    `);
+    currentVersion = 65;
   }
 
 

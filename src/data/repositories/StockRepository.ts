@@ -1,5 +1,5 @@
 import type {StockRule,StockRuleDraft,StockRulesSetup,StockSyncResult} from '../../domain/stockRules';
-import type {StockBatch,StockBatchDraft,StockBatchEditDraft,StockOverview,StockSetup,StockUseDraft,StockUseRecord} from '../../domain/stock';
+import type {StockBatch,StockBatchDraft,StockBatchEditDraft,StockLinkableLoad,StockOverview,StockSetup,StockUseDraft,StockUseRecord} from '../../domain/stock';
 
 /** Stock (Phase 1): any Catalog item as stock, its delivery batches, and hand-recorded use. UI calls this; SQLite persists it. */
 export interface StockRepository{
@@ -7,6 +7,10 @@ export interface StockRepository{
   getOverview():Promise<StockOverview>;
   /** Records a delivery. The first delivery of an item also adds it to Stock, in the item's default unit or the unit chosen on the form. */
   recordBatch(draft:StockBatchDraft):Promise<StockBatch>;
+  /** The active Supplier Loads of an item that are not in Stock yet, oldest first, so a delivery recorded there can be linked instead of typed again. */
+  listLinkableLoads(itemId:string):Promise<StockLinkableLoad[]>;
+  /** Makes one Stock batch from each chosen Supplier Load, copying its supplier, day, quantity, ticket and saved price and VAT. A load links once, and the loads must be of one item and one unit. */
+  recordBatchesFromLoads(loadIds:string[]):Promise<StockBatch[]>;
   /** Changes a batch. A new quantity or date needs a reason, and the old values are kept in the batch's correction history. */
   editBatch(id:string,draft:StockBatchEditDraft):Promise<StockBatch>;
   /** Cancels a batch with a reason; it stays visible as Cancelled and is never counted. A batch with recorded use cannot be cancelled. */

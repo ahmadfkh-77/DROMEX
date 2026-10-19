@@ -3,8 +3,8 @@ import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {localDateKey} from '../../domain/fuel';
 import {
-  buildStockItemOverview,calculateStockPrice,formatStockBatchNumber,formatStockQuantity,isOpenStockBatch,planStockUse,stockPrefix,STOCK_EPSILON,validateStockQuantity,
-  type StockBatch,type StockBatchBase,type StockBatchDraft,type StockBatchEditDraft,type StockCatalogItem,type StockCorrectionEntry,type StockOverview,type StockPriceBasis,type StockSetup,type StockUseDraft,type StockUseRecord,type StockUseRow,
+  batchPriceFromLoad,buildStockItemOverview,calculateStockPrice,formatStockBatchNumber,formatStockQuantity,isOpenStockBatch,planStockUse,stockPrefix,STOCK_EPSILON,validateStockQuantity,
+  type StockBatch,type StockLinkableLoad,type StockBatchBase,type StockBatchDraft,type StockBatchEditDraft,type StockCatalogItem,type StockCorrectionEntry,type StockOverview,type StockPriceBasis,type StockSetup,type StockUseDraft,type StockUseRecord,type StockUseRow,
 } from '../../domain/stock';
 import {reconcileStockUse,type RuleBatch,type RuleLoad,type RuleOverride,type StockRule,type StockRuleDraft,type StockRuleLine,type StockRulesSetup,type StockSyncResult} from '../../domain/stockRules';
 import type {StockRepository} from './StockRepository';
@@ -12,10 +12,13 @@ import {activeClosure,insertClosure,loadClosures,reopenClosure} from './batchClo
 
 type ItemRow={item_id:string;item_name:string;unit_symbol:string;unit_name:string;prefix:string;next_number:number};
 type BatchRow={
+  source_purchase_id?:string|null;
   id:string;item_id:string;batch_number:string;sequence:number;arrived_at:string;quantity:number;supplier_id:string|null;supplier_name:string|null;invoice_number:string|null;
   price_basis:StockPriceBasis|null;price_usd_cents:number|null;vat_basis_points:number|null;subtotal_usd_cents:number|null;total_usd_cents:number|null;notes:string|null;
   status:'Active'|'Cancelled';cancellation_reason:string|null;cancelled_at:string|null;correction_history_json:string|null;created_at:string;updated_at:string;
 };
+type LinkableLoadRow={id:string;purchase_number:string;confirmed_at:string;supplier_id:string;supplier_name:string;destination_name:string|null;quantity:number;unit_id:string|null;unit_symbol:string|null;supplier_ticket_number:string|null;unit_price_usd_cents:number|null;final_total_usd_cents:number|null};
+type LinkLoadRow={id:string;purchase_number:string;confirmed_at:string;supplier_id:string;supplier_name:string;item_id:string;quantity:number;unit_id:string|null;unit_name:string|null;unit_symbol:string|null;supplier_ticket_number:string|null;price_basis:'per_unit'|'whole'|null;unit_price_usd_cents:number|null;subtotal_usd_cents:number|null;vat_rate_basis_points:number|null;final_total_usd_cents:number|null;status:'Active'|'Cancelled'};
 type UseDbRow={id:string;group_id:string;item_id:string;batch_id:string;kind:'use'|'reversal';quantity:number;used_on:string;note:string|null;reason:string|null;created_at:string;source?:string|null;load_id?:string|null;load_number?:string|null;load_quantity?:number|null;load_unit?:string|null;rule_id?:string|null;rule_version_id?:string|null;rule_per_quantity?:number|null;rule_amount?:number|null};
 
 const makeId=()=>`stock_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
@@ -40,7 +43,7 @@ function baseFromRow(row:BatchRow):StockBatchBase{
     id:row.id,itemId:row.item_id,batchNumber:row.batch_number,arrivedAt:row.arrived_at,supplierId:row.supplier_id,supplierName:row.supplier_name,invoiceNumber:row.invoice_number,notes:row.notes,
     quantity:row.quantity,priceBasis:row.price_basis,priceUsd:row.price_usd_cents==null?null:row.price_usd_cents/100,vatRatePercent:row.vat_basis_points==null?null:row.vat_basis_points/100,
     subtotalUsd:row.subtotal_usd_cents==null?null:row.subtotal_usd_cents/100,totalUsd:row.total_usd_cents==null?null:row.total_usd_cents/100,priced,
-    recordStatus:row.status,cancellationReason:row.cancellation_reason,cancelledAt:row.cancelled_at,correctionHistory:parseHistory(row.correction_history_json),createdAt:row.created_at,
+    sourcePurchaseId:row.source_purchase_id??null,recordStatus:row.status,cancellationReason:row.cancellation_reason,cancelledAt:row.cancelled_at,correctionHistory:parseHistory(row.correction_history_json),createdAt:row.created_at,
   };
 }
 
@@ -131,6 +134,67 @@ export class SqliteStockRepository implements StockRepository{
       await this.enqueue('stockBatch',id,{id,itemId:item.id,batchNumber,arrivedAt,quantity,supplierId:supplier?.id??null,invoiceNumber:clean(draft.invoiceNumber),priceUsd:price.priceUsd,totalUsd:price.totalUsd,status:'Active'});
     });
     return this.batch(id);
+  }
+
+  async listLinkableLoads(itemId:string):Promise<StockLinkableLoad[]>{
+    const stocked=await this.db.getFirstAsync<{unit_symbol:string;item_name:string}>('SELECT unit_symbol,item_name FROM stock_items WHERE item_id=?',itemId);
+    const rows=await this.db.getAllAsync<LinkableLoadRow>(`SELECT p.id,p.purchase_number,p.confirmed_at,p.supplier_id,p.supplier_name,COALESCE(p.project_name,s.name) destination_name,p.quantity_cubic_metres quantity,p.unit_id,p.unit_symbol,
+        p.supplier_ticket_number,p.unit_price_usd_cents,p.final_total_usd_cents
+      FROM quarry_purchases p LEFT JOIN company_sites s ON s.id=p.company_site_id
+      WHERE p.item_id=? AND p.status='Active' AND NOT EXISTS (SELECT 1 FROM stock_batches b WHERE b.source_purchase_id=p.id AND b.status='Active')
+      ORDER BY p.confirmed_at,p.purchase_number`,itemId);
+    return rows.map(row=>{
+      const symbol=row.unit_symbol??'';
+      const sameUnit=!stocked||symbol.trim().toLowerCase()===stocked.unit_symbol.trim().toLowerCase();
+      return{id:row.id,purchaseNumber:row.purchase_number,arrivedAt:row.confirmed_at,supplierId:row.supplier_id,supplierName:row.supplier_name,destinationName:row.destination_name,quantity:row.quantity,unitId:row.unit_id,unitSymbol:symbol,
+        invoiceNumber:row.supplier_ticket_number,priced:row.unit_price_usd_cents!=null&&row.final_total_usd_cents!=null,totalUsd:row.final_total_usd_cents==null?null:row.final_total_usd_cents/100,
+        usable:sameUnit,unusableReason:sameUnit?null:`This load is counted in ${symbol||'another unit'}, but ${stocked!.item_name} is in Stock in ${stocked!.unit_symbol}.`};
+    });
+  }
+
+  async recordBatchesFromLoads(loadIds:string[]):Promise<StockBatch[]>{
+    const ids=[...new Set(loadIds.map(value=>value.trim()).filter(Boolean))];
+    if(!ids.length)throw new Error('Choose at least one Supplier Load.');
+    const loads:LinkLoadRow[]=[];
+    for(const id of ids){
+      const row=await this.db.getFirstAsync<LinkLoadRow>('SELECT id,purchase_number,confirmed_at,supplier_id,supplier_name,item_id,quantity_cubic_metres quantity,unit_id,unit_name,unit_symbol,supplier_ticket_number,price_basis,unit_price_usd_cents,subtotal_usd_cents,vat_rate_basis_points,final_total_usd_cents,status FROM quarry_purchases WHERE id=?',id);
+      if(!row)throw new Error('A chosen Supplier Load was not found.');
+      if(row.status!=='Active')throw new Error(`Supplier Load ${row.purchase_number} is cancelled, so it cannot go into Stock.`);
+      const linked=await this.db.getFirstAsync<{batch_number:string}>("SELECT batch_number FROM stock_batches WHERE source_purchase_id=? AND status='Active'",id);
+      if(linked)throw new Error(`Supplier Load ${row.purchase_number} is already in Stock as ${linked.batch_number}.`);
+      loads.push(row);
+    }
+    const first=loads[0]!;
+    if(loads.some(load=>load.item_id!==first.item_id))throw new Error('Link the loads of one item at a time.');
+    const symbol=(first.unit_symbol??'').trim().toLowerCase();
+    if(loads.some(load=>(load.unit_symbol??'').trim().toLowerCase()!==symbol))throw new Error('These loads are counted in different units. Link the loads of one unit at a time.');
+    const item=await this.db.getFirstAsync<{id:string;name:string}>('SELECT id,name FROM catalog_items WHERE id=? AND is_active=1',first.item_id);
+    if(!item)throw new Error('The item of these loads is not an active Catalog item.');
+    const existing=await this.db.getFirstAsync<ItemRow>('SELECT item_id,item_name,unit_symbol,unit_name,prefix,next_number FROM stock_items WHERE item_id=?',item.id);
+    if(existing&&existing.unit_symbol.trim().toLowerCase()!==symbol)throw new Error(`These loads are counted in ${first.unit_symbol||'another unit'}, but ${existing.item_name} is in Stock in ${existing.unit_symbol}.`);
+    if(!existing&&!first.unit_symbol)throw new Error('These loads have no unit, so the item cannot be added to Stock from them.');
+    const ordered=[...loads].sort((a,b)=>a.confirmed_at.localeCompare(b.confirmed_at)||a.purchase_number.localeCompare(b.purchase_number));
+    const created:string[]=[];const now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      if(!existing){
+        const taken=new Set((await this.db.getAllAsync<{prefix:string}>('SELECT prefix FROM stock_items')).map(row=>row.prefix));
+        await this.db.runAsync('INSERT INTO stock_items (item_id,item_name,unit_symbol,unit_name,prefix,next_number,is_active,created_at,updated_at) VALUES (?,?,?,?,?,1,1,?,?)',item.id,item.name,first.unit_symbol,first.unit_name??first.unit_symbol,stockPrefix(item.name,taken),now,now);
+      }
+      for(const load of ordered){
+        const counter=await this.db.getFirstAsync<{sequence:number;prefix:string}>('UPDATE stock_items SET next_number = next_number + 1,updated_at = ? WHERE item_id = ? RETURNING next_number - 1 AS sequence,prefix',now,item.id);
+        if(!counter)throw new Error('The batch number could not be generated.');
+        const id=makeId(),sequence=Number(counter.sequence),batchNumber=formatStockBatchNumber(counter.prefix,sequence);
+        const price=batchPriceFromLoad({quantity:load.quantity,priceBasis:load.price_basis,unitPriceCents:load.unit_price_usd_cents,subtotalCents:load.subtotal_usd_cents,vatBasisPoints:load.vat_rate_basis_points,totalCents:load.final_total_usd_cents});
+        await this.db.runAsync(`INSERT INTO stock_batches (id,item_id,batch_number,sequence,arrived_at,quantity,supplier_id,supplier_name,invoice_number,price_basis,price_usd_cents,vat_basis_points,subtotal_usd_cents,total_usd_cents,notes,source_purchase_id,status,created_at,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,'Active',?,?)`,
+          id,item.id,batchNumber,sequence,load.confirmed_at,load.quantity,load.supplier_id,load.supplier_name,clean(load.supplier_ticket_number??''),price?.priceBasis??null,price?.priceCents??null,price?.vatBasisPoints??null,price?.subtotalCents??null,price?.totalCents??null,load.id,now,now);
+        await this.enqueue('stockBatch',id,{id,itemId:item.id,batchNumber,arrivedAt:load.confirmed_at,quantity:load.quantity,supplierId:load.supplier_id,invoiceNumber:clean(load.supplier_ticket_number??''),priceUsd:price?price.priceCents/100:null,totalUsd:price?price.totalCents/100:null,sourcePurchaseId:load.id,status:'Active'});
+        created.push(id);
+      }
+    });
+    const overview=await this.getOverview();
+    const batches=overview.items.find(value=>value.itemId===item.id)?.batches??[];
+    return created.map(id=>{const found=batches.find(value=>value.id===id);if(!found)throw new Error('The stock batch was not found.');return found;});
   }
 
   async editBatch(id:string,draft:StockBatchEditDraft):Promise<StockBatch>{

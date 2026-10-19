@@ -42,7 +42,30 @@ export type StockBatch={
   closure:BatchClosure|null;
   /** Every close and reopen of this batch, oldest first. */
   closureHistory:BatchClosure[];
+  /** The Supplier Load this batch was made from, or null when it was recorded in Stock. */
+  sourcePurchaseId?:string|null;
 };
+
+/** A Supplier Load of an item that is not in Stock yet, offered for linking. `usable` is false when its unit differs from the item's Stock unit. */
+export type StockLinkableLoad={
+  id:string;purchaseNumber:string;arrivedAt:string;supplierId:string;supplierName:string;destinationName:string|null;
+  quantity:number;unitId:string|null;unitSymbol:string;invoiceNumber:string|null;priced:boolean;totalUsd:number|null;
+  usable:boolean;unusableReason:string|null;
+};
+
+/** The saved numbers of a Supplier Load that a Stock batch copies. Amounts are in cents; null means Unpriced. */
+export type LoadPriceForStock={quantity:number;priceBasis:StockPriceBasis|null;unitPriceCents:number|null;subtotalCents:number|null;vatBasisPoints:number|null;totalCents:number|null};
+
+/**
+ * What a Stock batch copies from the price of a Supplier Load. The subtotal, VAT rate and total are copied exactly as the load saved them, so
+ * the batch always agrees with the load. The price shown is the one without VAT (per unit, or for the whole delivery). A load with no price
+ * stays Unpriced; it is never treated as zero.
+ */
+export function batchPriceFromLoad(load:LoadPriceForStock):{priceBasis:StockPriceBasis;priceCents:number;vatBasisPoints:number|null;subtotalCents:number;totalCents:number}|null{
+  if(load.unitPriceCents==null||load.subtotalCents==null||load.totalCents==null)return null;
+  const basis:StockPriceBasis=load.priceBasis??'per_unit';
+  return{priceBasis:basis,priceCents:basis==='whole'?load.subtotalCents:Math.round(load.subtotalCents/load.quantity),vatBasisPoints:load.vatBasisPoints!=null&&load.vatBasisPoints>0?load.vatBasisPoints:null,subtotalCents:load.subtotalCents,totalCents:load.totalCents};
+}
 
 /** One row of the use table: a use takes quantity out of a batch, a reversal puts it back (negative quantity). */
 export type StockUseSource='manual'|'load';

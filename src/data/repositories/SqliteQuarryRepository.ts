@@ -254,6 +254,8 @@ export class SqliteQuarryRepository implements QuarryRepository {
     const value=reason.trim();if(!value)throw new Error('Cancellation reason is required.');
     const existing=await this.get(id);if(existing.status==='Cancelled')throw new Error('A cancelled supplier load cannot be changed.');
     if(await this.activePaymentCents(id)>0)throw new Error('Cancel all active payments for this supplier load first.');
+    const inStock=await this.db.getFirstAsync<{batch_number:string}>("SELECT batch_number FROM stock_batches WHERE source_purchase_id=? AND status='Active'",id);
+    if(inStock)throw new Error(`This supplier load is in Stock as ${inStock.batch_number}. Cancel that Stock batch first.`);
     const now=new Date().toISOString();
     await this.db.withTransactionAsync(async()=>{await this.db.runAsync("UPDATE quarry_purchases SET status='Cancelled',cancellation_reason=?,cancelled_at=?,updated_at=? WHERE id=?",value,now,now,id);await this.enqueue('quarryPurchase',id,{id,status:'Cancelled',cancellationReason:value,cancelledAt:now});});
     return this.get(id);
