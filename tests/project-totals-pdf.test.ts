@@ -79,7 +79,7 @@ describe('Project Totals PDF',()=>{
     expect(plain).toContain('DROMEX Asphalt Co.');
     expect(plain).toContain('Beirut, Lebanon · +961 1 234 567 · info@dromex.example · Tax/VAT: 1234567-001');
     expect(plain).toContain('Customer: <span dir="auto">Al Amal Contracting</span>');
-    expect(plain).toContain('border-bottom:2px solid #C84B31');
+    expect(plain).toContain('border-bottom:.8mm solid #C84B31');
   });
   it('shows the two boxes, the project row, and several suppliers by name',()=>{
     expect(plain).toContain('class="two"');
@@ -146,8 +146,9 @@ describe('Project Totals PDF',()=>{
     expect(plain).toContain('thead{display:table-header-group}');
     expect(plain).toContain('overflow-wrap:anywhere');
   });
-  it('is not an invoice and changes no document status',()=>{
-    expect(plain).toContain('not an invoice or bill');
+  it('is a record of the loads, not a billing document, and no longer carries the yellow notice (DEC-520)',()=>{
+    expect(plain).not.toContain('not an invoice or bill');expect(plain).not.toContain('class="notice"');
+    expect(plain).not.toMatch(/INV-|BILL-|Bill to|Billed to|Due date/);
   });
   it('leaves out an empty section and prints no customer boxes outside a project',()=>{
     const onlySupplier=noWbr(buildTotalsHtml({...base,includePrices:false,project:project([supplierA])}));

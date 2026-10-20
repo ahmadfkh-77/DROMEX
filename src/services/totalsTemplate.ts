@@ -2,6 +2,7 @@ import type {CompanyTotalsRecord} from '../data/repositories/CompanyTotalsReposi
 import {buildMaterialTree,treeTotals,unitDifferences,type CompanyTotalsData,type MaterialNode,type RecordedValue,type UnitMeasures} from '../domain/companyTotals';
 import {formatFuelPriceUsd,fuelPriceFromStored,fuelTypeLabels} from '../domain/fuel';
 import {breakAfterHyphens,colgroup,columnWidths,type ColumnSpec} from './pdfColumns';
+import {reportCss} from './pdfTheme';
 import {formatTotalQuantity,summarizeFuelFills,type ProjectFuelFill} from '../domain/projectTotals';
 import {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
 import {companyLoadReference,deliveredByLabel,INTERNAL_PROJECT,priceAsRecorded,supplierBox,supplierNameOf,unitTotals,vatAndTotal,type CustomerBox} from '../domain/projectTotalsPdf';
@@ -35,6 +36,7 @@ export type TotalsPdf={companyName:string;logo:string|null;title:string;scope:'c
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]??character));
 const t=(value:unknown)=>`<span dir="auto">${e(value)}</span>`;
+const css=(value:string)=>value.replace(/["\\]/g,'').replace(/\r?\n/g,' ');
 const missing='<span class="missing">Not recorded</span>';
 const qty=(measure:{quantity:number}|null,unitSymbol:string)=>measure?e(formatTotalQuantity(measure.quantity,unitSymbol)):missing;
 const plural=(count:number,word:string)=>`${count} ${word}${count===1?'':'s'}`;
@@ -68,6 +70,7 @@ function materialBlock(material:MaterialNode,index:number,showUsed:boolean,price
       <td class="num">${qty(unit.used,unit.unitSymbol)}</td><td class="num">${unit.transported?e(formatTotalQuantity(unit.transported.quantity,unit.unitSymbol)):''}</td>
       <td class="num">${differences.has(unit.unitKey)?e(formatTotalQuantity(differences.get(unit.unitKey)!,unit.unitSymbol)):''}</td></tr>`);
   }).join(''):'';
+  const deliveredTotals=material.units.filter(unit=>unit.delivered).map((unit,position)=>`<tr class="total-row"><td>Total</td><td>${e(unit.unitSymbol)}</td><td class="num">${e(formatTotalQuantity(unit.delivered!.quantity,unit.unitSymbol))}</td><td class="num">${plural(unit.delivered!.recordCount,'record')}</td>${prices?`<td class="num">${position===0?value(material.value):''}</td>`:''}</tr>`).join('');
   return `<section class="block">
     <div class="block-bar"><span class="block-index">${index}</span><span class="block-name">${t(material.itemName)}</span><span class="block-figures">${headline(material.units,showUsed)}</span></div>
     <div class="block-body">
@@ -75,7 +78,7 @@ function materialBlock(material:MaterialNode,index:number,showUsed:boolean,price
         <div class="figure side"><span class="figure-label">Records</span><b>${material.inclusion.total}</b>${prices?`<span class="figure-label spaced">Recorded value</span><b>${value(material.value)}</b>`:''}</div>
       </div>
       ${deliveredRows?`<h4 class="sub">Delivered — by project and supplier</h4>
-      <table class="grid"><colgroup>${(prices?[46,10,18,10,16]:[52,12,22,14]).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Project · supplier or source</th><th>Unit</th><th class="num">Delivered</th><th class="num">Records</th>${prices?'<th class="num">Recorded value</th>':''}</tr></thead><tbody>${deliveredRows}</tbody></table>`:''}
+      <table class="grid"><colgroup>${(prices?[46,10,18,10,16]:[52,12,22,14]).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Project · supplier or source</th><th>Unit</th><th class="num">Delivered</th><th class="num">Records</th>${prices?'<th class="num">Recorded value</th>':''}</tr></thead><tbody>${deliveredRows}${deliveredTotals}</tbody></table>`:''}
       ${useRows?`<h4 class="sub">Recorded on site — Daily Reports</h4>
       <table class="grid"><colgroup><col style="width:34%"/><col style="width:10%"/><col style="width:18%"/><col style="width:18%"/><col style="width:20%"/></colgroup><thead><tr><th>Project</th><th>Unit</th><th class="num">Used</th><th class="num">Transported</th><th class="num">Delivered minus recorded use</th></tr></thead><tbody>${useRows}</tbody></table>`:''}
     </div>
@@ -106,9 +109,9 @@ function fuelBlock(fills:ProjectFuelFill[],index:number,prices:boolean):string{
 
 function historyBlock(records:CompanyTotalsRecord[],index:number,prices:boolean,showProject:boolean):string{
   const sorted=[...records].sort((a,b)=>a.snapshot.recordedAt.localeCompare(b.snapshot.recordedAt)||a.snapshot.reference.localeCompare(b.snapshot.reference,undefined,{numeric:true}));
-  return `<section class="block" data-kind="history">
-    <div class="block-bar"><span class="block-index">${index}</span><span class="block-name">Loads history · ${plural(sorted.length,'load')}</span></div>
-    <div class="block-body">${loadListTable(sorted,prices,showProject)}</div>
+  const bar=`<div class="block-bar"><span class="block-index">${index}</span><span class="block-name">Loads history · ${plural(sorted.length,'load')}</span></div>`;
+  return `<section class="block table-block" data-kind="history">
+    <div class="block-body">${loadListTable(sorted,prices,showProject,bar)}</div>
   </section>`;
 }
 
@@ -123,7 +126,7 @@ const notRecordedOr=(raw:string|null|undefined)=>raw?t(raw):missing;
  * content (see pdfColumns.ts): every column has room for its longest word and a load number breaks after a hyphen, so
  * nothing runs into the next column. Numbers are right-aligned.
  */
-function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:boolean):string{
+function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:boolean,bar:string|null=null):string{
   const quantityOf=(s:CompanyTotalsRecord['snapshot'])=>`${formatTotalQuantity(s.quantity,'').trim()} ${s.unitSymbol}`.trim();
   const lines=records.map(record=>{
     const s=record.snapshot,d=record.details,company=s.recordType==='company_load';
@@ -159,7 +162,10 @@ function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:
   const dense=specs.length>=10;
   const widths=columnWidths(specs,dense?{fontPt:7,headerPt:6.5}:{});
   const head=specs.map(spec=>`<th${spec.header==='Quantity'?' class="num"':(prices&&(spec.header==='Price as recorded'||spec.header==='VAT · Total'))?' class="num wrap"':''}>${e(spec.header)}</th>`).join('');
-  return `<table class="grid history${dense?' dense':''}">${colgroup(widths)}<thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+  // The quantity is the eighth column. The total row sums each unit on its own; units are never added together.
+  const rest=(showProject?1:0)+(prices?2:0);
+  const totalRow=lines.length?`<tr class="total-row"><td colspan="7">Total · ${plural(lines.length,'load')}</td><td class="num">${unitTotals(records).map(unit=>e(formatTotalQuantity(unit.quantity,unit.unitSymbol))).join('<br/>')}</td>${rest?`<td colspan="${rest}"></td>`:''}</tr>`:'';
+  return `<table class="grid history${dense?' dense':''}">${colgroup(widths)}<thead>${bar?`<tr class="bar-row"><th colspan="${specs.length}">${bar}</th></tr>`:''}<tr>${head}</tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
 }
 
 /**
@@ -172,18 +178,18 @@ function projectLoadsBlock(kind:'company'|'supplier',records:CompanyTotalsRecord
   const ordered=[...records].sort((a,b)=>a.snapshot.recordedAt.localeCompare(b.snapshot.recordedAt)||a.snapshot.reference.localeCompare(b.snapshot.reference,undefined,{numeric:true}));
   const pills=unitTotals(ordered).map(unit=>`<span class="pill">${e(formatTotalQuantity(unit.quantity,unit.unitSymbol))}</span>`).join('');
   const title=kind==='company'?'Company loads delivered · own deliveries':'Supplier loads delivered · incoming from suppliers';
-  return `<section class="block" data-kind="project-${kind}-loads">
-    <div class="block-bar"><span class="block-index">${index}</span><span class="block-name">${e(title)}</span><span class="block-figures">${pills}<span class="pill">${plural(ordered.length,'load')}</span></span></div>
-    <div class="block-body">${loadListTable(ordered,prices,false)}</div>
+  const bar=`<div class="block-bar"><span class="block-index">${index}</span><span class="block-name">${e(title)}</span><span class="block-figures">${pills}<span class="pill">${plural(ordered.length,'load')}</span></span></div>`;
+  return `<section class="block table-block" data-kind="project-${kind}-loads">
+    <div class="block-body">${loadListTable(ordered,prices,false,bar)}</div>
   </section>`;
 }
 
 /** Company Totals: every Active load behind the totals, in the same table as every other load list. */
 function loadsDeliveredBlock(records:CompanyTotalsRecord[],index:number,prices:boolean,showProject:boolean):string{
   const ordered=[...records].sort((a,b)=>a.snapshot.recordedAt.localeCompare(b.snapshot.recordedAt)||a.snapshot.reference.localeCompare(b.snapshot.reference,undefined,{numeric:true}));
-  return `<section class="block" data-kind="loads-delivered">
-    <div class="block-bar"><span class="block-index">${index}</span><span class="block-name">Loads delivered · ${plural(ordered.length,'load')}</span></div>
-    <div class="block-body">${loadListTable(ordered,prices,showProject)}</div>
+  const bar=`<div class="block-bar"><span class="block-index">${index}</span><span class="block-name">Loads delivered · ${plural(ordered.length,'load')}</span></div>`;
+  return `<section class="block table-block" data-kind="loads-delivered">
+    <div class="block-body">${loadListTable(ordered,prices,showProject,bar)}</div>
   </section>`;
 }
 
@@ -220,86 +226,25 @@ export function buildTotalsHtml(input:TotalsPdf):string{
 
   // Phase 5. A priced list adds two price columns (and perhaps Project) to nine others: that needs the width of a landscape page.
   const landscape=prices&&Boolean(history||summaryLoads.length||companyLoads.length||supplierLoads.length);
+  const running=`${input.companyName} · ${input.title}${input.customerName?` · ${input.customerName}`:''}${input.issuedTo?` · ${input.issuedTo}`:''}`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${e(input.title)}</title><style>
-    @page{size:${landscape?'A4 landscape':'A4'};margin:12mm 11mm 14mm}
+    @page{size:${landscape?'A4 landscape':'A4'};margin:12mm 11mm 16mm;@bottom-left{content:"${css(running)}";font-size:7.5pt;color:#5A6570}@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:7.5pt;color:#5A6570}}
+    ${reportCss()}
     @media screen{body{max-width:${landscape?'297mm':'210mm'};margin:0 auto;padding:12mm}}
-    *{box-sizing:border-box}
-    body{font-family:Arial,'Noto Naskh Arabic','Geeza Pro',sans-serif;color:#17212B;font-size:9pt;line-height:1.35}
-    .head{display:flex;justify-content:space-between;align-items:flex-start;gap:6mm;border-bottom:2px solid #C84B31;padding-bottom:4mm;margin-bottom:3mm}
-    .logo{max-width:40mm;max-height:18mm;object-fit:contain;display:block;margin-bottom:1.5mm}
-    h1{font-size:18pt;color:#173F67;margin:0;text-align:right}
-    .head-right{text-align:right}
-    .subtitle{color:#17212B;font-size:12pt;font-weight:700;margin-top:1mm}
-    .when{color:#5A6570;font-size:9pt;margin-top:1mm}
-    .meta{color:#4F5B66;margin:0 0 3mm}
-    .notice{color:#6E4B1F;background:#FFF3D8;border-radius:2mm;padding:2mm 3mm;margin:0 0 3mm}
-    .tiles{display:flex;gap:3mm;margin:0 0 4mm}
-    .tile{flex:1;border:1px solid #E3DBCD;border-radius:2.5mm;padding:2.5mm 3.5mm;background:#FFFFFF}
-    .tile b{display:block;font-size:13pt;margin-top:.5mm;font-variant-numeric:tabular-nums}
-    .contents{border:1px solid #E3DBCD;border-radius:2.5mm;background:#F5F2EC;padding:3mm 4mm;margin:0 0 6mm;break-inside:avoid}
-    .contents h3{margin:0 0 2mm;font-size:10pt;color:#173F67}
-    .contents ol{list-style:none;margin:0;padding:0}
-    .contents li{display:flex;align-items:center;gap:3mm;padding:1.4mm 0;border-top:.3mm solid #E3DBCD}
-    .contents li:first-child{border-top:none}
-    .contents-index{flex:0 0 6mm;height:6mm;border-radius:1.5mm;background:#173F67;color:#FFFFFF;font-weight:700;font-size:8pt;display:flex;align-items:center;justify-content:center}
-    .contents-name{flex:1;font-weight:700}
-    .contents-figures{text-align:right}
-    .block{border:1px solid #CFC5B3;border-radius:3mm;margin:0 0 7mm;overflow:hidden;background:#FFFFFF}
-    .block-bar{display:flex;align-items:center;gap:3mm;background:#173F67;color:#FFF8ED;padding:2.6mm 4mm;break-after:avoid;break-inside:avoid}
-    .block-index{flex:0 0 7mm;height:7mm;border-radius:1.6mm;background:#C84B31;color:#FFFFFF;font-weight:700;display:flex;align-items:center;justify-content:center}
-    .block-name{flex:1;font-size:12.5pt;font-weight:700}
-    .block-figures{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:1.5mm}
-    .block-body{padding:3mm 4mm 4mm}
-    .pill{display:inline-block;border-radius:5mm;padding:.8mm 2.6mm;font-size:8.5pt;font-weight:700;white-space:nowrap}
-    .block-bar .pill{background:rgba(255,255,255,.16);color:#FFF8ED}
-    .contents .pill{margin-left:1mm}
-    .contents .pill.delivered{background:#EEF3F8;color:#173F67}
-    .contents .pill.used{background:#F6F0E6;color:#6E4B1F}
-    .figures{display:flex;flex-wrap:wrap;align-items:flex-start;gap:2.5mm;break-inside:avoid;break-after:avoid}
-    .figure{display:flex;align-items:center;gap:2mm;border:1px solid #E3DBCD;border-radius:2.5mm;padding:2mm}
-    .figure.side{flex-direction:column;justify-content:center;min-width:30mm}
-    .figure-unit{align-self:center;min-width:9mm;text-align:center;font-weight:700;color:#173F67;font-size:10pt}
-    .figure-cell{border-radius:2mm;padding:1.6mm 3mm;min-width:26mm}
-    .figure-cell.delivered{background:#EEF3F8}
-    .figure-cell.used{background:#F6F0E6}
-    .figure-cell b,.figure.side b{display:block;font-size:11.5pt;font-variant-numeric:tabular-nums}
-    .figure-label{display:block;color:#5A6570;font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
-    .figure-cell.delivered .figure-label{color:#173F67}
-    .figure-cell.used .figure-label{color:#6E4B1F}
-    .spaced{margin-top:1.5mm}
-    .sub{font-size:9.5pt;color:#173F67;margin:4.5mm 0 1.5mm;break-after:avoid}
-    .lead{margin:0 0 2mm;color:#4F5B66}
-    table{width:100%;border-collapse:collapse}
-    thead{display:table-header-group}
-    tr{break-inside:avoid}
-    th{text-align:left;color:#173F67;font-size:7.5pt;border-bottom:1.5px solid #173F67;padding:1.4mm 1.6mm}
-    td{padding:1.4mm 1.6mm;border-bottom:.3mm solid #EAE3D7;vertical-align:top;overflow-wrap:anywhere}
-    tbody tr:nth-child(even) td{background:#FAF8F4}
-    tr.group-row td{background:#F0EBE2;font-weight:700;color:#17212B;border-bottom:.3mm solid #D9CFBE;padding-top:1.8mm}
-    td.indent{padding-left:5mm}
     .grid{table-layout:fixed}
     .history td{font-size:8pt}.history.dense td{font-size:7pt}.history.dense th{font-size:6.5pt}
-    .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-    .nowrap{white-space:nowrap}
-    .wrap{white-space:normal}
-    .muted{color:#5A6570;font-size:7.5pt;font-weight:400}
-    .missing{color:#5A6570;font-style:italic;font-weight:400}
-    .empty{margin:0;color:#5A6570;font-style:italic}
-    .note{color:#5A6570;font-size:8pt;margin-top:4mm}
-    .contact{font-size:8pt;color:#444;margin-top:.5mm;overflow-wrap:anywhere}
-    .proj{border:1px solid #E3DBCD;border-radius:2.5mm;background:#F5F2EC;padding:2.5mm 4mm;margin:0 0 3mm;display:flex;gap:6mm;flex-wrap:wrap}
-    .proj .figure-label{margin-bottom:.3mm}.proj b{font-size:10.5pt}
-    .two{display:flex;gap:4mm;margin:0 0 3mm;break-inside:avoid}.box{flex:1;border:1px solid #CFC5B3;border-radius:2.5mm;padding:2.5mm 4mm;background:#FFFFFF}
-    .box-label{display:block;color:#5A6570;font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.box b{display:block;font-size:11.5pt;color:#173F67;overflow-wrap:anywhere}
-    .ln{font-weight:700;color:#173F67}.legacy{color:#5A6570;font-style:italic;font-weight:400}.ok{color:#2F6B3A;font-weight:700;font-size:7.5pt}
+    .proj{border:.35mm solid #9FB0C2;background:#FFFFFF;padding:2.5mm 3.5mm;margin:0 0 3mm;display:flex;gap:6mm;flex-wrap:wrap}
+    .proj .figure-label{margin-bottom:.3mm}.proj b{font-size:10.5pt;color:#173F67}
+    .two{display:flex;gap:4mm;margin:0 0 3mm;break-inside:avoid}.box{flex:1;border:.35mm solid #9FB0C2;padding:2.5mm 3.5mm;background:#FFFFFF}
+    .box-label{display:block;color:#52606D;font-size:6.8pt;font-weight:700;text-transform:uppercase;letter-spacing:.7px}.box b{display:block;font-size:11.5pt;color:#173F67;overflow-wrap:anywhere}
+    .ln{font-weight:700;color:#173F67}.legacy{color:#52606D;font-style:italic;font-weight:400}.ok{color:#2F6B3A;font-weight:700;font-size:7.5pt}
   </style></head><body>
     <div class="head"><div>${input.logo?`<img class="logo" src="${input.logo}" alt=""/>`:''}<b>${t(input.companyName)}</b>${input.contactLine?`<div class="contact">${t(input.contactLine)}</div>`:''}</div>
       <div class="head-right"><h1>${t(input.title)}</h1>${input.issuedTo?`<div class="subtitle">Issued to: ${t(input.issuedTo)}</div>`:''}${input.customerName?`<div class="subtitle">${t(input.customerName)}</div>`:''}${input.project?`<div class="subtitle">${input.project.customer.label===INTERNAL_PROJECT?t(INTERNAL_PROJECT):`Customer: ${t(input.project.customer.label)}`}</div>`:''}<div class="when">${e(formatRecordedAt(input.generatedAt))}</div></div></div>
     ${input.project?`<div class="proj"><div><span class="figure-label">Project</span><b>${t(input.project.name)}</b></div><div><span class="figure-label">Location</span><b>${input.project.location?t(input.project.location):missing}</b></div><div><span class="figure-label">Status</span><b>${e(input.project.status)}</b></div></div>
     ${customerSupplierBoxes(input.project.customer,input.project.loads.filter(record=>record.status!=='Cancelled'))}`:''}
     <div class="meta">${input.filters.map(t).join(' · ')}</div>
-    ${history||input.project||summaryLoads.length?'<p class="notice">A record of the loads delivered — not an invoice or bill. It does not change any record or document status.</p>':''}
-    ${input.data.usageHiddenReason&&!history?`<p class="notice">${e(input.data.usageHiddenReason)}</p>`:''}
+    ${input.data.usageHiddenReason&&!history?`<p class="note-plain">${e(input.data.usageHiddenReason)}</p>`:''}
     <div class="tiles">${tiles}</div>
     ${contents?`<nav class="contents"><h3>Contents</h3><ol>${contents}</ol></nav>`:''}
     ${tree.map((material,index)=>materialBlock(material,index+1,showUsed,prices)).join('')||'<p class="empty">Nothing recorded for these filters.</p>'}
@@ -308,6 +253,6 @@ export function buildTotalsHtml(input:TotalsPdf):string{
     ${summaryLoads.length?loadsDeliveredBlock(summaryLoads,summaryIndex,prices,showProject):''}
     ${companyLoads.length?projectLoadsBlock('company',companyLoads,companyIndex,prices):''}
     ${supplierLoads.length?projectLoadsBlock('supplier',supplierLoads,supplierIndex,prices):''}
-    <p class="note">Delivered counts Active Supplier Loads and company loads; Used and Transported come from Daily Reports. Each unit is totalled on its own and different units are never added together. Use is not recorded per supplier. "Delivered minus recorded use" is not an inventory balance.${prices?' Amounts add only records with a recorded price.':''}</p>
+    <div class="notes"><h4>Notes</h4><ol><li>Delivered counts Active Supplier Loads and company loads; Used and Transported come from Daily Reports. Each unit is totalled on its own and different units are never added together.</li><li>Use is not recorded per supplier. "Delivered minus recorded use" is not an inventory balance.</li>${prices?'<li>Amounts add only records with a recorded price.</li>':''}</ol></div>
   </body></html>`;
 }

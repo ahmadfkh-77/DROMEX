@@ -96,10 +96,16 @@ describe('Loads History PDF',()=>{
     for(const text of ['<td class="num">8 m³</td>','<td class="num">4 m³</td>'])expect(html).toContain(text);
     expect(html).toContain('12 m³');
   });
-  it('is not a billing document: no number, no signer, and it says so',()=>{
+  it('is not a billing document: no number, no signer, and no yellow notice (DEC-520)',()=>{
     const html=history(false);
-    expect(html).toContain('not an invoice or bill');
+    expect(html).not.toContain('not an invoice or bill');expect(html).not.toContain('class="notice"');
     expect(html).not.toMatch(/INV-|BILL-|Bill to|Billed to|Due date/);
+  });
+  it('repeats the section bar in the table header, so every page of the list says what it is, and ends with a Total row (DEC-520)',()=>{
+    const html=history(false);
+    const head=html.slice(html.indexOf('<thead>',html.indexOf('data-kind="history"')),html.indexOf('</thead>',html.indexOf('data-kind="history"')));
+    expect(head).toMatch(/<tr class="bar-row"><th colspan="\d+"><div class="block-bar"><span class="block-index">\d+<\/span><span class="block-name">Loads history · /);
+    expect(html).toMatch(/<tr class="total-row"><td colspan="7">Total · \d+ loads?<\/td><td class="num">/);
   });
   it('adds prices only when chosen, never as $0.00',()=>{
     expect(history(false)).not.toMatch(/\$\d/);
@@ -127,5 +133,30 @@ describe('project column',()=>{
     expect(table(shown)).toContain('Hidden Project Name');
     expect(table(hidden)).not.toContain('<th>Project</th>');
     expect(table(hidden)).not.toContain('Hidden Project Name');
+  });
+});
+
+describe('the Totals report look (DEC-520)',()=>{
+  const html=noWbr(buildTotalsHtml({...base,includePrices:false}));
+  it('is built from square boxes: no rounded corners, no clipped boxes, no badges or pills',()=>{
+    expect(html).not.toContain('border-radius');expect(html).not.toContain('overflow:hidden');
+    expect(html).toContain('.pill{display:inline-block;white-space:nowrap}');
+  });
+  it('has the navy section bar with its orange rule, and a navy header rule on the tables',()=>{
+    expect(html).toContain('.block-bar{display:flex;align-items:baseline;gap:3mm;background:#173F67;color:#FFFFFF;padding:2.7mm 3.5mm;border-bottom:.8mm solid #C84B31');
+    expect(html).toContain('border-bottom:.45mm solid #173F67');
+    expect(html).toContain('border-bottom:.8mm solid #C84B31;padding-bottom:4mm');
+  });
+  it('ends the delivered table of a material with a Total row for each unit, never adding units together',()=>{
+    const rows=[...html.matchAll(/<tr class="total-row"><td>Total<\/td><td>([^<]*)<\/td><td class="num">([^<]*)<\/td>/g)].map(match=>`${match[1]} ${match[2]}`);
+    expect(rows).toEqual(expect.arrayContaining(['m³ 12 m³','t 16 t']));
+  });
+  it('prints Page x of y and a running title in the page margins',()=>{
+    expect(html).toContain('@bottom-right{content:"Page " counter(page) " of " counter(pages)');
+    expect(html).toContain('@bottom-left{content:"DROMEX Plant · Company Totals"');
+  });
+  it('keeps the notes as a numbered list and has no yellow notice',()=>{
+    expect(html).toContain('<div class="notes"><h4>Notes</h4><ol><li>Delivered counts Active Supplier Loads');
+    expect(html).not.toContain('class="notice"');expect(html).not.toContain('FFF3D8');
   });
 });
