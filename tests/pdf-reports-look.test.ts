@@ -40,8 +40,19 @@ describe('the supplier Totals PDF',()=>{
   it('gives each destination its own box whose navy bar repeats in the table header, with Totals by material under the loads',()=>{
     expect(html).toContain('<tr class="bar-row"><th colspan="7"><div class="block-bar"><span class="block-index">1</span><span class="block-name"><bdi dir="auto">Ain Qana - Jbaa</bdi></span><span class="block-figures">3 loads · 2 materials</span></div></th></tr>');
     expect(html).toContain('<tr class="bar-row"><th colspan="7"><div class="block-bar"><span class="block-index">2</span>');
-    expect(html).toContain('<tr class="sub-row"><td colspan="4">Totals by material</td><td class="num">Loads</td><td class="num">Quantity</td><td colspan="1"></td></tr>');
-    expect(html).toContain('<tr class="total-row"><td colspan="4"><bdi dir="auto">Base course</bdi></td><td class="num">2</td><td class="num">41 t</td><td colspan="1"></td></tr>');
+    expect(html).not.toContain('class="sub-row"');
+  });
+  it('puts each destination\'s Totals by material in its own box with only Material, Loads and Quantity, so no load heading sits over it',()=>{
+    expect(html).toContain('<span class="block-name"><bdi dir="auto">Ain Qana - Jbaa</bdi></span><span class="block-figures">Totals by material</span></div></th></tr><tr><th>Material</th><th class="num">Loads</th><th class="num">Quantity</th></tr></thead>');
+    expect(html).toContain('<tr class="total-row"><td><bdi dir="auto">Base course</bdi></td><td class="num">2</td><td class="num">41 t</td></tr>');
+    const totalsBox=(html.split('<table class="grid total-grid">')[1]??'').split('</table>')[0]??'';
+    expect(totalsBox).not.toBe('');
+    for(const heading of ['Load<','Date, time','Driver · truck','Ticket','Status'])expect(totalsBox).not.toContain(heading);
+  });
+  it('still takes the selected company logo, name and contact line for the heading',()=>{
+    const branded=noWbr(buildSupplierDeliveriesHtml({companyName:'DROMEX S.A.R.L',logo:'data:image/png;base64,AAAA',contactLine:'Kfour-Nabatieh',report}));
+    expect(branded).toContain('<img class="logo" src="data:image/png;base64,AAAA"/>');
+    expect(branded).toContain('DROMEX S.A.R.L');expect(branded).toContain('Kfour-Nabatieh');
   });
   it('has the key cells, the orange rule, numbered Notes and Page x of y',()=>{
     expect(html).toContain('<div class="panel keys"><div><span class="figure-label">Period</span><b><bdi dir="auto">3 Sep 2026 – 29 Sep 2026</bdi></b></div>');

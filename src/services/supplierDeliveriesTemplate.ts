@@ -41,8 +41,7 @@ export function buildSupplierDeliveriesHtml(input:SupplierDeliveriesPdfInput):st
     {header:'Status',cells:everyLoad.map(load=>load.status)},
   ];
   const colgroupHtml=colgroup(columnWidths(specs));
-  // The quantity column follows Load, Date, Material, Driver, Ticket and the optional Pieces / Length / Meters columns.
-  const columnCount=head.length,beforeQuantity=5+(pieces?1:0)+(lengths?2:0),afterQuantity=columnCount-beforeQuantity-1;
+  const columnCount=head.length;
   const blocks=report.destinations.map((destination,index)=>{
     const rows=destination.loads.map(load=>`<tr>
       <td><span class="ln">${breakAfterHyphens(t(load.reference))}</span></td>
@@ -51,12 +50,14 @@ export function buildSupplierDeliveriesHtml(input:SupplierDeliveriesPdfInput):st
       <td class="num">${e(load.quantityText)}${lengths&&load.weightNote?`<div class="muted">${e(load.weightNote)}</div>`:''}</td>${prices?`<td class="num">${e(load.unitPrice)}</td><td class="num">${e(load.total)}</td>`:''}
       <td><b>${e(load.status)}</b>${load.statusNote?`<div class="muted">${e(load.statusNote)}</div>`:''}</td></tr>`).join('');
     // One Total row per material and unit, under the loads: units are never added together.
-    const totals=destination.totals.map(total=>`<tr class="total-row"><td colspan="${beforeQuantity-1}">${t(total.item)}${total.piecesText?` · ${e(total.piecesText)}`:''}</td><td class="num">${total.count}</td><td class="num">${e(total.quantityText)}</td>${afterQuantity>0?`<td colspan="${afterQuantity}"></td>`:''}</tr>`).join('');
+    // Totals by material have their own box with only Material, Loads and Quantity: a total has no single driver, ticket or status.
+    const totals=destination.totals.map(total=>`<tr class="total-row"><td>${t(total.item)}${total.piecesText?` · ${e(total.piecesText)}`:''}</td><td class="num">${total.count}</td><td class="num">${e(total.quantityText)}</td></tr>`).join('');
     const materials=new Set(destination.totals.map(total=>total.item)).size;
     // The destination bar is the first row of the table header, so it repeats on every page above the column titles.
     const bar=`<div class="block-bar"><span class="block-index">${index+1}</span><span class="block-name">${t(destination.label)}</span><span class="block-figures">${destination.loads.length} load${destination.loads.length===1?'':'s'} · ${materials} material${materials===1?'':'s'}</span></div>`;
-    return `<section class="block table-block"><div class="block-body"><table class="grid">${colgroupHtml}<thead><tr class="bar-row"><th colspan="${columnCount}">${bar}</th></tr><tr>${head.join('')}</tr></thead><tbody>${rows}<tr class="sub-row"><td colspan="${beforeQuantity-1}">Totals by material</td><td class="num">Loads</td><td class="num">Quantity</td>${afterQuantity>0?`<td colspan="${afterQuantity}"></td>`:''}</tr>${totals}</tbody></table>
-    ${prices&&destination.unpricedCount?`<p class="note">${destination.unpricedCount} unpriced load${destination.unpricedCount===1?'':'s'}: shown as Unpriced, never as zero.</p>`:''}</div></section>`;
+    return `<section class="block table-block"><div class="block-body"><table class="grid">${colgroupHtml}<thead><tr class="bar-row"><th colspan="${columnCount}">${bar}</th></tr><tr>${head.join('')}</tr></thead><tbody>${rows}</tbody></table>
+    ${prices&&destination.unpricedCount?`<p class="note">${destination.unpricedCount} unpriced load${destination.unpricedCount===1?'':'s'}: shown as Unpriced, never as zero.</p>`:''}</div></section>
+    <section class="block table-block"><div class="block-body"><table class="grid total-grid"><colgroup><col style="width:62%"/><col style="width:16%"/><col style="width:22%"/></colgroup><thead><tr class="bar-row"><th colspan="3"><div class="block-bar"><span class="block-index">${index+1}</span><span class="block-name">${t(destination.label)}</span><span class="block-figures">Totals by material</span></div></th></tr><tr><th>Material</th><th class="num">Loads</th><th class="num">Quantity</th></tr></thead><tbody>${totals}</tbody></table></div></section>`;
   }).join('');
   // Received from this supplier: one row per material, grouped by category, each unit on its own.
   const sortedTotals=[...report.totals].sort((a,b)=>(a.categoryName??'').localeCompare(b.categoryName??'')||a.item.localeCompare(b.item)||a.unitSymbol.localeCompare(b.unitSymbol));
