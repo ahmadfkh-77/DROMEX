@@ -52,7 +52,7 @@ export function WasteHistoryView({repository,locations,initialLocationKey}:{repo
     try{
       const[chosen,identity]=await Promise.all([resolve(),repository.getCompanyIdentity()]);
       const company=chosen?{name:chosen.list.companyName,logoUri:chosen.list.logoUri,contactLine:chosen.list.contactLine}:identity;
-      await exportAndShareWasteHistory({companyName:company.name,logoUri:company.logoUri,contactLine:company.contactLine,generatedAt:new Date().toISOString(),projectLabel,periodLabel:wasteRangeLabel(range),history,includeAllProjectsDriverTotals:showAllDrivers,fileName:`DROMEX-Waste-Dump-History-${range.fromDate.startsWith('0000')?'all':range.fromDate}`});
+      await exportAndShareWasteHistory({companyName:company.name,logoUri:company.logoUri,contactLine:company.contactLine,generatedAt:new Date().toISOString(),projectLabel,periodLabel:wasteRangeLabel(range),history,includeAllProjectsDriverTotals:showAllDrivers,fileName:`DROMEX-Waste-Dump-History-${range.fromDate.startsWith('0000')?'all':range.fromDate}.pdf`});
       setMessage('Waste Dump History PDF ready to share.');
     }catch(cause){setError(cause instanceof Error?cause.message:'The PDF could not be created.');}
     finally{setBusy(false);}
