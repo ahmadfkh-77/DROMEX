@@ -97,3 +97,12 @@ describe('every step in the Open form look',()=>{
     for(const text of ['+ Add another item to this delivery','Remove','setOpenExtra','Split the total across the items','Rebar calculator for this delivery'])expect(step(2)).toContain(text);
   });
 });
+
+describe('the Suppliers page',()=>{
+  it('drops the "Incoming material, connected" card, keeps the Add Supplier Load button, the counters and the history, and shows the summary as a plain row',()=>{
+    expect(screen).not.toContain('Incoming material, connected');expect(screen).not.toContain("['SUPPLIER','PROJECT','ITEM','PAYMENT','EXCEL']");
+    for(const text of ['Add Supplier Load','<SupplierTruckCounters','DELIVERY SUMMARY','Purchase history'])expect(screen).toContain(text);
+    expect(screen).toContain('summaryHeader:{backgroundColor:colors.surface');
+    expect(screen).not.toContain('borderLeftWidth:5,borderLeftColor:colors.brand,minHeight:82');
+  });
+});
