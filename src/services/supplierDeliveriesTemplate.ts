@@ -1,5 +1,6 @@
 import {NOT_RECORDED,pdfDayLabel,type SupplierDeliveriesPdf} from '../domain/supplierDeliveriesPdf';
 import {breakAfterHyphens,colgroup,columnWidths,type ColumnSpec} from './pdfColumns';
+import {reportCss} from './pdfTheme';
 
 /**
  * DEC-506. The supplier deliveries PDF as A4: the header company, "Totals" with the supplier's name in bold, the
@@ -40,6 +41,8 @@ export function buildSupplierDeliveriesHtml(input:SupplierDeliveriesPdfInput):st
     {header:'Status',cells:everyLoad.map(load=>load.status)},
   ];
   const colgroupHtml=colgroup(columnWidths(specs));
+  // The quantity column follows Load, Date, Material, Driver, Ticket and the optional Pieces / Length / Meters columns.
+  const columnCount=head.length,beforeQuantity=5+(pieces?1:0)+(lengths?2:0),afterQuantity=columnCount-beforeQuantity-1;
   const blocks=report.destinations.map((destination,index)=>{
     const rows=destination.loads.map(load=>`<tr>
       <td><span class="ln">${breakAfterHyphens(t(load.reference))}</span></td>
@@ -47,51 +50,51 @@ export function buildSupplierDeliveriesHtml(input:SupplierDeliveriesPdfInput):st
       <td>${t(load.item)}</td><td>${t(load.driver)}</td><td>${load.ticket?t(load.ticket):missing}</td>${pieces?`<td class="num${lengths?' wr':''}">${load.pieces?e(load.pieces):(lengths?missingWrap:missing)}</td>`:''}${lengths?`<td class="num wr">${load.length?e(load.length):missingWrap}</td><td class="num wr">${load.meters?e(load.meters):missingWrap}</td>`:''}
       <td class="num">${e(load.quantityText)}${lengths&&load.weightNote?`<div class="muted">${e(load.weightNote)}</div>`:''}</td>${prices?`<td class="num">${e(load.unitPrice)}</td><td class="num">${e(load.total)}</td>`:''}
       <td><b>${e(load.status)}</b>${load.statusNote?`<div class="muted">${e(load.statusNote)}</div>`:''}</td></tr>`).join('');
-    const totals=destination.totals.map(total=>`<span class="pill">${t(total.item)} · ${e(total.quantityText)}${total.piecesText?` · ${e(total.piecesText)}`:''} · ${total.count} load${total.count===1?'':'s'}</span>`).join('');
-    return `<section class="block"><div class="block-bar"><span class="block-index">${index+1}</span><span class="block-name">${t(destination.label)}</span><span class="block-count">${destination.loads.length} load${destination.loads.length===1?'':'s'}</span></div>
-    <div class="block-body"><table>${colgroupHtml}<thead><tr>${head.join('')}</tr></thead><tbody>${rows}</tbody></table>
-    <div class="pills">${totals}</div>${prices&&destination.unpricedCount?`<p class="note">${destination.unpricedCount} unpriced load${destination.unpricedCount===1?'':'s'}: shown as Unpriced, never as zero.</p>`:''}</div></section>`;
+    // One Total row per material and unit, under the loads: units are never added together.
+    const totals=destination.totals.map(total=>`<tr class="total-row"><td colspan="${beforeQuantity-1}">${t(total.item)}${total.piecesText?` · ${e(total.piecesText)}`:''}</td><td class="num">${total.count}</td><td class="num">${e(total.quantityText)}</td>${afterQuantity>0?`<td colspan="${afterQuantity}"></td>`:''}</tr>`).join('');
+    const materials=new Set(destination.totals.map(total=>total.item)).size;
+    // The destination bar is the first row of the table header, so it repeats on every page above the column titles.
+    const bar=`<div class="block-bar"><span class="block-index">${index+1}</span><span class="block-name">${t(destination.label)}</span><span class="block-figures">${destination.loads.length} load${destination.loads.length===1?'':'s'} · ${materials} material${materials===1?'':'s'}</span></div>`;
+    return `<section class="block table-block"><div class="block-body"><table class="grid">${colgroupHtml}<thead><tr class="bar-row"><th colspan="${columnCount}">${bar}</th></tr><tr>${head.join('')}</tr></thead><tbody>${rows}<tr class="sub-row"><td colspan="${beforeQuantity-1}">Totals by material</td><td class="num">Loads</td><td class="num">Quantity</td>${afterQuantity>0?`<td colspan="${afterQuantity}"></td>`:''}</tr>${totals}</tbody></table>
+    ${prices&&destination.unpricedCount?`<p class="note">${destination.unpricedCount} unpriced load${destination.unpricedCount===1?'':'s'}: shown as Unpriced, never as zero.</p>`:''}</div></section>`;
   }).join('');
-  const overall=report.totals.map(total=>`<span class="pill strong">${t(total.item)} · ${e(total.quantityText)}${total.piecesText?` · ${e(total.piecesText)}`:''} · ${total.count}</span>`).join('');
-  const categories=report.categories.map(category=>`<section class="block"><div class="block-bar"><span class="block-index">S</span><span class="block-name">${t(category.categoryName)} summary · quantity added per unit</span><span class="block-count">${category.loadCount} load${category.loadCount===1?'':'s'}</span></div>
+  // Received from this supplier: one row per material, grouped by category, each unit on its own.
+  const sortedTotals=[...report.totals].sort((a,b)=>(a.categoryName??'').localeCompare(b.categoryName??'')||a.item.localeCompare(b.item)||a.unitSymbol.localeCompare(b.unitSymbol));
+  let lastCategory:string|null=null;
+  const summaryRows=sortedTotals.map(total=>{
+    const category=total.categoryName||'Materials';
+    const group=category!==lastCategory?`<tr class="group-row"><td colspan="${pieces?5:4}">${t(category)}</td></tr>`:'';lastCategory=category;
+    return `${group}<tr><td class="indent">${t(total.item)}</td><td>${e(total.unitSymbol)}</td><td class="num">${total.count}</td>${pieces?`<td class="num">${e(total.piecesText)}</td>`:''}<td class="num">${e(total.quantityText)}</td></tr>`;
+  }).join('');
+  const materialCount=new Set(report.totals.map(total=>total.item)).size;
+  const summary=report.totals.length?`<div class="panel"><div class="panel-head">Received from this supplier <span>${report.loadCount} load${report.loadCount===1?'':'s'} · ${materialCount} material${materialCount===1?'':'s'}</span></div>
+    <table class="grid"><colgroup>${(pieces?[40,10,12,16,22]:[48,12,14,26]).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Material</th><th>Unit</th><th class="num">Loads</th>${pieces?'<th class="num">Pieces</th>':''}<th class="num">Quantity</th></tr></thead><tbody>${summaryRows}<tr class="total-row"><td colspan="2">Total loads</td><td class="num">${report.loadCount}</td>${pieces?'<td></td>':''}<td class="num muted">each unit on its own</td></tr></tbody></table></div>`:'';
+  const categories=report.categories.map(category=>`<section class="block"><div class="block-bar"><span class="block-index">S</span><span class="block-name">${t(category.categoryName)} summary · quantity added per unit</span><span class="block-figures">${category.loadCount} load${category.loadCount===1?'':'s'}</span></div>
     <div class="block-body"><table><colgroup>${[40,20,20,20].map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>${t(category.categoryName)} item</th><th class="num">Loads</th><th class="num">Pieces</th><th class="num">Quantity</th></tr></thead><tbody>${category.items.map(item=>`<tr><td>${t(item.item)}</td><td class="num">${item.loadCount}</td><td class="num">${item.piecesText?e(item.piecesText):missing}</td><td class="num">${e(item.quantityText)}</td></tr>`).join('')}
-    ${category.totals.map((total,position)=>`<tr class="total"><td>Total ${t(category.categoryName)}, all items</td><td class="num">${total.loadCount}</td><td class="num">${position===0&&category.piecesText?e(category.piecesText):''}</td><td class="num">${e(total.quantityText)}</td></tr>`).join('')}</tbody></table>
+    ${category.totals.map((total,position)=>`<tr class="total-row"><td>Total ${t(category.categoryName)}, all items</td><td class="num">${total.loadCount}</td><td class="num">${position===0&&category.piecesText?e(category.piecesText):''}</td><td class="num">${e(total.quantityText)}</td></tr>`).join('')}</tbody></table>
     <p class="note">A quantity is added only to the same unit. Pieces are shown beside it and never added to a weight or volume. Cancelled loads are not included.</p></div></section>`).join('');
-  const diesel=report.diesel?`<section class="block"><div class="block-bar"><span class="block-index">D</span><span class="block-name">Diesel delivered (litres only)</span><span class="block-count">${report.diesel.batchCount} batch${report.diesel.batchCount===1?'':'es'}</span></div>
+  const diesel=report.diesel?`<section class="block"><div class="block-bar"><span class="block-index">D</span><span class="block-name">Diesel delivered (litres only)</span><span class="block-figures">${report.diesel.batchCount} batch${report.diesel.batchCount===1?'':'es'}</span></div>
     <div class="block-body"><table><colgroup>${(prices?[20,22,20,12,13,13]:[28,30,24,18]).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Date</th><th>Batch</th><th>Invoice</th><th class="num">Litres</th>${prices?'<th class="num">Price / L</th><th class="num">Amount</th>':''}</tr></thead><tbody>${report.diesel.rows.map(row=>`<tr><td>${e(row.date)}</td><td>${e(row.batchNumber)}</td><td>${t(row.invoice)}</td><td class="num">${e(row.litres)}</td>${prices?`<td class="num">${e(row.price)}</td><td class="num">${e(row.amount)}</td>`:''}</tr>`).join('')}
-    <tr class="total"><td colspan="3">Total diesel</td><td class="num">${e(report.diesel.totalLitres)}</td>${prices?`<td></td><td class="num">${e(report.diesel.amount??'')}</td>`:''}</tr></tbody></table>
+    <tr class="total-row"><td colspan="3">Total diesel</td><td class="num">${e(report.diesel.totalLitres)}</td>${prices?`<td></td><td class="num">${e(report.diesel.amount??'')}</td>`:''}</tr></tbody></table>
     <p class="note">Litres are never added to tons or m³.${prices?' The amount covers the priced batches only, with VAT as recorded.':''}${report.diesel.unpricedNote?` ${e(report.diesel.unpricedNote)}.`:''}</p></div></section>`:'';
   const running=`${input.companyName} · Totals · ${report.supplierName} · Export only, no records changed`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${e(report.fileName.replace(/\.pdf$/,''))}</title><style>
     @page{size:A4;margin:12mm 11mm 16mm;@bottom-left{content:"${css(running)}";font-size:7.5pt;color:#5A6570}@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:7.5pt;color:#5A6570}}
     @media screen{body{max-width:210mm;margin:0 auto;padding:12mm}}
-    *{box-sizing:border-box}
-    body{font-family:Arial,'Noto Naskh Arabic','Geeza Pro',sans-serif;color:#17212B;font-size:8.5pt;line-height:1.35}
+    ${reportCss()}
+    body{font-size:8.5pt}
     bdi{unicode-bidi:isolate}
-    .head{display:flex;justify-content:space-between;align-items:flex-start;gap:6mm;border-bottom:2px solid #C84B31;padding-bottom:4mm;margin-bottom:3mm}
-    .logo{max-width:40mm;max-height:18mm;object-fit:contain;display:block;margin-bottom:1.5mm}
-    .brand{font-size:11pt;font-weight:700;color:#173F67;overflow-wrap:anywhere}.contact{font-size:8pt;color:#444;margin-top:.5mm;overflow-wrap:anywhere}
-    h1{font-size:18pt;color:#173F67;margin:0;text-align:right}.head-right{text-align:right;min-width:0}.who{font-size:12pt;font-weight:800;margin-top:1mm;overflow-wrap:anywhere}.when{color:#5A6570;font-size:8.5pt;margin-top:1mm}
-    .meta{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 6mm;margin:0 0 4mm;font-size:8.5pt}.meta div{display:flex;gap:2mm;min-width:0}.meta b{min-width:22mm;color:#5A6570;font-weight:700}.meta span{overflow-wrap:anywhere}
-    .block{border:1px solid #CFC5B3;border-radius:3mm;margin:0 0 5mm;overflow:hidden;background:#FFFFFF}
-    .block-bar{display:flex;align-items:center;gap:3mm;background:#173F67;color:#FFF8ED;padding:2.4mm 4mm;break-after:avoid;break-inside:avoid}
-    .block-index{flex:0 0 7mm;height:7mm;border-radius:1.6mm;background:#C84B31;color:#FFFFFF;font-weight:700;display:flex;align-items:center;justify-content:center}
-    .block-name{flex:1;font-size:12pt;font-weight:700;overflow-wrap:anywhere}.block-count{font-size:8.5pt;color:#E8DED0}.block-body{padding:2mm 3mm 3mm}
-    table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid}
-    th{text-align:left;color:#173F67;font-size:7pt;border-bottom:1.5px solid #173F67;padding:1.4mm 1.6mm;vertical-align:bottom}
-    td{padding:1.4mm 1.6mm;border-bottom:.3mm solid #EAE3D7;vertical-align:top;overflow-wrap:anywhere}
-    tbody tr:nth-child(even) td{background:#FAF8F4}
-    .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.nowrap{white-space:nowrap}.muted{color:#5A6570;font-size:7pt}.missing{color:#8A6D1D;font-style:italic;white-space:nowrap}.missing.wrap{white-space:normal;font-size:6.5pt}.num.wr{white-space:normal}.num .muted{white-space:normal}th.num{white-space:normal}
+    .brand{font-size:11pt;font-weight:700;color:#173F67;overflow-wrap:anywhere}
+    .head-right{min-width:0}.subtitle{overflow-wrap:anywhere}
+    .grid{table-layout:fixed}
+    .missing{color:#8A6D1D;font-style:italic;white-space:nowrap}.missing.wrap{white-space:normal;font-size:6.5pt}.num.wr{white-space:normal}.num .muted{white-space:normal}th.num{white-space:normal}
     .ln{font-weight:700;color:#173F67}
-    tr.total td{font-weight:800;border-top:1.5px solid #17212B;background:#F5F5F5}
-    .pills{display:flex;flex-wrap:wrap;gap:1.5mm;margin-top:2.5mm}.pill{border:1px solid #CFC5B3;border-radius:5mm;padding:.8mm 2.6mm;font-size:8pt;background:#FBF9F4}.pill.strong{background:#EAF1F6;border-color:#173F67;font-weight:700}
-    .note{font-size:7.5pt;color:#5A6570;margin:2mm 0 0}.empty{border:1px dashed #999;padding:5mm;text-align:center}
-    h2.sum{font-size:10pt;color:#173F67;margin:0 0 1.5mm}
+    .note{font-size:7.5pt;color:#52606D;margin:2mm 0 0}.empty{border:.35mm dashed #9FB0C2;padding:5mm;text-align:center}
   </style></head><body>
   <div class="head"><div>${input.logo?`<img class="logo" src="${input.logo}"/>`:''}<div class="brand">${t(input.companyName)}</div>${input.contactLine?`<div class="contact">${t(input.contactLine)}</div>`:''}</div>
-    <div class="head-right"><h1>Totals</h1><div class="who">${t(report.supplierName)}</div><div class="when">${e(day(report.generatedAt))}, ${e(time(report.generatedAt))}</div></div></div>
-  <div class="meta">${report.meta.map(item=>`<div><b>${e(item.label)}</b><span>${t(item.value)}</span></div>`).join('')}</div>
-  ${report.totals.length?`<h2 class="sum">Received from this supplier · ${report.loadCount} load${report.loadCount===1?'':'s'}</h2><div class="pills" style="margin:0 0 4mm">${overall}</div>`:''}
-  ${report.empty?'<div class="empty">No deliveries match these filters.</div>':blocks+categories+diesel}
+    <div class="head-right"><h1>Totals</h1><div class="subtitle">${t(report.supplierName)}</div><div class="when">${e(day(report.generatedAt))}, ${e(time(report.generatedAt))}</div></div></div>
+  <div class="panel keys">${report.meta.map(item=>`<div><span class="figure-label">${e(item.label)}</span><b>${t(item.value)}</b></div>`).join('')}</div>
+  ${report.empty?'<div class="empty">No deliveries match these filters.</div>':summary+blocks+categories+diesel}
+  <div class="notes"><h4>Notes</h4><ol><li>Quantities are added only to the same unit; different units are never added together. Litres are never added to tons or m³.</li><li>Cancelled loads are not included.</li><li>This PDF is an export only: it changes no record.</li></ol></div>
   </body></html>`;
 }

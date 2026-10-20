@@ -110,7 +110,7 @@ describe('the page itself',()=>{
     const pdf=buildSupplierDeliveriesPdf({supplierId:'nour',supplierName:'مؤسسة النور للمقالع والمحاجر — Al-Nour Quarry and Crushing Company',purchases,filters:base,generatedAt:'2026-10-09T10:30:00'});
     const html=noWbr(buildSupplierDeliveriesHtml({companyName:'DROMEX Construction',logo:null,contactLine:'Aley · 01 234 567',report:pdf}));
     expect(html).toContain('<h1>Totals</h1>');
-    expect(html).toContain('<div class="who"><bdi dir="auto">مؤسسة النور للمقالع والمحاجر — Al-Nour Quarry and Crushing Company</bdi></div>');
+    expect(html).toContain('<div class="subtitle"><bdi dir="auto">مؤسسة النور للمقالع والمحاجر — Al-Nour Quarry and Crushing Company</bdi></div>');
     expect(html).not.toContain('Company Totals');
     for(const load of pdf.destinations.flatMap(group=>group.loads))expect(html).toContain(load.reference);
     expect(html).toContain('Yard B (Site)');expect(html).toContain('Not recorded');

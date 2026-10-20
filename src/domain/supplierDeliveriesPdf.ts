@@ -16,7 +16,7 @@ export const NOT_RECORDED='Not recorded';
 export type SupplierPdfFilters={fromDate?:string;toDate?:string;/** Item ids; empty or absent = every material. */itemIds?:string[];/** Destination keys (see purchaseDestination); empty or absent = everywhere. */destinationKeys?:string[];includePrices:boolean;includeDiesel:boolean};
 
 export type SupplierPdfLoad={id:string;reference:string;recordedAt:string;item:string;quantityText:string;driver:string;ticket:string|null;/** Pieces recorded beside the quantity, as text; null when none. */pieces:string|null;/** Rebar: length per bar ("6 m") and meters (pieces × length), or null when not recorded. */length:string|null;meters:string|null;/** Where the weight came from: "Calculated 266.3 kg" beside a typed weight, "Typed only", or "Calculated weight". Only printed on a steel PDF. */weightNote:string|null;status:'Active'|'Corrected';statusNote:string|null;unitPrice?:string;total?:string};
-export type SupplierPdfTotal={item:string;unitSymbol:string;quantity:number;quantityText:string;count:number;pieces:number;piecesText:string};
+export type SupplierPdfTotal={item:string;/** The item's category, so a long list of materials can be grouped. */categoryName:string;unitSymbol:string;quantity:number;quantityText:string;count:number;pieces:number;piecesText:string};
 /** A category whose loads carry pieces (steel): each item, then one total per unit for all items together. */
 export type SupplierPdfCategory={categoryName:string;items:{item:string;loadCount:number;piecesText:string;quantityText:string}[];totals:{quantityText:string;loadCount:number}[];piecesText:string;loadCount:number};
 export type SupplierPdfDestination={key:string;type:FuelDestinationType;name:string;label:string;loads:SupplierPdfLoad[];totals:SupplierPdfTotal[];unpricedCount:number};
@@ -81,7 +81,7 @@ export function buildSupplierDeliveriesPdf(input:{supplierId:string;supplierName
     return true;
   });
   const addTotal=(map:Map<string,SupplierPdfTotal>,purchase:QuarryPurchase)=>{
-    const key=`${purchase.itemId}|${purchase.unitId}`,current=map.get(key)??{item:purchase.itemName,unitSymbol:purchase.unitSymbol,quantity:0,quantityText:'',count:0,pieces:0,piecesText:''};
+    const key=`${purchase.itemId}|${purchase.unitId}`,current=map.get(key)??{item:purchase.itemName,categoryName:purchase.categoryName,unitSymbol:purchase.unitSymbol,quantity:0,quantityText:'',count:0,pieces:0,piecesText:''};
     current.quantity=round(current.quantity+purchase.quantityCubicMetres);current.count+=1;current.pieces+=purchase.pieces??0;map.set(key,current);
   };
   const finish=(map:Map<string,SupplierPdfTotal>)=>[...map.values()].map(total=>({...total,quantityText:quantityText(total.quantity,total.unitSymbol),piecesText:piecesText(total.pieces)})).sort((a,b)=>a.item.localeCompare(b.item)||a.unitSymbol.localeCompare(b.unitSymbol));

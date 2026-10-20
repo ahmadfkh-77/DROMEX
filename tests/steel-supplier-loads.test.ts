@@ -140,9 +140,10 @@ describe('the supplier PDF',()=>{
     expect(report.hasPieces).toBe(true);
     expect(html).toContain('<th>Ticket</th><th class="num">Pieces</th><th class="num">Quantity</th><th>Status</th>');
     expect(html).toContain('Steel</bdi> summary · quantity added per unit');
-    expect(html).toContain('<tr class="total"><td>Total <bdi dir="auto">Steel</bdi>, all items</td><td class="num">3</td><td class="num">200 pcs</td><td class="num">1000 kg</td></tr>');
+    expect(html).toContain('<tr class="total-row"><td>Total <bdi dir="auto">Steel</bdi>, all items</td><td class="num">3</td><td class="num">200 pcs</td><td class="num">1000 kg</td></tr>');
     expect(html).toContain('<td><bdi dir="auto">Rebar 12 mm</bdi></td><td class="num">2</td><td class="num">150 pcs</td><td class="num">810 kg</td>');
-    expect(html).toContain('Rebar 10 mm</bdi> · 190 kg · 50 pcs · 1</span>');
+    expect(html).toContain('<td class="indent"><bdi dir="auto">Rebar 10 mm</bdi></td><td>kg</td><td class="num">1</td><td class="num">50 pcs</td><td class="num">190 kg</td>');
+    expect(html).toContain('Rebar 10 mm</bdi> · 50 pcs</td><td class="num">1</td><td class="num">190 kg</td>');
     expect(report.categories).toHaveLength(1);
   });
   it('lists only this supplier\'s steel, never another supplier\'s, and leaves out the cancelled pipe and other categories from the steel total',async()=>{

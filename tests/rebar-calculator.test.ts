@@ -187,9 +187,9 @@ describe('the supplier PDF and Excel',()=>{
     const {quarry}=await note();
     const report=buildSupplierDeliveriesPdf({supplierId:'hadid',supplierName:'Al Hadid Steel Trading',purchases:await quarry.listPurchases(),filters:{includePrices:true,includeDiesel:false},generatedAt:'2026-10-12T16:30:00'});
     const html=buildSupplierDeliveriesHtml({companyName:'DROMEX S.A.R.L.',logo:null,contactLine:null,report});
-    const widths=html.match(/<colgroup>.*?<\/colgroup>/s)![0].match(/width:(\d+)%/g)!;
+    const widths=html.slice(html.indexOf('<section class="block table-block">')).match(/<colgroup>.*?<\/colgroup>/s)![0].match(/width:(\d+)%/g)!;
     expect(widths.length).toBe(12);expect(widths.reduce((sum,value)=>sum+Number(value.match(/\d+/)![0]),0)).toBe(100);
-    expect((html.match(/<thead><tr>(.*?)<\/tr><\/thead>/s)![1]!.match(/<th/g)??[]).length).toBe(12);
+    expect((html.match(/<tr class="bar-row">.*?<\/tr><tr>(.*?)<\/tr><\/thead>/s)![1]!.match(/<th/g)??[]).length).toBe(12);
   });
   it('leaves a PDF with only typed weights and no length exactly as in Step 1',async()=>{
     const {quarry,draft}=await setup();

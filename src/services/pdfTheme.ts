@@ -59,8 +59,9 @@ export function reportCss():string{
     th{text-align:left;color:${c.navy};font-size:7.5pt;font-weight:700;border-bottom:.45mm solid ${c.navy};padding:1.5mm 1.6mm;vertical-align:bottom}
     td{padding:1.7mm 1.6mm;border-bottom:.2mm solid ${c.line};vertical-align:top;overflow-wrap:anywhere}
     tbody tr:nth-child(even) td{background:${c.soft}}
-    tr.group-row td{background:${c.group};font-weight:700;color:${c.ink};padding-top:2mm}
-    tr.total-row td{font-weight:700;color:${c.navy};background:${c.soft};border-top:.45mm solid ${c.navy};border-bottom:none}
+    tbody tr.group-row td{background:${c.group};font-weight:700;color:${c.ink};padding-top:2mm}
+    tbody tr.total-row td{font-weight:700;color:${c.navy};background:${c.soft};border-top:.45mm solid ${c.navy};border-bottom:none}
+    tbody tr.sub-row td{background:#FFFFFF;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${c.navy};border-top:.35mm solid ${c.cell};padding-top:2mm}
     tr.bar-row th{padding:0;border:none;font-weight:400;text-align:left}
     td.indent{padding-left:5mm}
     .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -69,6 +70,14 @@ export function reportCss():string{
     .muted{color:#6B7681;font-size:7.5pt;font-weight:400}
     .missing{color:#6B7681;font-style:italic;font-weight:400}
     .empty{margin:0;color:#6B7681;font-style:italic}
+    .panel{border:.35mm solid ${c.cell};margin:0 0 5mm;background:#FFFFFF}
+    .panel-head{display:flex;justify-content:space-between;gap:3mm;padding:2mm 3.5mm;font-size:8.5pt;letter-spacing:.5px;text-transform:uppercase;font-weight:700;color:${c.navy};background:${c.group};border-bottom:.35mm solid ${c.cell}}
+    .panel-head span{font-weight:400;text-transform:none;letter-spacing:0;color:#3E4C59}
+    .keys{display:flex;flex-wrap:wrap}
+    .keys div{flex:1 1 30%;min-width:0;padding:2.4mm 3.5mm;border-right:.35mm solid ${c.cell}}
+    .keys div:last-child{border-right:none}
+    .keys b{display:block;font-size:9pt;color:${c.ink};overflow-wrap:anywhere}
+    .block-body .note{padding:2mm 3.5mm;margin:0}
     .notes{color:${c.muted};font-size:7.5pt;margin-top:5mm}
     .notes h4{margin:0;color:${c.navy};text-transform:uppercase;letter-spacing:.5px;font-size:7.5pt}
     .notes ol{margin:1mm 0 0;padding-left:4mm}
