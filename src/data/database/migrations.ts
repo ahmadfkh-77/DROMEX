@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 65;
+export const DATABASE_VERSION = 66;
 
 type TableColumn = { name: string };
 
@@ -2427,6 +2427,14 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_batches_source_purchase ON stock_batches(source_purchase_id) WHERE source_purchase_id IS NOT NULL AND status = 'Active';
     `);
     currentVersion = 65;
+  }
+
+  if (currentVersion === 65) {
+    // Road sections for the paved area (DEC-518). A calculation may keep the road sections its area was built from (name, length, width 1,
+    // width 2), as JSON. Its area_m2 stays the total of the sections, so every total that sums area_m2 is unchanged. An older calculation keeps NULL
+    // here and is read exactly as before. Purely additive: one nullable column, no backfill, no existing record is touched.
+    await addColumnIfMissing(db, 'pavement_calculations', 'area_sections_json', 'TEXT');
+    currentVersion = 66;
   }
 
 

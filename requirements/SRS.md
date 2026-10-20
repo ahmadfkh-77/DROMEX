@@ -1969,6 +1969,18 @@ Status note: this section preserves the original question trace, but some indivi
 - Source: Interview turn 406
 - Status: Confirmed and implemented in code; physical mobile UI and generated-file acceptance pending
 
+### FR-PV-1
+- Statement: “The Pavement Calculator shall let the paved area be built from several road sections.”
+- Rationale: A road is often divided into sections of different widths, and one average width gives a poor area.
+- Actors: Owner/manager/foreman.
+- Main behavior: Under 1 · Paved area, beside Length × width and Direct net area, a Road sections option holds any number of sections. Each has an optional name, a length, a start width (Width 1) and an end width (Width 2). A section's area is length × (Width 1 + Width 2) ÷ 2 and the net area is the sum of all section areas. A section can be added, removed and duplicated; a new section starts with Width 1 equal to the previous section's Width 2. The area rule, an example and the straight-edge assumption are shown above the first section at all times. The total feeds every area-based result as a typed area does. A saved calculation keeps its sections and reopens in Road sections.
+- Alternate and exception behavior: Length must be above zero and each width zero or more; an empty or invalid field is an error that names its section and is never counted as zero; at least one valid section and a total above zero are required. Assumption: the width changes in a straight line within each section; a bending road or an uneven change is split into more sections. Older saved calculations are read exactly as before.
+- Postconditions: The saved calculation holds its sections and the total area; the PDF and Excel exports show them (pending).
+- Priority: Must
+- Acceptance criteria: Section 1 (10 m, widths 4 and 4.4) gives 42.0 m², Section 2 (20 m, widths 4.4 and 6) gives 104.0 m², and the total is 146.0 m²; at 90 kg/m² and 5% allowance that is 13.140 t theoretical and 13.797 t planned.
+- Source: Owner request, 2026-10-20 (DEC-518)
+- Status: Confirmed; rules, saving and migration 66 implemented with automated tests; screens and exports pending
+
 ### FR-092
 - Statement: “Future camera road measurement shall be an assisted, reviewed input with a manual fallback.”
 - Rationale: Phone AR can estimate scaled points, but automatic visual edge detection can mistake road boundaries and an ordinary unscaled photo cannot reliably supply absolute metres.
@@ -2012,10 +2024,13 @@ Status note: this section preserves the original question trace, but some indivi
 - Expandable parent labels shall display a literal `+` while closed and a literal `×` while open. The content reveal and accent-line animations remain, but the mark itself shall not depend on rotating `+`. The same state marks apply to specialized filter, report, Load History group, and Finance group disclosures. (Source: Interview turn 408; status: Confirmed and implemented application-wide.)
 
 ### UI-019
-- Pavement Calculator results shall use a dedicated high-contrast deep-teal treatment with white values, pale-teal labels, and a darker teal border. Red remains reserved for errors, danger, and destructive warnings. The result treatment applies to net area, the main kg/m² and thickness outputs, advanced outputs, saved-record chips, and combined project totals. (Source: Interview turn 409; status: Confirmed and implemented in code; physical contrast acceptance pending.)
+- Pavement Calculator results shall use a dedicated high-contrast deep-teal treatment with white values, pale-teal labels, and a darker teal border. Red remains reserved for errors, danger, and destructive warnings. The result treatment applies to net area, the main kg/m² and thickness outputs, advanced outputs, saved-record chips, and combined project totals. (Source: Interview turn 409; status: Confirmed and implemented in code; physical contrast acceptance pending; amended by DEC-519: result figures and one hero figure instead of filled cards.)
 
 ### UI-020
-- The Pavement Calculator's `1 · Paved area` and `2 · Spread rate and thickness` input sections shall use the shared colored expandable-label interaction, start closed whenever the calculator opens, display `+` while closed and `×` while open, and preserve entered values when folded. The main calculated-result cards remain visible outside the folded sections. (Source: Interview turn 410; status: Confirmed and implemented in code.)
+- The Pavement Calculator's `1 · Paved area` and `2 · Spread rate and thickness` input sections shall use the shared colored expandable-label interaction, start closed whenever the calculator opens, display `+` while closed and `×` while open, and preserve entered values when folded. The main calculated-result cards remain visible outside the folded sections. (Source: Interview turn 410; status: Confirmed and implemented in code; replaced by UI-021 / DEC-519.)
+
+### UI-021
+- The Asphalt Calculator shall be three pages with progress dots and Back / Next, like New Supplier Load: 1 Area, 2 Rate and thickness, and 3 Result with Save, each with its own coloured header band. More tools, each tool and Saved calculations are their own pages opened from the Result page. Fields use the Open form look with no cards and no stripes, and a fixed bottom bar shows the figures so far. (Source: Owner request, 2026-10-20; status: Confirmed; pending implementation in Phases B and C; physical review pending.)
 
 ## 20. Appendices
 

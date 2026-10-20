@@ -1,0 +1,187 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Asphalt Calculator redesign v3 - mockup</title><style>
+*{box-sizing:border-box}
+body{font-family:system-ui,Arial,sans-serif;color:#17212B;background:#E4E0D6;margin:0;padding:14px;font-size:14px}
+.callout{max-width:1500px;margin:0 auto 18px;background:#FFF3D8;border-left:5px solid #C84B31;padding:12px 16px;line-height:1.5}
+.callout li{margin:4px 0}
+h2.sec{max-width:1500px;margin:24px auto 8px;font-size:18px;color:#173F67;border-bottom:2px solid #C84B31;padding-bottom:4px}
+.row{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;max-width:1500px;margin:0 auto 14px;align-items:flex-start}
+.col{width:330px}
+.cap{font-weight:800;color:#173F67;margin:0 0 8px;font-size:14px}.cap span{font-weight:400;color:#65717D;font-size:12px}
+.tag{display:inline-block;background:#C84B31;color:#fff;border-radius:8px;padding:1px 8px;font-size:11px;font-weight:800;margin-left:6px}
+.phone{background:#F5F2EC;border:8px solid #17212B;border-radius:28px;overflow:hidden;display:flex;flex-direction:column;height:730px}
+.ctx{background:#173F67;border-bottom:3px solid #C84B31;padding:7px 14px;color:#FFF8ED;flex:none}
+.ctx small{display:block;color:#F2A184;font-size:7px;font-weight:900;letter-spacing:.8px}.ctx b{font-size:13px}
+.top{padding:10px 16px 8px;flex:none;display:flex;align-items:center;gap:12px}
+.back{background:#fff;border-radius:10px;padding:9px 12px;font-weight:800;font-size:13px}
+.eb{color:#C84B31;font-size:10px;font-weight:900;letter-spacing:1.3px}.h1{font-size:19px;font-weight:900;line-height:1.1}
+.dots{display:flex;gap:6px;padding:0 16px 10px;flex:none}.dots i{flex:1;height:6px;border-radius:3px;background:#E0E3E8}.dots i.d{background:#173F67}.dots i.on{background:#C84B31}
+.band{flex:none;padding:14px 16px 16px;color:#fff;display:flex;gap:12px;align-items:center}
+.band .n{width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;flex:none}
+.band b{display:block;font-size:20px;font-weight:900;line-height:1.15}.band span{display:block;font-size:12px;opacity:.92;margin-top:2px;line-height:1.35}
+.b-n{background:#173F67}.b-o{background:#C84B31}.b-t{background:#087F8C}.b-c{background:#FFF8ED;color:#17212B;border-bottom:1px solid #E3DBCD}.b-c .n{background:#173F67;color:#fff}.b-c span{color:#65717D}
+.body{padding:6px 16px 14px;flex:1;overflow:hidden}
+.bar{flex:none;background:#173F67;padding:10px 14px;display:flex;align-items:center;gap:10px;color:#fff}
+.bar .t{flex:1}.bar small{display:block;font-size:9px;letter-spacing:1px;font-weight:800;opacity:.85}.bar b{font-size:16px}
+.btn{border-radius:12px;padding:11px 16px;font-weight:800;font-size:14px}.btn.o{border:1.5px solid #fff;color:#fff}.btn.r{background:#C84B31;color:#fff}
+.g{border-top:1px solid #D9D2C5;padding-top:12px;margin-top:14px}.g.first{border-top:none;padding-top:6px;margin-top:0}
+.gl{font-size:11px;letter-spacing:1.2px;color:#65717D;font-weight:900;margin:0 0 6px}
+.lb{font-size:12px;color:#3C4854;font-weight:700;margin:9px 0 3px}.lb:first-child{margin-top:0}
+.f{border-bottom:2px solid #8F9AA6;padding:8px 2px;min-height:46px;display:flex;align-items:center;justify-content:space-between;font-size:18px;font-weight:700}
+.f.ph{color:#8A949E;font-weight:500;font-size:15px}.f small{font-size:11px;color:#65717D;font-weight:500;display:block}
+.r2{display:flex;gap:14px}.r2>div{flex:1}.r3{display:flex;gap:10px}.r3>div{flex:1}
+.seg{display:flex;background:#E8E3D8;border-radius:12px;padding:3px;gap:3px}
+.seg div{flex:1;text-align:center;padding:10px 3px;border-radius:9px;font-size:12px;font-weight:800;color:#65717D;min-height:44px;display:flex;align-items:center;justify-content:center}
+.seg div.on{background:#173F67;color:#fff}
+.note{font-size:13px;line-height:1.5;color:#173F67;background:#E9EEF4;border-radius:10px;padding:10px 12px}.note b{color:#17212B}
+.err{font-size:13px;font-weight:700;color:#B3261E;background:#FBE9E7;border-radius:10px;padding:9px 12px}
+.link{color:#C84B31;font-weight:800;font-size:13px;min-height:44px;display:flex;align-items:center}
+.acts{display:flex;gap:20px}
+.sh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}.sh b{font-size:15px;color:#173F67}.sh .a{font-size:15px;font-weight:900;color:#04545D}
+.rr{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:11px 2px;border-bottom:1px solid #E6E0D4}
+.rr span:first-child{color:#65717D;font-size:12px}.rr b{font-size:17px;color:#04545D}.rr.big b{font-size:26px}
+.hero{background:#087F8C;border:2px solid #04545D;border-radius:14px;padding:14px;color:#fff;margin-bottom:6px}
+.hero small{display:block;color:#DDF7F5;font-size:10px;font-weight:900;letter-spacing:.9px}.hero b{font-size:34px;font-weight:900;line-height:1.1}
+.hero .s{display:flex;gap:18px;margin-top:8px}.hero .s b{font-size:18px}
+.rl{display:flex;align-items:center;gap:10px;padding:14px 2px;border-bottom:1px solid #E0DACD;min-height:60px}
+.rl .t{flex:1}.rl b{display:block;font-size:15px;color:#173F67}.rl i{display:block;font-style:normal;color:#65717D;font-size:12px}
+.rl .v{color:#04545D;font-weight:900;font-size:13px;text-align:right}.rl .m{font-size:22px;color:#C84B31;font-weight:700}
+.bt{border-radius:12px;min-height:48px;padding:12px;text-align:center;font-weight:900;font-size:15px;display:flex;align-items:center;justify-content:center}
+.bt.s{border:1.5px solid #173F67;color:#173F67}
+.crumb{font-size:12px;color:#65717D;padding:0 16px;flex:none}
+</style></head><body>
+
+<div class="callout"><b>Mockup v3 - Asphalt Calculator as separate pages (nothing is built yet).</b> You chose Direction Y and said it still looked like one page. So now <b>every step is its own page</b>, like New Supplier Load:
+<ul>
+<li><b>Each page has its own coloured header band</b> with a big step number, a title and one line of help: <b>1 · Area</b> (navy), <b>2 · Rate</b> (orange), <b>3 · Result</b> (teal). The next page looks clearly different when you press Next.</li>
+<li><b>Progress dots and Back / Next</b> in the bottom bar, the same as Supplier Load. The bar also shows the figures so far (area, tonnes), so the answer is never hidden.</li>
+<li><b>Step 3 is the answer</b>: one large teal number (planned tonnes) with the rest in a ruled list, then Save. <b>More tools</b> and <b>Saved calculations</b> are separate pages opened from step 3, each with its own band, so the seven tools are no longer on the same scroll.</li>
+<li><b>Each tool is its own page</b> with a band, its fields, and its results.</li>
+<li><b>Inside a page</b>: Open form (underlined 18 px fields, small group labels, hairlines, no boxes, no stripes).</li></ul>
+<b>Road sections</b> sit on page 1, with the area rule note always visible above the first section. Sample: 10 m (4 → 4.4 m) = 42.0 m², 20 m (4.4 → 6 m) = 104.0 m², total 146.0 m². <b>This replaces the closed-by-default sections of DEC-345 and the filled teal cards of DEC-343</b> (teal stays for the derived numbers and the hero figure); I'll record that as a new decision only if you approve.</div>
+
+<h2 class="sec">The three steps</h2>
+<div class="row">
+
+<div class="col"><div class="cap">Page 1 · Area <span>(Road sections)</span><span class="tag">NEW</span></div>
+<div class="phone"><div class="ctx"><small>ACTIVE PROJECT</small><b>Coastal Road</b></div>
+ <div class="top"><div class="back">Back</div><div><div class="eb">PAVEMENT QUANTITY</div><div class="h1">Asphalt Calculator</div></div></div>
+ <div class="dots"><i class="on"></i><i></i><i></i></div>
+ <div class="band b-n"><div class="n">1</div><div><b>Area</b><span>How big is the paved area?</span></div></div>
+ <div class="body">
+  <div class="g first"><div class="lb">Section or layer name *</div><div class="f">Wearing course · Station 0+000–0+030</div></div>
+  <div class="g"><div class="gl">HOW DO YOU KNOW THE AREA?</div><div class="seg"><div>Length × width</div><div class="on">Road sections</div><div>Direct area</div></div></div>
+  <div class="g" style="border:none;padding-top:0;margin-top:10px"><div class="note"><b>Section area = Length × (Width 1 + Width 2) ÷ 2.</b> Example: 10 × (4 + 4.4) ÷ 2 = 42.0 m². Total area = the sum of all section areas. Straight edges are assumed inside each section: if the road bends or the width changes unevenly, split it into more sections.</div></div>
+  <div class="g"><div class="sh"><b>Section 1</b><span class="a">42.0 m²</span></div>
+   <div class="r3"><div><div class="lb">Length (m)</div><div class="f">10</div></div><div><div class="lb">Width 1</div><div class="f">4</div></div><div><div class="lb">Width 2</div><div class="f">4.4</div></div></div>
+   <div class="acts"><span class="link">Duplicate</span><span class="link" style="color:#B3261E">Remove</span></div></div>
+  <div class="g"><div class="sh"><b>Section 2</b><span class="a">104.0 m²</span></div>
+   <div class="r3"><div><div class="lb">Length (m)</div><div class="f">20</div></div><div><div class="lb">Width 1</div><div class="f">4.4</div></div><div><div class="lb">Width 2</div><div class="f">6</div></div></div>
+   <div class="acts"><span class="link">Duplicate</span><span class="link" style="color:#B3261E">Remove</span></div></div>
+  <div class="link" style="margin-top:-2px">+ Add section</div>
+ </div>
+ <div class="bar"><div class="t"><small>TOTAL AREA · 2 SECTIONS</small><b>146.0 m²</b></div><span class="btn o">Cancel</span><span class="btn r">Next</span></div></div></div>
+
+<div class="col"><div class="cap">Page 1 · with a problem <span>(never counted as zero)</span><span class="tag">NEW</span></div>
+<div class="phone"><div class="ctx"><small>ACTIVE PROJECT</small><b>Coastal Road</b></div>
+ <div class="top"><div class="back">Back</div><div><div class="eb">PAVEMENT QUANTITY</div><div class="h1">Asphalt Calculator</div></div></div>
+ <div class="dots"><i class="on"></i><i></i><i></i></div>
+ <div class="band b-n"><div class="n">1</div><div><b>Area</b><span>How big is the paved area?</span></div></div>
+ <div class="body">
+  <div class="g first"><div class="err">Section 3: enter a length greater than zero, or remove the section.</div></div>
+  <div class="g"><div class="sh"><b>Section 2</b><span class="a">104.0 m²</span></div><div style="color:#65717D;font-size:12px">20 m · 4.4 → 6 m</div></div>
+  <div class="g"><div class="sh"><b>Section 3</b><span class="a" style="color:#8A949E">—</span></div>
+   <div class="r3"><div><div class="lb">Length (m)</div><div class="f" style="border-bottom-color:#B3261E">&nbsp;</div></div><div><div class="lb">Width 1</div><div class="f">6</div></div><div><div class="lb">Width 2</div><div class="f ph">&nbsp;</div></div></div>
+   <div class="acts"><span class="link">Duplicate</span><span class="link" style="color:#B3261E">Remove</span></div></div>
+  <div class="link">+ Add section</div>
+  <div style="color:#65717D;font-size:12px;margin-top:4px">While a section has a problem, Next stays off, so a blank is never counted as 0 m².</div>
+ </div>
+ <div class="bar" style="background:#4F5B66"><div class="t"><small>TOTAL AREA</small><b>fix section 3</b></div><span class="btn o">Cancel</span><span class="btn r" style="opacity:.4">Next</span></div></div></div>
+
+<div class="col"><div class="cap">Page 2 · Rate <span>(own colour, own page)</span><span class="tag">NEW</span></div>
+<div class="phone"><div class="ctx"><small>ACTIVE PROJECT</small><b>Coastal Road</b></div>
+ <div class="top"><div class="back">Back</div><div><div class="eb">PAVEMENT QUANTITY</div><div class="h1">Asphalt Calculator</div></div></div>
+ <div class="dots"><i class="d"></i><i class="on"></i><i></i></div>
+ <div class="band b-o"><div class="n">2</div><div><b>Rate and thickness</b><span>How much asphalt per m², and how thick?</span></div></div>
+ <div class="body">
+  <div class="g first"><div class="gl">SPREAD RATE</div><div class="lb">Target spread rate *</div><div class="f">90 kg/m² <small>37.5 mm compacted</small></div></div>
+  <div class="g"><div class="gl">MATERIAL</div><div class="r2"><div><div class="lb">Compacted density (t/m³) *</div><div class="f">2.40</div></div><div><div class="lb">Allowance (%)</div><div class="f">5</div></div></div></div>
+  <div class="g"><div class="gl">LOOSE THICKNESS · OPTIONAL</div><div class="lb">Loose-to-compacted factor</div><div class="f">1.20 × <small>project factor</small></div>
+   <div class="note" style="margin-top:10px">No universal factor is assumed. Use the value set by the mix, paver setup, trial strip, or project specification.</div></div>
+  <div class="g"><div class="gl">SO FAR</div><div class="rr"><span>Finished thickness</span><b>37.5 mm</b></div><div class="rr"><span>Loose thickness</span><b>45.0 mm</b></div></div>
+ </div>
+ <div class="bar"><div class="t"><small>AREA · RATE</small><b>146.0 m² · 90 kg/m²</b></div><span class="btn o">Back</span><span class="btn r">Next</span></div></div></div>
+
+<div class="col"><div class="cap">Page 3 · Result and save <span>(the answer, in teal)</span><span class="tag">NEW</span></div>
+<div class="phone"><div class="ctx"><small>ACTIVE PROJECT</small><b>Coastal Road</b></div>
+ <div class="top"><div class="back">Back</div><div><div class="eb">PAVEMENT QUANTITY</div><div class="h1">Asphalt Calculator</div></div></div>
+ <div class="dots"><i class="d"></i><i class="d"></i><i class="on"></i></div>
+ <div class="band b-t"><div class="n">3</div><div><b>Result</b><span>What to order, and save it under the project.</span></div></div>
+ <div class="body">
+  <div class="g first"><div class="hero"><small>PLANNED ASPHALT</small><b>13.797 t</b><div class="s"><div><small>AREA</small><b>146.0 m²</b></div><div><small>FINISHED</small><b>37.5 mm</b></div></div></div>
+   <div class="rr"><span>Theoretical quantity</span><b>13.140 t</b></div><div class="rr"><span>Allowance (5%)</span><b>0.657 t</b></div>
+   <div class="rr"><span>Loose thickness (1.20 ×)</span><b>45.0 mm</b></div><div class="rr"><span>Trucks at <u>20 t</u> payload</span><b>1</b></div></div>
+  <div class="g"><div class="gl">NOTES</div><div class="f ph">Mix, station limits, exclusions…</div></div>
+  <div class="g"><div class="rl"><div class="t"><b>More tools</b><i>Layers, coats, milling, slopes, delivery</i></div><span class="m">›</span></div>
+   <div class="rl"><div class="t"><b>Saved calculations</b><i>2 under this project</i></div><span class="m">›</span></div></div>
+ </div>
+ <div class="bar"><div class="t"><small>SAVE UNDER</small><b>Coastal Road</b></div><span class="btn o">Back</span><span class="btn r">Save</span></div></div></div>
+</div>
+
+<h2 class="sec">The pages opened from step 3</h2>
+<div class="row">
+
+<div class="col"><div class="cap">More tools <span>(its own page and band)</span><span class="tag">NEW</span></div>
+<div class="phone"><div class="ctx"><small>ACTIVE PROJECT</small><b>Coastal Road</b></div>
+ <div class="top"><div class="back">Back</div><div><div class="eb">PAVEMENT QUANTITY</div><div class="h1">Asphalt Calculator</div></div></div>
+ <div class="band b-n"><div class="n">+</div><div><b>More tools</b><span>Each tool uses the area: 146.0 m².</span></div></div>
+ <div class="body" style="padding-top:2px">
+  <div class="rl"><div class="t"><b>Geometry and Variable Width</b><i>Triangles, circles, deductions</i></div><span class="m">›</span></div>
+  <div class="rl"><div class="t"><b>Complete Layer Stack</b><i>Subbase to wearing course</i></div><div class="v">13.140 t</div><span class="m">›</span></div>
+  <div class="rl"><div class="t"><b>Reverse Coverage and Truck Loads</b><i>Coverage, thickness, trucks</i></div><span class="m">›</span></div>
+  <div class="rl"><div class="t"><b>Prime and Tack Coats</b><i>Litres from L/m²</i></div><span class="m">›</span></div>
+  <div class="rl"><div class="t"><b>Milling</b><i>Volume and reclaimed tonnes</i></div><span class="m">›</span></div>
+  <div class="rl"><div class="t"><b>Crossfall, Slope, and Levels</b><i>Edge difference, sloped width</i></div><span class="m">›</span></div>
+  <div class="rl"><div class="t"><b>Actual Delivery and Variance</b><i>Received against planned</i></div><span class="m">›</span></div>
+ </div>
+ <div class="bar"><div class="t"><small>PLANNED</small><b>13.797 t</b></div><span class="btn o">Back to result</span></div></div></div>
+
+<div class="col"><div class="cap">A tool: Milling <span>(the other six look the same)</span><span class="tag">NEW</span></div>
+<div class="phone"><div class="ctx"><small>ACTIVE PROJECT</small><b>Coastal Road</b></div>
+ <div class="top"><div class="back">Back</div><div><div class="eb">MORE TOOLS</div><div class="h1">Milling</div></div></div>
+ <div class="band b-n" style="background:#173F67"><div class="n">⌀</div><div><b>Milling</b><span>Removal volume and reclaimed tonnes over 146.0 m².</span></div></div>
+ <div class="body">
+  <div class="g first"><div class="gl">INPUTS</div><div class="r2"><div><div class="lb">Milling depth (mm)</div><div class="f">50</div></div><div><div class="lb">Removed density (t/m³)</div><div class="f">2.30</div></div></div></div>
+  <div class="g"><div class="gl">RESULTS</div><div class="rr"><span>Milling area</span><b>146.00 m²</b></div><div class="rr"><span>Removal volume</span><b>7.30 m³</b></div><div class="rr big"><span>Estimated reclaimed mass</span><b>16.790 t</b></div></div>
+ </div>
+ <div class="bar"><div class="t"><small>PLANNED</small><b>13.797 t</b></div><span class="btn o">Back to tools</span></div></div></div>
+
+<div class="col"><div class="cap">A tool: Complete Layer Stack <span>(layers as rows)</span><span class="tag">NEW</span></div>
+<div class="phone"><div class="ctx"><small>ACTIVE PROJECT</small><b>Coastal Road</b></div>
+ <div class="top"><div class="back">Back</div><div><div class="eb">MORE TOOLS</div><div class="h1">Complete Layer Stack</div></div></div>
+ <div class="band b-o"><div class="n">≡</div><div><b>Layer Stack</b><span>Asphalt mass uses kg/m². Loose thickness needs the project factor.</span></div></div>
+ <div class="body">
+  <div class="rl" style="min-height:50px"><div class="t"><b>Subbase</b><i>29.20 m³ compacted</i></div><div class="v">61.320 t</div></div>
+  <div class="rl" style="min-height:50px"><div class="t"><b>Base course</b><i>enter thickness</i></div></div>
+  <div class="rl" style="min-height:50px"><div class="t"><b>Asphalt base</b><i>enter thickness</i></div></div>
+  <div class="rl" style="min-height:50px"><div class="t"><b>Binder course</b><i>enter thickness</i></div></div>
+  <div class="rl" style="min-height:50px;background:#EEF2F7;border-radius:10px;padding-left:10px;padding-right:10px"><div class="t"><b>Wearing course</b><i>5.84 m³ compacted · open</i></div><div class="v">13.140 t</div></div>
+  <div class="g" style="border:none;padding-top:6px"><div class="r2"><div><div class="lb">Thickness (mm)</div><div class="f">40</div></div><div><div class="lb">Density (t/m³)</div><div class="f">2.40</div></div></div>
+   <div class="r2"><div><div class="lb">Spread (kg/m²)</div><div class="f">90</div></div><div><div class="lb">Loose factor</div><div class="f">1.20</div></div></div></div>
+ </div>
+ <div class="bar"><div class="t"><small>REQUIRED ASPHALT</small><b>13.140 t</b></div><span class="btn o">Back to tools</span></div></div></div>
+
+<div class="col"><div class="cap">Saved calculations <span>(its own page, no stripe)</span><span class="tag">NEW</span></div>
+<div class="phone"><div class="ctx"><small>ACTIVE PROJECT</small><b>Coastal Road</b></div>
+ <div class="top"><div class="back">Back</div><div><div class="eb">PAVEMENT QUANTITY</div><div class="h1">Asphalt Calculator</div></div></div>
+ <div class="band b-c"><div class="n">▤</div><div><b>Saved calculations</b><span>2 under Coastal Road · 3,646.0 m² · 238.797 t</span></div></div>
+ <div class="body">
+  <div style="display:flex;gap:10px;margin:6px 0 4px"><div class="bt s" style="flex:1">Export PDF</div><div class="bt s" style="flex:1">Export Excel</div></div>
+  <div class="rl" style="min-height:80px"><div class="t"><b>Wearing course · Station 0+000–0+030</b><i>90 kg/m² · 37.5 mm · 146.0 m² · 2 road sections</i></div><div class="v">13.797 t<br><span style="color:#C84B31">Edit ›</span></div></div>
+  <div class="rl" style="min-height:80px"><div class="t"><b>Binder course</b><i>110 kg/m² · 45.8 mm · 3,500.0 m²</i></div><div class="v">225.000 t<br><span style="color:#C84B31">Edit ›</span></div></div>
+  <div style="color:#65717D;font-size:12px;margin-top:10px;line-height:1.45">The PDF lists a calculation's road sections (name, length, width 1, width 2, area) under it with their total, and Excel gets an Area Sections sheet. Calculations without sections export as today.</div>
+ </div>
+ <div class="bar"><div class="t"><small>COMBINED PLANNED</small><b>238.797 t</b></div><span class="btn o">Back to result</span></div></div></div>
+</div>
+
+<div class="callout" style="margin-top:20px"><b>What I changed from v2:</b> pages instead of tabs; a different coloured band on every page; progress dots; Back / Next like Supplier Load; the answer is page 3; tools and Saved are their own pages. If you want more separation, say how (for example bands in more colours, a bigger step number, or each page with its own icon). No code changes until you approve.</div>
+</body></html>
