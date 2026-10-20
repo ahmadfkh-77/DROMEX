@@ -46,7 +46,7 @@ describe('the steps and their checks (pure)',()=>{
 
 describe('the form (screen)',()=>{
   it('shows a progress bar, the step name, and Back (Cancel on step 1) with Next and Save load',()=>{
-    expect(screen).toContain('accessibilityRole="progressbar"');expect(screen).toContain('{entryStep} · {stepNames[entryStep-1]}');
+    expect(screen).toContain('accessibilityRole="progressbar"');expect(screen).toContain('{stepNames[entryStep-1]}');expect(screen).toContain('Step {entryStep} of 4');
     expect(screen).toContain("{entryStep===1?'Cancel':'Back'}");expect(screen).toContain("{entryStep===4?(busy?'Saving...':'Save load'):'Next'}");
     expect(screen).toContain('onPress={entryStep===4?()=>void confirm():goNextStep}');
   });
@@ -61,7 +61,7 @@ describe('the form (screen)',()=>{
   it('puts the old fields in their steps without dropping any',()=>{
     const step=(n:number)=>{const a=screen.indexOf(`{entryStep===${n}?`);const b=screen.indexOf(`{entryStep===${n+1}?`);return screen.slice(a,b>a?b:a+9000);};
     expect(step(1)).toContain('label="Record date *"');expect(step(1)).toContain('label="Supplier *"');expect(step(1)).toContain('<FuelDestinationFields');expect(step(1)).toContain('+ New supplier');
-    for(const part of ['label="Item *"','label="Measurement unit *"','label="Quantity *"','label="Pieces (optional)"','<SteelItemFields','Rebar calculator: suggest the weight','Delivery handled by','label="Driver *"','label="Truck plate *"','label="Supplier truck / plate (optional)"','label="Supplier ticket / invoice number"','More items on this delivery note','+ Add another item to this delivery','Split the total across the items'])expect(step(2),part).toContain(part);
+    for(const part of ['label="Item *"','label="Measurement unit *"','label="Quantity *"','label="Pieces (optional)"','<SteelItemFields','Rebar calculator: suggest the weight','Delivery handled by','label="Driver *"','label="Truck plate *"','label="Supplier truck / plate (optional)"','label="Supplier ticket / invoice number"','MORE ITEMS ON THIS DELIVERY NOTE','+ Add another item to this delivery','Split the total across the items'])expect(step(2),part).toContain(part);
     expect(step(3)).toContain('<PriceVatControls');expect(step(3)).toContain('No price entered: this supplier load is saved as Unpriced.');
     expect(step(4)).toContain('Supplier ticket photos');expect(step(4)).toContain('label="Notes"');
     expect(screen.match(/calculatedPatch\(/g)?.length).toBe(1);
@@ -77,5 +77,23 @@ describe('the form (screen)',()=>{
     expect(screen).toContain('<VatChoiceControl value={choice}');expect(screen).toContain('No VAT is added unless you choose it.');
     expect(screen).toContain('Does not include VAT');expect(screen).toContain('Already includes VAT');
     expect(screen).toContain("label:'Location *'");
+  });
+});
+
+describe('steps 1 to 3 in the Open form look',()=>{
+  const step=(n:number)=>{const a=screen.indexOf(`{entryStep===${n}?`);const b=screen.indexOf(`{entryStep===${n+1}?`);return screen.slice(a,b>a?b:a+9000);};
+  it('has no boxed cards on steps 1 to 3, and groups the fields under small labels',()=>{
+    for(const n of [1,2,3])expect(step(n)).not.toContain('<Card ');
+    for(const label of ['WHEN','WHO','WHERE','WHAT','HOW IT CAME'])expect(screen).toContain(`>${label}</Text>`);
+    for(const label of ['PRICE','VAT','WHAT IT COMES TO'])expect(screen).toContain(`>${label}</Text>`);
+  });
+  it('uses the underlined fields and the switches, and keeps the other screens on the boxed ones',()=>{
+    expect(step(2)).toContain('variant="open"');expect(step(2)).toContain('<OpenSwitch label="Delivery handled by"');
+    expect(screen).toContain('<PriceVatControls open value={draft}');
+    expect(screen).toContain('<PriceVatControls value={correction}');
+  });
+  it('shows the steel note only for a steel item, and keeps every extra item editable and removable',()=>{
+    expect(step(2)).toContain('{isSteelItem(draft.itemId)?<Text style={styles.openHelp}>Steel: choose the unit kg');
+    for(const text of ['+ Add another item to this delivery','Remove','setOpenExtra','Split the total across the items','Rebar calculator for this delivery'])expect(step(2)).toContain(text);
   });
 });
