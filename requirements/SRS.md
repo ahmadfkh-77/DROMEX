@@ -1975,11 +1975,11 @@ Status note: this section preserves the original question trace, but some indivi
 - Actors: Owner/manager/foreman.
 - Main behavior: Under 1 · Paved area, beside Length × width and Direct net area, a Road sections option holds any number of sections. Each has an optional name, a length, a start width (Width 1) and an end width (Width 2). A section's area is length × (Width 1 + Width 2) ÷ 2 and the net area is the sum of all section areas. A section can be added, removed and duplicated; a new section starts with Width 1 equal to the previous section's Width 2. The area rule, an example and the straight-edge assumption are shown above the first section at all times. The total feeds every area-based result as a typed area does. A saved calculation keeps its sections and reopens in Road sections.
 - Alternate and exception behavior: Length must be above zero and each width zero or more; an empty or invalid field is an error that names its section and is never counted as zero; at least one valid section and a total above zero are required. Assumption: the width changes in a straight line within each section; a bending road or an uneven change is split into more sections. Older saved calculations are read exactly as before.
-- Postconditions: The saved calculation holds its sections and the total area; the PDF and Excel exports show them (pending).
+- Postconditions: The saved calculation holds its sections and the total area; the PDF and Excel exports show them.
 - Priority: Must
 - Acceptance criteria: Section 1 (10 m, widths 4 and 4.4) gives 42.0 m², Section 2 (20 m, widths 4.4 and 6) gives 104.0 m², and the total is 146.0 m²; at 90 kg/m² and 5% allowance that is 13.140 t theoretical and 13.797 t planned.
 - Source: Owner request, 2026-10-20 (DEC-518)
-- Status: Confirmed; rules, saving and migration 66 implemented with automated tests; screens and exports pending
+- Status: Confirmed; rules, saving, migration 66, the screens, the tool pages and the exports implemented with automated tests; physical review pending
 
 ### FR-092
 - Statement: “Future camera road measurement shall be an assisted, reviewed input with a manual fallback.”
