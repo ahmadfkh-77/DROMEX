@@ -8,7 +8,7 @@ import {
 } from '../../domain/pavementForm';
 import {AppButton,AppField,EmptyState} from '../components/AppPrimitives';
 import {OpenSwitch} from '../components/OpenSwitch';
-import {PavementAdvancedSections} from '../components/PavementAdvancedSections';
+import {PavementTools,usePavementTools} from '../components/PavementTools';
 import {PavementPageFrame} from '../components/PavementPageFrame';
 import {PavementSectionsEditor} from '../components/PavementSectionsEditor';
 import {SearchableSelect} from '../components/SearchableSelect';
@@ -27,6 +27,8 @@ export function PavementCalculatorScreen({repository,onBack,initialProjectId}:{r
   const[page,setPage]=useState<Page>('area');const[showErrors,setShowErrors]=useState(false);const[payload,setPayload]=useState(String(defaultTruckPayloadTonnes));
   const[busy,setBusy]=useState(false);const[error,setError]=useState<string|null>(null);const[message,setMessage]=useState<string|null>(null);
   const locked=!!initialProjectId;
+  // The typed values of the seven tools live here, so they survive going to another page and coming back.
+  const tools=usePavementTools();
   const refresh=useCallback(async()=>{const next=await repository.getSetup();setSetup(next);setRecords(await repository.listCalculations(initialProjectId??null));},[initialProjectId,repository]);
   useEffect(()=>{void refresh().catch(cause=>setError(cause instanceof Error?cause.message:'Could not load pavement calculations.'));},[refresh]);
 
@@ -99,10 +101,7 @@ export function PavementCalculatorScreen({repository,onBack,initialProjectId}:{r
     </View>
   </PavementPageFrame>;
 
-  if(page==='tools')return <PavementPageFrame band={{mark:'+',title:'More tools',hint:`Each tool uses the area: ${area.areaM2>0?`${format(area.areaM2)} m²`:'not set yet'}.`,tone:'navy'}} onBack={()=>go('result')} error={error} message={message}
-    bar={{label:'PLANNED',value:result?`${format(result.plannedTonnes,3)} t`:'—',secondary:{label:'Back to result',onPress:()=>go('result')}}}>
-    <PavementAdvancedSections areaM2={area.areaM2} plannedTonnes={result?.plannedTonnes??0} onUseArea={value=>{set({areaMode:'direct',directArea:value.toFixed(2)});setMessage(`Direct net area set to ${format(value,2)} m². Open 1 · Area to see it.`);}}/>
-  </PavementPageFrame>;
+  if(page==='tools')return <PavementTools tools={tools} areaM2={area.areaM2} plannedTonnes={result?.plannedTonnes??0} onBack={()=>go('result')} error={error} message={message} onUseArea={value=>{set({areaMode:'direct',directArea:value.toFixed(2)});setMessage(`Direct net area set to ${format(value,2)} m². Open 1 · Area to see it.`);}}/>;
 
   if(page==='saved')return <PavementPageFrame band={{mark:'▤',title:'Saved calculations',hint:`${visible.length} ${form.projectId||initialProjectId?`under ${projectName}`:'saved'} · ${format(totalArea,1)} m² · ${format(totalPlanned,3)} t`,tone:'cream'}} onBack={()=>go('result')} error={error} message={message}
     bar={{label:'COMBINED PLANNED',value:`${format(totalPlanned,3)} t`,secondary:{label:'Back to result',onPress:()=>go('result')}}}>

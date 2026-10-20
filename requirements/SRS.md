@@ -2030,7 +2030,7 @@ Status note: this section preserves the original question trace, but some indivi
 - The Pavement Calculator's `1 · Paved area` and `2 · Spread rate and thickness` input sections shall use the shared colored expandable-label interaction, start closed whenever the calculator opens, display `+` while closed and `×` while open, and preserve entered values when folded. The main calculated-result cards remain visible outside the folded sections. (Source: Interview turn 410; status: Confirmed and implemented in code; replaced by UI-021 / DEC-519.)
 
 ### UI-021
-- The Asphalt Calculator shall be three pages with progress dots and Back / Next, like New Supplier Load: 1 Area, 2 Rate and thickness, and 3 Result with Save, each with its own coloured header band. More tools, each tool and Saved calculations are their own pages opened from the Result page. Fields use the Open form look with no cards and no stripes, and a fixed bottom bar shows the figures so far. (Source: Owner request, 2026-10-20; status: Confirmed; Phase B implemented; the seven tools as pages (Phase C) pending; physical review pending.)
+- The Asphalt Calculator shall be three pages with progress dots and Back / Next, like New Supplier Load: 1 Area, 2 Rate and thickness, and 3 Result with Save, each with its own coloured header band. More tools, each tool and Saved calculations are their own pages opened from the Result page. Fields use the Open form look with no cards and no stripes, and a fixed bottom bar shows the figures so far. (Source: Owner request, 2026-10-20; status: Confirmed; Phases B and C implemented (the three pages, the tool pages); physical review pending.)
 
 ## 20. Appendices
 

@@ -15,7 +15,7 @@ const AREA_RULE_TITLE=constant('AREA_RULE_TITLE'),AREA_RULE_BODY=constant('AREA_
 
 describe('the calculator is separate pages',()=>{
   it('has the three steps with their own bands and progress dots, then More tools and Saved calculations as pages',()=>{
-    for(const text of ["title:'Area'","title:'Rate and thickness'","title:'Result'","title:'More tools'","title:'Saved calculations'"])expect(screen).toContain(text);
+    for(const text of ["title:'Area'","title:'Rate and thickness'","title:'Result'","title:'Saved calculations'"])expect(screen).toContain(text);
     for(const tone of ["tone:'navy'","tone:'orange'","tone:'teal'","tone:'cream'"])expect(screen).toContain(tone);
     expect(screen).toContain('dots={{total:3,current:1}}');expect(screen).toContain('dots={{total:3,current:2}}');expect(screen).toContain('dots={{total:3,current:3}}');
     expect(frame).toContain('accessibilityRole="progressbar"');expect(frame).toContain('Step ${dots.current} of ${dots.total}');
@@ -24,9 +24,9 @@ describe('the calculator is separate pages',()=>{
     for(const text of ["label:'Next',onPress:nextFromArea","label:'Next',onPress:nextFromRate","label:editingId?'Update':'Save'","secondary:{label:'Back'"])expect(screen).toContain(text);
     expect(screen).toContain('areaPageIssue(form,area)');expect(screen).toContain('ratePageIssue(form)');
   });
-  it('no longer folds the core sections or uses cards and stripes, and keeps the seven tools and their formulas',()=>{
+  it('no longer folds the core sections or uses cards and stripes, and keeps the seven tools and the quantity formula',()=>{
     expect(screen).not.toContain('ExpandableMenuSection');expect(screen).not.toContain('<AppCard');expect(screen).not.toContain('borderLeftWidth');
-    expect(screen).toContain('<PavementAdvancedSections areaM2={area.areaM2} plannedTonnes={result?.plannedTonnes??0}');
+    expect(screen).toContain('<PavementTools tools={tools} areaM2={area.areaM2} plannedTonnes={result?.plannedTonnes??0}');expect(screen).toContain('usePavementTools()');
     expect(screen).toContain('calculatePavement(area.areaM2,rate,density,Math.max(0,allowance))');
   });
   it('gives the area three ways, each with its own fields, and the truck count uses a payload that is not saved',()=>{
@@ -57,5 +57,22 @@ describe('the shared pieces keep their default look',()=>{
   it('adds the open field as an opt-in variant only',()=>{
     const primitives=read('src/ui/components/AppPrimitives.tsx');
     expect(primitives).toContain("variant?:'open'");expect(primitives).toContain('open?styles.inputOpen:styles.input');
+  });
+});
+
+describe('the seven tools are pages',()=>{
+  const tools=read('src/ui/components/PavementTools.tsx');
+  it('lists the seven tools as plain rows and opens each as its own page with its own band',()=>{
+    expect(tools).toContain("title:'More tools'");
+    for(const title of ['Geometry and Variable Width','Complete Layer Stack','Reverse Coverage and Truck Loads','Prime and Tack Coats','Milling','Crossfall, Slope, and Levels','Actual Delivery and Variance'])expect(tools,title).toContain("title:'"+title+"'");
+    expect(tools).toContain('<PavementPageFrame band={{mark:info.mark,title:info.title,hint:info.hint,tone:info.tone}}');
+    for(const text of ['Back to tools','Back to result','RESULTS','Use This Net Area'])expect(tools).toContain(text);
+    expect(tools).not.toContain('ExpandableMenuSection');expect(tools).not.toContain('<AppCard');expect(tools).not.toContain('borderLeftWidth');
+  });
+  it('keeps the typed values in the calculator, so they survive going to another page and back',()=>{
+    expect(tools).toContain('export function usePavementTools()');expect(screen).toContain('const tools=usePavementTools();');
+  });
+  it('replaces the old folding component',()=>{
+    expect(()=>read('src/ui/components/PavementAdvancedSections.tsx')).toThrow();
   });
 });
