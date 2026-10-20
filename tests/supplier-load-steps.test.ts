@@ -54,7 +54,7 @@ describe('the form (screen)',()=>{
     expect(screen).toContain("Alert.alert('Leave this supplier load?','Your draft is kept, so you can come back to it.'");
   });
   it('keeps a running total on every step and a summary you can tap on the last one',()=>{
-    expect(screen).toContain("{grandTotal==null?'not priced yet'");expect(screen).toContain('<Card title="Summary" hint="Tap a line to change it.">');
+    expect(screen).toContain("{grandTotal==null?'not priced yet'");expect(screen).toContain('Tap a line to change it.');
     expect(screen).toContain('onPress={()=>setEntryStep(step)}');
     expect(screen).toContain('quarryStepIssues(entryStep,validateQuarryPurchase(draft,setup))');
   });
@@ -63,7 +63,7 @@ describe('the form (screen)',()=>{
     expect(step(1)).toContain('label="Record date *"');expect(step(1)).toContain('label="Supplier *"');expect(step(1)).toContain('<FuelDestinationFields');expect(step(1)).toContain('+ New supplier');
     for(const part of ['label="Item *"','label="Measurement unit *"','label="Quantity *"','label="Pieces (optional)"','<SteelItemFields','Rebar calculator: suggest the weight','Delivery handled by','label="Driver *"','label="Truck plate *"','label="Supplier truck / plate (optional)"','label="Supplier ticket / invoice number"','MORE ITEMS ON THIS DELIVERY NOTE','+ Add another item to this delivery','Split the total across the items'])expect(step(2),part).toContain(part);
     expect(step(3)).toContain('<PriceVatControls');expect(step(3)).toContain('No price entered: this supplier load is saved as Unpriced.');
-    expect(step(4)).toContain('Supplier ticket photos');expect(step(4)).toContain('label="Notes"');
+    expect(step(4)).toContain('TICKET PHOTOS · OPTIONAL');expect(step(4)).toContain('label="Notes"');
     expect(screen.match(/calculatedPatch\(/g)?.length).toBe(1);
   });
   it('opens New supplier as a sheet with the name first, the rest under More details, and the VAT choice',()=>{
@@ -80,12 +80,12 @@ describe('the form (screen)',()=>{
   });
 });
 
-describe('steps 1 to 3 in the Open form look',()=>{
+describe('every step in the Open form look',()=>{
   const step=(n:number)=>{const a=screen.indexOf(`{entryStep===${n}?`);const b=screen.indexOf(`{entryStep===${n+1}?`);return screen.slice(a,b>a?b:a+9000);};
   it('has no boxed cards on steps 1 to 3, and groups the fields under small labels',()=>{
-    for(const n of [1,2,3])expect(step(n)).not.toContain('<Card ');
+    for(const n of [1,2,3,4])expect(step(n)).not.toContain('<Card ');
     for(const label of ['WHEN','WHO','WHERE','WHAT','HOW IT CAME'])expect(screen).toContain(`>${label}</Text>`);
-    for(const label of ['PRICE','VAT','WHAT IT COMES TO'])expect(screen).toContain(`>${label}</Text>`);
+    for(const label of ['PRICE','VAT','WHAT IT COMES TO','NOTES · OPTIONAL'])expect(screen).toContain(`>${label}</Text>`);
   });
   it('uses the underlined fields and the switches, and keeps the other screens on the boxed ones',()=>{
     expect(step(2)).toContain('variant="open"');expect(step(2)).toContain('<OpenSwitch label="Delivery handled by"');
