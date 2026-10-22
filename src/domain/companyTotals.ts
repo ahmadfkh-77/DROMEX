@@ -40,6 +40,8 @@ export type CompanyTotalsFilters = {
   inclusion: InclusionFilter;
   /** Customer ids and/or NO_CUSTOMER_KEY. Empty means every customer. A non-empty list narrows to company loads: a Supplier Load is not delivered to a customer. */
   customerKeys: string[];
+  /** Totals PDF driver filter: lower-cased driver names (see totalsDrivers.ts). A non-empty list narrows to the company loads of those drivers. Optional so every older caller keeps working. */
+  driverKeys?: string[];
 };
 export const emptyCompanyTotalsFilters = (): CompanyTotalsFilters => ({ fromDate: '', toDate: '', itemKey: '', projectKey: '', supplierKey: '', unitKey: '', view: 'all', seriesId: '', inclusion: 'all', customerKeys: [] });
 

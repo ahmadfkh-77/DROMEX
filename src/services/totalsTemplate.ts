@@ -5,6 +5,7 @@ import {breakAfterHyphens,colgroup,columnWidths,type ColumnSpec} from './pdfColu
 import {reportCss} from './pdfTheme';
 import {formatTotalQuantity,summarizeFuelFills,type ProjectFuelFill} from '../domain/projectTotals';
 import {formatCents,formatDay,formatRecordedAt,recordMoneyLine,recordReferences,recordTitle} from '../domain/recordFormat';
+import {groupRecordsByDriver,recordsOfDrivers,type DriverGroup} from '../domain/totalsDrivers';
 import {companyLoadReference,deliveredByLabel,INTERNAL_PROJECT,priceAsRecorded,supplierBox,supplierNameOf,unitTotals,vatAndTotal,type CustomerBox} from '../domain/projectTotalsPdf';
 
 /**
@@ -32,7 +33,9 @@ export type TotalsPdf={companyName:string;logo:string|null;title:string;scope:'c
   /** Company Settings address, phone, email and Tax/VAT, joined with a middle dot, under the company name. */
   contactLine?:string|null;
   /** Project Totals top level: the project, its customer box, and every Active load behind the totals (company and supplier kept apart). */
-  project?:{name:string;location:string|null;status:string;customer:CustomerBox;loads:CompanyTotalsRecord[]}};
+  project?:{name:string;location:string|null;status:string;customer:CustomerBox;loads:CompanyTotalsRecord[]};
+  /** Driver filter (Project Totals, or Totals for one customer): only the loads of these drivers are listed, grouped by driver with a subtotal each, the Supplier box becomes a Drivers box, supplier loads and the Notes are left out. `names` is the line printed in the Drivers box. */
+  drivers?:{keys:string[];names:string}};
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]??character));
 const t=(value:unknown)=>`<span dir="auto">${e(value)}</span>`;
@@ -126,7 +129,7 @@ const notRecordedOr=(raw:string|null|undefined)=>raw?t(raw):missing;
  * content (see pdfColumns.ts): every column has room for its longest word and a load number breaks after a hyphen, so
  * nothing runs into the next column. Numbers are right-aligned.
  */
-function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:boolean,bar:string|null=null):string{
+function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:boolean,bar:string|null=null,byDriver=false):string{
   const quantityOf=(s:CompanyTotalsRecord['snapshot'])=>`${formatTotalQuantity(s.quantity,'').trim()} ${s.unitSymbol}`.trim();
   const lines=records.map(record=>{
     const s=record.snapshot,d=record.details,company=s.recordType==='company_load';
@@ -134,23 +137,24 @@ function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:
     const number=company?(s.loadNumber??'Legacy load'):s.reference;
     return {record,s,d,company,driver,number,quantity:quantityOf(s)};
   });
-  const rows=lines.map(({record,s,d,company,driver,number,quantity})=>{
+  const renderRow=({record,s,d,company,driver,number,quantity}:typeof lines[number])=>{
     const numberCell=company
       ?`${s.loadNumber?`<span class="ln">${breakAfterHyphens(e(s.loadNumber))}</span>`:`<span class="legacy" title="${e(recordTitle(s))}">Legacy load</span>`}<div class="muted">${breakAfterHyphens(e(companyLoadReference(s)))}</div>`
       :`<span class="ln">${breakAfterHyphens(e(s.reference))}</span>${s.supplierReference?`<div class="muted">Supplier ticket ${e(s.supplierReference)}</div>`:''}`;
     const priceCells=prices?`<td class="num wrap">${s.unitPriceCents==null?'<span class="missing">No price recorded</span>':e(priceAsRecorded(s))}</td><td class="num wrap">${s.totalCents==null?missing:e(vatAndTotal(s))}</td>`:'';
     void record;void number;
     return `<tr><td>${dateCell(s.recordedAt)}</td><td>${numberCell}</td><td>${t(s.itemName)}</td>
-      <td>${notRecordedOr(supplierNameOf({snapshot:s,details:d}))}</td><td>${notRecordedOr(company?s.partyName:d?.customerName)}</td>
+      ${byDriver?'':`<td>${notRecordedOr(supplierNameOf({snapshot:s,details:d}))}</td>`}<td>${notRecordedOr(company?s.partyName:d?.customerName)}</td>
       <td>${notRecordedOr(driver)}</td><td>${notRecordedOr(d?.truckPlate)}</td><td class="num">${e(quantity)}</td>
       ${showProject?`<td>${s.projectName?t(s.projectName):missing}</td>`:''}${priceCells}</tr>`;
-  }).join('');
+  };
   const NR='Not recorded';
+  const supplierSpec:ColumnSpec[]=byDriver?[]:[{header:'Supplier',cells:lines.map(line=>supplierNameOf({snapshot:line.s,details:line.d})??NR)}];
   const specs:ColumnSpec[]=[
     {header:'Date, time',cells:lines.map(line=>formatDay(localDay(line.s.recordedAt)))},
     {header:'Load No.',kind:'code',cells:lines.flatMap(line=>line.company?[line.s.loadNumber??'Legacy load',companyLoadReference(line.s)]:[line.s.reference,...(line.s.supplierReference?[`Supplier ticket ${line.s.supplierReference}`]:[])])},
     {header:'Item',cells:lines.map(line=>line.s.itemName)},
-    {header:'Supplier',cells:lines.map(line=>supplierNameOf({snapshot:line.s,details:line.d})??NR)},
+    ...supplierSpec,
     {header:'Customer',cells:lines.map(line=>(line.company?line.s.partyName:line.d?.customerName)??NR)},
     {header:'Driver',cells:lines.map(line=>line.driver??NR)},
     {header:'Truck plate',cells:lines.map(line=>line.d?.truckPlate??NR)},
@@ -161,11 +165,18 @@ function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:
   // Ten or more columns (a Project column with prices) use a smaller type so every word still fits its column on A4.
   const dense=specs.length>=10;
   const widths=columnWidths(specs,dense?{fontPt:7,headerPt:6.5}:{});
+  // The quantity is the eighth column (the seventh when the Supplier column is left out); the cells after it are Project and the price columns.
+  const rest=(showProject?1:0)+(prices?2:0),before=byDriver?6:7;
+  // By driver: a group row per driver, its loads, and a subtotal row; units are never added together.
+  const bodyRows=byDriver?groupRecordsByDriver(records).map((group:DriverGroup)=>{
+    const own=group.records.map(record=>lines.find(line=>line.record===record)!);
+    const label=`${group.name}${group.plates.length?` · ${group.plates.join(', ')}`:''}`;
+    return `<tr class="group-row"><td colspan="${specs.length}">${t(label)}</td></tr>${own.map(renderRow).join('')}<tr class="sub-row"><td colspan="${before}">${t(group.name)} · ${plural(own.length,'load')}</td><td class="num">${unitTotals(group.records).map(unit=>e(formatTotalQuantity(unit.quantity,unit.unitSymbol))).join('<br/>')}</td>${rest?`<td colspan="${rest}"></td>`:''}</tr>`;
+  }).join(''):lines.map(renderRow).join('');
   const head=specs.map(spec=>`<th${spec.header==='Quantity'?' class="num"':(prices&&(spec.header==='Price as recorded'||spec.header==='VAT · Total'))?' class="num wrap"':''}>${e(spec.header)}</th>`).join('');
-  // The quantity is the eighth column. The total row sums each unit on its own; units are never added together.
-  const rest=(showProject?1:0)+(prices?2:0);
-  const totalRow=lines.length?`<tr class="total-row"><td colspan="7">Total · ${plural(lines.length,'load')}</td><td class="num">${unitTotals(records).map(unit=>e(formatTotalQuantity(unit.quantity,unit.unitSymbol))).join('<br/>')}</td>${rest?`<td colspan="${rest}"></td>`:''}</tr>`:'';
-  return `<table class="grid history${dense?' dense':''}">${colgroup(widths)}<thead>${bar?`<tr class="bar-row"><th colspan="${specs.length}">${bar}</th></tr>`:''}<tr>${head}</tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
+  // The total row sums each unit on its own; units are never added together.
+  const totalRow=lines.length?`<tr class="total-row"><td colspan="${before}">Total · ${plural(lines.length,'load')}</td><td class="num">${unitTotals(records).map(unit=>e(formatTotalQuantity(unit.quantity,unit.unitSymbol))).join('<br/>')}</td>${rest?`<td colspan="${rest}"></td>`:''}</tr>`:'';
+  return `<table class="grid history${dense?' dense':''}">${colgroup(widths)}<thead>${bar?`<tr class="bar-row"><th colspan="${specs.length}">${bar}</th></tr>`:''}<tr>${head}</tr></thead><tbody>${bodyRows}${totalRow}</tbody></table>`;
 }
 
 /**
@@ -174,27 +185,29 @@ function loadListTable(records:CompanyTotalsRecord[],prices:boolean,showProject:
  * own per-unit totals; units are never added together. Cancelled loads are not listed. Both sections use the
  * same columns as every other load list. Price and VAT columns exist only on a priced export. Empty sections are left out.
  */
-function projectLoadsBlock(kind:'company'|'supplier',records:CompanyTotalsRecord[],index:number,prices:boolean):string{
+function projectLoadsBlock(kind:'company'|'supplier',records:CompanyTotalsRecord[],index:number,prices:boolean,byDriver=false):string{
   const ordered=[...records].sort((a,b)=>a.snapshot.recordedAt.localeCompare(b.snapshot.recordedAt)||a.snapshot.reference.localeCompare(b.snapshot.reference,undefined,{numeric:true}));
   const pills=unitTotals(ordered).map(unit=>`<span class="pill">${e(formatTotalQuantity(unit.quantity,unit.unitSymbol))}</span>`).join('');
-  const title=kind==='company'?'Company loads delivered · own deliveries':'Supplier loads delivered · incoming from suppliers';
+  const title=byDriver?'Company loads delivered · selected drivers':kind==='company'?'Company loads delivered · own deliveries':'Supplier loads delivered · incoming from suppliers';
   const bar=`<div class="block-bar"><span class="block-index">${index}</span><span class="block-name">${e(title)}</span><span class="block-figures">${pills}<span class="pill">${plural(ordered.length,'load')}</span></span></div>`;
   return `<section class="block table-block" data-kind="project-${kind}-loads">
-    <div class="block-body">${loadListTable(ordered,prices,false,bar)}</div>
+    <div class="block-body">${loadListTable(ordered,prices,false,bar,byDriver)}</div>
   </section>`;
 }
 
 /** Company Totals: every Active load behind the totals, in the same table as every other load list. */
-function loadsDeliveredBlock(records:CompanyTotalsRecord[],index:number,prices:boolean,showProject:boolean):string{
+function loadsDeliveredBlock(records:CompanyTotalsRecord[],index:number,prices:boolean,showProject:boolean,byDriver=false):string{
   const ordered=[...records].sort((a,b)=>a.snapshot.recordedAt.localeCompare(b.snapshot.recordedAt)||a.snapshot.reference.localeCompare(b.snapshot.reference,undefined,{numeric:true}));
-  const bar=`<div class="block-bar"><span class="block-index">${index}</span><span class="block-name">Loads delivered · ${plural(ordered.length,'load')}</span></div>`;
+  const bar=`<div class="block-bar"><span class="block-index">${index}</span><span class="block-name">${byDriver?'Company loads delivered · selected drivers · ':'Loads delivered · '}${plural(ordered.length,'load')}</span></div>`;
   return `<section class="block table-block" data-kind="loads-delivered">
-    <div class="block-body">${loadListTable(ordered,prices,showProject,bar)}</div>
+    <div class="block-body">${loadListTable(ordered,prices,showProject,bar,byDriver)}</div>
   </section>`;
 }
 
 /** The two boxes under the header: the project's customer, and its supplier(s) in the period. */
-function customerSupplierBoxes(customer:CustomerBox,loads:CompanyTotalsRecord[]):string{
+function customerSupplierBoxes(customer:CustomerBox,loads:CompanyTotalsRecord[],drivers?:TotalsPdf['drivers']):string{
+  if(drivers)return `<div class="two"><div class="box"><span class="box-label">Customer</span><b>${t(customer.label)}</b>${customer.note?`<div class="muted">${e(customer.note)}</div>`:''}</div>
+    <div class="box"><span class="box-label">Drivers listed</span><b>${t(drivers.names)}</b><div class="muted">${drivers.keys.length} selected</div></div></div>`;
   const supplier=supplierBox(loads);
   return `<div class="two"><div class="box"><span class="box-label">Customer</span><b>${t(customer.label)}</b>${customer.note?`<div class="muted">${e(customer.note)}</div>`:''}</div>
     <div class="box"><span class="box-label">Supplier</span><b>${t(supplier.label)}</b>${supplier.names.length?`<div class="muted">${supplier.names.map(t).join(' · ')}</div>`:''}</div></div>`;
@@ -211,15 +224,18 @@ export function buildTotalsHtml(input:TotalsPdf):string{
   const historyIndex=tree.length+(input.fuel?1:0)+1;
   // Cancelled loads are never listed (Owner decision); the totals already exclude them.
   const projectLoads=(input.project?.loads??[]).filter(record=>record.status!=='Cancelled');
-  const companyLoads=projectLoads.filter(record=>record.snapshot.recordType==='company_load'),supplierLoads=projectLoads.filter(record=>record.snapshot.recordType==='supplier_load');
-  const summaryLoads=(input.loads??[]).filter(record=>record.status!=='Cancelled');
+  const driverKeys=input.drivers?.keys??[];
+  // With a driver filter only the company loads of the chosen drivers are listed; supplier loads are not driven by company drivers.
+  const companyLoads=recordsOfDrivers(projectLoads.filter(record=>record.snapshot.recordType==='company_load'),driverKeys),supplierLoads=driverKeys.length?[]:projectLoads.filter(record=>record.snapshot.recordType==='supplier_load');
+  const summaryLoads=recordsOfDrivers((input.loads??[]).filter(record=>record.status!=='Cancelled'),driverKeys);
+  const byDriver=driverKeys.length>0;
   const summaryIndex=tree.length+(input.fuel?1:0)+1;
   const companyIndex=tree.length+(input.fuel?1:0)+1,supplierIndex=companyIndex+(companyLoads.length?1:0);
   const contents=[...tree.map((material,index)=>`<li><span class="contents-index">${index+1}</span><span class="contents-name">${t(material.itemName)}</span><span class="contents-figures">${headline(material.units,showUsed)}</span></li>`),
     input.fuel?`<li><span class="contents-index">${fuelIndex}</span><span class="contents-name">Fuel used on this project</span><span class="contents-figures">${plural(input.fuel.length,'fill')}</span></li>`:'',
     history?`<li><span class="contents-index">${historyIndex}</span><span class="contents-name">Loads history</span><span class="contents-figures">${plural(history.length,'load')}</span></li>`:'',
-    summaryLoads.length?`<li><span class="contents-index">${summaryIndex}</span><span class="contents-name">Loads delivered</span><span class="contents-figures">${plural(summaryLoads.length,'load')}</span></li>`:'',
-    companyLoads.length?`<li><span class="contents-index">${companyIndex}</span><span class="contents-name">Company loads delivered</span><span class="contents-figures">${plural(companyLoads.length,'load')}</span></li>`:'',
+    summaryLoads.length?`<li><span class="contents-index">${summaryIndex}</span><span class="contents-name">${byDriver?'Company loads delivered · selected drivers':'Loads delivered'}</span><span class="contents-figures">${plural(summaryLoads.length,'load')}</span></li>`:'',
+    companyLoads.length?`<li><span class="contents-index">${companyIndex}</span><span class="contents-name">${byDriver?'Company loads delivered · selected drivers':'Company loads delivered'}</span><span class="contents-figures">${plural(companyLoads.length,'load')}</span></li>`:'',
     supplierLoads.length?`<li><span class="contents-index">${supplierIndex}</span><span class="contents-name">Supplier loads delivered</span><span class="contents-figures">${plural(supplierLoads.length,'load')}</span></li>`:''].join('');
   const tiles=[`<div class="tile"><span class="figure-label">Materials</span><b>${whole.materialCount}</b></div>`,`<div class="tile"><span class="figure-label">Records delivered</span><b>${whole.inclusion.total}</b></div>`,
     prices?`<div class="tile"><span class="figure-label">Recorded value</span><b>${whole.value.totalCents==null?'<span class="missing">No prices recorded</span>':e(formatCents(whole.value.totalCents))}</b>${whole.value.unpricedCount?`<div class="muted">${plural(whole.value.unpricedCount,'record')} unpriced</div>`:''}</div>`:''].join('');
@@ -242,7 +258,7 @@ export function buildTotalsHtml(input:TotalsPdf):string{
     <div class="head"><div>${input.logo?`<img class="logo" src="${input.logo}" alt=""/>`:''}<b>${t(input.companyName)}</b>${input.contactLine?`<div class="contact">${t(input.contactLine)}</div>`:''}</div>
       <div class="head-right"><h1>${t(input.title)}</h1>${input.issuedTo?`<div class="subtitle">Issued to: ${t(input.issuedTo)}</div>`:''}${input.customerName?`<div class="subtitle">${t(input.customerName)}</div>`:''}${input.project?`<div class="subtitle">${input.project.customer.label===INTERNAL_PROJECT?t(INTERNAL_PROJECT):`Customer: ${t(input.project.customer.label)}`}</div>`:''}<div class="when">${e(formatRecordedAt(input.generatedAt))}</div></div></div>
     ${input.project?`<div class="proj"><div><span class="figure-label">Project</span><b>${t(input.project.name)}</b></div><div><span class="figure-label">Location</span><b>${input.project.location?t(input.project.location):missing}</b></div><div><span class="figure-label">Status</span><b>${e(input.project.status)}</b></div></div>
-    ${customerSupplierBoxes(input.project.customer,input.project.loads.filter(record=>record.status!=='Cancelled'))}`:''}
+    ${customerSupplierBoxes(input.project.customer,input.project.loads.filter(record=>record.status!=='Cancelled'),input.drivers)}`:''}
     <div class="meta">${input.filters.map(t).join(' · ')}</div>
     ${input.data.usageHiddenReason&&!history?`<p class="note-plain">${e(input.data.usageHiddenReason)}</p>`:''}
     <div class="tiles">${tiles}</div>
@@ -250,9 +266,9 @@ export function buildTotalsHtml(input:TotalsPdf):string{
     ${tree.map((material,index)=>materialBlock(material,index+1,showUsed,prices)).join('')||'<p class="empty">Nothing recorded for these filters.</p>'}
     ${input.fuel?fuelBlock(input.fuel,fuelIndex,prices):''}
     ${history?historyBlock(history,historyIndex,prices,showProject):''}
-    ${summaryLoads.length?loadsDeliveredBlock(summaryLoads,summaryIndex,prices,showProject):''}
-    ${companyLoads.length?projectLoadsBlock('company',companyLoads,companyIndex,prices):''}
+    ${summaryLoads.length?loadsDeliveredBlock(summaryLoads,summaryIndex,prices,showProject,byDriver):''}
+    ${companyLoads.length?projectLoadsBlock('company',companyLoads,companyIndex,prices,byDriver):''}
     ${supplierLoads.length?projectLoadsBlock('supplier',supplierLoads,supplierIndex,prices):''}
-    <div class="notes"><h4>Notes</h4><ol><li>Delivered counts Active Supplier Loads and company loads; Used and Transported come from Daily Reports. Each unit is totalled on its own and different units are never added together.</li><li>Use is not recorded per supplier. "Delivered minus recorded use" is not an inventory balance.</li>${prices?'<li>Amounts add only records with a recorded price.</li>':''}</ol></div>
+    ${byDriver?'':`<div class="notes"><h4>Notes</h4><ol><li>Delivered counts Active Supplier Loads and company loads; Used and Transported come from Daily Reports. Each unit is totalled on its own and different units are never added together.</li><li>Use is not recorded per supplier. "Delivered minus recorded use" is not an inventory balance.</li>${prices?'<li>Amounts add only records with a recorded price.</li>':''}</ol></div>`}
   </body></html>`;
 }

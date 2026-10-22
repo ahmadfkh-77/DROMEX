@@ -62,6 +62,7 @@ function recordConditions(filters:Partial<CompanyTotalsFilters>,status:'active'|
   if(filters.supplierKey){if(filters.supplierKey===COMPANY_SUPPLIER_KEY)where.push("recs.record_type = 'company_load'");else{where.push("recs.record_type = 'supplier_load' AND 'id:' || recs.party_id = ?");params.push(filters.supplierKey);}}
   if(filters.seriesId){where.push("recs.record_type = 'company_load'");if(filters.seriesId===LEGACY_SERIES_KEY)where.push('recs.load_number IS NULL');else{where.push('recs.series_id = ?');params.push(filters.seriesId);}}
   if(filters.customerKeys?.length)where.push(customerCondition(filters.customerKeys,params));
+  if(filters.driverKeys?.length){where.push("recs.record_type = 'company_load' AND lower(trim(recs.driver_name)) IN ("+filters.driverKeys.map(()=>'?').join(',')+')');params.push(...filters.driverKeys);}
   if(filters.inclusion&&filters.inclusion!=='all')where.push(inclusionSql[filters.inclusion]);
   return [where,params];
 }
@@ -85,6 +86,7 @@ export class SqliteCompanyTotalsRepository implements CompanyTotalsRepository{
     const usageHiddenReason=filters.view==='delivered'?null
       :filters.supplierKey?'Use is not recorded per supplier, so it is hidden while a supplier is chosen.'
       :filters.customerKeys?.length?'Use is not recorded per customer, so it is hidden while a customer is chosen.'
+      :filters.driverKeys?.length?'Use is not recorded per driver, so it is hidden while drivers are chosen.'
       :filters.seriesId?'Use records have no load number series, so they are hidden while a series is chosen.'
       :filters.inclusion!=='all'?'Use records are never put on documents, so they are hidden while a document status is chosen.'
       :null;

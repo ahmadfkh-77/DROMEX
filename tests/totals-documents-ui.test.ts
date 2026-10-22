@@ -154,7 +154,9 @@ describe('Totals PDF export',()=>{
     expect(explorer).toContain(`<SegmentedChoice label="Prices" options={[{id:'without',label:'Without prices'},{id:'with',label:'With prices'}]}`);
     expect(explorer).toContain('label="Project column"');
     expect(explorer).toContain('primaryLabel="Export PDF"');
-    expect(explorer).toContain('totals.getCompanyTotals(nodeFilters)');
+    // The export asks for the same totals as the screen, narrowed to the ticked drivers only when the Owner chose that Total.
+    expect(explorer).toContain('totals.getCompanyTotals(totalFilters)');
+    expect(explorer).toContain("exportDriverTotal==='selected'?{...nodeFilters,driverKeys}:nodeFilters");
     expect(company).toContain('profiles={profiles}');
     expect(read('src/ui/screens/ProjectTotalsScreen.tsx')).toContain('profiles={profiles}');
     expect(app).toContain('<CompanyTotalsScreen profiles={profileRepository}');
