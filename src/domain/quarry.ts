@@ -14,6 +14,8 @@ export type QuarryPurchaseDraft = {
   recordDate:string; supplierId: string; projectId: string; destinationType?: FuelDestinationType; companySiteId?: string; itemId: string; unitId: string; quantityCubicMetres: string;
   /** Steel and other counted goods: the number of pieces, beside the quantity (which is the weight for rebar). Optional; blank means not recorded. */
   pieces?: string;
+  /** DEC-522. The contract item this load counts toward: an id, '' for Not linked, absent while not chosen. */
+  contractItemId?: string;
   /** Rebar (Step 2): the bar diameter (mm) and length per bar (m) the pieces are counted in, the calculated weight (kg), and where the saved weight came from. All optional; blank means not recorded. */
   diameterMm?: string; lengthPerBarM?: string; calculatedWeightKg?: string; weightSource?: 'typed'|'calculated'|'';
   deliveryMethod: QuarryDeliveryMethod; driverId: string; truckId: string; supplierTruckPlate: string;
@@ -32,6 +34,8 @@ export type QuarryPurchase = {
   pieces?: number|null;
   /** Loads of one delivery note (several items) share this id; null/absent for a single-item load. */
   deliveryGroupId?: string|null;
+  /** DEC-522. The contract item this load counts toward, or null when it is not linked. */
+  contractItemId?: string|null;
   /** Rebar (Step 2). Null/absent on every load saved without them. Meters = pieces × length per bar; the quantity stays the weight that counts. */
   diameterMm?: number|null; lengthPerBarM?: number|null; calculatedWeightKg?: number|null; weightSource?: 'typed'|'calculated'|null;
   deliveryMethod:QuarryDeliveryMethod; driverId:string; driverName: string; truckId:string; truckPlate: string;

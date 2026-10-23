@@ -40,7 +40,7 @@ import { supplierSignatureForNewLoad } from './SqliteCompanyHeaderRepository';
 import { correctionChanges, correctionToLoadDraft, correctionVatRate, isFullCorrection, loadLocalDate, validateLoadCorrection, type LoadCorrectionContext } from '../../domain/loadCorrection';
 import type { SignerDisplay, SignerSnapshot } from '../../domain/documentSigners';
 import { parseStoredSignature } from '../../domain/supervisors';
-import { reconcileContractLink } from './contractLinks';
+import { linkAtConfirmation, reconcileContractLink } from './contractLinks';
 
 type UnitRow = { id: string; name: string; symbol: string; is_active: number };
 type ConversionRow = {
@@ -90,7 +90,7 @@ type LoadRow = {
   status: 'Active' | 'Cancelled'; cancellation_reason: string | null; cancelled_at: string | null;
   correction_history_json: string | null;
   driver_profile_id: string | null; driver_role: TruckCrewRole | null;
-  load_number?: string | null; load_number_series_name?: string | null;
+  load_number?: string | null; load_number_series_name?: string | null; contract_item_id?: string | null;
   supplier_signature_json?: string | null;
 };
 
@@ -178,7 +178,7 @@ function loadFromRow(row: LoadRow): ConfirmedLoad {
     companyReceiptFooter: row.company_receipt_footer, companyLogoUri: row.company_logo_uri,
     status: row.status ?? 'Active', cancellationReason: row.cancellation_reason, cancelledAt: row.cancelled_at,
     correctionHistory: safeCorrectionHistory(row.correction_history_json),
-    loadNumber: row.load_number ?? null, loadNumberSeriesName: row.load_number_series_name ?? null,
+    loadNumber: row.load_number ?? null, loadNumberSeriesName: row.load_number_series_name ?? null, contractItemId: row.contract_item_id ?? null,
     supplierSignature: parseSupplierSignature(row.supplier_signature_json),
   };
 }
@@ -539,6 +539,8 @@ export class SqliteLoadRepository implements LoadRepository {
         await this.db.runAsync('UPDATE loads SET supplier_signature_json = ? WHERE id = ?', JSON.stringify(supplierSignature), id);
         await recordSignerEvent(this.db, supplierSignature.signerId, 'used', enteredAt, null, `Delivery Authorization ${transactionNumber}`);
       }
+      // DEC-522. The chosen contract item is checked and saved with the load; a wrong choice rolls the whole confirmation back.
+      await linkAtConfirmation(this.db, 'company', id, draft.contractItemId, enteredAt);
       await this.db.runAsync('UPDATE device_state SET next_load_sequence = next_load_sequence + 1 WHERE id = ?', 'local');
       await this.db.runAsync('DELETE FROM load_drafts WHERE id = ?', 'current');
       await this.db.runAsync("DELETE FROM sync_outbox WHERE entity_type='loadDraft' AND entity_id='current'");

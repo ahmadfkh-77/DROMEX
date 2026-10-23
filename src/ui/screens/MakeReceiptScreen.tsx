@@ -4,7 +4,9 @@ import type { LoadNumberPreview } from '../../domain/loadNumberSeries';
 import {loadNumberLabel} from '../../domain/loadNumberSeries';
 import { Alert, Animated, LayoutAnimation, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import type { ContractQuantitiesRepository } from '../../data/repositories/ContractQuantitiesRepository';
 import type { LoadRepository } from '../../data/repositories/LoadRepository';
+import { ContractItemChoice } from '../components/ContractItemChoice';
 import { truckCrewRoleLabel, type TruckCrewRole } from '../../domain/people';
 import { calculateLoad, createAnotherItemDraft, directConversionLines, emptyLoadDraft, formatUsd, type ConfirmedLoad, type LoadDraft, type LoadSetupOptions, validateLoadDraft } from '../../domain/loads';
 import { printLoadBluetooth } from '../../services/bluetoothPrinter';
@@ -25,7 +27,9 @@ import { accountVatLabel, resolveVatRate, startingVatChoice } from '../../domain
 import { VatChoiceControl } from '../components/AccountVatControl';
 import { colors } from '../theme';
 
-export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId, seriesRepository, onOpenCompanySetups, headers }: { repository: LoadRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null;
+export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirectory, onOpenProjects, initialProjectId, seriesRepository, onOpenCompanySetups, headers, contracts }: { repository: LoadRepository;
+  /** DEC-522. Offers the contract item this load counts toward; absent, the screen is exactly as before. */
+  contracts?: ContractQuantitiesRepository; onBack: () => void; onOpenSetup: () => void; onOpenDirectory: () => void; onOpenProjects: () => void; initialProjectId?: string | null;
   /** DEC-500. Previews the Company Load number this load will receive. */
   seriesRepository?: LoadNumberSeriesRepository;
   /** Phase 2. Opens Company setups when no supplier signer is saved. */
@@ -121,6 +125,12 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   const universalVat = options?.companySettings.vatRatePercent ?? 0;
   const vatRate = resolveVatRate(draft.vat, universalVat);
   const calculation = useMemo(() => calculateLoad(draft, conversion, vatRate), [conversion, draft, vatRate]);
+  // DEC-522. The load's billed unit (the direct unit, or the conversion's output unit) is the unit a contract item counts it in.
+  const billedUnitId = draft.quantityMethod === 'direct' && !conversion ? (draft.directUnitId || null) : (conversion?.outputUnitId ?? null);
+  const billedUnitSymbol = draft.quantityMethod === 'direct' && !conversion ? (directUnit?.symbol ?? '') : (conversion?.outputUnitSymbol ?? '');
+  const [contractIssue, setContractIssue] = useState<string | null>(null);
+  const [contractRefresh, setContractRefresh] = useState(0);
+  const setContractItem = useCallback((value: string | undefined) => setDraft((current) => current.contractItemId === value ? current : { ...current, contractItemId: value }), []);
   useEffect(() => { if (!loaded) return; if (reducedMotion) { calculationMotion.setValue(1); return; } calculationMotion.setValue(.96); const animation = Animated.spring(calculationMotion, { toValue: 1, speed: 24, bounciness: 2, useNativeDriver: true }); animation.start(); return () => animation.stop(); }, [calculation.billedQuantity, calculation.finalTotalUsd, calculation.netWeightKg, calculationMotion, loaded, reducedMotion]);
 
   const customer = options?.customers.find((value) => value.id === draft.customerId); const item = options?.items.find((value) => value.id === draft.itemId);
@@ -144,10 +154,10 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   function chooseSignatureMode(mode: 'draw' | 'name') { if (mode === signatureMode) return; animateLayout(); setSignatureMode(mode); if (mode === 'name') setDraft((current) => ({ ...current, driverSignaturePaths: [] })); }
 
   async function doConfirm() {
-    if (!options) return; const nextIssues = validateLoadDraft(draft, options); setIssues(nextIssues); if (nextIssues.length) return;
+    if (!options) return; const nextIssues = [...validateLoadDraft(draft, options), ...(contractIssue ? [contractIssue] : [])]; setIssues(nextIssues); if (nextIssues.length) return;
     Alert.alert('Confirm this load?', 'Confirmation assigns the permanent load number and transaction number. The record cannot return to Draft.', [
       { text: 'Review again', style: 'cancel' },
-      { text: 'Confirm load', onPress: () => { setBusy(true); setError(null); const submittedDraft = draft; void repository.confirmLoad(draft).then((record) => { setConfirmed(record); setLastConfirmedDraft(submittedDraft); setPreview(false); setDraft(emptyLoadDraft); }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not confirm load.')).finally(() => setBusy(false)); } },
+      { text: 'Confirm load', onPress: () => { setBusy(true); setError(null); const submittedDraft = draft; void repository.confirmLoad(draft).then((record) => { setConfirmed(record); setLastConfirmedDraft(submittedDraft); setContractRefresh((value) => value + 1); setPreview(false); setDraft(emptyLoadDraft); }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not confirm load.')).finally(() => setBusy(false)); } },
     ]);
   }
   function createAnotherItemForSameDelivery() { if (!lastConfirmedDraft) return; setIssues([]); setError(null); setMessage(null); setDraft(createAnotherItemDraft(lastConfirmedDraft)); setConfirmed(null); }
@@ -286,6 +296,8 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
             <IssueList issues={valueIssues} />
           </ReceiptSection>
         </Animated.View>
+
+        {contracts ? <ContractItemChoice contracts={contracts} projectId={draft.projectId || null} materialId={draft.itemId} materialName={item?.name} loadUnitId={billedUnitId} loadUnitSymbol={billedUnitSymbol} loadQuantity={calculation.billedQuantity ?? null} value={draft.contractItemId} onChange={setContractItem} onIssue={setContractIssue} refreshKey={contractRefresh} /> : null}
 
         <Animated.View style={motion(4)}>
           <ReceiptSection number="04" title="Signatures" hint="Signed here, so nothing is left to do in Load History.">

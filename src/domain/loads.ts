@@ -135,6 +135,8 @@ export type LoadDraft = {
   recordDate:string;
   customerId: string;
   projectId: string;
+  /** DEC-522. The contract item this load counts toward: an id, '' for Not linked, absent while not chosen. Never printed on the receipt. */
+  contractItemId?: string;
   destinationAddress: string;
   itemId: string;
   driverId: string;
@@ -332,6 +334,8 @@ export type ConfirmedLoad = Omit<LoadCalculation, 'netWeightKg' | 'convertedQuan
   loadNumber?: string | null;
   /** The series display name snapshotted when the number was generated. */
   loadNumberSeriesName?: string | null;
+  /** DEC-522. The contract item this load counts toward, or null when it is not linked. Never printed on the receipt. */
+  contractItemId?: string | null;
   /** DEC-503. The supplier's (Owner's) signature on the Delivery Authorization, as this load keeps it. */
   supplierSignature?: SignerSnapshot | null;
 };

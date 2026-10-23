@@ -281,3 +281,11 @@ export function summarizeContractProject(rows:readonly ContractRow[]):ContractPr
     savings,overruns,
   };
 }
+
+/**
+ * The one check the load flows make (DEC-522 Phase C): with several fitting items the Owner must pick one, or Not linked (''); with one it is
+ * preselected and with none the load saves unlinked, so neither asks anything. Returns the message, or null when the load can be saved.
+ */
+export function contractChoiceIssue(candidates:readonly ContractItem[],value:string|undefined):string|null{
+  return candidates.length>1&&value===undefined?'Choose the contract item this load counts toward, or Not linked.':null;
+}

@@ -17,7 +17,7 @@ import {
 import {paymentStatus} from '../../domain/financials';
 import {DEFAULT_STEEL_DIAMETERS,defaultSteelSettings,validateSteelSettings,type SteelSettings} from '../../domain/rebar';
 import type { QuarryRepository } from './QuarryRepository';
-import {reconcileContractLink} from './contractLinks';
+import {linkAtConfirmation,reconcileContractLink} from './contractLinks';
 
 type PurchaseRow = {
   id:string;purchase_number:string;confirmed_at:string;supplier_id:string;supplier_name:string;
@@ -31,7 +31,7 @@ type PurchaseRow = {
   photos_json:string;status:'Active'|'Cancelled';cancellation_reason:string|null;cancelled_at:string|null;
   correction_history_json:string|null;updated_at:string|null;
   destination_type?:'project'|'company_site'|'unassigned'|null;company_site_id?:string|null;company_site_name?:string|null;
-  pieces?:number|null;delivery_group_id?:string|null;
+  pieces?:number|null;delivery_group_id?:string|null;contract_item_id?:string|null;
   diameter_mm?:number|null;length_per_bar_m?:number|null;calculated_weight_kg?:number|null;weight_source?:'typed'|'calculated'|null;
 };
 // DEC-506. A site's name is read live through this join, so renaming a site never rewrites its loads.
@@ -59,7 +59,7 @@ function fromRow(row:PurchaseRow):QuarryPurchase{
   return{id:row.id,purchaseNumber:row.purchase_number,confirmedAt:row.confirmed_at,supplierId:row.supplier_id,
     supplierName:row.supplier_name,projectId:row.project_id,projectName:row.project_name,destinationType:row.destination_type??(row.project_id?'project':'unassigned'),companySiteId:row.company_site_id??null,companySiteName:row.company_site_name??null,itemId:row.item_id,
     itemName:row.item_name,itemCode:row.item_code,categoryName:row.category_name,unitId:row.unit_id??'unit_m3',
-    unitName:row.unit_name??'Cubic metre',unitSymbol:row.unit_symbol??'m³',quantityCubicMetres:row.quantity_cubic_metres,pieces:row.pieces??null,deliveryGroupId:row.delivery_group_id??null,diameterMm:row.diameter_mm??null,lengthPerBarM:row.length_per_bar_m??null,calculatedWeightKg:row.calculated_weight_kg??null,weightSource:row.weight_source??null,
+    unitName:row.unit_name??'Cubic metre',unitSymbol:row.unit_symbol??'m³',quantityCubicMetres:row.quantity_cubic_metres,pieces:row.pieces??null,deliveryGroupId:row.delivery_group_id??null,contractItemId:row.contract_item_id??null,diameterMm:row.diameter_mm??null,lengthPerBarM:row.length_per_bar_m??null,calculatedWeightKg:row.calculated_weight_kg??null,weightSource:row.weight_source??null,
     deliveryMethod:row.delivery_method??'company',driverId:row.driver_profile_id,driverName:row.driver_name,
     truckId:row.truck_profile_id,truckPlate:row.truck_plate,supplierTicketNumber:row.supplier_ticket_number,
     priceBasis:row.price_basis??'per_unit',unitPriceUsd:row.unit_price_usd_cents==null?null:row.unit_price_usd_cents/100,
@@ -149,6 +149,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
         cents(calculation.finalTotalUsd),status,clean(draft.notes),JSON.stringify(draft.photos),'[]',enteredAt,enteredAt);
       await this.db.runAsync('UPDATE quarry_purchases SET destination_type=?,company_site_id=? WHERE id=?',destination.type,destination.companySiteId,id);
       await this.db.runAsync('UPDATE quarry_purchases SET pieces=?,delivery_group_id=?,diameter_mm=?,length_per_bar_m=?,calculated_weight_kg=?,weight_source=? WHERE id=?',piecesOf(draft.pieces),groupId,decimalOf(draft.diameterMm),decimalOf(draft.lengthPerBarM),decimalOf(draft.calculatedWeightKg),sourceOf(draft),id);
+      await linkAtConfirmation(this.db,'supplier',id,draft.contractItemId,enteredAt);
       await this.enqueue('quarryPurchase',id,{id,purchaseNumber,confirmedAt,enteredAt,projectId:project?.id??null,destinationType:destination.type,companySiteId:destination.companySiteId,deliveryMethod:draft.deliveryMethod,pieces:piecesOf(draft.pieces),deliveryGroupId:groupId});
     }
     return id;
@@ -174,6 +175,8 @@ export class SqliteQuarryRepository implements QuarryRepository {
         cents(calculation.subtotalUsd),source.vatMode,source.vatInclusive?1:0,source.vatRatePercent==null?null:Math.round(source.vatRatePercent*100),
         cents(calculation.vatAmountUsd),cents(calculation.finalTotalUsd),status,source.notes,'[]','[]',confirmedAt);
       await this.db.runAsync('UPDATE quarry_purchases SET destination_type=?,company_site_id=? WHERE id=?',purchaseDestination(source).type,purchaseDestination(source).companySiteId,id);
+      // DEC-522. A +1 Trip keeps the contract item of the trip it copies; if that item can no longer take it, the trip saves unlinked.
+      await linkAtConfirmation(this.db,'supplier',id,source.contractItemId??undefined,confirmedAt,{keepLoadIfInvalid:true});
       await this.enqueue('quarryPurchase',id,{id,purchaseNumber,confirmedAt,incrementedFrom:sourcePurchaseId,supplierTicketNumber:clean(supplierTicketNumber),quantity:quantityCubicMetres,unitSymbol:source.unitSymbol,projectId:source.projectId});
     });
     return this.get(id);

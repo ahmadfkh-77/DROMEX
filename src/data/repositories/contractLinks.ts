@@ -31,3 +31,25 @@ export async function reconcileContractLink(db:SQLiteDatabase,source:ContractLoa
   await db.runAsync(`UPDATE ${table} SET contract_item_id=NULL WHERE id=?`,loadId);
   await insertContractHistory(db,{contractItemId:row.contract_item_id,kind:'load_unlinked',reason,details:{source,loadId,automatic:true},createdAt:now});
 }
+
+/**
+ * DEC-522 Phase C. Saves the contract item chosen while recording a load, inside the load's own transaction, and records it in the item's
+ * history (no reason is needed at confirmation). Undefined or '' means Not linked. The item must be an open item of the load's own project
+ * that lists the load's material; otherwise the error rolls the whole confirmation back, unless `keepLoadIfInvalid` is set (a +1 Trip
+ * copying an item that was cancelled since), in which case the load simply saves unlinked.
+ */
+export async function linkAtConfirmation(db:SQLiteDatabase,source:ContractLoadSource,loadId:string,contractItemId:string|undefined,now:string,options:{keepLoadIfInvalid?:boolean}={}):Promise<void>{
+  if(!contractItemId)return;
+  const table=contractLoadTable(source);
+  const load=await db.getFirstAsync<{project_id:string|null;item_id:string;item_name:string;reference:string}>(
+    source==='company'?'SELECT project_id,item_id,item_name,COALESCE(load_number,transaction_number) reference FROM loads WHERE id=?':'SELECT project_id,item_id,item_name,purchase_number reference FROM quarry_purchases WHERE id=?',loadId);
+  const item=await db.getFirstAsync<{project_id:string;cancelled_at:string|null}>('SELECT project_id,cancelled_at FROM contract_items WHERE id=?',contractItemId);
+  let problem:string|null=null;
+  if(!load||!item)problem='The chosen contract item was not found.';
+  else if(item.cancelled_at)problem='The chosen contract item is cancelled. Choose another or Not linked.';
+  else if(item.project_id!==load.project_id)problem='The chosen contract item belongs to another project.';
+  else if(!await db.getFirstAsync('SELECT 1 one FROM contract_item_materials WHERE contract_item_id=? AND item_id=? AND removed_at IS NULL',contractItemId,load.item_id))problem=`${load.item_name} is not one of the materials of the chosen contract item.`;
+  if(problem){if(options.keepLoadIfInvalid)return;throw new Error(problem);}
+  await db.runAsync(`UPDATE ${table} SET contract_item_id=? WHERE id=?`,contractItemId,loadId);
+  await insertContractHistory(db,{contractItemId,kind:'load_linked',reason:null,details:{source,loadId,reference:load!.reference,atConfirmation:true},createdAt:now});
+}
