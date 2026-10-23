@@ -5,6 +5,7 @@ import type {ContractQuantitiesRepository,ContractRowView} from '../../data/repo
 import type {ContractProjectSummary} from '../../domain/contractQuantities';
 import type {Project} from '../../domain/loads';
 import {AppButton,AppCard,AppPage,EmptyState,Feedback,PageHeader} from '../components/AppPrimitives';
+import {ContractExportSheet} from '../components/contracts/ContractExportSheet';
 import {ContractItemCard,contractUsd} from '../components/contracts/ContractParts';
 import {colors} from '../theme';
 
@@ -20,6 +21,7 @@ export function ContractQuantitiesScreen({project,contracts,onBack,onAdd,onOpenI
 }){
   const[state,setState]=useState<{status:'loading'}|{status:'error';message:string}|{status:'ready';rows:ContractRowView[];summary:ContractProjectSummary}>({status:'loading'});
   const[showCancelled,setShowCancelled]=useState(false);
+  const[exporting,setExporting]=useState(false);
   const load=useCallback(()=>{setState({status:'loading'});contracts.listProject(project.id).then(view=>setState({status:'ready',...view})).catch(cause=>setState({status:'error',message:cause instanceof Error?cause.message:'Could not open the contract items.'}));},[contracts,project.id]);
   useEffect(load,[load]);
 
@@ -28,6 +30,10 @@ export function ContractQuantitiesScreen({project,contracts,onBack,onAdd,onOpenI
     {state.status==='loading'?<View style={styles.center}><ActivityIndicator size="large" color={colors.brand}/><Text style={styles.helper}>Opening contract items…</Text></View>:null}
     {state.status==='error'?<><Feedback kind="error">{state.message}</Feedback><AppButton label="Try again" tone="secondary" onPress={load}/></>:null}
     {state.status==='ready'?<Ready rows={state.rows} summary={state.summary} showCancelled={showCancelled} onToggleCancelled={()=>setShowCancelled(value=>!value)} onAdd={onAdd} onOpenItem={onOpenItem}/>:null}
+    {state.status==='ready'&&state.summary.itemCount?<>
+      <AppButton label="Export report (PDF / Excel)" tone="secondary" onPress={()=>setExporting(true)}/>
+      <ContractExportSheet project={project} contracts={contracts} rows={state.rows} summary={state.summary} visible={exporting} onClose={()=>setExporting(false)}/>
+    </>:null}
   </AppPage>;
 }
 

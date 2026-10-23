@@ -102,3 +102,19 @@ describe('Phase D2: the item page',()=>{
     expect(sheets).toContain('label="Edit load (correction with a reason)"');
   });
 });
+
+describe('Phase E: the export sheet',()=>{
+  const sheet=read('src/ui/components/contracts/ContractExportSheet.tsx');
+  it('offers the same options as the other PDFs: Header company and Customize header (shared picker), then Without or With prices, Without by default',()=>{
+    expect(sheet).toContain('useExportHeader(project.id)');
+    expect(sheet).toContain('{picker}');
+    expect(sheet).toContain("useState<'without'|'with'>('without')");
+    expect(sheet).toContain('label="Export PDF"');
+    expect(sheet).toContain('label="Export Excel"');
+  });
+  it('falls back to Company Settings when no header company is chosen, and is opened from the project page',()=>{
+    expect(sheet).toContain('contracts.getCompanyIdentity()');
+    expect(page).toContain('label="Export report (PDF / Excel)"');
+    expect(page).toContain('<ContractExportSheet');
+  });
+});

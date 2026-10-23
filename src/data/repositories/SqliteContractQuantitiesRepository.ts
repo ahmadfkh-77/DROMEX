@@ -53,6 +53,12 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
     return{materials:materials.map(row=>({id:row.id,name:row.name,categoryName:row.category_name,unitId:row.unit_id,unitSymbol:row.symbol})),units};
   }
 
+  async getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>{
+    const row=await this.db.getFirstAsync<{company_name:string|null;logo_uri:string|null;address:string|null;phone:string|null;email:string|null}>("SELECT company_name,logo_uri,address,phone,email FROM company_settings WHERE id='company'");
+    const contact=[row?.address,row?.phone,row?.email].map(value=>value?.trim()).filter(Boolean).join(' · ');
+    return{name:row?.company_name?.trim()||'DROMEX',logoUri:row?.logo_uri?.trim()||null,contactLine:contact||null};
+  }
+
   private async enqueue(entityType:'contractItem'|'contractAdjustment'|'contractLink',entityId:string,payload:unknown,now:string){
     await this.db.runAsync("INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES (?,?,'upsert',?,?)",entityType,entityId,JSON.stringify(payload),now);
   }

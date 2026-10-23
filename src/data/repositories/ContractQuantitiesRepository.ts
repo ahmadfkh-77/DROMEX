@@ -23,6 +23,8 @@ export type ContractFormSetup={materials:{id:string;name:string;categoryName:str
 
 export interface ContractQuantitiesRepository{
   getSetup():Promise<ContractFormSetup>;
+  /** The Company Settings name, logo and contact line: the report header when no Header company is chosen. */
+  getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>;
   listProject(projectId:string):Promise<{rows:ContractRowView[];summary:ContractProjectSummary}>;
   getItem(contractItemId:string):Promise<ContractItemDetail>;
   createItem(projectId:string,draft:ContractItemDraft):Promise<ContractItem>;
