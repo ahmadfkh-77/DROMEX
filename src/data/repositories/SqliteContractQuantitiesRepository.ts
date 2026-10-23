@@ -38,7 +38,7 @@ const loadFromRow=(row:LoadRow):ContractLoadDetail=>({
 });
 
 /**
- * Contract Quantities on SQLite (DEC-522). Used is never stored: it is read from the loads that point at an item every time, so a
+ * Quantity Targets on SQLite (DEC-522). Used is never stored: it is read from the loads that point at an item every time, so a
  * correction or a cancellation shows at once. Every change writes its history line and a sync_outbox entry in the same transaction.
  */
 export class SqliteContractQuantitiesRepository implements ContractQuantitiesRepository{
@@ -70,7 +70,7 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
 
   private async item(itemId:string):Promise<ContractItem>{
     const row=await this.db.getFirstAsync<ItemRow>('SELECT * FROM contract_items WHERE id=?',itemId);
-    if(!row)throw new Error('The contract item was not found.');
+    if(!row)throw new Error('The target was not found.');
     return itemFromRow(row,await this.materialIds(itemId));
   }
 
@@ -146,12 +146,12 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
 
   async editItem(contractItemId:string,draft:ContractItemDraft,reason:string):Promise<ContractItem>{
     const current=await this.item(contractItemId);
-    if(current.cancelledAt)throw new Error('A cancelled contract item cannot be edited.');
+    if(current.cancelledAt)throw new Error('A cancelled target cannot be edited.');
     const values=await this.checkedValues(draft);
     const removed=current.materialIds.filter(id=>!values.materialIds.includes(id));
     for(const materialId of removed){
       const used=await this.db.getFirstAsync<{name:string}>(`SELECT item_name name FROM (${COMPANY_LOADS} WHERE l.contract_item_id=? AND l.item_id=? UNION ALL ${SUPPLIER_LOADS} WHERE q.contract_item_id=? AND q.item_id=?) LIMIT 1`,contractItemId,materialId,contractItemId,materialId);
-      if(used)throw new Error(`${used.name} has loads counted in this contract item. Move or remove those loads first.`);
+      if(used)throw new Error(`${used.name} has loads counted in this target. Move or remove those loads first.`);
     }
     const now=new Date();
     const {item,entry}=applyContractItemEdit(current,{name:values.name,unitId:values.unitId,unitSymbol:values.unitSymbol,quantity:values.quantity,unitPriceUsd:values.unitPriceUsd,materialIds:values.materialIds},{hasHistory:await this.editNeedsReason(contractItemId),reason,now});
@@ -207,7 +207,7 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
 
   async addAdjustment(contractItemId:string,input:{amount:string;reason:string}):Promise<void>{
     const {item,usage}=await this.row(await this.item(contractItemId));
-    if(item.cancelledAt)throw new Error('A cancelled contract item cannot be adjusted.');
+    if(item.cancelledAt)throw new Error('A cancelled target cannot be adjusted.');
     const {amount,reason}=validateContractAdjustment(input,usage);
     const id=makeId('contract_adjustment'),now=new Date().toISOString();
     await this.db.withTransactionAsync(async()=>{
@@ -226,10 +226,10 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
 
   /** The checks a load must pass to count toward an item: an open item of the load's own project that lists the load's material. */
   private async assertCanCount(item:ContractItem,load:LoadRow&{project_id:string|null}){
-    if(item.cancelledAt)throw new Error('This contract item is cancelled.');
+    if(item.cancelledAt)throw new Error('This target is cancelled.');
     if(load.status==='Cancelled')throw new Error('A cancelled load cannot be linked.');
     if(load.project_id!==item.projectId)throw new Error('This load belongs to another project.');
-    if(!item.materialIds.includes(load.item_id))throw new Error(`${load.item_name} is not one of the materials of this contract item.`);
+    if(!item.materialIds.includes(load.item_id))throw new Error(`${load.item_name} is not one of the materials of this target.`);
   }
 
   async linkLoad(contractItemId:string,ref:ContractLoadRef,reason:string):Promise<void>{
@@ -242,8 +242,8 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
     for(const ref of refs){
       const load=await this.loadRow(ref);
       await this.assertCanCount(item,load);
-      if(load.contract_item_id===contractItemId)throw new Error('This load already counts toward this contract item.');
-      if(load.contract_item_id)throw new Error(`${load.reference} already counts toward another contract item. Move it instead.`);
+      if(load.contract_item_id===contractItemId)throw new Error('This load already counts toward this target.');
+      if(load.contract_item_id)throw new Error(`${load.reference} already counts toward another target. Move it instead.`);
       rows.push({ref,load});
     }
     const clean=validateContractReason(reason,'linking a load to'),now=new Date().toISOString();
@@ -258,8 +258,8 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
 
   async moveLoad(ref:ContractLoadRef,toContractItemId:string,reason:string):Promise<void>{
     const load=await this.loadRow(ref);
-    if(!load.contract_item_id)throw new Error('This load is not linked to a contract item.');
-    if(load.contract_item_id===toContractItemId)throw new Error('This load already counts toward this contract item.');
+    if(!load.contract_item_id)throw new Error('This load is not linked to a target.');
+    if(load.contract_item_id===toContractItemId)throw new Error('This load already counts toward this target.');
     const target=await this.item(toContractItemId);
     await this.assertCanCount(target,load);
     const from=load.contract_item_id,clean=validateContractReason(reason,'moving a load to'),now=new Date().toISOString();
@@ -274,7 +274,7 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
 
   async unlinkLoad(ref:ContractLoadRef,reason:string):Promise<void>{
     const load=await this.loadRow(ref);
-    if(!load.contract_item_id)throw new Error('This load is not linked to a contract item.');
+    if(!load.contract_item_id)throw new Error('This load is not linked to a target.');
     const from=load.contract_item_id,clean=validateContractReason(reason,'removing a load from'),now=new Date().toISOString();
     await this.db.withTransactionAsync(async()=>{
       await this.db.runAsync(`UPDATE ${contractLoadTable(ref.source)} SET contract_item_id=NULL WHERE id=?`,ref.loadId);

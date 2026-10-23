@@ -84,8 +84,8 @@ export function LoadSheet({load,item,visible,onClose,onEdit,onOpen,onMove,onRemo
       <Fact label="Status" value={load.status==='Cancelled'?'Cancelled · left out of Used':load.unitId!==item.unitId?`Active · not counted, unit differs (${load.unitSymbol} ≠ ${item.unitSymbol})`:'Active · counted'}/>
     </View>
     <ActionButton label="Edit load (correction with a reason)" tone="navy" onPress={onEdit}/>
-    <ActionButton label="Move to another contract item" onPress={onMove}/>
-    <ActionButton label="Remove from this contract item" onPress={onRemove}/>
+    <ActionButton label="Move to another target" onPress={onMove}/>
+    <ActionButton label="Remove from this target" onPress={onRemove}/>
     <ActionButton label="Open the full load" onPress={onOpen}/>
     <Text style={styles.helper}>Edit opens the existing reasoned correction. Move and Remove ask for a reason and are kept in the item's history; the load itself is never deleted.</Text>
   </FocusedSheet>;
@@ -106,12 +106,12 @@ export function MoveOrRemoveSheet({mode,load,item,projectId,contracts,visible,on
     try{if(mode==='move')await contracts.moveLoad({source:load!.source,loadId:load!.id},target,reason);else await contracts.unlinkLoad({source:load!.source,loadId:load!.id},reason);onDone();}
     catch(cause){setError(message(cause,'Could not change the load.'));}finally{setBusy(false);}
   }
-  return <FocusedSheet visible={visible} eyebrow={load.reference} title={mode==='move'?'Move to another contract item':'Remove from this contract item'} onClose={onClose} footer={<SheetActions primaryLabel={mode==='move'?'Move load':'Remove load'} onPrimary={()=>void save()} onCancel={onClose} busy={busy} disabled={!reason.trim()||(mode==='move'&&!target)}/>}>
+  return <FocusedSheet visible={visible} eyebrow={load.reference} title={mode==='move'?'Move to another target':'Remove from this target'} onClose={onClose} footer={<SheetActions primaryLabel={mode==='move'?'Move load':'Remove load'} onPrimary={()=>void save()} onCancel={onClose} busy={busy} disabled={!reason.trim()||(mode==='move'&&!target)}/>}>
     <Text style={styles.helper}>{mode==='move'?`The load stops counting in ${item.name} and counts in the item you choose. Both histories keep the reason.`:`The load stops counting in ${item.name} and becomes not linked. The load itself is not changed.`}</Text>
     {error?<Feedback kind="error">{error}</Feedback>:null}
     {mode==='move'?(targets===null?<Text style={styles.helper}>Looking for items…</Text>:targets.length?targets.map(value=><TouchableOpacity key={value.id} style={[styles.choice,target===value.id&&styles.choiceOn]} onPress={()=>setTarget(value.id)} accessibilityRole="radio" accessibilityState={{selected:target===value.id}}>
       <View style={styles.radio}>{target===value.id?<View style={styles.radioDot}/>:null}</View><Text style={styles.choiceTitle}>{value.name}</Text><Text style={styles.unit}>{value.unitSymbol}</Text>
-    </TouchableOpacity>):<Text style={styles.quiet}>No other contract item of this project lists {load.materialName}. Add the material to another item first, or remove the load instead.</Text>):null}
+    </TouchableOpacity>):<Text style={styles.quiet}>No other target of this project lists {load.materialName}. Add the material to another item first, or remove the load instead.</Text>):null}
     <AppField label="Reason *" value={reason} onChangeText={setReason}/>
   </FocusedSheet>;
 }
@@ -129,14 +129,14 @@ export function LinkLoadsSheet({detail,contracts,visible,onClose,onDone}:{detail
     catch(cause){setError(message(cause,'Could not link the loads.'));}finally{setBusy(false);}
   }
   return <FocusedSheet visible={visible} eyebrow={item.name.toUpperCase()} title="Link older loads" onClose={onClose} footer={<SheetActions primaryLabel={ticked.size?`Link ${ticked.size} load${ticked.size===1?'':'s'}`:'Link loads'} onPrimary={()=>void save()} onCancel={onClose} busy={busy} disabled={!ticked.size||!reason.trim()}/>}>
-    <Text style={styles.helper}>Loads of this project and of this item's materials that count toward no contract item yet. Linking them later needs a reason, kept in the history.</Text>
+    <Text style={styles.helper}>Loads of this project and of this item's materials that count toward no target yet. Linking them later needs a reason, kept in the history.</Text>
     {error?<Feedback kind="error">{error}</Feedback>:null}
     {loads===null?<Text style={styles.helper}>Looking for loads…</Text>:loads.length?loads.map(load=><TouchableOpacity key={load.id} style={[styles.choice,ticked.has(load.id)&&styles.choiceOn]} onPress={()=>toggle(load.id)} accessibilityRole="checkbox" accessibilityState={{checked:ticked.has(load.id)}}>
       <View style={[styles.box,ticked.has(load.id)&&styles.boxOn]}>{ticked.has(load.id)?<Text style={styles.tick}>✓</Text>:null}</View>
       <View style={styles.flex}><Text style={styles.choiceTitle}>{load.reference} · {contractDay(load.date)}</Text><Text style={styles.helper}>{load.materialName} · {load.source==='company'?'Company':'Supplier'}{load.partyName?` · ${load.partyName}`:''}</Text></View>
       <Text style={[styles.unit,load.unitId!==item.unitId&&styles.unitBad]}>{load.quantity===null?'—':contractAmount(load.quantity)} {load.unitSymbol}</Text>
     </TouchableOpacity>):<Text style={styles.quiet}>No unlinked loads of {detail.materials.map(material=>material.name).join(', ')||'these materials'} in this project.</Text>}
-    <AppField label="Reason *" value={reason} onChangeText={setReason} placeholder="For example Recorded before contract quantities"/>
+    <AppField label="Reason *" value={reason} onChangeText={setReason} placeholder="For example Recorded before quantity targets"/>
   </FocusedSheet>;
 }
 

@@ -13,7 +13,7 @@ import {buildLoadEscPos} from '../src/services/escpos';
 import {SEED_TIME,type SqliteTestDatabase,migratedDatabaseWithProject} from './support/sqliteTestDatabase';
 
 /**
- * DEC-522 Phase C. The contract item is chosen while recording a load in Make Receipt or New Supplier Load and is saved with the load in the
+ * DEC-522 Phase C. The target is chosen while recording a load in Make Receipt or New Supplier Load and is saved with the load in the
  * same transaction. A wrong choice saves nothing. The printed receipt, its PDF and the Delivery Authorization stay exactly as they are.
  */
 const databases:SqliteTestDatabase[]=[];
@@ -42,7 +42,7 @@ async function setup(){
   return {db,loads,quarry,contracts,loadDraft,supplierDraft,binder,count,history};
 }
 
-describe('Make Receipt saves the chosen contract item with the load',()=>{
+describe('Make Receipt saves the chosen target with the load',()=>{
   it('links the load in the same save, records it in the history without a reason, and counts it at once',async()=>{
     const {loads,contracts,loadDraft,binder,history}=await setup();
     const load=await loads.confirmLoad(loadDraft({contractItemId:binder.id}));
@@ -70,7 +70,7 @@ describe('Make Receipt saves the chosen contract item with the load',()=>{
   });
 });
 
-describe('New Supplier Load saves the chosen contract item',()=>{
+describe('New Supplier Load saves the chosen target',()=>{
   it('gives every item of one delivery note its own choice',async()=>{
     const {quarry,contracts,supplierDraft,binder}=await setup();
     const [first,second]=await quarry.confirmDelivery([supplierDraft({contractItemId:binder.id}),supplierDraft({itemId:'sand',contractItemId:''})]);
@@ -85,7 +85,7 @@ describe('New Supplier Load saves the chosen contract item',()=>{
     expect(count('quarry_purchases')).toBe(0);
   });
 
-  it('a truck counter +1 Trip keeps the contract item of the trip it copies, and saves unlinked when that item was cancelled',async()=>{
+  it('a truck counter +1 Trip keeps the target of the trip it copies, and saves unlinked when that item was cancelled',async()=>{
     const {quarry,contracts,supplierDraft,binder}=await setup();
     const first=await quarry.confirmPurchase(supplierDraft({contractItemId:binder.id}));
     const trip=await quarry.incrementPurchase(first.id,14);
@@ -103,7 +103,7 @@ describe('New Supplier Load saves the chosen contract item',()=>{
 });
 
 describe('the printed receipt stays exactly as it is',()=>{
-  it('the receipt, the Delivery Authorization and the Bluetooth print are identical with and without a contract item',async()=>{
+  it('the receipt, the Delivery Authorization and the Bluetooth print are identical with and without a target',async()=>{
     const {loads,loadDraft,binder}=await setup();
     const linked=await loads.confirmLoad(loadDraft({contractItemId:binder.id}));
     const plain={...linked,contractItemId:null};
@@ -118,7 +118,7 @@ describe('the printed receipt stays exactly as it is',()=>{
 describe('the choice on screen',()=>{
   const item=(id:string):ContractItem=>({id,projectId:'road',name:id,unitId:'unit_ton',unitSymbol:'t',quantity:10,unitPriceUsd:null,materialIds:['asphalt'],status:'in_progress',completedOn:null,cancelledAt:null});
   it('asks for a pick only when several items fit and none is chosen yet',()=>{
-    expect(contractChoiceIssue([item('a'),item('b')],undefined)).toBe('Choose the contract item this load counts toward, or Not linked.');
+    expect(contractChoiceIssue([item('a'),item('b')],undefined)).toBe('Choose the target this load counts toward, or Not linked.');
     expect(contractChoiceIssue([item('a'),item('b')],'')).toBeNull();
     expect(contractChoiceIssue([item('a'),item('b')],'b')).toBeNull();
     expect(contractChoiceIssue([item('a')],undefined)).toBeNull();
@@ -129,7 +129,7 @@ describe('the choice on screen',()=>{
 describe('the choice is wired into both flows (static checks, no React Native renderer)',()=>{
   const read=(path:string)=>readFileSync(join(__dirname,'..',path),'utf8');
   const choice=read('src/ui/components/ContractItemChoice.tsx');
-  it('shows nothing until the project has contract items, so a project without contracts is unchanged',()=>{
+  it('shows nothing until the project has targets, so a project without contracts is unchanged',()=>{
     expect(choice).toContain('if(!rows||!rows.length||!materialId)return null;');
   });
   it('is in Make Receipt after Conversion and price, and blocks Confirm only for an unanswered pick',()=>{
@@ -143,7 +143,7 @@ describe('the choice is wired into both flows (static checks, no React Native re
     const wizard=read('src/ui/screens/QuarryPurchasesScreen.tsx');
     expect(wizard.split('<ContractItemChoice').length-1).toBe(2);
     expect(wizard).toContain("contractItemId:extra.contractItemId");
-    expect(wizard).toContain("['Contract item',");
+    expect(wizard).toContain("['Target',");
   });
   it('gets its repository from the app shell, and the receipt templates never mention it',()=>{
     const app=read('src/ui/DromexApp.tsx');

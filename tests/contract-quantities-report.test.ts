@@ -7,7 +7,7 @@ import {buildContractReportHtml} from '../src/services/contractReportTemplate';
 import {contractWorkbookSheets} from '../src/services/contractWorkbook';
 
 /**
- * DEC-522 Phase E. The Contract Quantities report: With prices (internal, with savings) and Without prices (client-safe). Used quantities and
+ * DEC-522 Phase E. The Quantity Targets report: With prices (internal, with savings) and Without prices (client-safe). Used quantities and
  * percentages are identical in both; only prices, values and savings are left out. Units are never added together.
  */
 const item=(over:Partial<ContractItem>):ContractItem=>({id:'i',projectId:'p',name:'Item',unitId:'u_m3',unitSymbol:'m³',quantity:100,unitPriceUsd:null,materialIds:['m'],status:'in_progress',completedOn:null,cancelledAt:null,...over});
@@ -40,14 +40,14 @@ describe('the report model',()=>{
     const report=buildContractReport(rows,summary,project,{includePrices:true,generatedAt:'2026-10-23T10:00:00.000Z'});
     expect(report.rows.map(value=>value.name)).toEqual(['Base course','Asphalt binder','Sub-base','Wearing course']);
     expect(report.rows[0]).toMatchObject({unit:'m³',contract:500,fromLoads:455,adjustments:-3,used:452,remaining:48,percentUsed:90.4,status:'In progress',leftover:48,savingUsd:864,savingIsEstimate:true});
-    expect(report.rows[1]).toMatchObject({used:318.5,remaining:0,percentUsed:106.2,status:'Over contract',leftover:0,savingUsd:0});
+    expect(report.rows[1]).toMatchObject({used:318.5,remaining:0,percentUsed:106.2,status:'Over target',leftover:0,savingUsd:0});
     expect(report.rows[2]).toMatchObject({percentUsed:80,status:'Complete 18 Oct 2026',leftover:40,savingUsd:480,savingIsEstimate:false});
     expect(report.rows[3]).toMatchObject({savingUsd:null});
     expect(report.summary).toMatchObject({overallPercentUsed:78.7,basis:'items',itemsComplete:'1 of 4',totalSavingUsd:480,estimatedSavingUsd:864});
     expect(report.savings).toEqual([{name:'Sub-base',leftover:'40 m³',savingUsd:480}]);
     expect(report.overruns).toEqual([{name:'Asphalt binder',overBy:'18.5 t',percentUsed:106.2}]);
     expect(report.notCounted).toEqual([{load:'SL-0412 · 14 Oct 2026',item:'Base course',quantity:'22 t',why:'Unit differs (t, item counts m³)'}]);
-    expect(report.fileName).toBe('DROMEX-Contract-Quantities-Ain-Qana-Jbaa-With-Prices-2026-10-23.pdf');
+    expect(report.fileName).toBe('DROMEX-Quantity-Targets-Ain-Qana-Jbaa-With-Prices-2026-10-23.pdf');
   });
   it('without prices keeps every quantity and percent identical and leaves out prices, values and savings',()=>{
     const {rows,summary}=sample();
@@ -59,11 +59,11 @@ describe('the report model',()=>{
     expect(without.rows.every(value=>value.savingUsd===null&&value.leftover===null)).toBe(true);
     expect(without.summary).toMatchObject({totalSavingUsd:null,estimatedSavingUsd:null});
     expect(without.savings).toEqual([]);
-    expect(without.title).toBe('Contract Quantities');
-    expect(withPrices.title).toBe('Contract Quantities and Savings');
+    expect(without.title).toBe('Quantity Targets');
+    expect(withPrices.title).toBe('Quantity Targets and Savings');
     expect(without.fileName).toContain('Without-Prices');
   });
-  it('says so when the project has no live contract items',()=>{
+  it('says so when the project has no live targets',()=>{
     const report=buildContractReport([],summarizeContractProject([]),project,{includePrices:false,generatedAt:'2026-10-23T10:00:00.000Z'});
     expect(report.empty).toBe(true);
   });
@@ -76,9 +76,9 @@ describe('the PDF',()=>{
     expect(html).toContain('<img class="logo" src="data:image/png;base64,AAAA"');
     expect(html).toContain('DROMEX Asphalt Co.');
     expect(html).toContain('Jbaa · +961 70 123 456');
-    expect(html).toContain('Contract Quantities and Savings');
+    expect(html).toContain('Quantity Targets and Savings');
     expect(html).toContain('Hashem Contracting');
-    for(const group of ['>Contract<','>Use<','>Balance<','>Saving<'])expect(html).toContain(group);
+    for(const group of ['>Target<','>Use<','>Balance<','>Saving<'])expect(html).toContain(group);
     expect(html).toContain('A4 landscape');
     expect(html).toContain('counter(pages)');
     expect(html).toContain('$864.00 *');
@@ -104,11 +104,11 @@ describe('the workbook',()=>{
   it('keeps numbers as numbers, one row per item, and drops price columns without prices',()=>{
     const {rows,summary}=sample();
     const sheets=contractWorkbookSheets(buildContractReport(rows,summary,project,{includePrices:true,generatedAt:'2026-10-23T10:00:00.000Z'}),{name:'DROMEX Asphalt Co.'});
-    expect(sheets.map(sheet=>sheet.name)).toEqual(['Report Info','Contract Items','Not Counted','Data Dictionary']);
-    expect(sheets[1]!.rows[0]).toMatchObject({Item:'Base course',Unit:'m³','Contract Quantity':500,'From Loads':455,Adjustments:-3,Used:452,Remaining:48,'% Used':90.4,Status:'In progress','Leftover':48,'Saving USD':864,'Saving Is Estimate':'Yes'});
+    expect(sheets.map(sheet=>sheet.name)).toEqual(['Report Info','Targets','Not Counted','Data Dictionary']);
+    expect(sheets[1]!.rows[0]).toMatchObject({Item:'Base course',Unit:'m³','Target Quantity':500,'From Loads':455,Adjustments:-3,Used:452,Remaining:48,'% Used':90.4,Status:'In progress','Leftover':48,'Saving USD':864,'Saving Is Estimate':'Yes'});
     const without=contractWorkbookSheets(buildContractReport(rows,summary,project,{includePrices:false,generatedAt:'2026-10-23T10:00:00.000Z'}),{name:'DROMEX'});
     expect(Object.keys(without[1]!.rows[0]!)).not.toContain('Saving USD');
-    expect(Object.keys(without[1]!.rows[0]!)).not.toContain('Contract Price USD');
+    expect(Object.keys(without[1]!.rows[0]!)).not.toContain('Target Price USD');
     expect(without[1]!.rows[0]).toMatchObject({Used:452,'% Used':90.4});
   });
 });

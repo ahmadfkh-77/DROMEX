@@ -60,7 +60,7 @@ describe('contract usage',()=>{
     const over=computeContractUsage(item(),[load({quantity:57.5})],[]);
     expect(over).toMatchObject({warning:'over',overContract:true,overBy:7.5,remaining:0,percentUsed:115});
   });
-  it('shows the value used and remaining only with a contract price',()=>{
+  it('shows the value used and remaining only with a target price',()=>{
     expect(computeContractUsage(item(),[load({quantity:10})],[])).toMatchObject({valueUsedUsd:200,valueRemainingUsd:800,contractValueUsd:1000,valueOverUsd:0});
     expect(computeContractUsage(item(),[load({quantity:57.5})],[])).toMatchObject({valueOverUsd:150});
     expect(computeContractUsage(item({unitPriceUsd:null}),[load({quantity:57.5})],[])).toMatchObject({contractValueUsd:null,valueOverUsd:null});
@@ -106,7 +106,7 @@ describe('finishing with leftover',()=>{
   });
 });
 
-describe('contract item rules',()=>{
+describe('target rules',()=>{
   const draft={name:'Base course',unitId:'u_m3',quantity:'50',unitPriceUsd:'20',materialIds:['m_base']};
   it('accepts a valid draft and normalises it',()=>{
     expect(validateContractItemDraft({...draft,name:'  Base   course '})).toEqual({ok:true,value:{name:'Base course',unitId:'u_m3',quantity:50,unitPriceUsd:20,materialIds:['m_base']}});
@@ -114,18 +114,18 @@ describe('contract item rules',()=>{
   });
   it('rejects a missing name, unit, quantity of zero or less, a bad price and no material',()=>{
     const errors=(over:object)=>{const result=validateContractItemDraft({...draft,...over});return result.ok?[]:result.errors;};
-    expect(errors({name:' '})).toContain('Enter the contract item name.');
+    expect(errors({name:' '})).toContain('Enter the target name.');
     expect(errors({unitId:''})).toContain('Choose the unit.');
-    expect(errors({quantity:'0'})).toContain('The contract quantity must be greater than zero.');
-    expect(errors({quantity:'-3'})).toContain('The contract quantity must be greater than zero.');
-    expect(errors({quantity:'abc'})).toContain('The contract quantity must be greater than zero.');
-    expect(errors({unitPriceUsd:'-1'})).toContain('Enter the contract price as a number, zero or more.');
-    expect(errors({unitPriceUsd:'x'})).toContain('Enter the contract price as a number, zero or more.');
+    expect(errors({quantity:'0'})).toContain('The target quantity must be greater than zero.');
+    expect(errors({quantity:'-3'})).toContain('The target quantity must be greater than zero.');
+    expect(errors({quantity:'abc'})).toContain('The target quantity must be greater than zero.');
+    expect(errors({unitPriceUsd:'-1'})).toContain('Enter the target price as a number, zero or more.');
+    expect(errors({unitPriceUsd:'x'})).toContain('Enter the target price as a number, zero or more.');
     expect(errors({materialIds:[]})).toContain('Link at least one material.');
   });
   it('validates a reason, trimming and collapsing spaces',()=>{
     expect(validateContractReason('  too   much ','adjusting')).toBe('too much');
-    expect(()=>validateContractReason('   ','adjusting')).toThrow('Enter the reason for adjusting this contract item.');
+    expect(()=>validateContractReason('   ','adjusting')).toThrow('Enter the reason for adjusting this target.');
   });
   it('an adjustment needs a non-zero amount and a reason, and cannot push the used quantity below zero',()=>{
     const usage=computeContractUsage(item(),[load({quantity:10})],[]);
@@ -159,7 +159,7 @@ describe('editing is allowed and audited, never an overwrite',()=>{
     expect(()=>applyContractItemEdit(item(),{quantity:0},{hasHistory:false,reason:'',now:NOW})).toThrow(/greater than zero/i);
     expect(()=>applyContractItemEdit(item(),{materialIds:[]},{hasHistory:false,reason:'',now:NOW})).toThrow(/at least one material/i);
   });
-  it('a contract item can be cancelled with a reason and is then left out of the project summary',()=>{
+  it('a target can be cancelled with a reason and is then left out of the project summary',()=>{
     expect(()=>cancelContractItem(item(),'',NOW)).toThrow(/reason/i);
     const result=cancelContractItem(item(),'Created by mistake',NOW);
     expect(result.item.cancelledAt).toBe(NOW.toISOString());
@@ -168,7 +168,7 @@ describe('editing is allowed and audited, never an overwrite',()=>{
   });
 });
 
-describe('choosing the contract item for a load',()=>{
+describe('choosing the target for a load',()=>{
   const a=item({id:'a',materialIds:['m_base']}),b=item({id:'b',materialIds:['m_base','m_sub']}),c=item({id:'c',projectId:'p2',materialIds:['m_base']});
   it('preselects the only candidate, asks when there are several, and saves unlinked when there are none',()=>{
     expect(candidateContractItems([a,c],'p1','m_base')).toEqual({candidates:[a],preselectedId:'a'});
@@ -202,7 +202,7 @@ describe('project summary',()=>{
     expect(summary.overallBasis).toBe('items');
     expect(summary.completeCount).toBe(1);
   });
-  it('weights by contract value when every item has a price, and reports null with no items',()=>{
+  it('weights by target value when every item has a price, and reports null with no items',()=>{
     const a=item({quantity:10,unitPriceUsd:10}),b=item({id:'b',quantity:10,unitPriceUsd:30});
     const summary=summarizeContractProject([{item:a,usage:computeContractUsage(a,[load({quantity:10})],[])},{item:b,usage:computeContractUsage(b,[load({id:'l9',contractItemId:'b',quantity:5})],[])}]);
     expect(summary.overallBasis).toBe('value');
@@ -236,9 +236,9 @@ describe('loads counted, grouped by day',()=>{
 describe('words for the screens',()=>{
   it('describes what an edit changes, in the item units',async()=>{
     const {contractChangeLines}=await import('../src/domain/contractQuantities');
-    expect(contractChangeLines(item(),{name:'Base course',unitId:'u_m3',unitSymbol:'m³',quantity:550,unitPriceUsd:20,materialIds:['m_base']},{m_base:'BaseCourse 0/40'})).toEqual(['Contract quantity 50 → 550 m³']);
+    expect(contractChangeLines(item(),{name:'Base course',unitId:'u_m3',unitSymbol:'m³',quantity:550,unitPriceUsd:20,materialIds:['m_base']},{m_base:'BaseCourse 0/40'})).toEqual(['Target quantity 50 → 550 m³']);
     expect(contractChangeLines(item(),{name:'Base',unitId:'u_t',unitSymbol:'t',quantity:50,unitPriceUsd:null,materialIds:['m_base','m_sub']},{m_base:'BaseCourse 0/40',m_sub:'Sub-base'})).toEqual([
-      'Name Base course → Base','Unit m³ → t','Contract price $20.00 → not set','Materials added: Sub-base',
+      'Name Base course → Base','Unit m³ → t','Target price $20.00 → not set','Materials added: Sub-base',
     ]);
     expect(contractChangeLines(item(),{name:'Base course',unitId:'u_m3',unitSymbol:'m³',quantity:50,unitPriceUsd:20,materialIds:[]},{m_base:'BaseCourse 0/40'})).toEqual(['Materials removed: BaseCourse 0/40']);
   });

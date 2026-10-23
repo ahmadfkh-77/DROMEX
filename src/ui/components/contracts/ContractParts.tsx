@@ -22,7 +22,7 @@ export function contractPillText(item:ContractItem,usage:ContractUsage):string{
   const tone=contractTone(item,usage);
   if(tone==='cancelled')return 'Cancelled';
   if(tone==='done')return 'Complete';
-  if(tone==='over')return 'Over contract';
+  if(tone==='over')return 'Over target';
   if(usage.warning==='full')return `${contractPercent(usage)} · at the limit`;
   if(tone==='near')return `${contractPercent(usage)} · near limit`;
   return contractPercent(usage);
@@ -33,11 +33,11 @@ export function ContractPill({item,usage}:{item:ContractItem;usage:ContractUsage
   return <Text style={[styles.pill,pillTone[tone]]}>{contractPillText(item,usage)}</Text>;
 }
 
-/** The bar never draws past its end; over contract is said in words and in the Over by box, never by a longer bar. */
+/** The bar never draws past its end; over target is said in words and in the Over by box, never by a longer bar. */
 export function ContractBar({item,usage}:{item:ContractItem;usage:ContractUsage}){
   const tone=contractTone(item,usage);
   const width=`${Math.min(100,Math.max(0,usage.percentUsed))}%` as const;
-  return <View style={styles.bar} accessibilityRole="progressbar" accessibilityLabel={`${contractPercent(usage)} of the contract quantity used`}>
+  return <View style={styles.bar} accessibilityRole="progressbar" accessibilityLabel={`${contractPercent(usage)} of the target quantity used`}>
     <View style={[styles.barFill,{width},barTone[tone]]}/>
     {tone==='near'||tone==='progress'?<View style={styles.barMark}/>:null}
   </View>;
@@ -62,7 +62,7 @@ export function ContractWorkAndUse({item,usage}:{item:ContractItem;usage:Contrac
   if(item.status!=='complete'||!item.completedOn)return null;
   return <View style={styles.two}>
     <View style={[styles.statusBox,styles.workBox]}><Text style={[styles.statusLabel,styles.workText]}>WORK</Text><Text style={[styles.statusValue,styles.workText]}>Complete · {shortDay(item.completedOn)}</Text></View>
-    <View style={[styles.statusBox,styles.useBox]}><Text style={[styles.statusLabel,styles.useText]}>QUANTITY USED</Text><Text style={[styles.statusValue,styles.useText]}>{contractPercent(usage)} of contract</Text></View>
+    <View style={[styles.statusBox,styles.useBox]}><Text style={[styles.statusLabel,styles.useText]}>QUANTITY USED</Text><Text style={[styles.statusValue,styles.useText]}>{contractPercent(usage)} of target</Text></View>
   </View>;
 }
 

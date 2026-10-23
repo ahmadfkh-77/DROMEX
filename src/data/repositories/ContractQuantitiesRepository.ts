@@ -18,7 +18,7 @@ export type ContractItemDetail=ContractRowView&{
   editNeedsReason:boolean;
   history:ContractHistoryLine[];loadsByDay:{days:ContractLoadDay<ContractLoadDetail>[];cancelled:ContractLoadDetail[]}};
 export type ContractLoadRef={source:ContractLoadSource;loadId:string};
-/** What the contract item form chooses from: active Catalog materials (with their usual unit) and active units. */
+/** What the target form chooses from: active Catalog materials (with their usual unit) and active units. */
 export type ContractFormSetup={materials:{id:string;name:string;categoryName:string;unitId:string|null;unitSymbol:string|null}[];units:{id:string;name:string;symbol:string}[]};
 
 export interface ContractQuantitiesRepository{

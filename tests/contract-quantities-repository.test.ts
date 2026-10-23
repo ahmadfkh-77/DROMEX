@@ -14,7 +14,7 @@ import {emptyQuarryPurchaseDraft,type QuarryPurchaseDraft} from '../src/domain/q
 import {SEED_TIME,SqliteTestDatabase,migratedDatabaseWithProject} from './support/sqliteTestDatabase';
 
 /**
- * DEC-522 Phase B. Contract items are saved with their material links, adjustments and an append-only history; loads point at the item they
+ * DEC-522 Phase B. Targets are saved with their material links, adjustments and an append-only history; loads point at the item they
  * count toward through a nullable contract_item_id. Used is read fresh from the loads, so a correction or a cancellation shows at once.
  */
 const databases:SqliteTestDatabase[]=[];
@@ -99,7 +99,7 @@ describe('migration 67',()=>{
   });
 });
 
-describe('contract items',()=>{
+describe('targets',()=>{
   it('creates an item with its materials, a Created history line and a sync outbox entry',async()=>{
     const {db,contracts,outbox,history}=await setup();
     const item=await contracts.createItem('road',{name:'  Asphalt   binder ',unitId:'unit_ton',quantity:'300',unitPriceUsd:'62.5',materialIds:['asphalt','sand']});
@@ -286,7 +286,7 @@ describe('adjust, finish, reopen, edit and cancel',()=>{
   });
 });
 
-describe('setup for the contract item form',()=>{
+describe('setup for the target form',()=>{
   it('lists the active Catalog materials with their category and default unit, and the active units',async()=>{
     const {db,contracts}=await setup();
     db.raw.exec(`INSERT INTO catalog_items (id,category_id,name,default_unit_id,loads_enabled,is_active,created_at,updated_at) VALUES ('old','cat','Old gravel','unit_m3',1,0,'${SEED_TIME}','${SEED_TIME}')`);

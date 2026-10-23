@@ -16,7 +16,7 @@ type SourceFilter='all'|'company'|'supplier';
 const whenText=(at:string)=>`${contractDay(localDateKey(new Date(at)))} · ${new Date(at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
 
 /**
- * DEC-522 Phase D2 (mockup tabs 2, 6 and 8). One contract item: its state, From loads / Adjustments / Used kept apart, the Not counted
+ * DEC-522 Phase D2 (mockup tabs 2, 6 and 8). One target: its state, From loads / Adjustments / Used kept apart, the Not counted
  * loads, the loads counted grouped by day (each load opens its details, Edit, Move, Remove and Open), the adjustments and the history.
  * Every figure comes from the repository and the domain; this screen does no arithmetic.
  */
@@ -34,7 +34,7 @@ export function ContractItemScreen({project,contracts,contractItemId,onBack,onEd
   const[openDays,setOpenDays]=useState<Set<string>|null>(null);
   const[showCancelled,setShowCancelled]=useState(false);
   const[message,setMessage]=useState<string|null>(null);
-  const load=useCallback(()=>{setError(null);contracts.getItem(contractItemId).then(setDetail).catch(cause=>setError(cause instanceof Error?cause.message:'Could not open the contract item.'));},[contracts,contractItemId]);
+  const load=useCallback(()=>{setError(null);contracts.getItem(contractItemId).then(setDetail).catch(cause=>setError(cause instanceof Error?cause.message:'Could not open the target.'));},[contracts,contractItemId]);
   useEffect(load,[load]);
   const done=(text:string)=>{setSheet(null);setSelected(null);setMessage(text);load();};
 
@@ -47,26 +47,26 @@ export function ContractItemScreen({project,contracts,contractItemId,onBack,onEd
   const isOpen=(day:string)=>openDays?openDays.has(day):day===firstDay;
   const toggleDay=(day:string)=>setOpenDays(current=>{const next=new Set(current??(firstDay?[firstDay]:[]));if(next.has(day))next.delete(day);else next.add(day);return next;});
 
-  if(error)return <AppPage><PageHeader eyebrow="Contract item" title="Contract item" onBack={onBack}/><Feedback kind="error">{error}</Feedback><AppButton label="Try again" tone="secondary" onPress={load}/></AppPage>;
-  if(!detail||!grouped)return <AppPage><PageHeader eyebrow="Contract item" title="Contract item" onBack={onBack}/><View style={styles.center}><ActivityIndicator size="large" color={colors.brand}/></View></AppPage>;
+  if(error)return <AppPage><PageHeader eyebrow="Target" title="Target" onBack={onBack}/><Feedback kind="error">{error}</Feedback><AppButton label="Try again" tone="secondary" onPress={load}/></AppPage>;
+  if(!detail||!grouped)return <AppPage><PageHeader eyebrow="Target" title="Target" onBack={onBack}/><View style={styles.center}><ActivityIndicator size="large" color={colors.brand}/></View></AppPage>;
   const {item,usage}=detail,unit=item.unitSymbol,cancelled=Boolean(item.cancelledAt),complete=item.status==='complete';
 
   return <AppPage>
-    <PageHeader eyebrow="Contract item" title={item.name} onBack={onBack}/>
+    <PageHeader eyebrow="Target" title={item.name} onBack={onBack}/>
     {message?<Feedback kind="success">{message}</Feedback>:null}
-    {cancelled?<Feedback kind="warning">This contract item was cancelled. It stays in the history with its loads listed, and is left out of the project totals.</Feedback>:null}
+    {cancelled?<Feedback kind="warning">This target was cancelled. It stays in the history with its loads listed, and is left out of the project totals.</Feedback>:null}
 
     <View style={[styles.card,usage.warning==='over'&&!complete?styles.cardOver:usage.warning!=='none'&&!complete?styles.cardNear:complete?styles.cardDone:null]}>
       <View style={styles.head}>
-        <View style={styles.flex}><Text style={styles.allowed}>{contractAmount(usage.allowed)} {unit} allowed</Text><Text style={styles.helper}>{item.unitPriceUsd!==null?`${contractUsd(item.unitPriceUsd)} / ${unit} · contract value ${contractUsd(usage.contractValueUsd!)}`:'No contract price'}</Text></View>
+        <View style={styles.flex}><Text style={styles.allowed}>{contractAmount(usage.allowed)} {unit} allowed</Text><Text style={styles.helper}>{item.unitPriceUsd!==null?`${contractUsd(item.unitPriceUsd)} / ${unit} · target value ${contractUsd(usage.contractValueUsd!)}`:'No target price'}</Text></View>
         <ContractPill item={item} usage={usage}/>
       </View>
       <ContractBar item={item} usage={usage}/>
       <ContractWorkAndUse item={item} usage={usage}/>
       <ContractFigures item={item} usage={usage}/>
-      {!complete&&usage.warning==='near'?<Text style={styles.amber}><Text style={styles.bold}>90% of the contract is used.</Text> {contractAmount(usage.remaining)} {unit} left. Loads can still be recorded; going over is allowed and will be shown as over contract.</Text>:null}
-      {!complete&&usage.warning==='full'?<Text style={styles.amber}><Text style={styles.bold}>The contract quantity is reached.</Text> Loads can still be recorded; going over is allowed and will be shown as over contract.</Text>:null}
-      {usage.overContract?<Text style={styles.red}><Text style={styles.bold}>Over contract by {contractAmount(usage.overBy)} {unit} ({contractPercent(usage)} used).</Text> All loads are kept and counted.{usage.valueOverUsd!==null?` Value over contract: ${contractUsd(usage.valueOverUsd)}.`:''}</Text>:null}
+      {!complete&&usage.warning==='near'?<Text style={styles.amber}><Text style={styles.bold}>90% of the target is used.</Text> {contractAmount(usage.remaining)} {unit} left. Loads can still be recorded; going over is allowed and will be shown as over target.</Text>:null}
+      {!complete&&usage.warning==='full'?<Text style={styles.amber}><Text style={styles.bold}>The target quantity is reached.</Text> Loads can still be recorded; going over is allowed and will be shown as over target.</Text>:null}
+      {usage.overContract?<Text style={styles.red}><Text style={styles.bold}>Over target by {contractAmount(usage.overBy)} {unit} ({contractPercent(usage)} used).</Text> All loads are kept and counted.{usage.valueOverUsd!==null?` Value over target: ${contractUsd(usage.valueOverUsd)}.`:''}</Text>:null}
       {complete&&usage.lateLoads.length?<Text style={styles.amber}><Text style={styles.bold}>A load was added after this item was finished.</Text> {usage.lateLoads.map(value=>`${value.reference} · ${contractDay(value.date)} · ${contractAmount(value.quantity!)} ${unit}`).join('; ')} {usage.lateLoads.length===1?'is':'are'} counted. Reopen the item if the work continued.</Text>:null}
       {complete&&!usage.overContract?<Text style={styles.green}><Text style={styles.bold}>{usage.savingUsd!==null?`Saving: ${contractAmount(usage.leftover)} ${unit} · ${contractUsd(usage.savingUsd)}`:`Leftover: ${contractAmount(usage.leftover)} ${unit}`}</Text>{usage.savingUsd!==null?` (${contractAmount(usage.leftover)} ${unit} × ${contractUsd(item.unitPriceUsd!)}).`:'.'}{item.completedOn?` Finished on ${contractDay(item.completedOn)}.`:''}</Text>:null}
       <View style={styles.facts}>

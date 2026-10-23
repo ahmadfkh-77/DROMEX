@@ -12,7 +12,7 @@ const form=read('src/ui/screens/ContractItemFormScreen.tsx');
 const parts=read('src/ui/components/contracts/ContractParts.tsx');
 
 describe('navigation',()=>{
-  it('opens Contract Quantities from the Command Center and the item form from the project page',()=>{
+  it('opens Quantity Targets from the Command Center and the item form from the project page',()=>{
     expect(app).toContain("screen==='contractQuantities'&&commandProject");
     expect(app).toContain("screen==='contractItemForm'&&commandProject");
     expect(app).toContain("onContracts:()=>navigate('contractQuantities')");
@@ -21,19 +21,19 @@ describe('navigation',()=>{
 });
 
 describe('Command Center card',()=>{
-  it('is a closed-by-default section titled Contract Quantities, shown only when the repository is passed',()=>{
-    expect(center).toContain('title="Contract Quantities"');
+  it('is a closed-by-default section titled Quantity Targets, shown only when the repository is passed',()=>{
+    expect(center).toContain('title="Quantity Targets"');
     expect(center).toContain("open={open.has('contracts')}");
     expect(center).toContain('{contracts&&routes.onContracts?<ExpandableMenuSection');
-    expect(center).toContain('title="Open Contract Quantities"');
-    expect(center).toContain('No contract items yet · add the tender quantities to follow them.');
+    expect(center).toContain('title="Open Quantity Targets"');
+    expect(center).toContain('No targets yet · add the tender quantities to follow them.');
   });
 });
 
 describe('project page',()=>{
   it('has the empty state, the summary from the domain, and the Add button',()=>{
-    expect(page).toContain('title="No contract items yet"');
-    expect(page).toContain('label="+ Add contract item"');
+    expect(page).toContain('title="No targets yet"');
+    expect(page).toContain('label="+ Add target"');
     for(const field of ['summary.overallPercentUsed','summary.completeCount','summary.itemCount','summary.totalSavingUsd','summary.overruns.length'])expect(page).toContain(field);
   });
   it('does no arithmetic of its own',()=>{
@@ -42,19 +42,19 @@ describe('project page',()=>{
 });
 
 describe('item card parts',()=>{
-  it('never draws the bar past its end and says Over contract in words',()=>{
+  it('never draws the bar past its end and says Over target in words',()=>{
     expect(parts).toContain('Math.min(100,Math.max(0,usage.percentUsed))');
-    expect(parts).toContain("'Over contract'");
+    expect(parts).toContain("'Over target'");
     expect(parts).toContain("label:'Over by'");
   });
   it('keeps the work status and the quantity used in two separate boxes (honesty rule)',()=>{
     expect(parts).toContain('>WORK<');
     expect(parts).toContain('>QUANTITY USED<');
-    expect(parts).toContain('of contract');
+    expect(parts).toContain('of target');
   });
 });
 
-describe('contract item form',()=>{
+describe('target form',()=>{
   it('validates with the domain rules, shows both units, and keeps Save disabled until the item is valid',()=>{
     expect(form).toContain('validateContractItemDraft(draft)');
     expect(form).toContain('material · item');

@@ -31,11 +31,11 @@ export function ContractExportSheet({project,contracts,rows,summary,visible,onCl
     }catch(cause){setError(cause instanceof Error?cause.message:'The export could not be created.');}
     finally{setBusy(null);}
   };
-  return <FocusedSheet visible={visible} eyebrow="EXPORT" title="Export Contract Quantities" onClose={onClose} footer={<AppButton label="Close" tone="secondary" onPress={onClose}/>}>
-    <Text style={{color:colors.muted,fontSize:13,lineHeight:19}}>{project.name} · {summary.itemCount} contract item{summary.itemCount===1?'':'s'} · as of today</Text>
+  return <FocusedSheet visible={visible} eyebrow="EXPORT" title="Export Quantity Targets" onClose={onClose} footer={<AppButton label="Close" tone="secondary" onPress={onClose}/>}>
+    <Text style={{color:colors.muted,fontSize:13,lineHeight:19}}>{project.name} · {summary.itemCount} target{summary.itemCount===1?'':'s'} · as of today</Text>
     {picker}
     <SegmentedChoice label="Prices" options={[{id:'without',label:'Without prices'},{id:'with',label:'With prices'}]} selectedId={prices} onSelect={setPrices}/>
-    <Text style={{color:colors.muted,fontSize:13,lineHeight:19}}>Without prices leaves out contract prices, values and savings. Quantities and percentages are the same in both.</Text>
+    <Text style={{color:colors.muted,fontSize:13,lineHeight:19}}>Without prices leaves out target prices, values and savings. Quantities and percentages are the same in both.</Text>
     {error?<Feedback kind="error">{error}</Feedback>:null}{done?<Feedback kind="success">{done}</Feedback>:null}
     <AppButton label="Export PDF" busy={busy==='pdf'} disabled={busy!==null} onPress={()=>void run('pdf')}/>
     <AppButton label="Export Excel" tone="secondary" busy={busy==='excel'} disabled={busy!==null} onPress={()=>void run('excel')}/>

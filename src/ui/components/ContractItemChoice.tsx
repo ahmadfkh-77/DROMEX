@@ -9,8 +9,8 @@ const amount=(value:number)=>String(Number(value.toFixed(3)));
 const percent=(used:number,allowed:number)=>`${(Math.round((used/allowed)*1000)/10).toFixed(1)}%`;
 
 /**
- * DEC-522 Phase C. "Counts toward contract item" inside Make Receipt and New Supplier Load (mockup tab 5). It shows nothing until the
- * project has contract items, so a project without contracts records loads exactly as before. One fitting item is preselected with a Change
+ * DEC-522 Phase C. "Counts toward target" inside Make Receipt and New Supplier Load (mockup tab 5). It shows nothing until the
+ * project has targets, so a project without contracts records loads exactly as before. One fitting item is preselected with a Change
  * button; several ask for a pick (or Not linked); none says the load saves as not linked. Both units are always side by side, and the
  * 90% / over-contract notes never block Confirm. `value` is an item id, '' for Not linked, or undefined while nothing is chosen.
  */
@@ -60,19 +60,19 @@ export function ContractItemChoice({contracts,projectId,materialId,materialName,
   const pick=(next:string)=>{onChange(next);setChanging(false);};
 
   return <View style={open?styles.openGroup:styles.card}>
-    <Text style={open?styles.openLabel:styles.label}>{open?'CONTRACT ITEM':'Counts toward contract item'}{several?' *':''}</Text>
-    {!candidates.length?<Text style={[styles.note,styles.quiet]}>Not linked to a contract item. {materialName??'This material'} is in no contract item of this project. The load saves as usual.</Text>:null}
+    <Text style={open?styles.openLabel:styles.label}>{open?'TARGET':'Counts toward target'}{several?' *':''}</Text>
+    {!candidates.length?<Text style={[styles.note,styles.quiet]}>Not linked to a target. {materialName??'This material'} is in no target of this project. The load saves as usual.</Text>:null}
     {picking?<View style={styles.list}>
       {several&&value===undefined?<Text style={styles.helper}>{materialName??'This material'} is in {candidates.length} items of this project. Choose one.</Text>:null}
-      {candidates.map(row=><Choice key={row.item.id} on={value===row.item.id} title={row.item.name} detail={`${amount(row.usage.used)} of ${amount(row.item.quantity)} ${row.item.unitSymbol} used · ${row.usage.overContract?'over contract':percent(row.usage.used,row.item.quantity)}${row.item.status==='complete'?' · Complete':''}`} unit={row.item.unitSymbol} onPress={()=>pick(row.item.id)}/>)}
-      <Choice on={value===''} title="Not linked to a contract item" onPress={()=>pick('')}/>
+      {candidates.map(row=><Choice key={row.item.id} on={value===row.item.id} title={row.item.name} detail={`${amount(row.usage.used)} of ${amount(row.item.quantity)} ${row.item.unitSymbol} used · ${row.usage.overContract?'over target':percent(row.usage.used,row.item.quantity)}${row.item.status==='complete'?' · Complete':''}`} unit={row.item.unitSymbol} onPress={()=>pick(row.item.id)}/>)}
+      <Choice on={value===''} title="Not linked to a target" onPress={()=>pick('')}/>
     </View>:null}
     {!picking&&candidates.length?<View style={styles.selected}>
       <View style={styles.selectedCopy}>
-        <Text style={styles.selectedTitle} numberOfLines={2}>{chosen?chosen.item.name:'Not linked to a contract item'}</Text>
+        <Text style={styles.selectedTitle} numberOfLines={2}>{chosen?chosen.item.name:'Not linked to a target'}</Text>
         {chosen?<Text style={styles.helper}>{amount(chosen.usage.used)} of {amount(chosen.item.quantity)} {chosen.item.unitSymbol} used · {percent(chosen.usage.used,chosen.item.quantity)}{chosen.item.status==='complete'?' · Complete':''}</Text>:null}
       </View>
-      <TouchableOpacity style={styles.change} onPress={()=>setChanging(true)} accessibilityRole="button" accessibilityLabel="Change the contract item"><Text style={styles.changeText}>Change</Text></TouchableOpacity>
+      <TouchableOpacity style={styles.change} onPress={()=>setChanging(true)} accessibilityRole="button" accessibilityLabel="Change the target"><Text style={styles.changeText}>Change</Text></TouchableOpacity>
     </View>:null}
     {chosen&&!picking?<Preview row={chosen} loadUnitId={loadUnitId} loadUnitSymbol={loadUnitSymbol} loadQuantity={loadQuantity}/>:null}
   </View>;
@@ -94,8 +94,8 @@ function Preview({row,loadUnitId,loadUnitSymbol,loadQuantity}:{row:ContractRowVi
   if(item.status==='complete')notes.push({tone:'amber',text:'This item is finished. The load will still count as used, and the item will be flagged.'});
   if(same&&loadQuantity!==null&&loadQuantity>0){
     const after=usage.used+loadQuantity,line=`${amount(after)} of ${amount(item.quantity)} ${item.unitSymbol} · ${percent(after,item.quantity)}`;
-    if(usage.overContract)notes.push({tone:'red',text:`${item.name} is already over contract. This load will add ${amount(loadQuantity)} ${item.unitSymbol} (now ${line}). You can still confirm.`});
-    else if(after>item.quantity+1e-9)notes.push({tone:'red',text:`This load takes ${item.name} over contract: ${line}. You can still confirm.`});
+    if(usage.overContract)notes.push({tone:'red',text:`${item.name} is already over target. This load will add ${amount(loadQuantity)} ${item.unitSymbol} (now ${line}). You can still confirm.`});
+    else if(after>item.quantity+1e-9)notes.push({tone:'red',text:`This load takes ${item.name} over target: ${line}. You can still confirm.`});
     else if(after/item.quantity>=CONTRACT_NEAR_RATIO-1e-9)notes.push({tone:'amber',text:`After this load: ${line}. You can still confirm.`});
     else notes.push({tone:'quiet',text:`After this load: ${line}.`});
   }

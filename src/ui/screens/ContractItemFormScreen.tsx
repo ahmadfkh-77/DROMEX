@@ -14,7 +14,7 @@ import {colors} from '../theme';
 const emptyDraft:ContractItemDraft={name:'',unitId:'',quantity:'',unitPriceUsd:'',materialIds:[]};
 
 /**
- * DEC-522 Phase D1 (mockup tab 4). Add or edit a contract item: name, contract quantity, unit, an optional price, and the Catalog
+ * DEC-522 Phase D1 (mockup tab 4). Add or edit a target: name, target quantity, unit, an optional price, and the Catalog
  * materials whose loads count, each with its usual unit beside the item's unit. Once loads or adjustments count, every edit needs a reason
  * and the old values stay in the history. A mistaken item is cancelled with a reason, never deleted.
  */
@@ -38,7 +38,7 @@ export function ContractItemFormScreen({project,contracts,contractItemId,onBack,
       if(!active)return;
       setSetup(form);setDetail(item);
       if(item)setDraft({name:item.item.name,unitId:item.item.unitId,quantity:String(item.item.quantity),unitPriceUsd:item.item.unitPriceUsd===null?'':item.item.unitPriceUsd.toFixed(2),materialIds:item.item.materialIds});
-    }).catch(cause=>{if(active)setLoadError(cause instanceof Error?cause.message:'Could not open the contract item.');});
+    }).catch(cause=>{if(active)setLoadError(cause instanceof Error?cause.message:'Could not open the target.');});
     return()=>{active=false;};
   },[contracts,contractItemId]);
 
@@ -67,18 +67,18 @@ export function ContractItemFormScreen({project,contracts,contractItemId,onBack,
     try{
       if(detail)await contracts.editItem(detail.item.id,draft,reason);else await contracts.createItem(project.id,draft);
       onSaved();
-    }catch(cause){setError(cause instanceof Error?cause.message:'Could not save the contract item.');}finally{setBusy(false);}
+    }catch(cause){setError(cause instanceof Error?cause.message:'Could not save the target.');}finally{setBusy(false);}
   }
   function confirmCancel(){
     if(!detail)return;
-    if(!cancelReason.trim()){setError('Enter the reason for cancelling this contract item.');return;}
-    Alert.alert('Cancel this contract item?','It stays in the history, keeps its loads listed, and is left out of the project totals. This cannot be undone.',[
+    if(!cancelReason.trim()){setError('Enter the reason for cancelling this target.');return;}
+    Alert.alert('Cancel this target?','It stays in the history, keeps its loads listed, and is left out of the project totals. This cannot be undone.',[
       {text:'Keep it',style:'cancel'},
-      {text:'Cancel contract item',style:'destructive',onPress:()=>{setBusy(true);setError(null);contracts.cancelItem(detail.item.id,cancelReason).then(onSaved).catch(cause=>setError(cause instanceof Error?cause.message:'Could not cancel the contract item.')).finally(()=>setBusy(false));}},
+      {text:'Cancel target',style:'destructive',onPress:()=>{setBusy(true);setError(null);contracts.cancelItem(detail.item.id,cancelReason).then(onSaved).catch(cause=>setError(cause instanceof Error?cause.message:'Could not cancel the target.')).finally(()=>setBusy(false));}},
     ]);
   }
 
-  const title=detail?detail.item.name:'Contract item';
+  const title=detail?detail.item.name:'Target';
   if(loadError)return <AppPage><PageHeader eyebrow={project.name} title={title} onBack={onBack}/><Feedback kind="error">{loadError}</Feedback></AppPage>;
   if(!setup||(contractItemId&&!detail))return <AppPage><PageHeader eyebrow={project.name} title={title} onBack={onBack}/><View style={styles.center}><ActivityIndicator size="large" color={colors.brand}/></View></AppPage>;
 
@@ -87,16 +87,16 @@ export function ContractItemFormScreen({project,contracts,contractItemId,onBack,
 
   return <AppPage keyboard>
     <PageHeader eyebrow={editing?'Edit':project.name} title={title} onBack={onBack}/>
-    {cancelled?<Feedback kind="warning">This contract item was cancelled. It stays in the history and is left out of the totals.</Feedback>:null}
+    {cancelled?<Feedback kind="warning">This target was cancelled. It stays in the history and is left out of the totals.</Feedback>:null}
     {showErrors?<Feedback kind="error">{result.errors.join('\n')}</Feedback>:null}
     {error?<Feedback kind="error">{error}</Feedback>:null}
     <AppCard>
       <AppField label="Name *" value={draft.name} onChangeText={name=>change({name})} placeholder="For example Base course" editable={!cancelled}/>
       <View style={styles.row}>
-        <View style={styles.flex}><AppField label="Contract quantity *" value={draft.quantity} onChangeText={quantity=>change({quantity})} keyboardType="decimal-pad" editable={!cancelled}/></View>
+        <View style={styles.flex}><AppField label="Target quantity *" value={draft.quantity} onChangeText={quantity=>change({quantity})} keyboardType="decimal-pad" editable={!cancelled}/></View>
         <View style={styles.flex}><SearchableSelect label="Unit *" options={setup.units.map(unit=>({id:unit.id,label:unit.symbol,detail:unit.name}))} selectedId={draft.unitId} onSelect={unitId=>change({unitId})} placeholder="Choose"/></View>
       </View>
-      <AppField label={`Contract price per unit, USD${unitSymbol?` / ${unitSymbol}`:''} (optional)`} value={draft.unitPriceUsd} onChangeText={unitPriceUsd=>change({unitPriceUsd})} keyboardType="decimal-pad" placeholder="Not set" editable={!cancelled}/>
+      <AppField label={`Target price per unit, USD${unitSymbol?` / ${unitSymbol}`:''} (optional)`} value={draft.unitPriceUsd} onChangeText={unitPriceUsd=>change({unitPriceUsd})} keyboardType="decimal-pad" placeholder="Not set" editable={!cancelled}/>
     </AppCard>
 
     <AppCard title="Materials that count" hint="The Catalog materials whose loads can count toward this item. Each shows its usual unit beside the item's unit. Tap a material to take it off.">
@@ -118,7 +118,7 @@ export function ContractItemFormScreen({project,contracts,contractItemId,onBack,
       <AppField label="Reason for the change *" value={reason} onChangeText={setReason} placeholder="For example Variation order VO-03 approved"/>
       <Text style={styles.helper}>Required because loads or adjustments already count. The old values stay in the history.</Text>
     </AppCard>:null}
-    {!cancelled?<AppButton label={editing?'Save change':'Save contract item'} onPress={()=>void save()} disabled={!canSave} busy={busy}/>:null}
+    {!cancelled?<AppButton label={editing?'Save change':'Save target'} onPress={()=>void save()} disabled={!canSave} busy={busy}/>:null}
 
     {detail?<AppCard title="History">
       {detail.history.map(line=><View key={line.id} style={styles.history}>
@@ -127,11 +127,11 @@ export function ContractItemFormScreen({project,contracts,contractItemId,onBack,
       </View>)}
     </AppCard>:null}
 
-    {detail&&!cancelled?(cancelling?<AppCard title="Cancel this contract item" hint="It stays in the history with its loads listed, and is left out of the project totals.">
+    {detail&&!cancelled?(cancelling?<AppCard title="Cancel this target" hint="It stays in the history with its loads listed, and is left out of the project totals.">
       <AppField label="Reason *" value={cancelReason} onChangeText={setCancelReason} placeholder="For example Created by mistake"/>
-      <AppButton label="Cancel contract item" tone="danger" onPress={confirmCancel} busy={busy}/>
+      <AppButton label="Cancel target" tone="danger" onPress={confirmCancel} busy={busy}/>
       <AppButton label="Keep it" tone="secondary" onPress={()=>{setCancelling(false);setCancelReason('');}}/>
-    </AppCard>:<AppButton label="Cancel this contract item" tone="secondary" onPress={()=>setCancelling(true)}/>):null}
+    </AppCard>:<AppButton label="Cancel this target" tone="secondary" onPress={()=>setCancelling(true)}/>):null}
   </AppPage>;
 }
 

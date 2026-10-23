@@ -61,7 +61,7 @@ function matchesSearch(purchase:QuarryPurchase,query:string){const haystack=[pur
 const typedQuantity=(value:string):number|null=>{const parsed=Number(value.trim().replace(',','.'));return value.trim()&&Number.isFinite(parsed)&&parsed>0?parsed:null;};
 type ExtraItem={contractItemId?:string;key:string;itemId:string;unitId:string;quantity:string;pieces:string;price:string;diameterMm:string;lengthPerBarM:string;calculatedWeightKg:string;weightSource:''|'typed'|'calculated'};
 export function QuarryPurchasesScreen({ repository, onBack,initialProjectId,startEntry=false,initialPurchaseId,onOpenDocuments,onOpenFuelBatch,bitumen,onOpenBitumenBatch,stock,onOpenStockBatch,documents,onOpenDocument,fuel,contracts }: {
-  /** DEC-522. Offers the contract item each item of the delivery counts toward; absent, the wizard is exactly as before. */
+  /** DEC-522. Offers the target each item of the delivery counts toward; absent, the wizard is exactly as before. */
   contracts?:ContractQuantitiesRepository;
   /** DEC-506. Supplies the diesel batches shown as each supplier's Diesel deliveries. */
   fuel?:FuelRepository; repository: QuarryRepository; onBack: () => void;initialProjectId?:string|null;startEntry?:boolean;initialPurchaseId?:string|null;
@@ -196,7 +196,7 @@ export function QuarryPurchasesScreen({ repository, onBack,initialProjectId,star
     ['Items',`${entryItem} · ${draft.quantityCubicMetres||'0'} ${entryUnit}${extras.length?` + ${extras.length} more`:''}`,2],
     ['Delivery',draft.deliveryMethod==='company'?`Our driver · ${setup.drivers.find(value=>value.id===draft.driverId)?.name??'not chosen'} · ${setup.trucks.find(value=>value.id===draft.truckId)?.plate??'no truck'}`:`Supplier delivering${draft.supplierTruckPlate?` · ${draft.supplierTruckPlate}`:''}`,2],
     ['Ticket / invoice',draft.supplierTicketNumber||'Not recorded',2],
-    ...(contractLabel?[['Contract item',`${contractLabel}${extras.length?' (first item)':''}`,2] as [string,string,number]]:[]),
+    ...(contractLabel?[['Target',`${contractLabel}${extras.length?' (first item)':''}`,2] as [string,string,number]]:[]),
   ];
   if(showEntry)return <View style={{flex:1}}><ScrollView style={{flex:1}} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"><Header title="New Supplier Load" onBack={goBackStep}/>
     <View style={styles.stepTrack} accessibilityRole="progressbar" accessibilityLabel={`Step ${entryStep} of 4`}>{[1,2,3,4].map(number=><View key={number} style={[styles.stepDot,number<entryStep&&styles.stepDotDone,number===entryStep&&styles.stepDotOn]}/>)}</View>

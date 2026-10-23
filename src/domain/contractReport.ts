@@ -2,7 +2,7 @@ import type {ContractItem,ContractProjectSummary,ContractUsage} from './contract
 import {localDateKey} from './fuel';
 
 /**
- * DEC-522 Phase E. The Contract Quantities report, shared by the PDF and the Excel workbook. With prices it is the internal "Contract
+ * DEC-522 Phase E. The Quantity Targets report, shared by the PDF and the Excel workbook. With prices it is the internal "Contract
  * Quantities and Savings" report; without prices it is client-safe: prices, values, leftovers and savings are left out, and nothing else
  * changes. Honesty rule: every used quantity and percent is the true one (loads plus visible adjustments) in both versions, and the work
  * status is a separate column. Units are never converted or added together, so there is no grand total of quantities.
@@ -35,7 +35,7 @@ export function buildContractReport(rows:readonly ContractReportInput[],summary:
   const live=rows.filter(row=>!row.item.cancelledAt);
   const reportRows=live.map(({item,usage,materials}):ContractReportRow=>{
     const complete=item.status==='complete';
-    const status=complete?(usage.overContract?'Complete · over contract':`Complete ${item.completedOn?day(item.completedOn):''}`.trim()):usage.overContract?'Over contract':'In progress';
+    const status=complete?(usage.overContract?'Complete · over target':`Complete ${item.completedOn?day(item.completedOn):''}`.trim()):usage.overContract?'Over target':'In progress';
     return{
       name:item.name,materials:materials.map(material=>material.name).join(', '),unit:item.unitSymbol,
       contract:usage.allowed,fromLoads:usage.fromLoads,adjustments:usage.adjustmentsTotal,used:usage.used,remaining:usage.remaining,percentUsed:usage.percentUsed,
@@ -53,12 +53,12 @@ export function buildContractReport(rows:readonly ContractReportInput[],summary:
     'Used = quantity from loads plus adjustments, each shown in its own column. Units are never converted or added together.',
     '"% used" is the true quantity used. "Complete" is the work status and does not change it.',
     'Only Active loads count; a cancelled load is left out. A load in another unit, or without a quantity, is listed under Not counted.',
-    ...(prices?['Saving = leftover × contract price, only for an item with a price. * Estimate: the item is still in progress.']:[]),
+    ...(prices?['Saving = leftover × target price, only for an item with a price. * Estimate: the item is still in progress.']:[]),
   ];
   const date=localDateKey(new Date(generatedAt));
   return{
-    title:prices?'Contract Quantities and Savings':'Contract Quantities',
-    fileName:`DROMEX-Contract-Quantities-${safe(project.name)}-${prices?'With':'Without'}-Prices-${date}.pdf`,
+    title:prices?'Quantity Targets and Savings':'Quantity Targets',
+    fileName:`DROMEX-Quantity-Targets-${safe(project.name)}-${prices?'With':'Without'}-Prices-${date}.pdf`,
     empty:live.length===0,includePrices:prices,generatedAt,project,
     summary:{overallPercentUsed:summary.overallPercentUsed,basis:summary.overallBasis,itemsComplete:`${summary.completeCount} of ${summary.itemCount}`,
       totalSavingUsd:prices?summary.totalSavingUsd:null,estimatedSavingUsd:prices?summary.estimatedSavingUsd:null},

@@ -1,7 +1,7 @@
 /**
- * Contract Quantities (DEC-522, Phase A: rules and calculations only).
+ * Quantity Targets (DEC-522, Phase A: rules and calculations only).
  *
- * A project is bid on quantities from the tender. A contract item holds one allowed quantity in one unit, linked to one or more Catalog
+ * A project is bid on quantities from the tender. A target holds one allowed quantity in one unit, linked to one or more Catalog
  * materials. This module works out what has been used, what is left and which warning applies. Honesty rule: the used quantity is always
  * the real one -- active loads linked to the item plus visible, reasoned adjustments -- and the status "Complete" never changes it.
  * Units are never converted: a load in another unit is listed as not counted. Nothing here blocks a load.
@@ -12,9 +12,9 @@ export type ContractItemStatus='in_progress'|'complete';
 export type ContractItem={
   id:string;projectId:string;name:string;
   unitId:string;unitSymbol:string;
-  /** The allowed contract quantity, above zero. */
+  /** The allowed target quantity, above zero. */
   quantity:number;
-  /** Optional contract price per unit, in USD. */
+  /** Optional target price per unit, in USD. */
   unitPriceUsd:number|null;
   /** Catalog materials this item may count. Links that are never used are kept. */
   materialIds:string[];
@@ -33,7 +33,7 @@ export type ContractLoad={
   /** The day the load was delivered (YYYY-MM-DD). */
   date:string;
   status:'Active'|'Cancelled';
-  /** The contract item the Owner chose for this load, or null when it is not linked to one. */
+  /** The target the Owner chose for this load, or null when it is not linked to one. */
   contractItemId:string|null;
 };
 
@@ -57,14 +57,14 @@ export type ContractUsage={
   warning:ContractWarning;
   valueUsedUsd:number|null;
   valueRemainingUsd:number|null;
-  /** contract quantity × contract price, and the over-contract quantity × price; null without a price. */
+  /** target quantity × target price, and the over-target quantity × price; null without a price. */
   contractValueUsd:number|null;
   valueOverUsd:number|null;
   countedLoads:ContractLoad[];
   notCounted:{load:ContractLoad;reason:ContractNotCountedReason}[];
   /** What is left of the allowed quantity (never below zero). For a finished item this is the recorded leftover. */
   leftover:number;
-  /** leftover × contract price; null without a price. */
+  /** leftover × target price; null without a price. */
   savingUsd:number|null;
   /** True while the item is still in progress: the saving is then an estimate, not a result. */
   savingIsEstimate:boolean;
@@ -117,7 +117,7 @@ export function computeContractUsage(item:ContractItem,loads:readonly ContractLo
 
 export function validateContractReason(reason:string,what:string):string{
   const value=reason.trim().replace(/\s+/g,' ');
-  if(!value)throw new Error(`Enter the reason for ${what} this contract item.`);
+  if(!value)throw new Error(`Enter the reason for ${what} this target.`);
   return value;
 }
 
@@ -129,12 +129,12 @@ export type ContractItemValues={name:string;unitId:string;quantity:number;unitPr
 export function validateContractItemDraft(draft:ContractItemDraft):{ok:true;value:ContractItemValues}|{ok:false;errors:string[]}{
   const errors:string[]=[];
   const name=draft.name.trim().replace(/\s+/g,' ');
-  if(!name)errors.push('Enter the contract item name.');
+  if(!name)errors.push('Enter the target name.');
   if(!draft.unitId)errors.push('Choose the unit.');
   const quantity=typedNumber(draft.quantity);
-  if(quantity===null||quantity<=0)errors.push('The contract quantity must be greater than zero.');
+  if(quantity===null||quantity<=0)errors.push('The target quantity must be greater than zero.');
   let unitPriceUsd:number|null=null;
-  if(draft.unitPriceUsd.trim()){const price=typedNumber(draft.unitPriceUsd);if(price===null||price<0)errors.push('Enter the contract price as a number, zero or more.');else unitPriceUsd=price;}
+  if(draft.unitPriceUsd.trim()){const price=typedNumber(draft.unitPriceUsd);if(price===null||price<0)errors.push('Enter the target price as a number, zero or more.');else unitPriceUsd=price;}
   const materialIds=[...new Set(draft.materialIds)];
   if(!materialIds.length)errors.push('Link at least one material.');
   return errors.length?{ok:false,errors}:{ok:true,value:{name,unitId:draft.unitId,quantity:quantity!,unitPriceUsd,materialIds}};
@@ -162,8 +162,8 @@ function validDay(day:string):boolean{
 }
 
 export function finishContractItem(item:ContractItem,usage:Pick<ContractUsage,'used'|'leftover'|'savingUsd'>,completedOn:string,now:Date=new Date()):{item:ContractItem;entry:ContractHistoryEntry}{
-  if(item.cancelledAt)throw new Error('A cancelled contract item cannot be finished.');
-  if(item.status==='complete')throw new Error('This contract item is already finished.');
+  if(item.cancelledAt)throw new Error('A cancelled target cannot be finished.');
+  if(item.status==='complete')throw new Error('This target is already finished.');
   if(!validDay(completedOn))throw new Error('Choose a valid day.');
   return{
     item:{...item,status:'complete',completedOn},
@@ -172,7 +172,7 @@ export function finishContractItem(item:ContractItem,usage:Pick<ContractUsage,'u
 }
 
 export function reopenContractItem(item:ContractItem,reason:string,now:Date=new Date()):{item:ContractItem;entry:ContractHistoryEntry}{
-  if(item.status!=='complete')throw new Error('This contract item is not finished.');
+  if(item.status!=='complete')throw new Error('This target is not finished.');
   const clean=validateContractReason(reason,'reopening');
   return{
     item:{...item,status:'in_progress',completedOn:null},
@@ -181,7 +181,7 @@ export function reopenContractItem(item:ContractItem,reason:string,now:Date=new 
 }
 
 export function cancelContractItem(item:ContractItem,reason:string,now:Date=new Date()):{item:ContractItem;entry:ContractHistoryEntry}{
-  if(item.cancelledAt)throw new Error('This contract item is already cancelled.');
+  if(item.cancelledAt)throw new Error('This target is already cancelled.');
   const clean=validateContractReason(reason,'cancelling');
   return{item:{...item,cancelledAt:now.toISOString()},entry:{kind:'cancelled',contractItemId:item.id,reason:clean,createdAt:now.toISOString(),details:{}}};
 }
@@ -206,10 +206,10 @@ export function applyContractItemEdit(item:ContractItem,changes:ContractItemChan
   return{item:{...next,name:check.value.name},entry:{kind:'edited',contractItemId:item.id,reason,createdAt:now.toISOString(),details:{changes:diff}}};
 }
 
-/* ── Choosing the contract item for a load ──────────────────────────────────────────────────────────────────────────────────── */
+/* ── Choosing the target for a load ──────────────────────────────────────────────────────────────────────────────────── */
 
 /**
- * The contract items of a project a load of this material could count toward. Exactly one candidate is preselected (visible and
+ * The targets of a project a load of this material could count toward. Exactly one candidate is preselected (visible and
  * changeable); with several the Owner picks; with none the load is saved as not linked. A finished item stays selectable, because a
  * load after Finish still counts as used; a cancelled one does not.
  */
@@ -253,7 +253,7 @@ export type ContractProjectSummary={
   itemCount:number;
   /** Items whose work is marked Complete (a status; it says nothing about the quantity used). */
   completeCount:number;
-  /** The average percent used, or null with no items. Weighted by contract value when every item has a price, otherwise by item. */
+  /** The average percent used, or null with no items. Weighted by target value when every item has a price, otherwise by item. */
   overallPercentUsed:number|null;
   overallBasis:'value'|'items';
   /** The saving of finished items only: a result, never an estimate. */
@@ -293,7 +293,7 @@ export function summarizeContractProject(rows:readonly ContractRow[]):ContractPr
  * preselected and with none the load saves unlinked, so neither asks anything. Returns the message, or null when the load can be saved.
  */
 export function contractChoiceIssue(candidates:readonly ContractItem[],value:string|undefined):string|null{
-  return candidates.length>1&&value===undefined?'Choose the contract item this load counts toward, or Not linked.':null;
+  return candidates.length>1&&value===undefined?'Choose the target this load counts toward, or Not linked.':null;
 }
 
 /* ── Words for the screens ──────────────────────────────────────────────────────────────────────────────────────────────────── */
@@ -304,13 +304,13 @@ export const contractHistoryLabel=(kind:ContractHistoryKind)=>historyLabels[kind
 const usd=(value:number|null)=>value===null?'not set':`$${value.toFixed(2)}`;
 const num=(value:number)=>String(Number(value.toFixed(3)));
 
-/** The lines shown before an edit is saved ("Contract quantity 500 → 550 m³"), so the Owner sees exactly what changes. */
+/** The lines shown before an edit is saved ("Target quantity 500 → 550 m³"), so the Owner sees exactly what changes. */
 export function contractChangeLines(item:ContractItem,next:Pick<ContractItem,'name'|'unitId'|'unitSymbol'|'quantity'|'unitPriceUsd'|'materialIds'>,materialNames:Record<string,string>):string[]{
   const lines:string[]=[];
   if(next.name!==item.name)lines.push(`Name ${item.name} → ${next.name}`);
   if(next.unitId!==item.unitId)lines.push(`Unit ${item.unitSymbol} → ${next.unitSymbol}`);
-  if(next.quantity!==item.quantity)lines.push(`Contract quantity ${num(item.quantity)} → ${num(next.quantity)} ${next.unitSymbol}`);
-  if(next.unitPriceUsd!==item.unitPriceUsd)lines.push(`Contract price ${usd(item.unitPriceUsd)} → ${usd(next.unitPriceUsd)}`);
+  if(next.quantity!==item.quantity)lines.push(`Target quantity ${num(item.quantity)} → ${num(next.quantity)} ${next.unitSymbol}`);
+  if(next.unitPriceUsd!==item.unitPriceUsd)lines.push(`Target price ${usd(item.unitPriceUsd)} → ${usd(next.unitPriceUsd)}`);
   const name=(id:string)=>materialNames[id]??id;
   const added=next.materialIds.filter(id=>!item.materialIds.includes(id)),removed=item.materialIds.filter(id=>!next.materialIds.includes(id));
   if(added.length)lines.push(`Materials added: ${added.map(name).join(', ')}`);

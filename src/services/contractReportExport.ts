@@ -10,7 +10,7 @@ import {imageUriToDataUrl} from './media';
 
 /** DEC-522 Phase E. Saves the report as a PDF or an Excel workbook under the chosen header company and opens the share sheet. */
 export async function exportAndShareContractReport(report:ContractReport,company:{name:string;logoUri:string|null;contactLine:string|null},kind:'pdf'|'excel'):Promise<string>{
-  if(report.empty)throw new Error('This project has no contract items, so there is nothing to export.');
+  if(report.empty)throw new Error('This project has no targets, so there is nothing to export.');
   if(!FileSystem.documentDirectory)throw new Error('Document storage is unavailable.');
   const directory=`${FileSystem.documentDirectory}exports/`;
   await FileSystem.makeDirectoryAsync(directory,{intermediates:true});

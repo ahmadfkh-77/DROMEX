@@ -23,7 +23,7 @@ const priorityColor:Record<WorkspaceIssue['priority'],string>={Urgent:colors.dan
 const priorityTint:Record<WorkspaceIssue['priority'],string>={Urgent:'#FCE8E6',High:'#FFF3D8',Normal:'#E8F0F7',Low:'#F1EFEA'};
 
 export function ProjectCommandCenterScreen({project,repository,financialRepository,loadRepository,contracts,routes,onBack,initialPanel,onProjectUpdated}:{project:Project;repository:WorkspaceRepository;
-  /** DEC-522. The Contract Quantities card; absent, the Command Center is exactly as before. */
+  /** DEC-522. The Quantity Targets card; absent, the Command Center is exactly as before. */
   contracts?:ContractQuantitiesRepository;financialRepository:FinancialRepository;loadRepository:LoadRepository;routes:Routes;onBack:()=>void;initialPanel?:'issues'|'photos'|null;onProjectUpdated?:(project:Project)=>void}){
   const[status,setStatus]=useState<ScreenStatus>('loading');
   const[loadError,setLoadError]=useState<string|null>(null);
@@ -145,9 +145,9 @@ export function ProjectCommandCenterScreen({project,repository,financialReposito
       {activityGroups.length?activityGroups.map((group,index)=>{const key=`activity-${group.type}`;return <ExpandableMenuSection key={group.type} title={group.label} hint={`${group.activities.length===50?'Latest ':''}${group.activities.length} record${group.activities.length===1?'':'s'} · independent of the timeline date filter above`} tone="cream" marker={String(index+1).padStart(2,'0')} refined polished open={open.has(key)} onToggle={()=>toggle(key)}>{group.activities.map(value=><ActivityRow key={`${value.type}-${value.id}-${value.occurredAt}`} activity={value}/>)}</ExpandableMenuSection>;}):<EmptyState title="No project activity" body="New project-linked records will appear here automatically under their record-type label."/>}
     </ExpandableMenuSection>
 
-    {contracts&&routes.onContracts?<ExpandableMenuSection title="Contract Quantities" hint={contractCardHint(contractView)} marker="07" refined polished open={open.has('contracts')} onToggle={()=>toggle('contracts')}>
+    {contracts&&routes.onContracts?<ExpandableMenuSection title="Quantity Targets" hint={contractCardHint(contractView)} marker="07" refined polished open={open.has('contracts')} onToggle={()=>toggle('contracts')}>
       {(contractView?.rows??[]).filter(row=>!row.item.cancelledAt).map(row=><View key={row.item.id} style={styles.contractRow}><Text style={styles.contractName} numberOfLines={1}>{row.item.name}</Text><ContractPill item={row.item} usage={row.usage}/></View>)}
-      <MenuAction refined polished number="01" title="Open Contract Quantities" body="Allowed, used and remaining for each tender quantity of this project." onPress={routes.onContracts}/>
+      <MenuAction refined polished number="01" title="Open Quantity Targets" body="Allowed, used and remaining for each tender quantity of this project." onPress={routes.onContracts}/>
     </ExpandableMenuSection>:null}
 
     <ExpandableMenuSection title="Records and Documents" hint="Open project loads, reports, PDFs, and Excel output." marker={contracts&&routes.onContracts?'08':'07'} refined polished open={open.has('documents')} onToggle={()=>toggle('documents')}>
@@ -159,12 +159,12 @@ export function ProjectCommandCenterScreen({project,repository,financialReposito
   </AppPage>;
 }
 
-/** DEC-522. The closed card line: how many items, the true quantity used, and how many are over contract. */
+/** DEC-522. The closed card line: how many items, the true quantity used, and how many are over target. */
 function contractCardHint(view:{rows:ContractRowView[];summary:ContractProjectSummary}|null):string{
-  if(!view||!view.summary.itemCount)return 'No contract items yet · add the tender quantities to follow them.';
+  if(!view||!view.summary.itemCount)return 'No targets yet · add the tender quantities to follow them.';
   const items=`${view.summary.itemCount} item${view.summary.itemCount===1?'':'s'}`;
   const used=view.summary.overallPercentUsed===null?'':` · ${view.summary.overallPercentUsed.toFixed(1)}% used`;
-  const over=view.summary.overruns.length?` · ${view.summary.overruns.length} over contract`:'';
+  const over=view.summary.overruns.length?` · ${view.summary.overruns.length} over target`:'';
   return items+used+over;
 }
 
