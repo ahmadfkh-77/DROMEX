@@ -17,6 +17,7 @@ import {
 import {paymentStatus} from '../../domain/financials';
 import {DEFAULT_STEEL_DIAMETERS,defaultSteelSettings,validateSteelSettings,type SteelSettings} from '../../domain/rebar';
 import type { QuarryRepository } from './QuarryRepository';
+import {reconcileContractLink} from './contractLinks';
 
 type PurchaseRow = {
   id:string;purchase_number:string;confirmed_at:string;supplier_id:string;supplier_name:string;
@@ -245,6 +246,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
         clean(draft.notes),JSON.stringify(history),now,id);
       await this.db.runAsync('UPDATE quarry_purchases SET destination_type=?,company_site_id=? WHERE id=?',destination.type,destination.companySiteId,id);
       await this.db.runAsync('UPDATE quarry_purchases SET pieces=?,diameter_mm=?,length_per_bar_m=?,calculated_weight_kg=?,weight_source=? WHERE id=?',piecesOf(draft.pieces),decimalOf(draft.diameterMm),decimalOf(draft.lengthPerBarM),decimalOf(draft.calculatedWeightKg),sourceOf(draft),id);
+      await reconcileContractLink(this.db,'supplier',id,now);
       await this.enqueue('quarryPurchase',id,{id,correctedAt:now,reason,changes,paymentStatus:status,destinationType:destination.type,companySiteId:destination.companySiteId});
     });
     return this.get(id);

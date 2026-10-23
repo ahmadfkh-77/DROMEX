@@ -40,6 +40,7 @@ import { supplierSignatureForNewLoad } from './SqliteCompanyHeaderRepository';
 import { correctionChanges, correctionToLoadDraft, correctionVatRate, isFullCorrection, loadLocalDate, validateLoadCorrection, type LoadCorrectionContext } from '../../domain/loadCorrection';
 import type { SignerDisplay, SignerSnapshot } from '../../domain/documentSigners';
 import { parseStoredSignature } from '../../domain/supervisors';
+import { reconcileContractLink } from './contractLinks';
 
 type UnitRow = { id: string; name: string; symbol: string; is_active: number };
 type ConversionRow = {
@@ -720,6 +721,7 @@ export class SqliteLoadRepository implements LoadRepository {
         conversionId,conversionName,conversionRule,outputSymbol,calculation.convertedQuantity,calculation.billedQuantity,
         isDirect?entered:null,isDirect?directUnit!.id:null,isDirect?directUnit!.name:null,isDirect?directUnit!.symbol:null,
         price==null?null:Math.round(price*100),subtotal,price==null?null:Math.round(vatRate*100),vat,total,paymentStatusValue,clean(effective.notes),signaturePaths.length?JSON.stringify(signaturePaths):null,signaturePaths.length?'Signed':'Unsigned',JSON.stringify(history),now,loadId);
+      await reconcileContractLink(this.db,'company',loadId,now);
       if(draft.supplierSignature!==undefined){
         await this.db.runAsync('UPDATE loads SET supplier_signature_json=? WHERE id=?',supplier?JSON.stringify(supplier):null,loadId);
         if(supplier)await recordSignerEvent(this.db,supplier.signerId,'used',now,null,`Delivery Authorization ${row.transaction_number}`);

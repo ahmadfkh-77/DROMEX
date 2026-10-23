@@ -75,13 +75,19 @@ const round6=(value:number)=>Math.round(value*1e6)/1e6;
 const round1=(value:number)=>Math.round(value*1000)/10;
 const roundMoney=(value:number)=>Math.round(value*100)/100;
 
+/** Why an active load linked to the item is left out of Used, or null when it counts. */
+export function notCountedReason(item:Pick<ContractItem,'unitId'>,load:ContractLoad):ContractNotCountedReason|null{
+  if(load.unitId!==item.unitId)return 'unit_differs';
+  if(load.quantity===null||!Number.isFinite(load.quantity)||load.quantity<=0)return 'no_quantity';
+  return null;
+}
+
 export function computeContractUsage(item:ContractItem,loads:readonly ContractLoad[],adjustments:readonly ContractAdjustment[]):ContractUsage{
   const countedLoads:ContractLoad[]=[],notCounted:ContractUsage['notCounted']=[];
   for(const load of loads){
     if(load.contractItemId!==item.id||load.status!=='Active')continue;
-    if(load.unitId!==item.unitId)notCounted.push({load,reason:'unit_differs'});
-    else if(load.quantity===null||!Number.isFinite(load.quantity)||load.quantity<=0)notCounted.push({load,reason:'no_quantity'});
-    else countedLoads.push(load);
+    const reason=notCountedReason(item,load);
+    if(reason)notCounted.push({load,reason});else countedLoads.push(load);
   }
   const own=adjustments.filter(value=>value.contractItemId===item.id);
   const fromLoads=round6(countedLoads.reduce((sum,load)=>sum+load.quantity!,0));
@@ -141,7 +147,7 @@ export function validateContractAdjustment(input:{amount:string;reason:string},u
 
 /* ── Audited changes: every change is a history entry, never an overwrite ───────────────────────────────────────────────────── */
 
-export type ContractHistoryKind='edited'|'finished'|'reopened'|'cancelled';
+export type ContractHistoryKind='created'|'edited'|'finished'|'reopened'|'cancelled'|'adjusted'|'load_linked'|'load_moved'|'load_unlinked';
 export type ContractHistoryEntry={kind:ContractHistoryKind;contractItemId:string;reason:string|null;createdAt:string;details:Record<string,unknown>};
 
 function validDay(day:string):boolean{
@@ -207,6 +213,33 @@ export function candidateContractItems(items:readonly ContractItem[],projectId:s
   if(!projectId)return{candidates:[],preselectedId:null};
   const candidates=items.filter(value=>value.projectId===projectId&&!value.cancelledAt&&value.materialIds.includes(materialId));
   return{candidates,preselectedId:candidates.length===1?candidates[0]!.id:null};
+}
+
+/* ── Loads counted, grouped by day ──────────────────────────────────────────────────────────────────────────────────────────── */
+
+export type ContractLoadDay<T extends ContractLoad>={
+  day:string;
+  loads:{load:T;notCountedReason:ContractNotCountedReason|null}[];
+  /** The total of the loads that count, in the item's unit. Not-counted loads are listed but never added. */
+  countedQuantity:number;countedCount:number;notCountedCount:number;
+};
+
+/**
+ * The active loads linked to an item, one group per delivery day, newest day first; within a day the input order is kept. Cancelled
+ * loads are returned apart, because they are left out of Used.
+ */
+export function groupContractLoadsByDay<T extends ContractLoad>(item:Pick<ContractItem,'id'|'unitId'>,loads:readonly T[]):{days:ContractLoadDay<T>[];cancelled:T[]}{
+  const byDay=new Map<string,ContractLoadDay<T>>(),cancelled:T[]=[];
+  for(const load of loads){
+    if(load.contractItemId!==item.id)continue;
+    if(load.status!=='Active'){cancelled.push(load);continue;}
+    const reason=notCountedReason(item,load);
+    const day=byDay.get(load.date)??{day:load.date,loads:[],countedQuantity:0,countedCount:0,notCountedCount:0};
+    day.loads.push({load,notCountedReason:reason});
+    if(reason)day.notCountedCount+=1;else{day.countedCount+=1;day.countedQuantity=round6(day.countedQuantity+load.quantity!);}
+    byDay.set(load.date,day);
+  }
+  return{days:[...byDay.values()].sort((a,b)=>b.day.localeCompare(a.day)),cancelled};
 }
 
 /* ── Project summary ────────────────────────────────────────────────────────────────────────────────────────────────────────── */

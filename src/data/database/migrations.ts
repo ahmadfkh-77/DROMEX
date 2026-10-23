@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 66;
+export const DATABASE_VERSION = 67;
 
 type TableColumn = { name: string };
 
@@ -2435,6 +2435,73 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     // here and is read exactly as before. Purely additive: one nullable column, no backfill, no existing record is touched.
     await addColumnIfMissing(db, 'pavement_calculations', 'area_sections_json', 'TEXT');
     currentVersion = 66;
+  }
+
+  if (currentVersion === 66) {
+    // Contract Quantities per project (DEC-522). A contract item holds one allowed quantity in one unit for a project, linked to Catalog
+    // materials; a removed material link is marked removed and kept. Adjustments and the history are append-only (triggers refuse a change
+    // or a delete), so a used quantity can always be traced. Loads point at the item they count toward through a nullable contract_item_id;
+    // every existing load stays NULL (not linked) and is never touched. Used is read from the loads each time and never stored.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS contract_items (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        name TEXT NOT NULL,
+        unit_id TEXT NOT NULL REFERENCES measurement_units(id),
+        unit_symbol TEXT NOT NULL,
+        quantity REAL NOT NULL CHECK (quantity > 0),
+        unit_price_usd_cents INTEGER CHECK (unit_price_usd_cents IS NULL OR unit_price_usd_cents >= 0),
+        status TEXT NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress','complete')),
+        completed_on TEXT,
+        cancelled_at TEXT,
+        cancellation_reason TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK ((status = 'complete') = (completed_on IS NOT NULL))
+      );
+      CREATE INDEX IF NOT EXISTS idx_contract_items_project ON contract_items(project_id, created_at);
+      CREATE TABLE IF NOT EXISTS contract_item_materials (
+        contract_item_id TEXT NOT NULL REFERENCES contract_items(id),
+        item_id TEXT NOT NULL REFERENCES catalog_items(id),
+        item_name TEXT NOT NULL,
+        added_at TEXT NOT NULL,
+        removed_at TEXT,
+        PRIMARY KEY (contract_item_id, item_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_contract_item_materials_item ON contract_item_materials(item_id);
+      CREATE TABLE IF NOT EXISTS contract_item_adjustments (
+        id TEXT PRIMARY KEY NOT NULL,
+        contract_item_id TEXT NOT NULL REFERENCES contract_items(id),
+        amount REAL NOT NULL CHECK (amount <> 0),
+        reason TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_contract_item_adjustments_item ON contract_item_adjustments(contract_item_id, created_at);
+      CREATE TRIGGER IF NOT EXISTS trg_contract_item_adjustments_no_update BEFORE UPDATE ON contract_item_adjustments
+        BEGIN SELECT RAISE(ABORT, 'A contract adjustment cannot change; add a new adjustment instead.'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_contract_item_adjustments_no_delete BEFORE DELETE ON contract_item_adjustments
+        BEGIN SELECT RAISE(ABORT, 'A contract adjustment cannot be deleted; add a new adjustment instead.'); END;
+      CREATE TABLE IF NOT EXISTS contract_item_history (
+        id TEXT PRIMARY KEY NOT NULL,
+        contract_item_id TEXT NOT NULL REFERENCES contract_items(id),
+        kind TEXT NOT NULL CHECK (kind IN ('created','edited','finished','reopened','cancelled','adjusted','load_linked','load_moved','load_unlinked')),
+        reason TEXT,
+        details_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_contract_item_history_item ON contract_item_history(contract_item_id, created_at);
+      CREATE TRIGGER IF NOT EXISTS trg_contract_item_history_no_update BEFORE UPDATE ON contract_item_history
+        BEGIN SELECT RAISE(ABORT, 'Contract item history cannot change.'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_contract_item_history_no_delete BEFORE DELETE ON contract_item_history
+        BEGIN SELECT RAISE(ABORT, 'Contract item history cannot be deleted.'); END;
+    `);
+    await addColumnIfMissing(db, 'loads', 'contract_item_id', 'TEXT REFERENCES contract_items(id)');
+    await addColumnIfMissing(db, 'quarry_purchases', 'contract_item_id', 'TEXT REFERENCES contract_items(id)');
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS idx_loads_contract_item ON loads(contract_item_id) WHERE contract_item_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_quarry_purchases_contract_item ON quarry_purchases(contract_item_id) WHERE contract_item_id IS NOT NULL;
+    `);
+    currentVersion = 67;
   }
 
 

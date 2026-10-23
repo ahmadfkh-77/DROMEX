@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contract Quantities mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --orange:#C84B31;--orange-dark:#9F3622;--navy:#173F67;--ink:#17212B;--cream:#FFF8ED;--cream2:#F5F2EC;
+  --white:#FFFFFF;--line:#DDD7CC;--muted:#5C6773;
+  --amber:#8A5300;--amber-bg:#FFF4DC;--amber-line:#EFC979;
+  --red:#A61B12;--red-bg:#FDECEA;--red-line:#F0ABA4;
+  --green:#17693B;--green-bg:#E6F4EA;--green-line:#A9D8B8;
+  --teal:#0E5C63;
+}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:#E9E4DA;color:var(--ink);font-family:"Noto Sans",system-ui,sans-serif;font-size:14px;line-height:1.4}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.top{max-width:1320px;margin:0 auto;padding:22px 16px 6px}
+.top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}
+.top p{margin:0;color:var(--muted);max-width:820px}
+.tabs{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.tabs button{min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--navy);background:var(--white);color:var(--navy);font:700 13px "Noto Sans",sans-serif;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--navy);color:#fff}
+.stage{max-width:1320px;margin:0 auto;padding:16px;display:flex;gap:28px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+[data-g][hidden]{display:none!important}
+.phone-wrap{width:375px;max-width:100%}
+.caption{font-weight:700;color:var(--navy);margin:0 0 8px;font-size:13px}
+.phone{width:100%;background:var(--cream2);border-radius:28px;box-shadow:0 10px 30px rgba(20,38,58,.18);overflow:hidden;border:6px solid #1C2530}
+.band{background:var(--navy);color:#fff;padding:12px 16px 14px}
+.band .k{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C9D6E6}
+.band .n{font-size:16px;font-weight:700}
+.body{padding:14px 14px 22px;display:flex;flex-direction:column;gap:12px}
+.head{display:flex;align-items:center;gap:12px}
+.back{background:#fff;border-radius:12px;min-height:44px;padding:0 14px;display:flex;align-items:center;font-weight:700}
+.title{font-size:24px;font-weight:800;margin:0;line-height:1.1}
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--orange);text-transform:uppercase;margin:0}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px}
+.card h3{margin:0 0 4px;font-size:16px}
+.hint{font-size:13px;color:var(--muted);margin:4px 0 0;line-height:1.45}
+.sum{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.sum div{background:var(--cream2);border-radius:12px;padding:10px}
+.sum b{display:block;font-size:20px;color:var(--navy)}
+.sum small{font-size:12px;color:var(--muted);font-weight:600}
+.sum .money b{color:var(--green)}
+.btn{min-height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;padding:0 14px;text-align:center}
+.btn-primary{background:var(--orange);color:#fff}
+.btn-navy{background:var(--navy);color:#fff}
+.btn-out{border:1.5px solid var(--navy);color:var(--navy);background:#fff}
+.btn-dis{background:#D9D4CB;color:#7B828A}
+.row2{display:flex;gap:8px}.row2>*{flex:1}
+.item{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.item.near{border-color:var(--amber-line)}
+.item.over{border-color:var(--red-line)}
+.item.done{border-color:var(--green-line)}
+.ih{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.ih b{font-size:16px}
+.ih .mat{font-size:12px;color:var(--muted);margin-top:2px}
+.pill{font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;white-space:nowrap;letter-spacing:.02em}
+.p-prog{background:#E8EDF3;color:var(--navy)}
+.p-near{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-line)}
+.p-over{background:var(--red-bg);color:var(--red);border:1px solid var(--red-line)}
+.p-done{background:var(--green-bg);color:var(--green);border:1px solid var(--green-line)}
+.bar{height:12px;background:#ECE7DD;border-radius:99px;position:relative;overflow:visible}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--navy)}
+.bar.near i{background:#C98A1A}.bar.over i{background:var(--red)}.bar.done i{background:var(--green)}
+.bar .mark{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:.45}
+.bar .lbl{position:absolute;top:15px;font-size:10px;color:var(--muted);transform:translateX(-50%)}
+.aur{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.aur div{border-radius:10px;padding:8px 6px;text-align:center;background:var(--cream2)}
+.aur small{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.aur b{font-size:16px}
+.aur .used b{color:var(--navy)}
+.facts{font-size:13px;border-top:1px solid #EEE9DF;padding-top:8px;display:flex;flex-direction:column;gap:4px}
+.fr{display:flex;justify-content:space-between;gap:10px}
+.fr span:first-child{color:var(--muted)}
+.fr b{font-weight:700}
+.note{border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.45}
+.n-amber{background:var(--amber-bg);border:1px solid var(--amber-line);color:#5E3A00}
+.n-red{background:var(--red-bg);border:1px solid var(--red-line);color:#6E120B}
+.n-green{background:var(--green-bg);border:1px solid var(--green-line);color:#0F4627}
+.n-quiet{background:#EEF2F6;border:1px solid #D3DDE7;color:#24384D}
+.n-err{background:var(--red-bg);border:1px solid var(--red-line);color:var(--red);font-weight:700}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.status-box{border-radius:10px;padding:8px 10px}
+.status-box small{display:block;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.status-box b{font-size:15px}
+.sb-status{background:var(--green-bg);color:var(--green)}
+.sb-fact{background:#E8EDF3;color:var(--navy)}
+.acts{display:flex;gap:8px}.acts .btn{flex:1;min-height:48px;font-size:14px}
+.flabel{font-size:13px;font-weight:700;margin:2px 0 5px}
+.opt{font-weight:500;color:var(--muted)}
+.input,.select{min-height:48px;border:1px solid #CFC8BB;border-radius:11px;background:#FFFDF9;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:15px}
+.input.err{border:2px solid var(--red)}
+.ph{color:#80868D}
+.chev{color:var(--navy);font-weight:800}
+.unit{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;border-radius:8px;padding:3px 8px;background:#E8EDF3;color:var(--navy);white-space:nowrap}
+.unit.bad{background:var(--red-bg);color:var(--red)}
+.matrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #EEE9DF}
+.matrow:first-of-type{border-top:0}
+.box{width:24px;height:24px;border-radius:6px;border:2px solid var(--navy);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;flex:none}
+.box.on{background:var(--navy)}
+.matrow .mn{flex:1;min-width:0}
+.matrow .mn b{display:block;font-size:14px}
+.matrow .mn small{color:var(--muted);font-size:12px}
+.units{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.units small{font-size:10px;color:var(--muted);font-weight:700}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--cream2);border-radius:12px;padding:4px;gap:4px}
+.seg span{display:flex;align-items:center;justify-content:center;min-height:44px;border-radius:9px;font-weight:800;color:var(--muted)}
+.seg span.on{background:var(--navy);color:#fff}
+.sheet-bg{background:rgba(8,27,45,.55);padding-top:60px}
+.sheet{background:var(--cream2);border-radius:24px 24px 0 0;padding:18px 16px 24px;display:flex;flex-direction:column;gap:10px}
+.sheet h2{margin:0;font-size:20px;font-weight:800}
+.prev{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.prev b{font-size:17px;color:var(--navy)}
+/* load-flow selector */
+.og{border-top:1px solid var(--line);padding-top:12px;margin-top:4px}
+.ogl{font-size:11px;font-weight:800;letter-spacing:.1em;color:#3C4854;margin-bottom:6px}
+.field-open{border-bottom:2px solid #8F9AA6;min-height:46px;display:flex;align-items:center;justify-content:space-between;font-size:17px;font-weight:700;padding:4px 2px}
+.ci{background:#fff;border:1.5px solid var(--navy);border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:10px;min-height:56px}
+.ci .t{flex:1;min-width:0}
+.ci .t b{display:block}
+.ci .t small{color:var(--muted);font-size:12px}
+.ci .change{color:var(--orange);font-weight:800;font-size:14px;min-height:44px;display:flex;align-items:center}
+.choice{background:#fff;border:1.5px solid #CFC8BB;border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:10px;min-height:56px}
+.choice.on{border-color:var(--navy);background:#F1F5FA}
+.radio{width:22px;height:22px;border-radius:50%;border:2px solid var(--navy);flex:none;display:flex;align-items:center;justify-content:center}
+.radio.on::after{content:"";width:11px;height:11px;border-radius:50%;background:var(--navy)}
+.unitpair{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);font-weight:700;margin-top:6px;flex-wrap:wrap}
+/* report paper */
+[data-g="report"]>div{max-width:100%;min-width:0;overflow-x:auto}
+.paper{width:640px;background:#fff;color:#111;padding:22px 22px 30px;box-shadow:0 10px 26px rgba(20,38,58,.16);font-size:11px}
+.paper h1{font-size:17px;margin:0;color:var(--navy)}
+.phead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:3px solid var(--orange);padding-bottom:12px;margin-bottom:8px}
+.plogo{width:120px;height:40px;display:block;margin-bottom:4px}
+.pco{font-size:14px;display:block}.pct{font-size:10px;color:#444;margin-top:2px}
+.phr{text-align:right}.psub{font-size:11px;color:#333;margin-top:2px}
+.paper .meta{color:#444;margin:4px 0 12px;font-size:11px}
+.rbox{border:1px solid #9AA6B2;margin-bottom:12px}
+.rbar{background:var(--navy);color:#fff;font-weight:700;padding:6px 9px;font-size:12px;border-bottom:2px solid var(--orange)}
+.kf{display:grid;grid-template-columns:repeat(4,1fr);border-top:0}
+.kf div{padding:8px 9px;border-right:1px solid #D5DBE1}
+.kf div:last-child{border-right:0}
+.kf small{display:block;color:#555;font-size:10px}
+.kf b{font-size:14px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:10px;padding:5px 6px;border-bottom:2px solid var(--navy);color:#222;vertical-align:bottom;border-right:1px solid #C9D1D9}
+th:last-child,td:last-child{border-right:0}
+.gsep{border-left:2px solid var(--navy)!important}
+tr.grp th{background:#EEF2F6;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);text-align:center;border-bottom:1px solid #C9D1D9}
+td{padding:5px 6px;border-bottom:1px solid #D5DBE1;vertical-align:top;border-right:1px solid #E1E6EB}
+tr:nth-child(even) td{background:#F7F9FB}
+td.r,th.r{text-align:right}
+tr.tot td{font-weight:800;border-top:1.5px solid #222;background:#fff}
+.rs{font-weight:800}.rs.ov{color:var(--red)}.rs.dn{color:var(--green)}
+.notes{font-size:10px;color:#333;margin:0;padding-left:16px}
+.day{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.dayh{display:flex;align-items:center;gap:10px;min-height:56px;padding:8px 14px;background:#F2EEE6}
+.dayh>div{flex:1;min-width:0}.dayh small{display:block;color:var(--muted);font-size:12px;font-weight:600}
+.dayh .num{font-size:16px;color:var(--navy)}
+.dm{font-size:22px;font-weight:800;color:var(--navy);width:24px;text-align:center}
+.ld{padding:10px 14px;border-top:1px solid #EEE9DF;display:flex;flex-direction:column;gap:3px}
+.ld.nc{background:#FFFAF2}
+.lt{display:flex;align-items:center;gap:8px}
+.lt .tm{color:var(--muted);font-size:12px}
+.lt .lq{margin-left:auto;font-size:16px}
+.src{font-size:10px;font-weight:800;border-radius:6px;padding:2px 7px;letter-spacing:.03em;text-transform:uppercase}
+.s-co{background:#FBE6DF;color:var(--orange-dark)}.s-su{background:#E8EDF3;color:var(--navy)}
+.lx{font-size:12.5px;color:#3C4854}
+.la{display:flex;gap:18px;margin-top:2px}
+.la span{color:var(--orange);font-weight:800;font-size:14px;min-height:44px;display:flex;align-items:center}
+.legend{font-size:12px;color:var(--muted);max-width:640px}
+@media (max-width:420px){.phone-wrap{width:100%}.phone{border-width:4px}}
+</style></head><body>
+
+<div class="top">
+  <h1>Contract Quantities · mockup for approval (DEC-522)</h1>
+  <p>Project Ain Qana – Jbaa. Realistic figures; every number on a page is the true used quantity (loads + visible adjustments). Pick a tab to see each screen and its states.</p>
+  <div class="tabs" role="tablist">
+    <button data-t="page" aria-pressed="true">1 · Project page</button>
+    <button data-t="states">2 · Item states</button>
+    <button data-t="center">3 · Command Center card</button>
+    <button data-t="link">4 · Add item & link materials</button>
+    <button data-t="loads">5 · In Make Receipt &amp; Supplier Load</button>
+    <button data-t="dialogs">6 · Adjust, Finish, Reopen</button>
+    <button data-t="report">7 · Report PDF</button>
+    <button data-t="counted">8 · Loads counted, by day</button>
+  </div>
+</div>
+
+<!-- ============ 1 PROJECT PAGE ============ -->
+<div class="stage" data-g="page">
+ <div class="phone-wrap"><p class="caption">Filled: four contract items</p><div class="phone">
+  <div class="band"><div class="k">Active project</div><div class="n">Ain Qana – Jbaa</div></div>
+  <div class="body">
+   <div class="head"><span class="back">Back</span><div><p class="eyebrow">Project</p><h2 class="title">Contract Quantities</h2></div></div>
+   <div class="card">
+    <h3>Whole project</h3>
+    <p class="hint">Average of the four items, because one item has no contract price.</p>
+    <div class="sum">
+      <div><b class="num">78.7%</b><small>Quantity used</small></div>
+      <div><b class="num">1 of 4</b><small>Items complete</small></div>
+      <div class="money"><b class="num">$480</b><small>Saving, finished items</small></div>
+      <div><b class="num" style="color:var(--red)">1</b><small>Item over contract</small></div>
+    </div>
+   </div>
+   <div class="row2"><div class="btn btn-primary">+ Add contract item</div></div>
+
+   <div class="item near">
+    <div class="ih"><div><b>Base course</b><div class="mat">BaseCourse 0/40 · m³</div></div><span class="pill p-near">90.4% · near limit</span></div>
+    <div class="bar near"><i style="width:90.4%"></i><span class="mark" style="left:90%"></span></div>
+    <div class="aur"><div><small>Allowed</small><b class="num">500 m³</b></div><div class="used"><small>Used</small><b class="num">452 m³</b></div><div><small>Remaining</small><b class="num">48 m³</b></div></div>
+   </div>
+
+   <div class="item over">
+    <div class="ih"><div><b>Asphalt binder</b><div class="mat">Binder 0/20 · t</div></div><span class="pill p-over">Over contract</span></div>
+    <div class="bar over"><i style="width:100%"></i></div>
+    <div class="aur"><div><small>Allowed</small><b class="num">300 t</b></div><div class="used"><small>Used</small><b class="num">318.5 t</b></div><div><small>Over by</small><b class="num" style="color:var(--red)">18.5 t</b></div></div>
+   </div>
+
+   <div class="item done">
+    <div class="ih"><div><b>Sub-base</b><div class="mat">Sub-base 0/63 · m³</div></div><span class="pill p-done">Complete</span></div>
+    <div class="bar done"><i style="width:80%"></i></div>
+    <div class="two"><div class="status-box sb-status"><small>Work</small><b>Complete · 18 Oct</b></div><div class="status-box sb-fact"><small>Quantity used</small><b class="num">80.0% of contract</b></div></div>
+   </div>
+
+   <div class="item">
+    <div class="ih"><div><b>Wearing course</b><div class="mat">Wearing 0/10 · t</div></div><span class="pill p-prog">38.4%</span></div>
+    <div class="bar"><i style="width:38.4%"></i></div>
+    <div class="aur"><div><small>Allowed</small><b class="num">250 t</b></div><div class="used"><small>Used</small><b class="num">96 t</b></div><div><small>Remaining</small><b class="num">154 t</b></div></div>
+   </div>
+
+   <div class="btn btn-out">Export report (PDF / Excel)</div>
+  </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Empty: no contract items yet</p><div class="phone">
+  <div class="band"><div class="k">Active project</div><div class="n">Marjayoun Water Tank</div></div>
+  <div class="body">
+   <div class="head"><span class="back">Back</span><div><p class="eyebrow">Project</p><h2 class="title">Contract Quantities</h2></div></div>
+   <div class="card" style="border-style:dashed">
+    <h3>No contract items yet</h3>
+    <p class="hint">Add the quantities from the tender, for example 500 m³ of base course or 300 t of asphalt. Loads you record for this project can then count toward them. Nothing changes for loads until you add an item.</p>
+   </div>
+   <div class="btn btn-primary">+ Add contract item</div>
+  </div></div></div>
+</div>
+
+<!-- ============ 2 ITEM STATES (opened item) ============ -->
+<div class="stage" data-g="states" hidden>
+ <div class="phone-wrap"><p class="caption">Item at 90% (warning, never blocks)</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Back</span><div><p class="eyebrow">Contract item</p><h2 class="title">Base course</h2></div></div>
+  <div class="item near">
+   <div class="ih"><div><b>500 m³ allowed</b><div class="mat">$18.00 / m³ · contract value $9,000</div></div><span class="pill p-near">90.4% · near limit</span></div>
+   <div class="bar near"><i style="width:90.4%"></i><span class="mark" style="left:90%"></span></div>
+   <div class="aur"><div><small>Allowed</small><b class="num">500 m³</b></div><div class="used"><small>Used</small><b class="num">452 m³</b></div><div><small>Remaining</small><b class="num">48 m³</b></div></div>
+   <div class="note n-amber"><b>90% of the contract is used.</b> 48 m³ left. Loads can still be recorded; going over is allowed and will be shown as over contract.</div>
+   <div class="facts">
+    <div class="fr"><span>From loads (31)</span><b class="num">455 m³</b></div>
+    <div class="fr"><span>Adjustments (1)</span><b class="num">− 3 m³</b></div>
+    <div class="fr" style="border-top:1px solid #EEE9DF;padding-top:4px"><span style="color:var(--ink);font-weight:700">Used</span><b class="num">452 m³</b></div>
+    <div class="fr"><span>Value used · remaining</span><b class="num">$8,136 · $864</b></div>
+   </div>
+   <div class="acts"><div class="btn btn-out">Adjust</div><div class="btn btn-navy">Finish</div></div>
+  </div>
+  <div class="card">
+   <h3>Not counted (1)</h3>
+   <p class="hint">Linked to this item but left out of Used. Never converted or guessed.</p>
+   <div class="facts" style="margin-top:8px;border-top:0;padding-top:0">
+    <div class="fr"><span>SL-2026-0412 · 14 Oct · 22 t</span><b class="unit bad">unit differs: t ≠ m³</b></div>
+   </div>
+  </div>
+  <div class="card">
+   <h3>Adjustments</h3>
+   <div class="facts" style="border-top:0;padding-top:4px">
+    <div class="fr"><span>16 Oct 2026 · 17:40</span><b class="num">− 3 m³</b></div>
+    <div class="hint" style="margin:0">Reason: 3 m³ left on site, not spread.</div>
+   </div>
+  </div>
+  <div class="card"><h3>Loads counted (31)</h3><p class="hint">Newest first. Tap a load to open it.</p>
+   <div class="facts" style="margin-top:6px">
+    <div class="fr"><span>L-0981 · Company · 22 Oct</span><b class="num">20 m³</b></div>
+    <div class="fr"><span>SL-2026-0430 · Supplier · 21 Oct</span><b class="num">18 m³</b></div>
+    <div class="fr"><span>L-0975 · Company · 21 Oct</span><b class="num">20 m³</b></div>
+    <div class="hint" style="margin:0;color:var(--orange);font-weight:800">Show all 31 loads</div>
+   </div></div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Item over 100%</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Back</span><div><p class="eyebrow">Contract item</p><h2 class="title">Asphalt binder</h2></div></div>
+  <div class="item over">
+   <div class="ih"><div><b>300 t allowed</b><div class="mat">$62.00 / t · contract value $18,600</div></div><span class="pill p-over">106.2% · over contract</span></div>
+   <div class="bar over"><i style="width:100%"></i></div>
+   <div class="aur"><div><small>Allowed</small><b class="num">300 t</b></div><div class="used"><small>Used</small><b class="num">318.5 t</b></div><div><small>Over by</small><b class="num" style="color:var(--red)">18.5 t</b></div></div>
+   <div class="note n-red"><b>Over contract by 18.5 t (6.2%).</b> All loads are kept and counted. Value over contract: $1,147.</div>
+   <div class="facts">
+    <div class="fr"><span>From loads (17)</span><b class="num">318.5 t</b></div>
+    <div class="fr"><span>Adjustments</span><b class="num">none</b></div>
+    <div class="fr" style="border-top:1px solid #EEE9DF;padding-top:4px"><span style="color:var(--ink);font-weight:700">Used</span><b class="num">318.5 t</b></div>
+   </div>
+   <div class="acts"><div class="btn btn-out">Adjust</div><div class="btn btn-navy">Finish</div></div>
+  </div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Finished with leftover · and a load after Finish</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Back</span><div><p class="eyebrow">Contract item</p><h2 class="title">Sub-base</h2></div></div>
+  <div class="item done">
+   <div class="ih"><div><b>200 m³ allowed</b><div class="mat">$12.00 / m³</div></div><span class="pill p-done">Complete</span></div>
+   <div class="bar done"><i style="width:80%"></i></div>
+   <div class="two"><div class="status-box sb-status"><small>Work</small><b>Complete · 18 Oct</b></div><div class="status-box sb-fact"><small>Quantity used</small><b class="num">80.0% of contract</b></div></div>
+   <div class="aur"><div><small>Allowed</small><b class="num">200 m³</b></div><div class="used"><small>Used</small><b class="num">160 m³</b></div><div><small>Leftover</small><b class="num" style="color:var(--green)">40 m³</b></div></div>
+   <div class="note n-green"><b>Saving: 40 m³ · $480</b> (40 m³ × $12.00). Recorded when finished on 18 Oct 2026.</div>
+   <div class="acts"><div class="btn btn-out">Adjust</div><div class="btn btn-out">Reopen</div></div>
+  </div>
+  <p class="caption" style="margin-top:6px">Same item after a late load</p>
+  <div class="item done">
+   <div class="ih"><div><b>200 m³ allowed</b></div><span class="pill p-done">Complete</span></div>
+   <div class="note n-amber"><b>A load was added after this item was finished.</b> L-0990 · 22 Oct · 10 m³ is counted. Reopen the item if the work continued.</div>
+   <div class="two"><div class="status-box sb-status"><small>Work</small><b>Complete · 18 Oct</b></div><div class="status-box sb-fact"><small>Quantity used</small><b class="num">85.0% of contract</b></div></div>
+   <div class="aur"><div><small>Allowed</small><b class="num">200 m³</b></div><div class="used"><small>Used</small><b class="num">170 m³</b></div><div><small>Leftover</small><b class="num" style="color:var(--green)">30 m³</b></div></div>
+   <div class="note n-green"><b>Saving now: 30 m³ · $360</b></div>
+  </div>
+ </div></div></div>
+</div>
+
+<!-- ============ 3 COMMAND CENTER ============ -->
+<div class="stage" data-g="center" hidden>
+ <div class="phone-wrap"><p class="caption">Closed (default)</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Back</span><div><p class="eyebrow">Project Command Center</p><h2 class="title">Ain Qana – Jbaa</h2></div></div>
+  <div class="card" style="display:flex;align-items:center;gap:12px;min-height:64px">
+   <div style="flex:1"><b style="font-size:16px">Contract Quantities</b><p class="hint" style="margin:2px 0 0">4 items · 78.7% used · 1 over contract</p></div><b style="font-size:22px;color:var(--navy)">+</b>
+  </div>
+  <div class="card" style="display:flex;align-items:center;gap:12px;min-height:64px;opacity:.6"><div style="flex:1"><b>Project Totals</b></div><b style="font-size:22px;color:var(--navy)">+</b></div>
+ </div></div></div>
+ <div class="phone-wrap"><p class="caption">Opened</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Back</span><div><p class="eyebrow">Project Command Center</p><h2 class="title">Ain Qana – Jbaa</h2></div></div>
+  <div class="card">
+   <div style="display:flex;align-items:center;gap:12px"><div style="flex:1"><b style="font-size:16px">Contract Quantities</b><p class="hint" style="margin:2px 0 0">4 items · 78.7% used · 1 over contract</p></div><b style="font-size:22px;color:var(--navy)">×</b></div>
+   <div class="facts" style="margin-top:10px;gap:9px">
+    <div class="fr"><span>Base course</span><span class="pill p-near">90.4%</span></div>
+    <div class="fr"><span>Asphalt binder</span><span class="pill p-over">106.2% over</span></div>
+    <div class="fr"><span>Sub-base</span><span class="pill p-done">Complete · 80.0% used</span></div>
+    <div class="fr"><span>Wearing course</span><span class="pill p-prog">38.4%</span></div>
+   </div>
+   <div class="btn btn-navy" style="margin-top:12px">Open Contract Quantities</div>
+  </div>
+ </div></div></div>
+</div>
+
+<!-- ============ 4 ADD ITEM / LINK MATERIALS ============ -->
+<div class="stage" data-g="link" hidden>
+ <div class="phone-wrap"><p class="caption">Add item · filled, with a unit mismatch</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Cancel</span><div><p class="eyebrow">Ain Qana – Jbaa</p><h2 class="title">Contract item</h2></div></div>
+  <div class="card" style="display:flex;flex-direction:column;gap:10px">
+   <div><div class="flabel">Name *</div><div class="input">Base course</div></div>
+   <div class="row2">
+    <div><div class="flabel">Contract quantity *</div><div class="input num">500</div></div>
+    <div><div class="flabel">Unit *</div><div class="select"><b>m³</b><span class="chev">⌄</span></div></div>
+   </div>
+   <div><div class="flabel">Contract price per unit <span class="opt">(optional)</span></div><div class="input num">18.00 <span class="ph">USD / m³</span></div></div>
+  </div>
+  <div class="card">
+   <h3>Materials that count</h3>
+   <p class="hint">Tick the Catalog materials whose loads can count toward this item. Each shows its own unit beside the item's unit.</p>
+   <div style="margin-top:8px">
+    <div class="matrow"><span class="box on">✓</span><div class="mn"><b>BaseCourse 0/40</b><small>Aggregates</small></div><div class="units"><span class="unit">m³ = m³</span><small>material · item</small></div></div>
+    <div class="matrow"><span class="box on">✓</span><div class="mn"><b>BaseCourse 0/31.5</b><small>Aggregates</small></div><div class="units"><span class="unit bad">t ≠ m³</span><small>material · item</small></div></div>
+    <div class="matrow"><span class="box"></span><div class="mn"><b>Sub-base 0/63</b><small>Aggregates</small></div><div class="units"><span class="unit">m³ = m³</span><small>material · item</small></div></div>
+   </div>
+   <div class="note n-amber" style="margin-top:8px"><b>BaseCourse 0/31.5 is usually in t.</b> Its loads in t will be listed as "not counted, unit differs". Only loads recorded in m³ count. Nothing is converted.</div>
+   <div class="hint" style="color:var(--orange);font-weight:800;margin-top:8px">Search all Catalog materials</div>
+  </div>
+  <div class="btn btn-primary">Save contract item</div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Errors · Save stays disabled</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Cancel</span><div><p class="eyebrow">Ain Qana – Jbaa</p><h2 class="title">Contract item</h2></div></div>
+  <div class="note n-err">The contract quantity must be greater than zero.<br>Link at least one material.</div>
+  <div class="card" style="display:flex;flex-direction:column;gap:10px">
+   <div><div class="flabel">Name *</div><div class="input">Kerbstones</div></div>
+   <div class="row2"><div><div class="flabel">Contract quantity *</div><div class="input err num">0</div></div><div><div class="flabel">Unit *</div><div class="select"><b>pcs</b><span class="chev">⌄</span></div></div></div>
+   <div><div class="flabel">Contract price per unit <span class="opt">(optional)</span></div><div class="input ph">Not set</div></div>
+  </div>
+  <div class="card"><h3>Materials that count</h3><p class="hint">None ticked.</p></div>
+  <div class="btn btn-dis">Save contract item</div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Editing an item that already has loads</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Cancel</span><div><p class="eyebrow">Edit</p><h2 class="title">Base course</h2></div></div>
+  <div class="card" style="display:flex;flex-direction:column;gap:10px">
+   <div class="row2"><div><div class="flabel">Contract quantity *</div><div class="input num">550</div></div><div><div class="flabel">Unit *</div><div class="select"><b>m³</b><span class="chev">⌄</span></div></div></div>
+   <div class="note n-quiet">Changed: contract quantity 500 → 550 m³.</div>
+   <div><div class="flabel">Reason for the change *</div><div class="input">Variation order VO-03 approved</div></div>
+   <p class="hint" style="margin:0">Required because 31 loads already count. The old values stay in the history.</p>
+  </div>
+  <div class="btn btn-primary">Save change</div>
+  <div class="card"><h3>History</h3>
+   <div class="facts" style="border-top:0;padding-top:4px;gap:8px">
+    <div><b>16 Oct · Adjusted −3 m³</b><div class="hint" style="margin:0">3 m³ left on site, not spread.</div></div>
+    <div><b>02 Oct · Created</b><div class="hint" style="margin:0">500 m³ · $18.00 / m³ · 2 materials</div></div>
+   </div></div>
+  <div class="btn btn-out" style="color:var(--red);border-color:var(--red-line)">Cancel this contract item</div>
+ </div></div></div>
+</div>
+
+<!-- ============ 5 LOAD FLOWS ============ -->
+<div class="stage" data-g="loads" hidden>
+ <p class="legend" style="flex-basis:100%;text-align:center;margin:0">The contract item is chosen on the screen only. The printed receipt, its PDF and the Delivery Authorization stay exactly as they are.</p>
+ <div class="phone-wrap"><p class="caption">Make Receipt · one candidate, preselected</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Back</span><div><p class="eyebrow">Make Receipt</p><h2 class="title">Load details</h2></div></div>
+  <div class="card" style="display:flex;flex-direction:column;gap:8px">
+   <div class="fr"><span>Project</span><b>Ain Qana – Jbaa</b></div>
+   <div class="fr"><span>Item</span><b>BaseCourse 0/40</b></div>
+   <div class="fr"><span>Quantity</span><b class="num">20 m³</b></div>
+  </div>
+  <div class="card">
+   <div class="flabel" style="margin-top:0">Counts toward contract item</div>
+   <div class="ci"><div class="t"><b>Base course</b><small>452 of 500 m³ used · 90.4%</small></div><span class="change">Change</span></div>
+   <div class="unitpair">Load <span class="unit">m³</span> · Item <span class="unit">m³</span> · same unit, counted</div>
+   <div class="note n-amber" style="margin-top:8px">After this load: 472 of 500 m³ · 94.4%. You can still confirm.</div>
+  </div>
+  <div class="btn btn-primary">Confirm load</div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Make Receipt · several candidates, Owner picks</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Back</span><div><p class="eyebrow">Make Receipt</p><h2 class="title">Load details</h2></div></div>
+  <div class="card">
+   <div class="flabel" style="margin-top:0">Counts toward contract item *</div>
+   <p class="hint" style="margin:0 0 8px">Asphalt Binder 0/20 is in two items of this project. Choose one.</p>
+   <div style="display:flex;flex-direction:column;gap:8px">
+    <div class="choice on"><span class="radio on"></span><div style="flex:1"><b>Asphalt binder</b><div class="hint" style="margin:0">318.5 of 300 t · over contract</div></div><span class="unit">t</span></div>
+    <div class="choice"><span class="radio"></span><div style="flex:1"><b>Binder – access road</b><div class="hint" style="margin:0">40 of 120 t · 33.3%</div></div><span class="unit">t</span></div>
+    <div class="choice"><span class="radio"></span><div style="flex:1"><b>Not linked to a contract item</b></div></div>
+   </div>
+   <div class="unitpair">Load <span class="unit">t</span> · Item <span class="unit">t</span> · same unit, counted</div>
+   <div class="note n-red" style="margin-top:8px">Asphalt binder is already over contract. This load will add 24 t (now 342.5 t, 114.2%). You can still confirm.</div>
+  </div>
+  <div class="btn btn-primary">Confirm load</div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">New Supplier Load · step 2 (Open form look)</p><div class="phone"><div class="body">
+  <div style="display:flex;gap:6px"><span style="flex:1;height:6px;border-radius:99px;background:var(--navy)"></span><span style="flex:1;height:6px;border-radius:99px;background:var(--orange)"></span><span style="flex:1;height:6px;border-radius:99px;background:#E4E8EE"></span><span style="flex:1;height:6px;border-radius:99px;background:#E4E8EE"></span></div>
+  <div><h2 class="title" style="font-size:21px">What arrived</h2><p class="hint" style="margin:2px 0 0">Step 2 of 4</p></div>
+  <div><div class="ogl">WHAT</div>
+   <div class="flabel">Item *</div><div class="field-open">Sub-base 0/63 <span class="chev">⌄</span></div>
+   <div class="flabel" style="margin-top:10px">Quantity *</div><div class="field-open num">18 <span class="unit">m³</span></div>
+  </div>
+  <div class="og"><div class="ogl">CONTRACT ITEM</div>
+   <div class="ci"><div class="t"><b>Sub-base</b><small>Complete · 160 of 200 m³ used</small></div><span class="change">Change</span></div>
+   <div class="unitpair">Load <span class="unit">m³</span> · Item <span class="unit">m³</span> · same unit, counted</div>
+   <div class="note n-amber" style="margin-top:8px">This item is finished. The load will still count as used, and the item will be flagged.</div>
+  </div>
+  <div class="row2"><div class="btn btn-out">Back</div><div class="btn btn-navy">Next</div></div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Unit differs · and no candidate</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Back</span><div><p class="eyebrow">Make Receipt</p><h2 class="title">Load details</h2></div></div>
+  <div class="card">
+   <div class="flabel" style="margin-top:0">Counts toward contract item</div>
+   <div class="ci"><div class="t"><b>Base course</b><small>452 of 500 m³ used</small></div><span class="change">Change</span></div>
+   <div class="unitpair">Load <span class="unit bad">t</span> · Item <span class="unit">m³</span></div>
+   <div class="note n-amber" style="margin-top:8px"><b>Unit differs.</b> This load is in t and the item counts m³. The load is saved but <b>not counted</b>; it is listed under "Not counted, unit differs". Nothing is converted.</div>
+  </div>
+  <p class="caption" style="margin:4px 0 0">Another load: no contract item has this material</p>
+  <div class="card">
+   <div class="flabel" style="margin-top:0">Counts toward contract item</div>
+   <div class="note n-quiet">Not linked to a contract item. Diesel is in no contract item of this project. The load saves as usual.</div>
+  </div>
+  <div class="btn btn-primary">Confirm load</div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Linking an older load later (reason required)</p><div class="phone sheet-bg"><div class="sheet">
+  <h2>Link to a contract item</h2>
+  <p class="hint" style="margin:0">L-0612 · 03 Oct · BaseCourse 0/40 · 20 m³. Recorded before Contract Quantities, so linking needs a reason.</p>
+  <div class="choice on"><span class="radio on"></span><div style="flex:1"><b>Base course</b><div class="hint" style="margin:0">452 → 472 of 500 m³</div></div><span class="unit">m³</span></div>
+  <div class="choice"><span class="radio"></span><div style="flex:1"><b>Not linked</b></div></div>
+  <div><div class="flabel">Reason *</div><div class="input ph">Why this load counts toward the item</div></div>
+  <div class="btn btn-dis">Link load</div>
+  <div class="btn btn-out">Close</div>
+ </div></div></div>
+</div>
+
+<!-- ============ 6 DIALOGS ============ -->
+<div class="stage" data-g="dialogs" hidden>
+ <div class="phone-wrap"><p class="caption">Adjust · filled</p><div class="phone sheet-bg"><div class="sheet">
+  <h2>Adjust used quantity</h2>
+  <p class="hint" style="margin:0">Base course. The loads are never changed; this is its own line with a reason, added to Used.</p>
+  <div class="seg"><span>+ Add</span><span class="on">− Take off</span></div>
+  <div><div class="flabel">Amount *</div><div class="input num">3 <span class="unit">m³</span></div></div>
+  <div><div class="flabel">Reason *</div><div class="input">3 m³ left on site, not spread</div></div>
+  <div class="prev"><span>Used</span><b class="num">455 → 452 m³</b></div>
+  <div class="prev"><span>Quantity used</span><b class="num">91.0% → 90.4%</b></div>
+  <div class="btn btn-primary">Save adjustment</div><div class="btn btn-out">Close</div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Adjust · errors</p><div class="phone sheet-bg"><div class="sheet">
+  <h2>Adjust used quantity</h2>
+  <div class="note n-err">Enter the reason for adjusting this contract item.<br>An adjustment cannot take the used quantity below zero.</div>
+  <div class="seg"><span>+ Add</span><span class="on">− Take off</span></div>
+  <div><div class="flabel">Amount *</div><div class="input err num">500 <span class="unit">m³</span></div></div>
+  <div><div class="flabel">Reason *</div><div class="input err ph">Required</div></div>
+  <div class="btn btn-dis">Save adjustment</div><div class="btn btn-out">Close</div>
+  <p class="hint" style="margin:0">A wrong adjustment is undone by a new one in the other direction, with its own reason. The first one stays in the history.</p>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Finish with leftover</p><div class="phone sheet-bg"><div class="sheet">
+  <h2>Finish Sub-base?</h2>
+  <p class="hint" style="margin:0">The work for this item is done. Loads can still be added later and will be counted.</p>
+  <div><div class="flabel">Finished on *</div><div class="select"><b>18 Oct 2026</b><span class="chev">📅</span></div></div>
+  <div class="prev"><span>Quantity used</span><b class="num">160 of 200 m³ · 80.0%</b></div>
+  <div class="prev"><span>Leftover (saving)</span><b class="num" style="color:var(--green)">40 m³ · $480</b></div>
+  <div class="note n-quiet">The item will show <b>Work: Complete</b> and, separately, <b>Quantity used: 80.0%</b>. The used quantity does not change.</div>
+  <div class="btn btn-navy">Finish item</div><div class="btn btn-out">Keep in progress</div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Reopen (reason required)</p><div class="phone sheet-bg"><div class="sheet">
+  <h2>Reopen Sub-base?</h2>
+  <p class="hint" style="margin:0">Finished on 18 Oct 2026. Reopening keeps that in the history and turns the saving back into an estimate.</p>
+  <div><div class="flabel">Reason *</div><div class="input">Extra 30 m of shoulder added</div></div>
+  <div class="btn btn-navy">Reopen item</div><div class="btn btn-out">Close</div>
+ </div></div></div>
+</div>
+
+<!-- ============ 7 REPORT ============ -->
+<div class="stage" data-g="report" hidden>
+ <div class="phone-wrap"><p class="caption">Export sheet · same options as the other PDFs</p><div class="phone sheet-bg"><div class="sheet">
+  <h2>Export Contract Quantities</h2>
+  <p class="hint" style="margin:0">Ain Qana – Jbaa · 4 contract items · as of today</p>
+  <div class="card" style="padding:12px 14px">
+   <h3 style="font-size:15px">Header company</h3>
+   <p class="hint" style="margin:0 0 8px">Its name, logo, contact details and signature go on this PDF. Records and numbers do not change. Remembered for this project.</p>
+   <div class="choice on" style="margin-bottom:8px"><span class="radio on"></span><div style="flex:1"><b>Plant Company</b><div class="hint" style="margin:0">DROMEX Asphalt Co.</div></div></div>
+   <div class="choice"><span class="radio"></span><div style="flex:1"><b>Project Company</b><div class="hint" style="margin:0">Hashem Contracting</div></div></div>
+   <div class="hint" style="margin-top:8px">☐ Use for every export in this project</div>
+   <div class="ci" style="margin-top:10px;border-color:#CFC8BB"><div class="t"><b>Customize header</b><small>Logo, name and details for this PDF only</small></div><span class="chev">+</span></div>
+  </div>
+  <div><div class="flabel">Prices</div><div class="seg"><span class="on">Without prices</span><span>With prices</span></div>
+   <p class="hint">Without prices leaves out contract prices, values and savings. Quantities and percentages are the same in both.</p></div>
+  <div class="row2"><div class="btn btn-primary">Export PDF</div><div class="btn btn-out">Export Excel</div></div>
+  <div class="btn btn-out">Close</div>
+ </div></div></div>
+
+ <div>
+  <p class="caption">With prices: Contract Quantities and Savings (PDF; Excel has the same columns)</p>
+  <div class="paper">
+   <div class="phead"><div><svg class="plogo" viewBox="0 0 120 40" aria-label="Company logo"><rect x="0" y="4" width="32" height="32" rx="4" fill="#C84B31"/><path d="M8 28 L16 12 L24 28 Z" fill="#fff"/><text x="40" y="27" font-family="Noto Sans,Arial" font-weight="800" font-size="18" fill="#173F67">DROMEX</text></svg><b class="pco">DROMEX Asphalt Co.</b><div class="pct">Jbaa, Nabatieh · +961 70 123 456 · info@dromex.example</div></div><div class="phr"><h1>Contract Quantities and Savings</h1><div class="psub">Project: Ain Qana – Jbaa</div><div class="psub">Customer: Hashem Contracting</div></div></div>
+   <div class="meta">As of 23 Oct 2026 · With prices · Internal</div>
+   <div class="rbox"><div class="rbar">1 · Project summary</div>
+    <div class="kf"><div><small>Quantity used (average of items)</small><b>78.7%</b></div><div><small>Items complete</small><b>1 of 4</b></div><div><small>Saving, finished items</small><b>$480.00</b></div><div><small>Estimated, items in progress</small><b>$864.00</b></div></div></div>
+   <div class="rbox"><div class="rbar">2 · Contract items</div>
+    <table>
+     <tr class="grp"><th colspan="2">Item</th><th class="gsep">Contract</th><th class="gsep" colspan="3">Use</th><th class="gsep" colspan="3">Balance</th><th class="gsep" colspan="2">Saving</th></tr>
+     <tr><th>Item · materials</th><th>Unit</th><th class="r gsep">Contract</th><th class="r gsep">From loads</th><th class="r">Adjust.</th><th class="r">Used</th><th class="r gsep">Remaining</th><th class="r">% used</th><th>Status</th><th class="r gsep">Leftover</th><th class="r">Saving</th></tr>
+     <tr><td><b>Base course</b><br>BaseCourse 0/40, 0/31.5</td><td>m³</td><td class="r gsep">500</td><td class="r gsep">455</td><td class="r">−3</td><td class="r">452</td><td class="r gsep">48</td><td class="r">90.4%</td><td class="rs">In progress</td><td class="r gsep">48</td><td class="r">$864.00 *</td></tr>
+     <tr><td><b>Asphalt binder</b><br>Binder 0/20</td><td>t</td><td class="r gsep">300</td><td class="r gsep">318.5</td><td class="r">0</td><td class="r">318.5</td><td class="r gsep">0</td><td class="r">106.2%</td><td class="rs ov">Over contract</td><td class="r gsep">0</td><td class="r">—</td></tr>
+     <tr><td><b>Sub-base</b><br>Sub-base 0/63</td><td>m³</td><td class="r gsep">200</td><td class="r gsep">160</td><td class="r">0</td><td class="r">160</td><td class="r gsep">40</td><td class="r">80.0%</td><td class="rs dn">Complete 18 Oct</td><td class="r gsep">40</td><td class="r">$480.00</td></tr>
+     <tr><td><b>Wearing course</b><br>Wearing 0/10</td><td>t</td><td class="r gsep">250</td><td class="r gsep">96</td><td class="r">0</td><td class="r">96</td><td class="r gsep">154</td><td class="r">38.4%</td><td class="rs">In progress</td><td class="r gsep">154</td><td class="r">no price</td></tr>
+    </table></div>
+   <div class="rbox"><div class="rbar">3 · Savings and overruns</div>
+    <table><tr><th>Largest saving first</th><th class="r">Leftover</th><th class="r">Saving</th></tr>
+     <tr><td>Sub-base</td><td class="r">40 m³</td><td class="r">$480.00</td></tr></table>
+    <table style="margin-top:6px"><tr><th>Largest overrun first</th><th class="r">Over by</th><th class="r">% used</th></tr>
+     <tr><td>Asphalt binder</td><td class="r">18.5 t</td><td class="r">106.2%</td></tr></table></div>
+   <div class="rbox"><div class="rbar">4 · Not counted</div>
+    <table><tr><th>Load</th><th>Item</th><th class="r">Quantity</th><th>Why</th></tr>
+     <tr><td>SL-2026-0412 · 14 Oct</td><td>Base course</td><td class="r">22 t</td><td>Unit differs (t, item counts m³)</td></tr></table></div>
+   <ol class="notes"><li>Used = loads + adjustments, shown separately. Units are never converted or added together.</li><li>* Estimate: the item is still in progress.</li><li>"Complete" is the work status. "% used" is the true quantity used.</li></ol>
+  </div>
+ </div>
+ <div>
+  <p class="caption">Without prices (client-safe): no prices, no savings. Used and % are identical.</p>
+  <div class="paper">
+   <div class="phead"><div><svg class="plogo" viewBox="0 0 120 40" aria-label="Company logo"><rect x="0" y="4" width="32" height="32" rx="4" fill="#C84B31"/><path d="M8 28 L16 12 L24 28 Z" fill="#fff"/><text x="40" y="27" font-family="Noto Sans,Arial" font-weight="800" font-size="18" fill="#173F67">DROMEX</text></svg><b class="pco">DROMEX Asphalt Co.</b><div class="pct">Jbaa, Nabatieh · +961 70 123 456 · info@dromex.example</div></div><div class="phr"><h1>Contract Quantities</h1><div class="psub">Project: Ain Qana – Jbaa</div><div class="psub">Customer: Hashem Contracting</div></div></div>
+   <div class="meta">As of 23 Oct 2026 · Without prices</div>
+   <div class="rbox"><div class="rbar">1 · Project summary</div>
+    <div class="kf" style="grid-template-columns:1fr 1fr"><div><small>Quantity used (average of items)</small><b>78.7%</b></div><div><small>Items complete</small><b>1 of 4</b></div></div></div>
+   <div class="rbox"><div class="rbar">2 · Contract items</div>
+    <table>
+     <tr class="grp"><th colspan="2">Item</th><th class="gsep">Contract</th><th class="gsep" colspan="3">Use</th><th class="gsep" colspan="3">Balance</th></tr>
+     <tr><th>Item · materials</th><th>Unit</th><th class="r gsep">Contract</th><th class="r gsep">From loads</th><th class="r">Adjust.</th><th class="r">Used</th><th class="r gsep">Remaining</th><th class="r">% used</th><th>Status</th></tr>
+     <tr><td><b>Base course</b></td><td>m³</td><td class="r gsep">500</td><td class="r gsep">455</td><td class="r">−3</td><td class="r">452</td><td class="r gsep">48</td><td class="r">90.4%</td><td class="rs">In progress</td></tr>
+     <tr><td><b>Asphalt binder</b></td><td>t</td><td class="r gsep">300</td><td class="r gsep">318.5</td><td class="r">0</td><td class="r">318.5</td><td class="r gsep">0</td><td class="r">106.2%</td><td class="rs ov">Over contract</td></tr>
+     <tr><td><b>Sub-base</b></td><td>m³</td><td class="r gsep">200</td><td class="r gsep">160</td><td class="r">0</td><td class="r">160</td><td class="r gsep">40</td><td class="r">80.0%</td><td class="rs dn">Complete 18 Oct</td></tr>
+     <tr><td><b>Wearing course</b></td><td>t</td><td class="r gsep">250</td><td class="r gsep">96</td><td class="r">0</td><td class="r">96</td><td class="r gsep">154</td><td class="r">38.4%</td><td class="rs">In progress</td></tr>
+    </table></div>
+   <ol class="notes"><li>Used = loads + adjustments, shown separately. Units are never converted.</li><li>"Complete" is the work status. "% used" is the true quantity used.</li></ol>
+  </div>
+ </div>
+</div>
+
+<!-- ============ 8 LOADS COUNTED BY DAY ============ -->
+<div class="stage" data-g="counted" hidden>
+ <div class="phone-wrap"><p class="caption">Loads counted · grouped by day (newest first)</p><div class="phone"><div class="body">
+  <div class="head"><span class="back">Back</span><div><p class="eyebrow">Base course · 500 m³</p><h2 class="title">Loads counted</h2></div></div>
+  <div class="card" style="padding:12px 14px">
+   <div class="fr"><span>31 loads on 14 days</span><b class="num">455 m³</b></div>
+   <div class="hint" style="margin:2px 0 0">From loads only. Adjustments (−3 m³) are listed on the item page.</div>
+  </div>
+  <div class="seg" style="grid-template-columns:1fr 1fr 1fr"><span class="on">All</span><span>Company</span><span>Supplier</span></div>
+
+  <div class="day">
+   <div class="dayh"><div><b>Wed 22 Oct 2026</b><small>3 loads</small></div><b class="num">58 m³</b><span class="dm">×</span></div>
+   <div class="ld">
+    <div class="lt"><b>L-0981</b><span class="src s-co">Company</span><span class="tm">15:42</span><b class="num lq">20 m³</b></div>
+    <div class="lx">BaseCourse 0/40 · M358645 · Bou Hussien</div>
+    <div class="lx">Customer: Hashem Contracting · Weighbridge 20.4 t net</div>
+    <div class="la"><span>Edit</span><span>Move</span></div>
+   </div>
+   <div class="ld">
+    <div class="lt"><b>SL-2026-0436</b><span class="src s-su">Supplier</span><span class="tm">11:05</span><b class="num lq">18 m³</b></div>
+    <div class="lx">BaseCourse 0/40 · Majbal Quarry · Ticket T-55821</div>
+    <div class="lx">Supplier Delivering · plate 412093</div>
+    <div class="la"><span>Edit</span><span>Move</span></div>
+   </div>
+   <div class="ld">
+    <div class="lt"><b>L-0979</b><span class="src s-co">Company</span><span class="tm">08:20</span><b class="num lq">20 m³</b></div>
+    <div class="lx">BaseCourse 0/40 · M355965 · Mohamad mohsen</div>
+    <div class="lx">Customer: Hashem Contracting · Direct quantity</div>
+    <div class="la"><span>Edit</span><span>Move</span></div>
+   </div>
+  </div>
+
+  <div class="day"><div class="dayh"><div><b>Tue 21 Oct 2026</b><small>4 loads</small></div><b class="num">76 m³</b><span class="dm">+</span></div></div>
+  <div class="day"><div class="dayh"><div><b>Mon 20 Oct 2026</b><small>2 loads</small></div><b class="num">38 m³</b><span class="dm">+</span></div></div>
+  <div class="day">
+   <div class="dayh"><div><b>Tue 14 Oct 2026</b><small>2 loads · 1 not counted</small></div><b class="num">20 m³</b><span class="dm">×</span></div>
+   <div class="ld">
+    <div class="lt"><b>L-0902</b><span class="src s-co">Company</span><span class="tm">09:30</span><b class="num lq">20 m³</b></div>
+    <div class="lx">BaseCourse 0/40 · M358645 · Bou Hussien</div>
+    <div class="la"><span>Edit</span><span>Move</span></div>
+   </div>
+   <div class="ld nc">
+    <div class="lt"><b>SL-2026-0412</b><span class="src s-su">Supplier</span><span class="tm">13:10</span><b class="num lq" style="text-decoration:line-through;color:var(--muted)">22 t</b></div>
+    <div class="lx">BaseCourse 0/31.5 · Majbal Quarry · Ticket T-55102</div>
+    <div class="unitpair" style="margin-top:2px">Not counted: load <span class="unit bad">t</span> · item <span class="unit">m³</span></div>
+    <div class="la"><span>Edit</span><span>Move</span></div>
+   </div>
+  </div>
+  <div class="day"><div class="dayh"><div><b>Cancelled loads</b><small>1 · left out of Used</small></div><b class="num" style="color:var(--muted)">20 m³</b><span class="dm">+</span></div></div>
+ </div></div></div>
+
+ <div class="phone-wrap"><p class="caption">Tap a load · its important details and actions</p><div class="phone sheet-bg"><div class="sheet">
+  <div style="display:flex;justify-content:space-between;align-items:center"><h2>L-0981</h2><span class="src s-co">Company load</span></div>
+  <div class="card" style="padding:12px 14px"><div class="facts" style="border-top:0;padding-top:0;gap:6px">
+   <div class="fr"><span>Date · time</span><b>22 Oct 2026 · 15:42</b></div>
+   <div class="fr"><span>Material</span><b>BaseCourse 0/40</b></div>
+   <div class="fr"><span>Quantity</span><b class="num">20 m³</b></div>
+   <div class="fr"><span>Method</span><b>Weighbridge · 20.4 t net</b></div>
+   <div class="fr"><span>Truck · driver</span><b>M358645 · Bou Hussien</b></div>
+   <div class="fr"><span>Customer</span><b>Hashem Contracting</b></div>
+   <div class="fr"><span>Location</span><b>Ain Qana – Jbaa</b></div>
+   <div class="fr"><span>Price</span><b class="num">$18.00 / m³ · $360.00</b></div>
+   <div class="fr"><span>Status</span><b style="color:var(--green)">Active · counted</b></div>
+  </div></div>
+  <div class="btn btn-navy">Edit load (correction with a reason)</div>
+  <div class="btn btn-out">Move to another contract item</div>
+  <div class="btn btn-out">Remove from this contract item</div>
+  <div class="btn btn-out">Open the full load</div>
+  <p class="hint" style="margin:0">Edit opens the existing reasoned correction. Move and Remove ask for a reason and are kept in the item's history; the load itself is never deleted.</p>
+ </div></div></div>
+</div>
+
+<script>
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+  document.querySelectorAll('[data-g]').forEach(g=>g.hidden=g.dataset.g!==b.dataset.t);
+}));
+</script>
+</body></html>

@@ -214,3 +214,18 @@ describe('project summary',()=>{
     expect(summary.itemCount).toBe(1);
   });
 });
+
+describe('loads counted, grouped by day',()=>{
+  it('groups active linked loads by day, newest first, totals only the counted ones and keeps cancelled apart',async()=>{
+    const {groupContractLoadsByDay}=await import('../src/domain/contractQuantities');
+    const loads=[
+      load({id:'a',date:'2026-10-22',quantity:20}),load({id:'b',date:'2026-10-22',quantity:18,source:'supplier'}),
+      load({id:'c',date:'2026-10-14',quantity:20}),load({id:'d',date:'2026-10-14',quantity:22,unitId:'u_t',unitSymbol:'t'}),
+      load({id:'e',date:'2026-10-20',quantity:5,status:'Cancelled'}),load({id:'f',date:'2026-10-21',contractItemId:'other'}),
+    ];
+    const {days,cancelled}=groupContractLoadsByDay(item(),loads);
+    expect(days.map(day=>[day.day,day.countedQuantity,day.countedCount,day.notCountedCount])).toEqual([['2026-10-22',38,2,0],['2026-10-14',20,1,1]]);
+    expect(days[1]!.loads.map(entry=>[entry.load.id,entry.notCountedReason])).toEqual([['c',null],['d','unit_differs']]);
+    expect(cancelled.map(value=>value.id)).toEqual(['e']);
+  });
+});
