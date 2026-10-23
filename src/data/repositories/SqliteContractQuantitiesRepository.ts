@@ -227,15 +227,26 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
   }
 
   async linkLoad(contractItemId:string,ref:ContractLoadRef,reason:string):Promise<void>{
-    const item=await this.item(contractItemId),load=await this.loadRow(ref);
-    await this.assertCanCount(item,load);
-    if(load.contract_item_id===contractItemId)throw new Error('This load already counts toward this contract item.');
-    if(load.contract_item_id)throw new Error('This load already counts toward another contract item. Move it instead.');
+    await this.linkLoads(contractItemId,[ref],reason);
+  }
+
+  async linkLoads(contractItemId:string,refs:ContractLoadRef[],reason:string):Promise<void>{
+    if(!refs.length)throw new Error('Tick at least one load.');
+    const item=await this.item(contractItemId),rows:{ref:ContractLoadRef;load:LoadRow&{project_id:string|null}}[]=[];
+    for(const ref of refs){
+      const load=await this.loadRow(ref);
+      await this.assertCanCount(item,load);
+      if(load.contract_item_id===contractItemId)throw new Error('This load already counts toward this contract item.');
+      if(load.contract_item_id)throw new Error(`${load.reference} already counts toward another contract item. Move it instead.`);
+      rows.push({ref,load});
+    }
     const clean=validateContractReason(reason,'linking a load to'),now=new Date().toISOString();
     await this.db.withTransactionAsync(async()=>{
-      await this.db.runAsync(`UPDATE ${contractLoadTable(ref.source)} SET contract_item_id=? WHERE id=?`,contractItemId,ref.loadId);
-      await insertContractHistory(this.db,{contractItemId,kind:'load_linked',reason:clean,details:{source:ref.source,loadId:ref.loadId,reference:load.reference},createdAt:now});
-      await this.enqueue('contractLink',ref.loadId,{source:ref.source,loadId:ref.loadId,contractItemId,reason:clean},now);
+      for(const {ref,load} of rows){
+        await this.db.runAsync(`UPDATE ${contractLoadTable(ref.source)} SET contract_item_id=? WHERE id=?`,contractItemId,ref.loadId);
+        await insertContractHistory(this.db,{contractItemId,kind:'load_linked',reason:clean,details:{source:ref.source,loadId:ref.loadId,reference:load.reference},createdAt:now});
+        await this.enqueue('contractLink',ref.loadId,{source:ref.source,loadId:ref.loadId,contractItemId,reason:clean},now);
+      }
     });
   }
 

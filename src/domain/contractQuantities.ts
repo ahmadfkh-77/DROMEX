@@ -57,6 +57,9 @@ export type ContractUsage={
   warning:ContractWarning;
   valueUsedUsd:number|null;
   valueRemainingUsd:number|null;
+  /** contract quantity × contract price, and the over-contract quantity × price; null without a price. */
+  contractValueUsd:number|null;
+  valueOverUsd:number|null;
   countedLoads:ContractLoad[];
   notCounted:{load:ContractLoad;reason:ContractNotCountedReason}[];
   /** What is left of the allowed quantity (never below zero). For a finished item this is the recorded leftover. */
@@ -104,6 +107,7 @@ export function computeContractUsage(item:ContractItem,loads:readonly ContractLo
     allowed:item.quantity,fromLoads,adjustments:[...own],adjustmentsTotal,used,remaining,percentUsed:round1(ratio),
     overContract,overBy:overContract?round6(used-item.quantity):0,warning,
     valueUsedUsd:price===null?null:roundMoney(used*price),valueRemainingUsd:price===null?null:roundMoney(remaining*price),
+    contractValueUsd:price===null?null:roundMoney(item.quantity*price),valueOverUsd:price===null?null:roundMoney((overContract?used-item.quantity:0)*price),
     countedLoads,notCounted,leftover,savingUsd:price===null?null:roundMoney(leftover*price),savingIsEstimate:!complete,
     lateLoads:complete&&item.completedOn?countedLoads.filter(load=>load.date>item.completedOn!):[],
   };
@@ -312,4 +316,12 @@ export function contractChangeLines(item:ContractItem,next:Pick<ContractItem,'na
   if(added.length)lines.push(`Materials added: ${added.map(name).join(', ')}`);
   if(removed.length)lines.push(`Materials removed: ${removed.map(name).join(', ')}`);
   return lines;
+}
+
+/** The Adjust dialog preview: Used and percent after a plus (add) or minus (take) amount, or null while the amount is not a number above zero. */
+export function adjustmentPreview(usage:Pick<ContractUsage,'used'|'allowed'>,direction:'add'|'take',amountText:string):{amount:string;usedAfter:number;percentAfter:number}|null{
+  const value=typedNumber(amountText);
+  if(value===null||value<=0)return null;
+  const usedAfter=round6(usage.used+(direction==='take'?-value:value));
+  return{amount:`${direction==='take'?'-':''}${amountText.trim().replace(',','.')}`,usedAfter,percentAfter:round1(usedAfter/usage.allowed)};
 }

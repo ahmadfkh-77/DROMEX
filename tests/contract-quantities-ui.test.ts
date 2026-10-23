@@ -69,3 +69,36 @@ describe('contract item form',()=>{
     expect(form).not.toMatch(/contracts.delete|DELETE FROM/);
   });
 });
+
+describe('Phase D2: the item page',()=>{
+  const itemPage=read('src/ui/screens/ContractItemScreen.tsx');
+  const sheets=read('src/ui/components/contracts/ContractItemSheets.tsx');
+  it('is reached from a project-page card, and Edit item opens the form',()=>{
+    expect(app).toContain("onOpenItem={id=>{setContractItemId(id);navigate('contractItem');}}");
+    expect(app).toContain("screen==='contractItem'&&commandProject&&contractItemId");
+    expect(app).toContain("onEdit={()=>navigate('contractItemForm')}");
+  });
+  it('opens a load through the existing screens: the reasoned correction to edit, the load itself to open',()=>{
+    expect(app).toContain("setCorrectionLoadId(load.id);navigate('loadCorrections');");
+    expect(app).toContain("navigate(load.source==='company'?'loads':'quarry')");
+  });
+  it('keeps From loads, Adjustments and Used apart, and the work status apart from the quantity used',()=>{
+    for(const text of ['label={`From loads (','label={`Adjustments (','label="Used"','<ContractWorkAndUse'])expect(itemPage).toContain(text);
+  });
+  it('groups the loads counted by day with the domain helper, filters by source, and offers Link older loads',()=>{
+    expect(itemPage).toContain('groupContractLoadsByDay(detail.item,');
+    expect(itemPage).toContain("{id:'company' as const,label:'Company'}");
+    expect(itemPage).toContain('label="Link older loads"');
+    expect(itemPage).toContain("{open?'×':'+'}");
+  });
+  it('does no arithmetic of its own',()=>{
+    for(const source of [itemPage,sheets])expect(source).not.toMatch(/\.reduce\(|usage\.used\s*[-+*/]|\.quantity\s*[-+*/]|leftover\s*\*/);
+  });
+  it('asks for a reason in every dialog that changes the record, and Finish says Used does not change',()=>{
+    expect(sheets.split('label="Reason *"').length-1).toBe(4);
+    expect(sheets).toContain('adjustmentPreview(usage,direction,amount)');
+    expect(sheets).toContain('The used quantity does not change.');
+    expect(sheets).toContain('the load itself is never deleted.');
+    expect(sheets).toContain('label="Edit load (correction with a reason)"');
+  });
+});

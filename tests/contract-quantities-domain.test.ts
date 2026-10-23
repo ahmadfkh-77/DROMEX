@@ -61,7 +61,9 @@ describe('contract usage',()=>{
     expect(over).toMatchObject({warning:'over',overContract:true,overBy:7.5,remaining:0,percentUsed:115});
   });
   it('shows the value used and remaining only with a contract price',()=>{
-    expect(computeContractUsage(item(),[load({quantity:10})],[])).toMatchObject({valueUsedUsd:200,valueRemainingUsd:800});
+    expect(computeContractUsage(item(),[load({quantity:10})],[])).toMatchObject({valueUsedUsd:200,valueRemainingUsd:800,contractValueUsd:1000,valueOverUsd:0});
+    expect(computeContractUsage(item(),[load({quantity:57.5})],[])).toMatchObject({valueOverUsd:150});
+    expect(computeContractUsage(item({unitPriceUsd:null}),[load({quantity:57.5})],[])).toMatchObject({contractValueUsd:null,valueOverUsd:null});
     expect(computeContractUsage(item({unitPriceUsd:null}),[load({quantity:10})],[])).toMatchObject({valueUsedUsd:null,valueRemainingUsd:null});
   });
 });
@@ -245,5 +247,15 @@ describe('words for the screens',()=>{
     expect(['created','edited','finished','reopened','cancelled','adjusted','load_linked','load_moved','load_unlinked'].map(kind=>contractHistoryLabel(kind as never))).toEqual([
       'Created','Edited','Finished','Reopened','Cancelled','Adjusted','Load linked','Load moved','Load removed',
     ]);
+  });
+});
+
+describe('the Adjust dialog preview',()=>{
+  it('shows Used and percent after the amount, signed by the chosen direction',async()=>{
+    const {adjustmentPreview}=await import('../src/domain/contractQuantities');
+    expect(adjustmentPreview({used:455,allowed:500},'take','3')).toEqual({amount:'-3',usedAfter:452,percentAfter:90.4});
+    expect(adjustmentPreview({used:455,allowed:500},'add','2,5')).toEqual({amount:'2.5',usedAfter:457.5,percentAfter:91.5});
+    expect(adjustmentPreview({used:455,allowed:500},'add','')).toBeNull();
+    expect(adjustmentPreview({used:455,allowed:500},'take','-4')).toBeNull();
   });
 });

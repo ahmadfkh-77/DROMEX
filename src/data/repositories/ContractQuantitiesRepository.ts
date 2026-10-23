@@ -33,6 +33,8 @@ export interface ContractQuantitiesRepository{
   addAdjustment(contractItemId:string,input:{amount:string;reason:string}):Promise<void>;
   /** Links a load recorded earlier (or saved unlinked). A reason is required and kept in the history. */
   linkLoad(contractItemId:string,load:ContractLoadRef,reason:string):Promise<void>;
+  /** Several loads with one reason, all or none. */
+  linkLoads(contractItemId:string,loads:ContractLoadRef[],reason:string):Promise<void>;
   moveLoad(load:ContractLoadRef,toContractItemId:string,reason:string):Promise<void>;
   unlinkLoad(load:ContractLoadRef,reason:string):Promise<void>;
   /** Active loads of the item's project and materials that count toward no item yet. */

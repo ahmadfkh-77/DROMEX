@@ -171,6 +171,16 @@ describe('counting loads',()=>{
     await expect(contracts.unlinkLoad({source:'company',loadId:load.id},'again')).rejects.toThrow('not linked');
   });
 
+  it('links several loads with one reason, all or none',async()=>{
+    const {db,contracts,asphaltItem,company,supplier}=await setup();
+    const item=await asphaltItem();
+    const a=await company(),b=await supplier(),sand=await company({itemId:'sand'});
+    await expect(contracts.linkLoads(item.id,[{source:'company',loadId:a.id},{source:'company',loadId:sand.id}],'Older')).rejects.toThrow('not one of the materials');
+    expect(db.raw.prepare('SELECT contract_item_id FROM loads WHERE id=?').get(a.id)).toEqual({contract_item_id:null});
+    await contracts.linkLoads(item.id,[{source:'company',loadId:a.id},{source:'supplier',loadId:b.id}],'Recorded before contracts');
+    expect((await contracts.getItem(item.id)).usage.used).toBe(31.5);
+  });
+
   it('offers the unlinked loads of the linked materials in the project, for linking later',async()=>{
     const {contracts,asphaltItem,company,supplier}=await setup();
     const item=await asphaltItem();
