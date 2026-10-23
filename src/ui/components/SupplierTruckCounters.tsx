@@ -14,9 +14,9 @@ const timeText=(value:string)=>new Date(value).toLocaleTimeString([],{hour:'2-di
  * Today's truck counters: grouped by place, compact rows, a +1 Trip button on every open counter, the trips of a
  * counter on tap (each one opens the existing reasoned correction), and Finish for a truck that is done today.
  */
-export function SupplierTruckCounters({counters,finishedKeys,busy,incrementing,incrementQuantity,onIncrementQuantity,onBeginIncrement,onConfirmIncrement,onCloseIncrement,onFinish,onResume,onFinishAll,onEditTrip}:{
+export function SupplierTruckCounters({counters,finishedKeys,busy,incrementing,incrementQuantity,onIncrementQuantity,incrementTicket,onIncrementTicket,onBeginIncrement,onConfirmIncrement,onCloseIncrement,onFinish,onResume,onFinishAll,onEditTrip}:{
   counters:QuarryDailyCounter[];finishedKeys:ReadonlySet<string>;busy:boolean;
-  incrementing:QuarryDailyCounter|null;incrementQuantity:string;onIncrementQuantity:(value:string)=>void;
+  incrementing:QuarryDailyCounter|null;incrementQuantity:string;onIncrementQuantity:(value:string)=>void;incrementTicket:string;onIncrementTicket:(value:string)=>void;
   onBeginIncrement:(counter:QuarryDailyCounter)=>void;onConfirmIncrement:()=>void;onCloseIncrement:()=>void;
   onFinish:(key:string)=>void;onResume:(key:string)=>void;onFinishAll:(keys:string[])=>void;onEditTrip:(purchaseId:string)=>void}){
   const[place,setPlace]=useState<string|null>(null);
@@ -53,6 +53,7 @@ export function SupplierTruckCounters({counters,finishedKeys,busy,incrementing,i
         </View>
         {confirming?<View style={styles.panel}><Text style={styles.panelTitle}>Confirm this trip</Text><Text style={styles.summary}>The previous trip quantity is ready. Change it only if this truck carried a different quantity this time.</Text>
           <Text style={styles.fieldLabel}>This trip quantity *</Text><TextInput style={styles.input} value={incrementQuantity} onChangeText={onIncrementQuantity} keyboardType="decimal-pad"/>
+          <Text style={styles.fieldLabel}>Supplier ticket / invoice number</Text><TextInput style={styles.input} value={incrementTicket} onChangeText={onIncrementTicket} placeholder="Optional · this trip's ticket" placeholderTextColor={colors.muted} autoCapitalize="characters"/>
           <View style={styles.panelActions}><TouchableOpacity style={styles.panelClose} disabled={busy} onPress={onCloseIncrement} accessibilityRole="button"><Text style={styles.panelCloseText}>Close</Text></TouchableOpacity><TouchableOpacity style={styles.panelConfirm} disabled={busy} onPress={onConfirmIncrement} accessibilityRole="button"><Text style={styles.panelConfirmText}>{busy?'Adding...':'Confirm +1 Trip'}</Text></TouchableOpacity></View></View>:null}
       </View>;})}
     </View>)}

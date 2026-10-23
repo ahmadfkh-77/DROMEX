@@ -8,7 +8,7 @@ export interface QuarryRepository {
   confirmPurchase(draft: QuarryPurchaseDraft): Promise<QuarryPurchase>;
   /** One delivery note with several items: each item is its own Supplier Load, saved all or none, linked by one delivery group id. */
   confirmDelivery(drafts: QuarryPurchaseDraft[]): Promise<QuarryPurchase[]>;
-  incrementPurchase(sourcePurchaseId:string,quantityCubicMetres:number):Promise<QuarryPurchase>;
+  incrementPurchase(sourcePurchaseId:string,quantityCubicMetres:number,supplierTicketNumber?:string):Promise<QuarryPurchase>;
   listPurchases(): Promise<QuarryPurchase[]>;
   /** The steel density (kg/m³) and the diameter list the rebar calculator uses; one saved value, edited in one place. */
   getSteelSettings(): Promise<SteelSettings>;

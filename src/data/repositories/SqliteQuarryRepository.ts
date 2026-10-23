@@ -153,7 +153,7 @@ export class SqliteQuarryRepository implements QuarryRepository {
     return id;
   }
 
-  async incrementPurchase(sourcePurchaseId:string,quantityCubicMetres:number):Promise<QuarryPurchase>{
+  async incrementPurchase(sourcePurchaseId:string,quantityCubicMetres:number,supplierTicketNumber=''):Promise<QuarryPurchase>{
     if(!Number.isFinite(quantityCubicMetres)||quantityCubicMetres<=0)throw new Error('Trip quantity must be greater than zero.');
     const source=await this.get(sourcePurchaseId);if(source.status!=='Active')throw new Error('A cancelled supplier load cannot be incremented.');
     const confirmedAt=new Date().toISOString();if(dateKey(source.confirmedAt)!==dateKey(confirmedAt))throw new Error('This counter belongs to an earlier day. Create the first supplier load for today.');
@@ -169,11 +169,11 @@ export class SqliteQuarryRepository implements QuarryRepository {
         'INSERT INTO quarry_purchases (id,purchase_number,confirmed_at,supplier_id,supplier_name,project_id,project_name,item_id,item_name,item_code,category_name,unit_id,unit_name,unit_symbol,quantity_cubic_metres,delivery_method,driver_profile_id,driver_name,truck_profile_id,truck_plate,supplier_ticket_number,price_basis,unit_price_usd_cents,subtotal_usd_cents,vat_mode,vat_inclusive,vat_rate_basis_points,vat_amount_usd_cents,final_total_usd_cents,payment_status,notes,photos_json,correction_history_json,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
         id,purchaseNumber,confirmedAt,source.supplierId,source.supplierName,source.projectId,source.projectName,source.itemId,source.itemName,
         source.itemCode,source.categoryName,source.unitId,source.unitName,source.unitSymbol,quantityCubicMetres,source.deliveryMethod,
-        source.driverId,source.driverName,source.truckId,source.truckPlate,null,source.priceBasis,price==null?null:Math.round(price*100),
+        source.driverId,source.driverName,source.truckId,source.truckPlate,clean(supplierTicketNumber),source.priceBasis,price==null?null:Math.round(price*100),
         cents(calculation.subtotalUsd),source.vatMode,source.vatInclusive?1:0,source.vatRatePercent==null?null:Math.round(source.vatRatePercent*100),
         cents(calculation.vatAmountUsd),cents(calculation.finalTotalUsd),status,source.notes,'[]','[]',confirmedAt);
       await this.db.runAsync('UPDATE quarry_purchases SET destination_type=?,company_site_id=? WHERE id=?',purchaseDestination(source).type,purchaseDestination(source).companySiteId,id);
-      await this.enqueue('quarryPurchase',id,{id,purchaseNumber,confirmedAt,incrementedFrom:sourcePurchaseId,quantity:quantityCubicMetres,unitSymbol:source.unitSymbol,projectId:source.projectId});
+      await this.enqueue('quarryPurchase',id,{id,purchaseNumber,confirmedAt,incrementedFrom:sourcePurchaseId,supplierTicketNumber:clean(supplierTicketNumber),quantity:quantityCubicMetres,unitSymbol:source.unitSymbol,projectId:source.projectId});
     });
     return this.get(id);
   }

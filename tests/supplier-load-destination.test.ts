@@ -102,10 +102,12 @@ describe('Destination on a new supplier load',()=>{
   it('copies the destination onto a truck-counter trip and finds site loads by name',async()=>{
     const {db,quarry,yard,draft}=await setup();
     const first=await quarry.confirmPurchase(draft({destinationType:'company_site',companySiteId:yard.id,recordDate:'2026-10-05'}));
-    const trip=await quarry.incrementPurchase(first.id,18);
+    const trip=await quarry.incrementPurchase(first.id,18,'  T-777 ');
+    expect(trip.supplierTicketNumber).toBe('T-777');
+    expect((await quarry.incrementPurchase(first.id,5)).supplierTicketNumber).toBeNull();
     expect(trip).toMatchObject({destinationType:'company_site',companySiteId:yard.id,projectId:null});
     expect(purchaseDestinationLabel(trip)).toBe('Company Site: Yard B');
-    expect(db.raw.prepare("SELECT COUNT(*) n FROM quarry_purchases WHERE company_site_id=?").get(yard.id)).toEqual({n:2});
+    expect(db.raw.prepare("SELECT COUNT(*) n FROM quarry_purchases WHERE company_site_id=?").get(yard.id)).toEqual({n:3});
   });
 });
 
