@@ -147,7 +147,8 @@ describe('the choice is wired into both flows (static checks, no React Native re
   });
   it('gets its repository from the app shell, and the receipt templates never mention it',()=>{
     const app=read('src/ui/DromexApp.tsx');
-    expect(app.split('contracts={contractRepository}').length-1).toBe(2);
+    expect(app).toContain('<MakeReceiptScreen repository={loadRepository} contracts={contractRepository}');
+    expect(app).toContain('<QuarryPurchasesScreen repository={quarryRepository} fuel={fuelRepository} contracts={contractRepository}');
     for(const template of ['src/services/documentTemplates.ts','src/services/escpos.ts'])expect(read(template)).not.toMatch(/contract/i);
   });
 });

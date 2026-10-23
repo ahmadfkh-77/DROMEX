@@ -13,10 +13,16 @@ export type ContractLoadDetail=ContractLoad&{
 export type ContractMaterial={id:string;name:string;unitId:string|null;unitSymbol:string|null};
 export type ContractRowView={item:ContractItem;usage:ContractUsage;materials:ContractMaterial[]};
 export type ContractHistoryLine={id:string;kind:ContractHistoryKind;reason:string|null;details:Record<string,unknown>;createdAt:string};
-export type ContractItemDetail=ContractRowView&{history:ContractHistoryLine[];loadsByDay:{days:ContractLoadDay<ContractLoadDetail>[];cancelled:ContractLoadDetail[]}};
+export type ContractItemDetail=ContractRowView&{
+  /** True once loads point at the item or it has adjustments: every edit then needs a reason (the same rule editItem applies). */
+  editNeedsReason:boolean;
+  history:ContractHistoryLine[];loadsByDay:{days:ContractLoadDay<ContractLoadDetail>[];cancelled:ContractLoadDetail[]}};
 export type ContractLoadRef={source:ContractLoadSource;loadId:string};
+/** What the contract item form chooses from: active Catalog materials (with their usual unit) and active units. */
+export type ContractFormSetup={materials:{id:string;name:string;categoryName:string;unitId:string|null;unitSymbol:string|null}[];units:{id:string;name:string;symbol:string}[]};
 
 export interface ContractQuantitiesRepository{
+  getSetup():Promise<ContractFormSetup>;
   listProject(projectId:string):Promise<{rows:ContractRowView[];summary:ContractProjectSummary}>;
   getItem(contractItemId:string):Promise<ContractItemDetail>;
   createItem(projectId:string,draft:ContractItemDraft):Promise<ContractItem>;

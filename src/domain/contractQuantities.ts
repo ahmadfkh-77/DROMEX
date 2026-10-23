@@ -247,6 +247,8 @@ export function groupContractLoadsByDay<T extends ContractLoad>(item:Pick<Contra
 export type ContractRow={item:ContractItem;usage:ContractUsage};
 export type ContractProjectSummary={
   itemCount:number;
+  /** Items whose work is marked Complete (a status; it says nothing about the quantity used). */
+  completeCount:number;
   /** The average percent used, or null with no items. Weighted by contract value when every item has a price, otherwise by item. */
   overallPercentUsed:number|null;
   overallBasis:'value'|'items';
@@ -275,7 +277,7 @@ export function summarizeContractProject(rows:readonly ContractRow[]):ContractPr
     .map(row=>({itemId:row.item.id,name:row.item.name,unitSymbol:row.item.unitSymbol,overBy:row.usage.overBy,percentUsed:row.usage.percentUsed}))
     .sort((a,b)=>b.percentUsed-a.percentUsed);
   return{
-    itemCount:live.length,overallPercentUsed,overallBasis:priced?'value':'items',
+    itemCount:live.length,completeCount:finished.length,overallPercentUsed,overallBasis:priced?'value':'items',
     totalSavingUsd:roundMoney(finished.reduce((sum,row)=>sum+(row.usage.savingUsd??0),0)),
     estimatedSavingUsd:roundMoney(live.filter(row=>row.item.status==='in_progress').reduce((sum,row)=>sum+(row.usage.savingUsd??0),0)),
     savings,overruns,
@@ -288,4 +290,26 @@ export function summarizeContractProject(rows:readonly ContractRow[]):ContractPr
  */
 export function contractChoiceIssue(candidates:readonly ContractItem[],value:string|undefined):string|null{
   return candidates.length>1&&value===undefined?'Choose the contract item this load counts toward, or Not linked.':null;
+}
+
+/* ── Words for the screens ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+
+const historyLabels:Record<ContractHistoryKind,string>={created:'Created',edited:'Edited',finished:'Finished',reopened:'Reopened',cancelled:'Cancelled',adjusted:'Adjusted',load_linked:'Load linked',load_moved:'Load moved',load_unlinked:'Load removed'};
+export const contractHistoryLabel=(kind:ContractHistoryKind)=>historyLabels[kind];
+
+const usd=(value:number|null)=>value===null?'not set':`$${value.toFixed(2)}`;
+const num=(value:number)=>String(Number(value.toFixed(3)));
+
+/** The lines shown before an edit is saved ("Contract quantity 500 → 550 m³"), so the Owner sees exactly what changes. */
+export function contractChangeLines(item:ContractItem,next:Pick<ContractItem,'name'|'unitId'|'unitSymbol'|'quantity'|'unitPriceUsd'|'materialIds'>,materialNames:Record<string,string>):string[]{
+  const lines:string[]=[];
+  if(next.name!==item.name)lines.push(`Name ${item.name} → ${next.name}`);
+  if(next.unitId!==item.unitId)lines.push(`Unit ${item.unitSymbol} → ${next.unitSymbol}`);
+  if(next.quantity!==item.quantity)lines.push(`Contract quantity ${num(item.quantity)} → ${num(next.quantity)} ${next.unitSymbol}`);
+  if(next.unitPriceUsd!==item.unitPriceUsd)lines.push(`Contract price ${usd(item.unitPriceUsd)} → ${usd(next.unitPriceUsd)}`);
+  const name=(id:string)=>materialNames[id]??id;
+  const added=next.materialIds.filter(id=>!item.materialIds.includes(id)),removed=item.materialIds.filter(id=>!next.materialIds.includes(id));
+  if(added.length)lines.push(`Materials added: ${added.map(name).join(', ')}`);
+  if(removed.length)lines.push(`Materials removed: ${removed.map(name).join(', ')}`);
+  return lines;
 }

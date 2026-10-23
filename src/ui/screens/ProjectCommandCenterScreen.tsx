@@ -1,6 +1,9 @@
 import {useCallback,useEffect,useState,type ReactNode} from 'react';
 import {ActivityIndicator,Image,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
+import type {ContractQuantitiesRepository,ContractRowView} from '../../data/repositories/ContractQuantitiesRepository';
 import type {FinancialRepository} from '../../data/repositories/FinancialRepository';
+import type {ContractProjectSummary} from '../../domain/contractQuantities';
+import {ContractPill} from '../components/contracts/ContractParts';
 import type {LoadRepository} from '../../data/repositories/LoadRepository';
 import type {WorkspaceRepository} from '../../data/repositories/WorkspaceRepository';
 import type {Project} from '../../domain/loads';
@@ -13,13 +16,15 @@ import {EditProjectInformationScreen} from './EditProjectInformationScreen';
 import {ProjectFinancialReview} from './FinancialsScreen';
 import {colors} from '../theme';
 
-type Routes={onSchedule:()=>void;onPavement:()=>void;onWalls:()=>void;onDailyReport:()=>void;onReceipt:()=>void;onWaste:()=>void;onFuel:()=>void;onQuarry:()=>void;onQuickText:()=>void;onLoads:()=>void;onReports:()=>void;onManageProject:()=>void;onTotals:()=>void};
+type Routes={onSchedule:()=>void;onPavement:()=>void;onWalls:()=>void;onDailyReport:()=>void;onReceipt:()=>void;onWaste:()=>void;onFuel:()=>void;onQuarry:()=>void;onQuickText:()=>void;onLoads:()=>void;onReports:()=>void;onManageProject:()=>void;onTotals:()=>void;onContracts?:()=>void};
 type ScreenStatus='loading'|'error'|'ready';
 const PHOTO_PAGE=8;
 const priorityColor:Record<WorkspaceIssue['priority'],string>={Urgent:colors.danger,High:colors.warning,Normal:colors.navy,Low:colors.muted};
 const priorityTint:Record<WorkspaceIssue['priority'],string>={Urgent:'#FCE8E6',High:'#FFF3D8',Normal:'#E8F0F7',Low:'#F1EFEA'};
 
-export function ProjectCommandCenterScreen({project,repository,financialRepository,loadRepository,routes,onBack,initialPanel,onProjectUpdated}:{project:Project;repository:WorkspaceRepository;financialRepository:FinancialRepository;loadRepository:LoadRepository;routes:Routes;onBack:()=>void;initialPanel?:'issues'|'photos'|null;onProjectUpdated?:(project:Project)=>void}){
+export function ProjectCommandCenterScreen({project,repository,financialRepository,loadRepository,contracts,routes,onBack,initialPanel,onProjectUpdated}:{project:Project;repository:WorkspaceRepository;
+  /** DEC-522. The Contract Quantities card; absent, the Command Center is exactly as before. */
+  contracts?:ContractQuantitiesRepository;financialRepository:FinancialRepository;loadRepository:LoadRepository;routes:Routes;onBack:()=>void;initialPanel?:'issues'|'photos'|null;onProjectUpdated?:(project:Project)=>void}){
   const[status,setStatus]=useState<ScreenStatus>('loading');
   const[loadError,setLoadError]=useState<string|null>(null);
   const[reloadToken,setReloadToken]=useState(0);
@@ -38,6 +43,8 @@ export function ProjectCommandCenterScreen({project,repository,financialReposito
   const[timelineBusy,setTimelineBusy]=useState(false);
   const[showFinancialReview,setShowFinancialReview]=useState(false);
   const[editingInformation,setEditingInformation]=useState(false);
+  const[contractView,setContractView]=useState<{rows:ContractRowView[];summary:ContractProjectSummary}|null>(null);
+  useEffect(()=>{let active=true;if(!contracts)return;contracts.listProject(project.id).then(view=>{if(active)setContractView(view);}).catch(()=>{if(active)setContractView(null);});return()=>{active=false;};},[contracts,project.id,reloadToken]);
   const refresh=useCallback(async()=>{const value=await repository.getProjectWorkspace(project.id);setSnapshot(value);},[project.id,repository]);
   useEffect(()=>{let active=true;setStatus('loading');setLoadError(null);void refresh().then(()=>{if(active)setStatus('ready');}).catch(cause=>{if(active){setLoadError(cause instanceof Error?cause.message:'Could not load the project command center.');setStatus('error');}});return()=>{active=false;};},[refresh,reloadToken]);
   const toggle=(key:string)=>setOpen(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next;});
@@ -138,13 +145,27 @@ export function ProjectCommandCenterScreen({project,repository,financialReposito
       {activityGroups.length?activityGroups.map((group,index)=>{const key=`activity-${group.type}`;return <ExpandableMenuSection key={group.type} title={group.label} hint={`${group.activities.length===50?'Latest ':''}${group.activities.length} record${group.activities.length===1?'':'s'} · independent of the timeline date filter above`} tone="cream" marker={String(index+1).padStart(2,'0')} refined polished open={open.has(key)} onToggle={()=>toggle(key)}>{group.activities.map(value=><ActivityRow key={`${value.type}-${value.id}-${value.occurredAt}`} activity={value}/>)}</ExpandableMenuSection>;}):<EmptyState title="No project activity" body="New project-linked records will appear here automatically under their record-type label."/>}
     </ExpandableMenuSection>
 
-    <ExpandableMenuSection title="Records and Documents" hint="Open project loads, reports, PDFs, and Excel output." marker="07" refined polished open={open.has('documents')} onToggle={()=>toggle('documents')}>
+    {contracts&&routes.onContracts?<ExpandableMenuSection title="Contract Quantities" hint={contractCardHint(contractView)} marker="07" refined polished open={open.has('contracts')} onToggle={()=>toggle('contracts')}>
+      {(contractView?.rows??[]).filter(row=>!row.item.cancelledAt).map(row=><View key={row.item.id} style={styles.contractRow}><Text style={styles.contractName} numberOfLines={1}>{row.item.name}</Text><ContractPill item={row.item} usage={row.usage}/></View>)}
+      <MenuAction refined polished number="01" title="Open Contract Quantities" body="Allowed, used and remaining for each tender quantity of this project." onPress={routes.onContracts}/>
+    </ExpandableMenuSection>:null}
+
+    <ExpandableMenuSection title="Records and Documents" hint="Open project loads, reports, PDFs, and Excel output." marker={contracts&&routes.onContracts?'08':'07'} refined polished open={open.has('documents')} onToggle={()=>toggle('documents')}>
       <MenuAction refined polished number="01" title="Project Load Records" body="Open confirmed loads and documents." onPress={routes.onLoads}/>
       <MenuAction refined polished number="02" title="Project Reports" body="Daily history, completed-project PDF, and Excel exports." onPress={routes.onReports}/>
       <MenuAction refined polished number="03" title="Totals" body="Delivered, used, fuel and construction quantities for this project, per item and unit." onPress={routes.onTotals}/>
       <MenuAction refined polished number="03" title="Project Financial Review" body="Billed, paid, and outstanding for this project. Read-only." onPress={()=>setShowFinancialReview(true)}/><MenuAction refined polished number="04" title="Edit Project Information" body="Correct the project name, location, and notes. Records, payments, and history are untouched." onPress={()=>setEditingInformation(true)}/>
     </ExpandableMenuSection>
   </AppPage>;
+}
+
+/** DEC-522. The closed card line: how many items, the true quantity used, and how many are over contract. */
+function contractCardHint(view:{rows:ContractRowView[];summary:ContractProjectSummary}|null):string{
+  if(!view||!view.summary.itemCount)return 'No contract items yet · add the tender quantities to follow them.';
+  const items=`${view.summary.itemCount} item${view.summary.itemCount===1?'':'s'}`;
+  const used=view.summary.overallPercentUsed===null?'':` · ${view.summary.overallPercentUsed.toFixed(1)}% used`;
+  const over=view.summary.overruns.length?` · ${view.summary.overruns.length} over contract`:'';
+  return items+used+over;
 }
 
 function MetricGroup({label,children}:{label:string;children:ReactNode}){
@@ -191,6 +212,8 @@ function TimelineRow({activity,isFirst,isLast}:{activity:WorkspaceActivity;isFir
 }
 
 const styles=StyleSheet.create({
+  contractRow:{minHeight:44,flexDirection:'row',alignItems:'center',gap:10,paddingHorizontal:4},
+  contractName:{flex:1,minWidth:0,color:colors.ink,fontSize:14,fontWeight:'700'},
   centerState:{alignItems:'center',justifyContent:'center',gap:12,paddingVertical:70,paddingHorizontal:24},
   centerStateTitle:{color:colors.ink,fontSize:18,fontWeight:'700',textAlign:'center'},
   centerStateText:{color:colors.muted,fontSize:13,lineHeight:19,textAlign:'center',fontWeight:'500'},

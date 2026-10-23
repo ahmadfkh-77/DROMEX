@@ -198,6 +198,7 @@ describe('project summary',()=>{
     expect(summary.overruns.map(value=>[value.name,value.overBy])).toEqual([['Steel',4]]);
     expect(summary.overallPercentUsed).toBe(86.7);
     expect(summary.overallBasis).toBe('items');
+    expect(summary.completeCount).toBe(1);
   });
   it('weights by contract value when every item has a price, and reports null with no items',()=>{
     const a=item({quantity:10,unitPriceUsd:10}),b=item({id:'b',quantity:10,unitPriceUsd:30});
@@ -227,5 +228,22 @@ describe('loads counted, grouped by day',()=>{
     expect(days.map(day=>[day.day,day.countedQuantity,day.countedCount,day.notCountedCount])).toEqual([['2026-10-22',38,2,0],['2026-10-14',20,1,1]]);
     expect(days[1]!.loads.map(entry=>[entry.load.id,entry.notCountedReason])).toEqual([['c',null],['d','unit_differs']]);
     expect(cancelled.map(value=>value.id)).toEqual(['e']);
+  });
+});
+
+describe('words for the screens',()=>{
+  it('describes what an edit changes, in the item units',async()=>{
+    const {contractChangeLines}=await import('../src/domain/contractQuantities');
+    expect(contractChangeLines(item(),{name:'Base course',unitId:'u_m3',unitSymbol:'m³',quantity:550,unitPriceUsd:20,materialIds:['m_base']},{m_base:'BaseCourse 0/40'})).toEqual(['Contract quantity 50 → 550 m³']);
+    expect(contractChangeLines(item(),{name:'Base',unitId:'u_t',unitSymbol:'t',quantity:50,unitPriceUsd:null,materialIds:['m_base','m_sub']},{m_base:'BaseCourse 0/40',m_sub:'Sub-base'})).toEqual([
+      'Name Base course → Base','Unit m³ → t','Contract price $20.00 → not set','Materials added: Sub-base',
+    ]);
+    expect(contractChangeLines(item(),{name:'Base course',unitId:'u_m3',unitSymbol:'m³',quantity:50,unitPriceUsd:20,materialIds:[]},{m_base:'BaseCourse 0/40'})).toEqual(['Materials removed: BaseCourse 0/40']);
+  });
+  it('labels every history line',async()=>{
+    const {contractHistoryLabel}=await import('../src/domain/contractQuantities');
+    expect(['created','edited','finished','reopened','cancelled','adjusted','load_linked','load_moved','load_unlinked'].map(kind=>contractHistoryLabel(kind as never))).toEqual([
+      'Created','Edited','Finished','Reopened','Cancelled','Adjusted','Load linked','Load moved','Load removed',
+    ]);
   });
 });

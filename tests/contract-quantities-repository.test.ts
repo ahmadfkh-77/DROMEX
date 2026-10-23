@@ -250,7 +250,9 @@ describe('adjust, finish, reopen, edit and cancel',()=>{
     const item=await asphaltItem();
     const free=await contracts.editItem(item.id,{name:'Asphalt binder',unitId:'unit_ton',quantity:'320',unitPriceUsd:'62',materialIds:['asphalt','sand']},'');
     expect(free).toMatchObject({quantity:320,materialIds:['asphalt','sand']});
+    expect((await contracts.getItem(item.id)).editNeedsReason).toBe(false);
     const load=await company();await contracts.linkLoad(item.id,{source:'company',loadId:load.id},'Older');
+    expect((await contracts.getItem(item.id)).editNeedsReason).toBe(true);
     await expect(contracts.editItem(item.id,{name:'Asphalt binder',unitId:'unit_ton',quantity:'350',unitPriceUsd:'62',materialIds:['asphalt','sand']},'')).rejects.toThrow('reason');
     await expect(contracts.editItem(item.id,{name:'Asphalt binder',unitId:'unit_ton',quantity:'350',unitPriceUsd:'62',materialIds:['sand']},'VO-3')).rejects.toThrow('loads counted');
     const edited=await contracts.editItem(item.id,{name:'Asphalt binder',unitId:'unit_ton',quantity:'350',unitPriceUsd:'62',materialIds:['asphalt']},'VO-3 approved');
@@ -271,5 +273,16 @@ describe('adjust, finish, reopen, edit and cancel',()=>{
     expect(view.summary.itemCount).toBe(0);
     const load=await company();
     await expect(contracts.linkLoad(item.id,{source:'company',loadId:load.id},'x')).rejects.toThrow('cancelled');
+  });
+});
+
+describe('setup for the contract item form',()=>{
+  it('lists the active Catalog materials with their category and default unit, and the active units',async()=>{
+    const {db,contracts}=await setup();
+    db.raw.exec(`INSERT INTO catalog_items (id,category_id,name,default_unit_id,loads_enabled,is_active,created_at,updated_at) VALUES ('old','cat','Old gravel','unit_m3',1,0,'${SEED_TIME}','${SEED_TIME}')`);
+    const form=await contracts.getSetup();
+    expect(form.materials.map(value=>value.id)).toEqual(['asphalt','base','sand']);
+    expect(form.materials[0]).toEqual({id:'asphalt',name:'Asphalt',categoryName:'Aggregates',unitId:'unit_ton',unitSymbol:'t'});
+    expect(form.units.find(value=>value.id==='unit_m3')).toEqual({id:'unit_m3',name:'Cubic metre',symbol:'m³'});
   });
 });

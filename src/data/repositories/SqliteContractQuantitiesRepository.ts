@@ -7,7 +7,7 @@ import {
 } from '../../domain/contractQuantities';
 import {localDateKey} from '../../domain/fuel';
 import type {
-  ContractHistoryLine,ContractItemDetail,ContractLoadDetail,ContractLoadRef,ContractMaterial,ContractQuantitiesRepository,ContractRowView,
+  ContractFormSetup,ContractHistoryLine,ContractItemDetail,ContractLoadDetail,ContractLoadRef,ContractMaterial,ContractQuantitiesRepository,ContractRowView,
 } from './ContractQuantitiesRepository';
 import {contractLoadTable,insertContractHistory} from './contractLinks';
 
@@ -43,6 +43,15 @@ const loadFromRow=(row:LoadRow):ContractLoadDetail=>({
  */
 export class SqliteContractQuantitiesRepository implements ContractQuantitiesRepository{
   constructor(private readonly db:SQLiteDatabase){}
+
+  async getSetup():Promise<ContractFormSetup>{
+    const[materials,units]=await Promise.all([
+      this.db.getAllAsync<{id:string;name:string;category_name:string;unit_id:string|null;symbol:string|null}>(`SELECT i.id,i.name,c.name category_name,i.default_unit_id unit_id,u.symbol FROM catalog_items i JOIN categories c ON c.id=i.category_id
+        LEFT JOIN measurement_units u ON u.id=i.default_unit_id WHERE i.is_active=1 ORDER BY c.name COLLATE NOCASE,i.name COLLATE NOCASE`),
+      this.db.getAllAsync<{id:string;name:string;symbol:string}>('SELECT id,name,symbol FROM measurement_units WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
+    ]);
+    return{materials:materials.map(row=>({id:row.id,name:row.name,categoryName:row.category_name,unitId:row.unit_id,unitSymbol:row.symbol})),units};
+  }
 
   private async enqueue(entityType:'contractItem'|'contractAdjustment'|'contractLink',entityId:string,payload:unknown,now:string){
     await this.db.runAsync("INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES (?,?,'upsert',?,?)",entityType,entityId,JSON.stringify(payload),now);
@@ -88,11 +97,16 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
     return{rows:views,summary:summarizeContractProject(views)};
   }
 
+  private async editNeedsReason(contractItemId:string):Promise<boolean>{
+    const counted=await this.db.getFirstAsync<{n:number}>('SELECT (SELECT COUNT(*) FROM loads WHERE contract_item_id=?)+(SELECT COUNT(*) FROM quarry_purchases WHERE contract_item_id=?)+(SELECT COUNT(*) FROM contract_item_adjustments WHERE contract_item_id=?) n',contractItemId,contractItemId,contractItemId);
+    return (counted?.n??0)>0;
+  }
+
   async getItem(contractItemId:string):Promise<ContractItemDetail>{
     const {item,usage,materials,loads}=await this.row(await this.item(contractItemId));
     const history=await this.db.getAllAsync<{id:string;kind:ContractHistoryKind;reason:string|null;details_json:string;created_at:string}>('SELECT id,kind,reason,details_json,created_at FROM contract_item_history WHERE contract_item_id=? ORDER BY created_at DESC,rowid DESC',contractItemId);
     const lines:ContractHistoryLine[]=history.map(line=>{let details:Record<string,unknown>={};try{details=JSON.parse(line.details_json) as Record<string,unknown>;}catch{details={};}return{id:line.id,kind:line.kind,reason:line.reason,details,createdAt:line.created_at};});
-    return{item,usage,materials,history:lines,loadsByDay:groupContractLoadsByDay(item,loads)};
+    return{item,usage,materials,editNeedsReason:await this.editNeedsReason(contractItemId),history:lines,loadsByDay:groupContractLoadsByDay(item,loads)};
   }
 
   private async checkedValues(draft:ContractItemDraft):Promise<ContractItemValues&{unitSymbol:string;materialNames:Map<string,string>}>{
@@ -133,9 +147,8 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
       const used=await this.db.getFirstAsync<{name:string}>(`SELECT item_name name FROM (${COMPANY_LOADS} WHERE l.contract_item_id=? AND l.item_id=? UNION ALL ${SUPPLIER_LOADS} WHERE q.contract_item_id=? AND q.item_id=?) LIMIT 1`,contractItemId,materialId,contractItemId,materialId);
       if(used)throw new Error(`${used.name} has loads counted in this contract item. Move or remove those loads first.`);
     }
-    const counted=await this.db.getFirstAsync<{n:number}>('SELECT (SELECT COUNT(*) FROM loads WHERE contract_item_id=?)+(SELECT COUNT(*) FROM quarry_purchases WHERE contract_item_id=?)+(SELECT COUNT(*) FROM contract_item_adjustments WHERE contract_item_id=?) n',contractItemId,contractItemId,contractItemId);
     const now=new Date();
-    const {item,entry}=applyContractItemEdit(current,{name:values.name,unitId:values.unitId,unitSymbol:values.unitSymbol,quantity:values.quantity,unitPriceUsd:values.unitPriceUsd,materialIds:values.materialIds},{hasHistory:(counted?.n??0)>0,reason,now});
+    const {item,entry}=applyContractItemEdit(current,{name:values.name,unitId:values.unitId,unitSymbol:values.unitSymbol,quantity:values.quantity,unitPriceUsd:values.unitPriceUsd,materialIds:values.materialIds},{hasHistory:await this.editNeedsReason(contractItemId),reason,now});
     const stamp=now.toISOString();
     await this.db.withTransactionAsync(async()=>{
       await this.db.runAsync('UPDATE contract_items SET name=?,unit_id=?,unit_symbol=?,quantity=?,unit_price_usd_cents=?,updated_at=? WHERE id=?',
