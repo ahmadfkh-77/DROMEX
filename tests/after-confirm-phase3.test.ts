@@ -103,7 +103,7 @@ describe('what prints under each header',()=>{
 
 describe('the Load confirmed screen',()=>{
   const screen=readFileSync('src/ui/screens/MakeReceiptScreen.tsx','utf8');
-  const view=screen.slice(screen.indexOf('function ConfirmedView('),screen.indexOf('function PreviewView('));
+  const view=screen.slice(screen.indexOf('function ConfirmedView('),screen.indexOf('function MethodChoice('));
   it('asks what to print, shows the Header company picker and a live preview of the choice',()=>{
     for(const text of ['What do you want to print?','Receipt','Delivery Authorization','<HeaderCompanyPicker','kind={kind} paper={paper}','applyHeaderCompany(record, header)'])expect(view).toContain(text);
   });

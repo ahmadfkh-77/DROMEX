@@ -176,7 +176,7 @@ describe('weighbridge loads and the Make Receipt screen',()=>{
   });
   it('offers the typed fields, the conversion and section 04 with the approved wording',()=>{
     const screen=readFileSync('src/ui/screens/MakeReceiptScreen.tsx','utf8');
-    for(const text of ['Saved person','Type a name','Saved truck','Type a plate','NOT SAVED','Used on this load only. It is not added to People.','Used on this load only. It is not added to Trucks.','Conversion (optional)','No conversion (use the quantity as entered)','number="04" title="Signatures"','AUTO-SIGNED','Draw signature','Name only','Open Company setups','Leaving the pad empty is allowed.'])expect(screen).toContain(text);
+    for(const text of ['Saved person','Type a name','Saved truck','Type a plate','NOT SAVED','Used on this load only. It is not added to People.','Used on this load only. It is not added to Trucks.','Conversion (optional)','No conversion (use the quantity as entered)','.toUpperCase()} SIGNATURE','AUTO-SIGNED','Draw signature','Name only','Open Company setups','Leaving the pad empty is allowed.','SUPPLIER SIGNATURE'])expect(screen).toContain(text);
     expect(screen).toContain("scrollEnabled={!signing}");
     expect(readFileSync('src/ui/DromexApp.tsx','utf8')).toContain("onOpenCompanySetups={()=>navigate('companySetups')}");
   });

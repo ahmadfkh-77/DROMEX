@@ -465,6 +465,22 @@ export function validateLoadDraft(draft: LoadDraft, options: LoadSetupOptions): 
   return issues;
 }
 
+/** DEC-524. The four steps of Make Receipt, the same pattern as New Supplier Load. */
+export const receiptEntrySteps = ['Who and where', 'What left', 'Price (optional)', 'Review and sign'] as const;
+
+/** The step (1 to 4) that holds the field a validation message is about. Anything not tied to a field belongs to step 4. */
+export function receiptIssueStep(issue: string): 1 | 2 | 3 | 4 {
+  if (/conversion|price|VAT/i.test(issue)) return 3;
+  if (/customer|record date|project|destination/i.test(issue)) return 1;
+  if (/item|driver|operator|truck|quantity|weight|unit/i.test(issue)) return 2;
+  return 4;
+}
+
+/** The checks Next stops for on one step. Step 4 rechecks everything before confirming. */
+export function receiptStepIssues(step: number, issues: readonly string[]): string[] {
+  return step >= 4 ? [...issues] : issues.filter((issue) => receiptIssueStep(issue) === step);
+}
+
 export function formatUsd(value: number | null): string {
   return value == null ? 'Unpriced' : `$${value.toFixed(2)}`;
 }

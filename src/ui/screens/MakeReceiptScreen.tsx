@@ -2,19 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LoadNumberSeriesRepository } from '../../data/repositories/LoadNumberSeriesRepository';
 import type { LoadNumberPreview } from '../../domain/loadNumberSeries';
 import {loadNumberLabel} from '../../domain/loadNumberSeries';
-import { Alert, Animated, LayoutAnimation, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, LayoutAnimation, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { ContractQuantitiesRepository } from '../../data/repositories/ContractQuantitiesRepository';
 import type { LoadRepository } from '../../data/repositories/LoadRepository';
 import { ContractItemChoice } from '../components/ContractItemChoice';
 import { truckCrewRoleLabel, type TruckCrewRole } from '../../domain/people';
-import { calculateLoad, createAnotherItemDraft, directConversionLines, emptyLoadDraft, formatUsd, type ConfirmedLoad, type LoadDraft, type LoadSetupOptions, validateLoadDraft } from '../../domain/loads';
+import { calculateLoad, createAnotherItemDraft, directConversionLines, emptyLoadDraft, formatUsd, receiptEntrySteps, receiptIssueStep, receiptStepIssues, type ConfirmedLoad, type LoadDraft, type LoadSetupOptions, validateLoadDraft } from '../../domain/loads';
+import { fitSignatureToBox } from '../../domain/signatureFit';
 import { printLoadBluetooth } from '../../services/bluetoothPrinter';
 import { exportAndShareLoadDocument, type LoadDocumentKind, type PaperWidth } from '../../services/documentExport';
 import type { CompanyHeaderRepository } from '../../data/repositories/CompanyHeaderRepository';
 import { applyHeaderCompany, type HeaderCompany, type HeaderCompanyKind } from '../../domain/companyHeaders';
 import { HeaderCompanyPicker } from '../components/HeaderCompanyPicker';
-import { AppButton, AppCard, AppField, Feedback, MetricCard, PageHeader } from '../components/AppPrimitives';
+import { AppButton, AppField, Feedback, PageHeader } from '../components/AppPrimitives';
+import { OpenSwitch } from '../components/OpenSwitch';
 import { LoadDocuments, type DocumentViewData } from '../components/LoadDocuments';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { SignaturePad } from '../components/SignaturePad';
@@ -66,7 +68,13 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   const [loaded, setLoaded] = useState(false);
   const [setupStatus, setSetupStatus] = useState<'loading' | 'error' | 'ready'>('loading');
   const [setupError, setSetupError] = useState<string | null>(null);
-  const [preview, setPreview] = useState(false);
+  // DEC-524. One step at a time, like New Supplier Load; a reopened draft starts on step 1 with everything kept.
+  const [step, setStep] = useState(1);
+  const [destinationMode, setDestinationMode] = useState<'project' | 'address'>('project');
+  const [showDocuments, setShowDocuments] = useState(false);
+  const [nextNumber, setNextNumber] = useState<LoadNumberPreview | null>(null);
+  const [contractLabel, setContractLabel] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [issues, setIssues] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -74,8 +82,6 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   const [confirmed, setConfirmed] = useState<ConfirmedLoad | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const reducedMotion = useReducedMotion();
-  const entrance = useState(() => Array.from({ length: 5 }, () => new Animated.Value(0)))[0];
-  const calculationMotion = useState(() => new Animated.Value(1))[0];
   const mountedRef = useRef(true);
   const saveRevisionRef = useRef(0);
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -87,7 +93,7 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
       let next = saved ? { ...emptyLoadDraft, ...saved } : emptyLoadDraft;
       if (saved && !saved.vat) next = { ...next, vat: startingVatChoice(nextOptions.customers.find((value) => value.id === next.customerId)?.vat) };
       if (initialProjectId && !next.projectId) { const selected = nextOptions.projects.find((project) => project.id === initialProjectId); if (selected) next = { ...next, projectId: selected.id, customerId: selected.customerId, destinationAddress: '' }; }
-      setOptions(nextOptions); setDraft(next); setEntryModes(next); setLoaded(true); setSetupStatus('ready');
+      setOptions(nextOptions); setDraft(next); setEntryModes(next); setDestinationMode(!next.projectId && next.destinationAddress.trim() ? 'address' : 'project'); setLoaded(true); setSetupStatus('ready');
     }).catch((cause) => {
       if (!mountedRef.current) return;
       setSetupError(cause instanceof Error ? cause.message : 'Could not load the receipt workflow.'); setSetupStatus('error');
@@ -115,7 +121,13 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
       .then(() => { if (mountedRef.current && saveRevisionRef.current === revision) setSaveStatus('saved'); })
       .catch(() => { if (mountedRef.current && saveRevisionRef.current === revision) setSaveStatus('error'); });
   }
-  useEffect(() => { if (!loaded) return; if (reducedMotion) { entrance.forEach((value) => value.setValue(1)); return; } const animation = Animated.stagger(70, entrance.map((value) => Animated.timing(value, { toValue: 1, duration: 280, useNativeDriver: true }))); animation.start(); return () => animation.stop(); }, [entrance, loaded, reducedMotion]);
+  // DEC-500. Step 4 shows the Company Load number this load will receive.
+  useEffect(() => {
+    if (!seriesRepository || !draft.itemId || !draft.recordDate || step !== 4) { setNextNumber(null); return; }
+    let active = true;
+    seriesRepository.previewNextLoadNumber(draft.itemId, draft.recordDate).then((value) => { if (active) setNextNumber(value); }).catch(() => { if (active) setNextNumber(null); });
+    return () => { active = false; };
+  }, [seriesRepository, draft.itemId, draft.recordDate, step]);
 
   const conversion = options?.conversions.find((value) => value.id === draft.conversionId);
   const directUnit = options?.units.find((value) => value.id === draft.directUnitId);
@@ -131,12 +143,11 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   const [contractIssue, setContractIssue] = useState<string | null>(null);
   const [contractRefresh, setContractRefresh] = useState(0);
   const setContractItem = useCallback((value: string | undefined) => setDraft((current) => current.contractItemId === value ? current : { ...current, contractItemId: value }), []);
-  useEffect(() => { if (!loaded) return; if (reducedMotion) { calculationMotion.setValue(1); return; } calculationMotion.setValue(.96); const animation = Animated.spring(calculationMotion, { toValue: 1, speed: 24, bounciness: 2, useNativeDriver: true }); animation.start(); return () => animation.stop(); }, [calculation.billedQuantity, calculation.finalTotalUsd, calculation.netWeightKg, calculationMotion, loaded, reducedMotion]);
+  // DEC-524. The taller pad's strokes, fitted into the printed signature box, are what the preview shows and what is saved.
+  const fittedDraft = useMemo(() => ({ ...draft, driverSignaturePaths: fitSignatureToBox(draft.driverSignaturePaths) }), [draft]);
 
   const customer = options?.customers.find((value) => value.id === draft.customerId); const item = options?.items.find((value) => value.id === draft.itemId);
   const project = options?.projects.find((value) => value.id === draft.projectId);
-  const destinationComplete = Boolean(customer && (project || (!customer.isOwnCompany && draft.destinationAddress.trim()))); const directComplete = /^\d+(?:[.,]\d{1,6})?$/.test(draft.directQuantity) && Number(draft.directQuantity.replace(',', '.')) > 0 && Boolean(draft.directUnitId); const weighedComplete = /^\d+$/.test(draft.emptyWeightKg) && /^\d+$/.test(draft.fullWeightKg) && Number(draft.fullWeightKg) > Number(draft.emptyWeightKg); const loadComplete = Boolean(item && draft.driverName.trim() && draft.truckPlate.trim() && (draft.quantityMethod === 'direct' ? directComplete : weighedComplete)); const valueComplete = draft.quantityMethod === 'direct' || Boolean(draft.conversionId); const currentStage = !destinationComplete ? 1 : !loadComplete ? 2 : !valueComplete ? 3 : 4;
-  const destinationIssues = issues.filter((issue) => /customer|project|destination/i.test(issue)); const loadIssues = issues.filter((issue) => /item|driver|truck|weight|quantity/i.test(issue)); const valueIssues = issues.filter((issue) => /conversion|price/i.test(issue)); const otherIssues = issues.filter((issue) => ![...destinationIssues, ...loadIssues, ...valueIssues].includes(issue));
 
   function update<K extends keyof LoadDraft>(key: K, value: LoadDraft[K]) { setDraft((current) => ({ ...current, [key]: value })); setIssues([]); }
   function selectCustomer(id: string) { animateLayout(); setDraft((current) => { const currentProject = options?.projects.find((value) => value.id === current.projectId); return { ...current, customerId: id, projectId: currentProject?.customerId === id ? current.projectId : '', vat: current.customerId === id ? current.vat : startingVatChoice(options?.customers.find((value) => value.id === id)?.vat) }; }); setIssues([]); }
@@ -153,189 +164,214 @@ export function MakeReceiptScreen({ repository, onBack, onOpenSetup, onOpenDirec
   function typePlate(value: string) { setTypedPlate(value); setDraft((current) => ({ ...current, truckId: '', truckPlate: value })); setIssues([]); }
   function chooseSignatureMode(mode: 'draw' | 'name') { if (mode === signatureMode) return; animateLayout(); setSignatureMode(mode); if (mode === 'name') setDraft((current) => ({ ...current, driverSignaturePaths: [] })); }
 
+  // DEC-524. Delivered to: a project, or an address for an outside customer. Switching drops what the other side held.
+  function chooseDestinationMode(mode: 'project' | 'address') {
+    if (mode === destinationMode) return; animateLayout(); setDestinationMode(mode);
+    setDraft((current) => mode === 'address' ? { ...current, projectId: '' } : { ...current, destinationAddress: '' }); setIssues([]);
+  }
+  function scrollToTop() { scrollRef.current?.scrollTo({ y: 0, animated: false }); }
+  function goToStep(next: number) { setError(null); setIssues([]); setStep(next); scrollToTop(); }
+  function stepProblems(forStep: number) {
+    if (!options) return [];
+    return receiptStepIssues(forStep, [...validateLoadDraft(draft, options), ...(contractIssue && forStep >= 3 ? [contractIssue] : [])]);
+  }
+  function goNextStep() { const found = stepProblems(step); if (found.length) { setIssues(found); scrollToTop(); return; } goToStep(step + 1); }
+  function goBackStep() {
+    if (step > 1) { goToStep(step - 1); return; }
+    Alert.alert('Leave this receipt?', 'Your draft is kept, so you can come back to it.', [{ text: 'Keep editing', style: 'cancel' }, { text: 'Leave', onPress: onBack }]);
+  }
+
   async function doConfirm() {
-    if (!options) return; const nextIssues = [...validateLoadDraft(draft, options), ...(contractIssue ? [contractIssue] : [])]; setIssues(nextIssues); if (nextIssues.length) return;
+    if (!options) return; const nextIssues = [...validateLoadDraft(draft, options), ...(contractIssue ? [contractIssue] : [])];
+    if (nextIssues.length) { setIssues(nextIssues); const first = Math.min(...nextIssues.map(receiptIssueStep)); if (first < 4) goToStep(first); setIssues(nextIssues); return; }
     Alert.alert('Confirm this load?', 'Confirmation assigns the permanent load number and transaction number. The record cannot return to Draft.', [
       { text: 'Review again', style: 'cancel' },
-      { text: 'Confirm load', onPress: () => { setBusy(true); setError(null); const submittedDraft = draft; void repository.confirmLoad(draft).then((record) => { setConfirmed(record); setLastConfirmedDraft(submittedDraft); setContractRefresh((value) => value + 1); setPreview(false); setDraft(emptyLoadDraft); }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not confirm load.')).finally(() => setBusy(false)); } },
+      { text: 'Confirm load', onPress: () => { setBusy(true); setError(null); const submittedDraft = fittedDraft; void repository.confirmLoad(fittedDraft).then((record) => { setConfirmed(record); setLastConfirmedDraft(submittedDraft); setContractRefresh((value) => value + 1); setDraft(emptyLoadDraft); setStep(1); setShowDocuments(false); }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not confirm load.')).finally(() => setBusy(false)); } },
     ]);
   }
   function createAnotherItemForSameDelivery() { if (!lastConfirmedDraft) return; setIssues([]); setError(null); setMessage(null); setDraft(createAnotherItemDraft(lastConfirmedDraft)); setConfirmed(null); }
-  const motion = (index: number) => { const value = entrance[index]!; return { opacity: value, transform: [{ translateY: value.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }; };
-
   if (setupStatus === 'error') return <ErrorView message={setupError} onBack={onBack} onRetry={loadSetup} />;
   if (!options) return <LoadingView onBack={onBack} />;
   if (confirmed) return <ConfirmedView record={confirmed} headers={headers} projectId={lastConfirmedDraft?.projectId || null} canRepeatDelivery={Boolean(lastConfirmedDraft)} onBack={onBack} onOpenCompanySetups={onOpenCompanySetups} onCreateAnotherItem={createAnotherItemForSameDelivery} onStartAnotherLoad={() => { setConfirmed(null); setMessage(null); setError(null); }} />;
-  if (preview) return <PreviewView options={options} draft={draft} calculation={calculation} issues={issues} busy={busy} onBack={() => setPreview(false)} onConfirm={() => void doConfirm()} seriesRepository={seriesRepository} />;
+
+  // DEC-524. Every detail of the load on step 4, each line opening the step that holds it, like Review and save on New Supplier Load.
+  const driverRole = options.drivers.find((value) => value.id === draft.driverId)?.role;
+  const priced = Boolean(draft.unitPriceUsd.trim());
+  const reviewRows: [string, string, number | null][] = [
+    ['Date', draft.recordDate, 1],
+    ['Customer', customer?.name ?? 'Not chosen', 1],
+    ['Location', project?.name ?? (draft.destinationAddress.trim() || 'Not chosen'), 1],
+    ['Item', item?.name ?? 'Not chosen', 2],
+    ...(draft.quantityMethod === 'weighbridge'
+      ? [['Weighing', `Empty ${draft.emptyWeightKg || '—'} · Full ${draft.fullWeightKg || '—'} · Net ${calculation.netWeightKg ?? '—'} kg`, 2] as [string, string, number], ...(draft.requestedQuantityKg.trim() ? [['Requested', `${draft.requestedQuantityKg.trim()} kg`, 2] as [string, string, number]] : [])]
+      : [['Entered', `${draft.directQuantity.trim().replace(',', '.') || '—'} ${directUnit?.symbol ?? ''}`.trim(), 2] as [string, string, number]]),
+    ['Quantity', calculation.billedQuantity == null ? '—' : `${calculation.billedQuantity} ${billedUnitSymbol}${conversion ? ` (${conversion.name})` : ''}`.trim(), conversion ? 3 : 2],
+    [truckCrewRoleLabel(driverRole), `${draft.driverName.trim() || 'Not chosen'}${!draft.driverId && draft.driverName.trim() ? ' (not saved)' : ''}`, 2],
+    ['Truck', `${draft.truckPlate.trim() || 'Not chosen'}${!draft.truckId && draft.truckPlate.trim() ? ' (not saved)' : ''}`, 2],
+    ...(contractLabel ? [['Target', contractLabel, 3] as [string, string, number]] : []),
+    ['Price', priced ? `$${Number(draft.unitPriceUsd.trim().replace(',', '.')).toFixed(2)} per ${billedUnitSymbol || 'unit'}` : 'Unpriced', 3],
+    ...(priced ? [['Subtotal', formatUsd(calculation.subtotalUsd), 3] as [string, string, number], ['VAT', vatRate > 0 ? `${vatRate}% · ${formatUsd(calculation.vatAmountUsd)}` : 'No VAT', 3] as [string, string, number]] : []),
+    ['Load No.', nextNumber ? `${nextNumber.loadNumber} (given on confirm)` : 'Given on confirm', null],
+  ];
+  const saveText = saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Draft saved' : saveStatus === 'error' ? "Couldn't save · Retry" : 'Autosave on';
 
   return (
     <View style={styles.screen}>
-      <Animated.ScrollView style={styles.screen} scrollEnabled={!signing} contentContainerStyle={[styles.content, styles.contentWithFooter]} keyboardShouldPersistTaps="handled">
-        <Animated.View style={motion(0)}>
-          <PageHeader eyebrow="NEW OUTGOING LOAD" title="Make Receipt" onBack={onBack} />
-          <View style={styles.workflowHero}>
-            <View style={styles.workflowTop}>
-              <View style={styles.flex}><Text style={styles.workflowKicker}>ONE ENTRY · TWO DOCUMENTS</Text><Text style={styles.workflowTitle}>Build the load record</Text></View>
-              <TouchableOpacity style={styles.autosaveBadge} disabled={saveStatus !== 'error'} onPress={retryAutosave} accessibilityRole="button" accessibilityState={{ disabled: saveStatus !== 'error' }} accessibilityLabel={saveStatus === 'saving' ? 'Saving draft' : saveStatus === 'saved' ? 'Draft saved' : saveStatus === 'error' ? 'Draft not saved. Double tap to retry.' : 'Autosave is on'} hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}>
-                <View style={[styles.autosaveDot, saveStatus === 'saving' && styles.autosaveDotBusy, saveStatus === 'error' && styles.autosaveDotError]} />
-                <Text style={styles.autosave}>{saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? "Couldn't save · Retry" : 'Autosave on'}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.progressTrack}>
-              <ProgressMarker number={1} done={destinationComplete} current={currentStage === 1} />
-              <View style={[styles.progressLine, destinationComplete && styles.progressLineDone]} />
-              <ProgressMarker number={2} done={loadComplete} current={currentStage === 2} />
-              <View style={[styles.progressLine, loadComplete && styles.progressLineDone]} />
-              <ProgressMarker number={3} done={valueComplete} current={currentStage === 3} />
-              <View style={[styles.progressLine, currentStage === 4 && styles.progressLineDone]} />
-              <ProgressMarker number={4} done={false} current={currentStage === 4} />
-            </View>
-            <View style={styles.progressLabels}>
-              <Text style={[styles.progressLabel, destinationComplete && styles.progressLabelDone]}>Destination</Text>
-              <Text style={[styles.progressLabel, loadComplete && styles.progressLabelDone]}>Load</Text>
-              <Text style={[styles.progressLabel, valueComplete && styles.progressLabelDone]}>Price</Text>
-              <Text style={[styles.progressLabel, currentStage === 4 && styles.progressLabelCurrent]}>Review</Text>
-            </View>
-          </View>
-        </Animated.View>
-
+      <ScrollView ref={scrollRef} style={styles.screen} scrollEnabled={!signing} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <PageHeader eyebrow="NEW OUTGOING LOAD" title="Make Receipt" onBack={goBackStep} />
+        <View style={styles.stepTrack} accessibilityRole="progressbar" accessibilityLabel={`Step ${step} of 4`}>{[1, 2, 3, 4].map((number) => <View key={number} style={[styles.stepDot, number < step && styles.stepDotDone, number === step && styles.stepDotOn]} />)}</View>
+        <View style={styles.openHead}>
+          <Text style={styles.openTitle}>{receiptEntrySteps[step - 1]}</Text>
+          <TouchableOpacity disabled={saveStatus !== 'error'} onPress={retryAutosave} accessibilityRole="button" accessibilityState={{ disabled: saveStatus !== 'error' }} accessibilityLabel={saveStatus === 'error' ? 'Draft not saved. Double tap to retry.' : `Step ${step} of 4. ${saveText}`} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={[styles.openSub, saveStatus === 'error' && styles.saveError]}>Step {step} of 4 · {saveText}</Text>
+          </TouchableOpacity>
+        </View>
         {error ? <Feedback kind="error">{error}</Feedback> : null}
-        {(!options.customers.length || !options.items.length || !options.units.length || (draft.quantityMethod === 'weighbridge' && !options.conversions.length)) ? (
-          <View style={styles.warning}>
-            <Text style={styles.warningEyebrow}>ACTION NEEDED</Text>
-            <Text style={styles.warningTitle}>Setup required</Text>
-            <Text style={styles.helper}>Create a customer and a load-enabled item. Drivers and trucks can be saved in People & Equipment or simply typed on each load. Units and the kg-to-ton conversion are already seeded.</Text>
-            <TouchableOpacity onPress={onOpenDirectory} accessibilityRole="button" accessibilityLabel="Open People and Equipment" hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}><Text style={styles.link}>Open People & Equipment</Text></TouchableOpacity>
-          </View>
-        ) : null}
+        <IssueList issues={issues} />
 
-        <Animated.View style={motion(1)}>
-          <ReceiptSection number="01" title="Customer and destination" hint="Connect this load to the correct customer and place.">
-            <DatePickerField label="Record date *" value={draft.recordDate} onChange={(value) => update('recordDate', value)} minDate={project?.startDate ?? undefined} maxDate={project?.endDate ?? todayIso()} />
-            <SearchableSelect label="Project" options={options.projects.map((value) => ({ id: value.id, label: value.name, detail: `${value.customerName} · ${value.location}` }))} selectedId={draft.projectId} onSelect={selectProject} allowClear placeholder={options.projects.length ? 'Search and select a project' : 'Create a project first'} />
-            <Text style={styles.helper}>Selecting a project automatically selects its customer and links the confirmed load to that project's daily report.</Text>
-            <SearchableSelect label="Customer *" options={options.customers.map((value) => ({ id: value.id, label: value.name, detail: value.isOwnCompany ? 'Own company' : value.type }))} selectedId={draft.customerId} onSelect={selectCustomer} />
-            {customer ? <Text style={styles.helper}>{customer.isOwnCompany ? 'Own company: a saved project is required.' : 'Outside customer: select a project or enter a destination.'}</Text> : null}
-            {!project && customer && !customer.isOwnCompany ? <AppField label="Destination address *" value={draft.destinationAddress} onChangeText={(value) => update('destinationAddress', value)} multiline /> : null}
-            <IssueList issues={destinationIssues} />
-          </ReceiptSection>
-        </Animated.View>
-
-        <Animated.View style={motion(2)}>
-          <ReceiptSection number="02" title="Load information" hint="Choose weighed or direct quantity, then record what moved and who carried it.">
-            <Text style={styles.methodLabel}>QUANTITY METHOD</Text>
-            <View style={styles.methodSelector}>
-              <MethodChoice title="Weighbridge" hint="Empty and full kg" selected={draft.quantityMethod === 'weighbridge'} onPress={() => selectQuantityMethod('weighbridge')} />
-              <MethodChoice title="Direct quantity" hint="Pieces, metres, bundles…" selected={draft.quantityMethod === 'direct'} onPress={() => selectQuantityMethod('direct')} />
+        {step === 1 ? <View>
+          {(!options.customers.length || !options.items.length || !options.units.length || (draft.quantityMethod === 'weighbridge' && !options.conversions.length)) ? (
+            <View style={styles.warning}>
+              <Text style={styles.warningEyebrow}>ACTION NEEDED</Text>
+              <Text style={styles.warningTitle}>Setup required</Text>
+              <Text style={styles.helper}>Create a customer and a load-enabled item. Drivers and trucks can be saved in People & Equipment or simply typed on each load. Units and the kg-to-ton conversion are already seeded.</Text>
+              <TouchableOpacity onPress={onOpenDirectory} accessibilityRole="button" accessibilityLabel="Open People and Equipment" hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}><Text style={styles.link}>Open People & Equipment</Text></TouchableOpacity>
             </View>
-            <GroupedSearchableSelect label="Load-enabled item *" groups={itemGroups} selectedId={draft.itemId} onSelect={selectItem} placeholder="Choose category, then item" />
+          ) : null}
+          <View style={[styles.openGroup, styles.openGroupFirst]}><Text style={styles.openGroupLabel}>WHEN</Text>
+            <DatePickerField variant="open" label="Record date *" value={draft.recordDate} onChange={(value) => update('recordDate', value)} minDate={project?.startDate ?? undefined} maxDate={project?.endDate ?? todayIso()} />
+          </View>
+          <View style={styles.openGroup}><Text style={styles.openGroupLabel}>WHERE</Text>
+            <OpenSwitch label="Delivered to *" options={[{ id: 'project' as const, label: 'Project' }, { id: 'address' as const, label: 'Other address' }]} selectedId={destinationMode} onSelect={chooseDestinationMode} />
+            <Text style={styles.openHelp}>{destinationMode === 'project' ? "The load goes to a saved project and appears in that project's daily report." : 'For an outside customer without a saved project.'}</Text>
+            {destinationMode === 'project' ? <SearchableSelect variant="open" label="Select project *" options={options.projects.map((value) => ({ id: value.id, label: value.name, detail: `${value.customerName} · ${value.location}` }))} selectedId={draft.projectId} onSelect={selectProject} placeholder={options.projects.length ? 'Search and select a project' : 'Create a project first'} /> : null}
+          </View>
+          <View style={styles.openGroup}><Text style={styles.openGroupLabel}>WHO</Text>
+            <SearchableSelect variant="open" label="Customer *" options={options.customers.map((value) => ({ id: value.id, label: value.name, detail: value.isOwnCompany ? 'Own company' : value.type }))} selectedId={draft.customerId} onSelect={selectCustomer} />
+            {project && customer ? <Text style={styles.openHelp}>Filled from the project.</Text> : null}
+            {destinationMode === 'address' ? <>
+              {customer?.isOwnCompany ? <Text style={styles.openHelp}>Own company: a saved project is required. Choose Project above.</Text> : null}
+              <AppField variant="open" label="Destination address *" value={draft.destinationAddress} onChangeText={(value) => update('destinationAddress', value)} multiline />
+            </> : null}
+          </View>
+        </View> : null}
+
+        {step === 2 ? <View>
+          <View style={[styles.openGroup, styles.openGroupFirst]}><Text style={styles.openGroupLabel}>WHAT</Text>
+            <OpenSwitch label="Quantity method" options={[{ id: 'weighbridge' as const, label: 'Weighbridge' }, { id: 'direct' as const, label: 'Direct quantity' }]} selectedId={draft.quantityMethod} onSelect={selectQuantityMethod} />
+            <Text style={styles.openHelp}>{draft.quantityMethod === 'weighbridge' ? 'Empty and full kg from the weighbridge.' : 'Pieces, metres, bundles or another unit.'}</Text>
+            <GroupedSearchableSelect variant="open" label="Load-enabled item *" groups={itemGroups} selectedId={draft.itemId} onSelect={selectItem} placeholder="Choose category, then item" />
+            {draft.quantityMethod === 'weighbridge' ? <>
+              <View style={styles.columns}><View style={styles.column}><AppField variant="open" label="Empty weight kg *" value={draft.emptyWeightKg} onChangeText={(value) => update('emptyWeightKg', value)} keyboardType="number-pad" /></View><View style={styles.column}><AppField variant="open" label="Full weight kg *" value={draft.fullWeightKg} onChangeText={(value) => update('fullWeightKg', value)} keyboardType="number-pad" /></View></View>
+              <OpenResult label="Net weight" value={calculation.netWeightKg == null ? '—' : `${calculation.netWeightKg} kg`} />
+              <AppField variant="open" label="Requested quantity (kg, optional)" value={draft.requestedQuantityKg} onChangeText={(value) => update('requestedQuantityKg', value)} keyboardType="number-pad" />
+            </> : <>
+              <AppField variant="open" label="Quantity *" value={draft.directQuantity} onChangeText={(value) => update('directQuantity', value)} keyboardType="decimal-pad" />
+              <SearchableSelect variant="open" label="Unit *" options={options.units.map((value) => ({ id: value.id, label: value.name, detail: value.symbol }))} selectedId={draft.directUnitId} onSelect={selectDirectUnit} placeholder="Piece, metre, bundle, or another unit" />
+              <OpenResult label="Receipt quantity" value={draft.directQuantity.trim() && directUnit ? `${draft.directQuantity.trim().replace(',', '.')} ${directUnit.symbol}` : '—'} />
+            </>}
+          </View>
+          <View style={styles.openGroup}><Text style={styles.openGroupLabel}>WHO CARRIED IT</Text>
             {/* DEC-477. Drivers and Operators can both drive a truck. The filter only narrows the list; choosing an Operator never changes their directory role. */}
-            <SegmentedChoice label="Driver / Operator *" options={[{ id: 'saved' as const, label: 'Saved person' }, { id: 'typed' as const, label: 'Type a name' }]} selectedId={driverMode} onSelect={switchDriverMode} />
+            <OpenSwitch label="Driver / Operator *" options={[{ id: 'saved' as const, label: 'Saved person' }, { id: 'typed' as const, label: 'Type a name' }]} selectedId={driverMode} onSelect={switchDriverMode} />
             {driverMode === 'saved' ? (
               <>
                 <SegmentedChoice mode="tabs" options={crewFilterOptions} selectedId={crewFilter} onSelect={setCrewFilter} />
-                <SearchableSelect label="Saved driver or operator" options={crewOptions} selectedId={draft.driverId} onSelect={selectDriver} placeholder={crew.length ? 'Choose the person driving' : 'No saved drivers yet. Type a name instead.'} />
+                <SearchableSelect variant="open" label="Saved driver or operator" options={crewOptions} selectedId={draft.driverId} onSelect={selectDriver} placeholder={crew.length ? 'Choose the person driving' : 'No saved drivers yet. Type a name instead.'} />
               </>
             ) : (
               <>
-                <AppField label="Driver name *" value={typedDriver} onChangeText={typeDriver} autoCapitalize="words" />
-                <View style={styles.notSavedRow}><Text style={styles.notSavedChip}>NOT SAVED</Text><Text style={[styles.helper, styles.flex]}>Used on this load only. It is not added to People.</Text></View>
+                <AppField variant="open" label="Driver name *" value={typedDriver} onChangeText={typeDriver} autoCapitalize="words" />
+                <View style={styles.notSavedRow}><Text style={styles.notSavedChip}>NOT SAVED</Text><Text style={[styles.openHelp, styles.flex]}>Used on this load only. It is not added to People.</Text></View>
               </>
             )}
-            <SegmentedChoice label="Truck *" options={[{ id: 'saved' as const, label: 'Saved truck' }, { id: 'typed' as const, label: 'Type a plate' }]} selectedId={truckMode} onSelect={switchTruckMode} />
+            <OpenSwitch label="Truck *" options={[{ id: 'saved' as const, label: 'Saved truck' }, { id: 'typed' as const, label: 'Type a plate' }]} selectedId={truckMode} onSelect={switchTruckMode} />
             {truckMode === 'saved' ? (
-              <SearchableSelect label="Saved truck" options={options.trucks.map((value) => ({ id: value.id, label: value.plate, detail: [value.makeModel, value.ownerName].filter(Boolean).join(' · ') }))} selectedId={draft.truckId} onSelect={selectTruck} placeholder={options.trucks.length ? 'Choose the truck' : 'No saved trucks yet. Type a plate instead.'} />
+              <SearchableSelect variant="open" label="Saved truck" options={options.trucks.map((value) => ({ id: value.id, label: value.plate, detail: [value.makeModel, value.ownerName].filter(Boolean).join(' · ') }))} selectedId={draft.truckId} onSelect={selectTruck} placeholder={options.trucks.length ? 'Choose the truck' : 'No saved trucks yet. Type a plate instead.'} />
             ) : (
               <>
-                <AppField label="Truck plate *" value={typedPlate} onChangeText={typePlate} autoCapitalize="characters" />
-                <View style={styles.notSavedRow}><Text style={styles.notSavedChip}>NOT SAVED</Text><Text style={[styles.helper, styles.flex]}>Used on this load only. It is not added to Trucks.</Text></View>
+                <AppField variant="open" label="Truck plate *" value={typedPlate} onChangeText={typePlate} autoCapitalize="characters" />
+                <View style={styles.notSavedRow}><Text style={styles.notSavedChip}>NOT SAVED</Text><Text style={[styles.openHelp, styles.flex]}>Used on this load only. It is not added to Trucks.</Text></View>
               </>
             )}
-            {draft.quantityMethod === 'weighbridge' ? (
-              <>
-                <AppField label="Requested quantity (kg, optional)" value={draft.requestedQuantityKg} onChangeText={(value) => update('requestedQuantityKg', value)} keyboardType="number-pad" />
-                <View style={styles.columns}><View style={styles.column}><AppField label="Empty weight kg *" value={draft.emptyWeightKg} onChangeText={(value) => update('emptyWeightKg', value)} keyboardType="number-pad" /></View><View style={styles.column}><AppField label="Full weight kg *" value={draft.fullWeightKg} onChangeText={(value) => update('fullWeightKg', value)} keyboardType="number-pad" /></View></View>
-                <Animated.View style={{ transform: [{ scale: calculationMotion }] }}><View style={styles.metricRow}><MetricCard label="Calculated net weight" value={calculation.netWeightKg == null ? '—' : `${calculation.netWeightKg} kg`} result /></View></Animated.View>
-              </>
-            ) : (
-              <>
-                <AppField label="Quantity *" value={draft.directQuantity} onChangeText={(value) => update('directQuantity', value)} keyboardType="decimal-pad" />
-                <SearchableSelect label="Unit *" options={options.units.map((value) => ({ id: value.id, label: value.name, detail: value.symbol }))} selectedId={draft.directUnitId} onSelect={selectDirectUnit} placeholder="Piece, metre, bundle, or another unit" />
-                <Animated.View style={{ transform: [{ scale: calculationMotion }] }}><View style={styles.metricRow}><MetricCard label={conversion ? 'Quantity entered' : 'Receipt quantity'} value={calculation.billedQuantity == null ? '—' : conversion ? `${draft.directQuantity.trim().replace(',', '.')} ${directUnit?.symbol ?? ''}` : `${calculation.billedQuantity} ${directUnit?.symbol ?? ''}`} result /></View></Animated.View>
-              </>
-            )}
-            <IssueList issues={loadIssues} />
-          </ReceiptSection>
-        </Animated.View>
+          </View>
+        </View> : null}
 
-        <Animated.View style={motion(3)}>
-          <ReceiptSection number="03" title="Conversion and price" hint={draft.quantityMethod === 'direct' ? 'Optionally convert the entered quantity, then calculate the optional sale value.' : 'Convert the verified weight and calculate the optional sale value.'}>
+        {step === 3 ? <View>
+          <Text style={styles.openHelp}>Optional. Left empty, this load is saved as Unpriced, never as zero.</Text>
+          <View style={styles.openGroup}><Text style={styles.openGroupLabel}>CONVERSION</Text>
             {draft.quantityMethod === 'weighbridge' ? (
               <>
-                <SearchableSelect label="Conversion *" options={options.conversions.map((value) => ({ id: value.id, label: value.name, detail: `${value.inputQuantity} ${value.inputUnitSymbol} = ${value.outputQuantity} ${value.outputUnitSymbol}` }))} selectedId={draft.conversionId} onSelect={(id) => update('conversionId', id)} />
-                {conversion ? <Text style={styles.helper}>{conversion.inputQuantity} {conversion.inputUnitSymbol} = {conversion.outputQuantity} {conversion.outputUnitSymbol} · result: {calculation.billedQuantity == null ? '—' : calculation.billedQuantity.toFixed(conversion.decimalPlaces)} {conversion.outputUnitSymbol}</Text> : null}
+                <SearchableSelect variant="open" label="Conversion *" options={options.conversions.map((value) => ({ id: value.id, label: value.name, detail: `${value.inputQuantity} ${value.inputUnitSymbol} = ${value.outputQuantity} ${value.outputUnitSymbol}` }))} selectedId={draft.conversionId} onSelect={(id) => update('conversionId', id)} />
+                {conversion ? <OpenResult label="Converted quantity, used for the price" value={calculation.billedQuantity == null ? '—' : `${calculation.billedQuantity.toFixed(conversion.decimalPlaces)} ${conversion.outputUnitSymbol}`} /> : null}
               </>
             ) : (
               <>
-                <SearchableSelect label="Conversion (optional)" options={directConversions.map((value) => ({ id: value.id, label: value.name, detail: `${value.inputQuantity} ${value.inputUnitSymbol} = ${value.outputQuantity} ${value.outputUnitSymbol}` }))} selectedId={draft.conversionId} onSelect={(id) => update('conversionId', id)} allowClear placeholder="No conversion (use the quantity as entered)" />
-                {draft.directUnitId && !directConversions.length ? <Text style={styles.helper}>No conversion starts from {directUnit?.symbol ?? 'this unit'}. The quantity is used as entered. Add one in Units &amp; Conversions.</Text> : null}
-                {conversion ? <Text style={styles.helper}>{conversion.inputQuantity} {conversion.inputUnitSymbol} = {conversion.outputQuantity} {conversion.outputUnitSymbol}</Text> : <Text style={styles.directSummary}>{calculation.billedQuantity ?? '—'} {directUnit?.symbol ?? ''} · entered directly, no conversion</Text>}
-                {conversion ? <Animated.View style={{ transform: [{ scale: calculationMotion }] }}><View style={styles.metricRow}><MetricCard label="Converted quantity, used for the price" value={calculation.billedQuantity == null ? '—' : `${calculation.billedQuantity.toFixed(conversion.decimalPlaces)} ${conversion.outputUnitSymbol}`} result /></View></Animated.View> : null}
+                <SearchableSelect variant="open" label="Conversion (optional)" options={directConversions.map((value) => ({ id: value.id, label: value.name, detail: `${value.inputQuantity} ${value.inputUnitSymbol} = ${value.outputQuantity} ${value.outputUnitSymbol}` }))} selectedId={draft.conversionId} onSelect={(id) => update('conversionId', id)} allowClear placeholder="No conversion (use the quantity as entered)" />
+                {draft.directUnitId && !directConversions.length ? <Text style={styles.openHelp}>No conversion starts from {directUnit?.symbol ?? 'this unit'}. The quantity is used as entered. Add one in Units &amp; Conversions.</Text> : null}
+                {conversion ? <OpenResult label="Converted quantity, used for the price" value={calculation.billedQuantity == null ? '—' : `${calculation.billedQuantity.toFixed(conversion.decimalPlaces)} ${conversion.outputUnitSymbol}`} /> : <OpenResult label="Entered directly, no conversion" value={`${calculation.billedQuantity ?? '—'} ${directUnit?.symbol ?? ''}`.trim()} />}
               </>
             )}
-            <AppField label={`Price per ${draft.quantityMethod === 'direct' ? (conversion ? `converted unit (${conversion.outputUnitSymbol})` : (directUnit?.symbol || 'unit')) : 'converted unit'} USD (optional)`} value={draft.unitPriceUsd} onChangeText={(value) => update('unitPriceUsd', value)} keyboardType="decimal-pad" />
+          </View>
+          <View style={styles.openGroup}><Text style={styles.openGroupLabel}>PRICE</Text>
+            <AppField variant="open" label={`Price per ${draft.quantityMethod === 'direct' ? (conversion ? `converted unit (${conversion.outputUnitSymbol})` : (directUnit?.symbol || 'unit')) : 'converted unit'} USD (optional)`} value={draft.unitPriceUsd} onChangeText={(value) => update('unitPriceUsd', value)} keyboardType="decimal-pad" placeholder="Unpriced when empty" />
             <VatChoiceControl value={draft.vat} onChange={(vat) => update('vat', vat)} universalRatePercent={universalVat} hint={customer ? `${customer.name} is set to ${accountVatLabel(customer.vat, universalVat)}. No VAT is added unless you choose it.` : 'No VAT is added unless you choose it.'} />
-            <Animated.View style={{ transform: [{ scale: calculationMotion }] }}>
-              <View style={styles.metricRow}>
-                <MetricCard label="Subtotal" value={formatUsd(calculation.subtotalUsd)} />
-                {vatRate > 0 ? <MetricCard label={`VAT ${vatRate}%`} value={formatUsd(calculation.vatAmountUsd)} /> : null}
-                <MetricCard label="Final total" value={formatUsd(calculation.finalTotalUsd)} accent />
-              </View>
-            </Animated.View>
-            <AppField label="Notes" value={draft.notes} onChangeText={(value) => update('notes', value)} multiline />
-            <IssueList issues={valueIssues} />
-          </ReceiptSection>
-        </Animated.View>
+          </View>
+          {contracts ? <ContractItemChoice variant="open" contracts={contracts} projectId={draft.projectId || null} materialId={draft.itemId} materialName={item?.name} loadUnitId={billedUnitId} loadUnitSymbol={billedUnitSymbol} loadQuantity={calculation.billedQuantity ?? null} value={draft.contractItemId} onChange={setContractItem} onIssue={setContractIssue} onSelection={setContractLabel} refreshKey={contractRefresh} /> : null}
+          <View style={styles.openGroup}><Text style={styles.openGroupLabel}>WHAT IT COMES TO</Text>
+            {calculation.subtotalUsd != null ? <View style={styles.ruled}>
+              <OpenResult label="Subtotal" value={formatUsd(calculation.subtotalUsd)} plain />
+              {vatRate > 0 ? <OpenResult label={`VAT (${vatRate}%)`} value={formatUsd(calculation.vatAmountUsd)} plain /> : null}
+              <OpenResult label="Final total" value={formatUsd(calculation.finalTotalUsd)} />
+            </View> : <Text style={styles.openHelp}>No price entered: this load is saved as Unpriced.</Text>}
+          </View>
+        </View> : null}
 
-        {contracts ? <ContractItemChoice contracts={contracts} projectId={draft.projectId || null} materialId={draft.itemId} materialName={item?.name} loadUnitId={billedUnitId} loadUnitSymbol={billedUnitSymbol} loadQuantity={calculation.billedQuantity ?? null} value={draft.contractItemId} onChange={setContractItem} onIssue={setContractIssue} refreshKey={contractRefresh} /> : null}
-
-        <Animated.View style={motion(4)}>
-          <ReceiptSection number="04" title="Signatures" hint="Signed here, so nothing is left to do in Load History.">
-            <Text style={styles.methodLabel}>SUPPLIER</Text>
+        {step === 4 ? <View>
+          <Text style={styles.openHelp}>Tap a line to change it.</Text>
+          <View style={[styles.ruled, styles.reviewList]}>
+            {reviewRows.map(([label, value, target]) => target == null
+              ? <View key={label} style={styles.ruledRow}><Text style={styles.ruledLabel}>{label}</Text><Text style={styles.ruledValue}>{value}</Text></View>
+              : <TouchableOpacity key={label} style={styles.ruledRow} onPress={() => goToStep(target)} accessibilityRole="button" accessibilityLabel={`${label}: ${value}. Change`}><Text style={styles.ruledLabel}>{label}</Text><Text style={styles.ruledValue}>{value}<Text style={styles.openLink}>  Change</Text></Text></TouchableOpacity>)}
+            <TouchableOpacity style={[styles.ruledRow, styles.ruledTotal]} onPress={() => goToStep(3)} accessibilityRole="button" accessibilityLabel={`Total: ${formatUsd(calculation.finalTotalUsd)}. Change`}><Text style={styles.ruledTotalLabel}>Total</Text><Text style={styles.ruledTotalValue}>{formatUsd(calculation.finalTotalUsd)}</Text></TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.openLinkBox} onPress={() => setShowDocuments(!showDocuments)} accessibilityRole="button" accessibilityState={{ expanded: showDocuments }}><Text style={styles.openLink}>{showDocuments ? 'Hide documents' : 'Preview documents · Receipt and Authorization'}</Text></TouchableOpacity>
+          {showDocuments ? <LoadDocuments data={draftDocument(options, fittedDraft, calculation, nextNumber?.loadNumber ?? null)} isDraft /> : null}
+          <View style={styles.openGroup}><Text style={styles.openGroupLabel}>SUPPLIER SIGNATURE</Text>
             {options.deliverySignature ? (
-              <View style={styles.sigCard}>
+              <View style={styles.sigOpen}>
                 {options.deliverySignature.display === 'name_with_signature' && options.deliverySignature.signature.length ? <View style={styles.sigPreview} accessibilityLabel={`Saved signature of ${options.deliverySignature.name}`}><Svg width="100%" height="100%" viewBox="0 0 320 140" preserveAspectRatio="xMidYMid meet">{options.deliverySignature.signature.map((path, index) => <Path key={`${index}-${path.length}`} d={path} fill="none" stroke="#111" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />)}</Svg></View> : null}
                 <Text style={styles.sigName}>{[options.deliverySignature.name, options.deliverySignature.jobTitle].filter(Boolean).join(' · ')}</Text>
-                <Text style={styles.autoChip}>AUTO-SIGNED</Text>
-                <Text style={styles.helper}>Auto-signed from the saved company signature{options.deliverySignature.display === 'name_only' ? ' (name only)' : ''}. Change it in Company setups.</Text>
+                <View style={styles.notSavedRow}><Text style={styles.autoChip}>AUTO-SIGNED</Text><Text style={[styles.openHelp, styles.flex]}>From the saved company signature{options.deliverySignature.display === 'name_only' ? ' (name only)' : ''}. Change it in Company setups.</Text></View>
               </View>
             ) : (
-              <View style={styles.sigEmpty}>
+              <View style={styles.sigOpen}>
                 <Text style={styles.sigName}>No supplier signature</Text>
-                <Text style={styles.helper}>{options.supplierSignatureNote ?? 'No default signer is set, so the supplier line is left off the Delivery Authorization.'}</Text>
-                {onOpenCompanySetups ? <AppButton label="Open Company setups" tone="secondary" onPress={onOpenCompanySetups} /> : null}
+                <Text style={styles.openHelp}>{options.supplierSignatureNote ?? 'No default signer is set, so the supplier line is left off the Delivery Authorization.'}</Text>
+                {onOpenCompanySetups ? <TouchableOpacity style={styles.openLinkBox} onPress={onOpenCompanySetups} accessibilityRole="button"><Text style={styles.openLink}>Open Company setups</Text></TouchableOpacity> : null}
               </View>
             )}
-            <Text style={styles.methodLabel}>DRIVER</Text>
-            <SegmentedChoice options={[{ id: 'draw' as const, label: 'Draw signature' }, { id: 'name' as const, label: 'Name only' }]} selectedId={signatureMode} onSelect={chooseSignatureMode} />
+          </View>
+          <View style={styles.openGroup}><Text style={styles.openGroupLabel}>{truckCrewRoleLabel(driverRole).toUpperCase()} SIGNATURE</Text>
+            <OpenSwitch options={[{ id: 'draw' as const, label: 'Draw signature' }, { id: 'name' as const, label: 'Name only' }]} selectedId={signatureMode} onSelect={chooseSignatureMode} />
             {signatureMode === 'draw' ? (
               <>
-                <SignaturePad value={draft.driverSignaturePaths} onChange={(paths) => update('driverSignaturePaths', paths)} onSigningChange={setSigning} />
-                <Text style={styles.helper}>Page scrolling pauses while you sign. The signature prints on the Delivery Authorization. Leaving the pad empty is allowed.</Text>
+                <SignaturePad large value={draft.driverSignaturePaths} onChange={(paths) => update('driverSignaturePaths', paths)} onSigningChange={setSigning} />
+                <Text style={styles.openHelp}>Page scrolling pauses while you sign. The signature prints on the Delivery Authorization. Leaving the pad empty is allowed.</Text>
               </>
-            ) : <Text style={styles.directSummary}>No drawn signature. The load is saved Unsigned and the driver can sign later in Load History.</Text>}
-          </ReceiptSection>
-        </Animated.View>
-
-        <IssueList issues={otherIssues} />
-
-        <AppCard title="Ready to check the documents?" hint="The main Preview action stays within thumb reach below. Preview both layouts before the permanent transaction number is assigned.">
-          <View style={styles.manageActions}><View style={styles.manageAction}><AppButton label="Manage Projects" tone="secondary" onPress={onOpenProjects} /></View><View style={styles.manageAction}><AppButton label="Units & Conversions" tone="secondary" onPress={onOpenSetup} /></View></View>
-        </AppCard>
-      </Animated.ScrollView>
-      <View style={styles.stickyAction}>
-        <View style={styles.stickyCopy}><Text style={styles.stickyStep}>STEP {currentStage} OF 4</Text><Text style={styles.stickyHint}>{currentStage === 1 ? 'Complete customer and destination' : currentStage === 2 ? `Complete ${draft.quantityMethod === 'direct' ? 'direct quantity' : 'load and weighing'}` : currentStage === 3 ? 'Choose conversion and value' : 'Ready for document review'}</Text></View>
-        <View style={styles.stickyButton}><AppButton label="Preview Documents" onPress={() => { const next = validateLoadDraft(draft, options); setIssues(next); setPreview(true); }} /></View>
+            ) : <Text style={styles.openHelp}>No drawn signature. The load is saved Unsigned and the driver can sign later in Load History.</Text>}
+          </View>
+          <View style={styles.openGroup}><Text style={styles.openGroupLabel}>NOTES · OPTIONAL</Text>
+            <AppField variant="open" label="Notes" value={draft.notes} onChangeText={(value) => update('notes', value)} multiline />
+          </View>
+        </View> : null}
+      </ScrollView>
+      <View style={styles.stepBar}>
+        <View style={styles.flex}><Text style={styles.stepBarLabel}>TOTAL</Text><Text style={styles.stepBarValue}>{calculation.finalTotalUsd == null ? 'not priced yet' : formatUsd(calculation.finalTotalUsd)}</Text></View>
+        <View style={styles.stepActions}>
+          <TouchableOpacity style={styles.stepBack} onPress={goBackStep} accessibilityRole="button"><Text style={styles.stepBackText}>{step === 1 ? 'Cancel' : 'Back'}</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.stepNext} disabled={busy} onPress={step === 4 ? () => void doConfirm() : goNextStep} accessibilityRole="button"><Text style={styles.stepNextText}>{step === 4 ? (busy ? 'Saving…' : 'Confirm load') : 'Next'}</Text></TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -408,7 +444,7 @@ function ConfirmedView({ record, headers, projectId, canRepeatDelivery, onBack, 
     finally { if (mounted.current) setBusy(null); }
   }
   return (
-    <Animated.ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <PageHeader eyebrow="LOAD WORKFLOW" title="Load confirmed" onBack={onBack} />
       <View style={styles.confirmedHero}>
         <Text style={styles.confirmedKicker}>CONFIRMED OFFLINE</Text>
@@ -418,13 +454,14 @@ function ConfirmedView({ record, headers, projectId, canRepeatDelivery, onBack, 
       </View>
       {error ? <Feedback kind="error">{error}</Feedback> : null}
       {message ? <Feedback kind="success">{message}</Feedback> : null}
-      <AppCard title="What do you want to print?">
+      <View style={[styles.openGroup, styles.openGroupFirst]}>
+        <Text style={styles.openGroupLabel}>What do you want to print?</Text>
         <View style={styles.methodSelector}>
           <MethodChoice title="Receipt" hint="Quantity, price and total for the customer" selected={kind === 'receipt'} onPress={() => setKind('receipt')} />
           <MethodChoice title="Delivery Authorization" hint="Driver, truck and both signatures" selected={kind === 'authorization'} onPress={() => setKind('authorization')} />
         </View>
-        <SegmentedChoice label="Paper" options={[{ id: '58' as const, label: '58 mm' }, { id: '80' as const, label: '80 mm' }]} selectedId={paper} onSelect={setPaper} />
-      </AppCard>
+        <OpenSwitch label="Paper" options={[{ id: '58' as const, label: '58 mm' }, { id: '80' as const, label: '80 mm' }]} selectedId={paper} onSelect={setPaper} />
+      </View>
       {headers ? <HeaderCompanyPicker headers={headers} value={headerKind} onChange={setHeaderKind} remember={projectId ? { checked: remember, onChange: setRemember } : undefined} onOpenSetups={onOpenCompanySetups} /> : null}
       <LoadDocuments data={confirmedDocument(shown)} isDraft={false} kind={kind} paper={paper} />
       <AppButton label={printFailed ? 'Retry Print' : `Bluetooth Print ${label}`} busy={busy === 'print'} disabled={busy !== null} onPress={() => void print()} />
@@ -439,90 +476,37 @@ function ConfirmedView({ record, headers, projectId, canRepeatDelivery, onBack, 
         </View>
       ) : null}
       <AppButton label="Start Another Load" tone="secondary" onPress={onStartAnotherLoad} />
-    </Animated.ScrollView>
+    </ScrollView>
   );
 }
 
-function PreviewView({ options, draft, calculation, issues, busy, onBack, onConfirm, seriesRepository }: { options: LoadSetupOptions; draft: LoadDraft; calculation: ReturnType<typeof calculateLoad>; issues: string[]; busy: boolean; onBack: () => void; onConfirm: () => void; seriesRepository?: LoadNumberSeriesRepository }) {
-  const [nextNumber, setNextNumber] = useState<LoadNumberPreview | null>(null);
-  useEffect(() => {
-    if (!seriesRepository || !draft.itemId || !draft.recordDate) { setNextNumber(null); return; }
-    let active = true;
-    seriesRepository.previewNextLoadNumber(draft.itemId, draft.recordDate).then((value) => { if (active) setNextNumber(value); }).catch(() => { if (active) setNextNumber(null); });
-    return () => { active = false; };
-  }, [seriesRepository, draft.itemId, draft.recordDate]);
-  return (
-    <Animated.ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <PageHeader eyebrow="FINAL REVIEW" title="Confirm this load" onBack={onBack} />
-      <FinalReviewSummary options={options} draft={draft} calculation={calculation} />
-      {nextNumber ? <View style={styles.loadNumberPreview} accessible accessibilityLabel={`This load will be numbered ${nextNumber.loadNumber}, ${nextNumber.displayName} series, when confirmed.`}>
-        <Text style={styles.loadNumberLabel}>Load number on confirmation</Text>
-        <Text style={styles.loadNumberValue}>{nextNumber.loadNumber}</Text>
-        <Text style={styles.loadNumberHint}>{nextNumber.displayName} series. The number is given only when you confirm, and never changes or is reused.</Text>
-      </View> : null}
-      <LoadDocuments data={draftDocument(options, draft, calculation, nextNumber?.loadNumber ?? null)} isDraft />
-      <IssueList issues={issues} />
-      <AppButton label="Confirm This Load" busy={busy} onPress={onConfirm} />
-      <AppButton label="Return to Entry" tone="secondary" onPress={onBack} />
-    </Animated.ScrollView>
-  );
-}
-
-function FinalReviewSummary({ options, draft, calculation }: { options: LoadSetupOptions; draft: LoadDraft; calculation: ReturnType<typeof calculateLoad> }) {
-  const customer = options.customers.find((value) => value.id === draft.customerId);
-  const project = options.projects.find((value) => value.id === draft.projectId);
-  const item = options.items.find((value) => value.id === draft.itemId);
-  const unit = options.units.find((value) => value.id === draft.directUnitId);
-  const conversion = options.conversions.find((value) => value.id === draft.conversionId);
-  const quantitySymbol = draft.quantityMethod === 'direct' && !conversion ? (unit?.symbol ?? '') : (conversion?.outputUnitSymbol ?? '');
-  return (
-    <AppCard title="Everything correct?" hint="Confirming assigns the permanent transaction number. The record cannot return to Draft.">
-      <SummaryRow label="Customer" value={customer?.name ?? '—'} />
-      <SummaryRow label="Project / destination" value={project?.name ?? (draft.destinationAddress.trim() || '—')} />
-      <SummaryRow label="Item" value={item?.name ?? '—'} />
-      <SummaryRow label={`${truckCrewRoleLabel(options.drivers.find((value) => value.id === draft.driverId)?.role)} / truck`} value={`${draft.driverName || '—'} · ${draft.truckPlate || '—'}`} />
-      {!draft.driverId || !draft.truckId ? <SummaryRow label="Not saved" value={`${[!draft.driverId ? 'Driver name' : null, !draft.truckId ? 'truck plate' : null].filter(Boolean).join(' and ')} used on this load only`} /> : null}
-      <SummaryRow label="Quantity" value={calculation.billedQuantity == null ? '—' : draft.quantityMethod === 'direct' && conversion ? `${draft.directQuantity.trim().replace(',', '.')} ${unit?.symbol ?? ''} → ${calculation.billedQuantity} ${conversion.outputUnitSymbol}` : `${calculation.billedQuantity} ${quantitySymbol}`} />
-      <SummaryRow label="Price" value={draft.unitPriceUsd.trim() ? formatUsd(calculation.finalTotalUsd) : 'Unpriced'} strong />
-      <SummaryRow label="Supplier signature" value={options.deliverySignature ? `${options.deliverySignature.name} (auto)` : 'None'} />
-      <SummaryRow label="Driver signature" value={draft.driverSignaturePaths.length ? 'Drawn' : 'Not signed (name only)'} />
-    </AppCard>
-  );
-}
-
-function SummaryRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) { return <View style={styles.summaryRow}><Text style={styles.summaryLabel}>{label}</Text><Text style={[styles.summaryValue, strong && styles.summaryValueStrong]}>{value}</Text></View>; }
-function ReceiptSection({ number, title, hint, children }: { number: string; title: string; hint: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.receiptSection}>
-      <View style={styles.sectionHeader}><View style={styles.sectionNumber}><Text style={styles.sectionNumberText}>{number}</Text></View><View style={styles.flex}><Text style={styles.sectionTitle}>{title}</Text><Text style={styles.sectionHint}>{hint}</Text></View></View>
-      <AppCard>{children}</AppCard>
-    </View>
-  );
-}
-function ProgressMarker({ number, done, current }: { number: number; done: boolean; current: boolean }) { return <View style={[styles.progressStep, current && styles.progressStepActive, done && styles.progressStepDone]}><Text style={[styles.progressNumber, (current || done) && styles.progressNumberActive]}>{done ? '✓' : number}</Text></View>; }
 function MethodChoice({ title, hint, selected, onPress }: { title: string; hint: string; selected: boolean; onPress: () => void }) { return <TouchableOpacity activeOpacity={.72} onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${title}. ${hint}`} style={[styles.methodChoice, selected && styles.methodChoiceSelected]}><Text style={[styles.methodTitle, selected && styles.methodTitleSelected]}>{title}</Text><Text style={[styles.methodHint, selected && styles.methodHintSelected]}>{hint}</Text></TouchableOpacity>; }
 function IssueList({ issues }: { issues: string[] }) { if (!issues.length) return null; return <Feedback kind="error">{issues.map((issue) => `• ${issue}`).join('\n')}</Feedback>; }
 
 function draftDocument(options: LoadSetupOptions, draft: LoadDraft, calculation: ReturnType<typeof calculateLoad>, loadNumber: string | null = null): DocumentViewData { const customer = options.customers.find((v) => v.id === draft.customerId); const project = options.projects.find((v) => v.id === draft.projectId); const item = options.items.find((v) => v.id === draft.itemId); const conversion = options.conversions.find((v) => v.id === draft.conversionId); const unit = options.units.find(v => v.id === draft.directUnitId); const direct = draft.quantityMethod === 'direct'; return { quantityMethod: draft.quantityMethod, companyName: options.companySettings.companyName, companyAddress: options.companySettings.address, companyPhone: options.companySettings.phone, companyEmail: options.companySettings.email, companyTaxVatNumber: options.companySettings.taxVatNumber, companyReceiptFooter: options.companySettings.receiptFooter, loadNumber, transactionNumber: '', dateTime: new Date(`${draft.recordDate}T12:00:00`).toISOString(), customerName: customer?.name ?? '', projectName: project?.name ?? null, destinationAddress: project?.location ?? (draft.destinationAddress.trim() || null), itemName: item?.name ?? '', driverName: draft.driverName.trim(), driverRole: options.drivers.find((v) => v.id === draft.driverId)?.role ?? null, truckPlate: draft.truckPlate.trim(), requestedQuantityKg: !direct && draft.requestedQuantityKg ? Number(draft.requestedQuantityKg) : null, emptyWeightKg: !direct && draft.emptyWeightKg ? Number(draft.emptyWeightKg) : null, fullWeightKg: !direct && draft.fullWeightKg ? Number(draft.fullWeightKg) : null, netWeightKg: calculation.netWeightKg, convertedQuantity: calculation.billedQuantity, outputUnitSymbol: direct && !conversion ? (unit?.symbol ?? null) : (conversion?.outputUnitSymbol ?? null), unitPriceUsd: draft.unitPriceUsd.trim() ? Number(draft.unitPriceUsd.replace(',', '.')) : null, subtotalUsd: calculation.subtotalUsd, vatRatePercent: draft.unitPriceUsd.trim() ? options.companySettings.vatRatePercent : null, vatAmountUsd: calculation.vatAmountUsd, finalTotalUsd: calculation.finalTotalUsd, signaturePaths: draft.driverSignaturePaths, supplierSignature: options.deliverySignature ?? null, enteredQuantity: direct && conversion ? `${draft.directQuantity.trim().replace(',', '.')} ${unit?.symbol ?? ''}`.trim() : null, conversionRule: direct && conversion ? `${conversion.inputQuantity} ${conversion.inputUnitSymbol} = ${conversion.outputQuantity} ${conversion.outputUnitSymbol}` : null }; }
 export function confirmedDocument(record: ConfirmedLoad): DocumentViewData { return { quantityMethod: record.quantityMethod, companyName: record.companyName, companyAddress: record.companyAddress, companyPhone: record.companyPhone, companyEmail: record.companyEmail, companyTaxVatNumber: record.companyTaxVatNumber, companyReceiptFooter: record.companyReceiptFooter, loadNumber: record.loadNumber ?? null, transactionNumber: record.transactionNumber, dateTime: record.confirmedAt, customerName: record.customerName, projectName: record.projectName, destinationAddress: record.projectLocation ?? record.destinationAddress, itemName: record.itemName, driverName: record.driverName, driverRole: record.driverRole ?? null, truckPlate: record.truckPlate, requestedQuantityKg: record.requestedQuantityKg, emptyWeightKg: record.emptyWeightKg, fullWeightKg: record.fullWeightKg, netWeightKg: record.netWeightKg, convertedQuantity: record.billedQuantity, outputUnitSymbol: record.outputUnitSymbol, unitPriceUsd: record.unitPriceUsd, subtotalUsd: record.subtotalUsd, vatRatePercent: record.vatRatePercent, vatAmountUsd: record.vatAmountUsd, finalTotalUsd: record.finalTotalUsd, signaturePaths: record.signaturePaths, supplierSignature: record.supplierSignature ?? null, enteredQuantity: directConversionLines(record)?.entered ?? null, conversionRule: directConversionLines(record)?.rule ?? null }; }
 
+/** A calculated line in the Open form: a grey label and the result, large unless `plain`. */
+function OpenResult({ label, value, plain = false }: { label: string; value: string; plain?: boolean }) { return <View style={styles.resultRow}><Text style={plain ? styles.resultLabel : styles.resultStrongLabel}>{label}</Text><Text style={plain ? styles.resultValue : styles.resultStrongValue}>{value}</Text></View>; }
+
 const styles = StyleSheet.create({ nextRule: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }, nextLine: { flex: 1, borderTopWidth: 1, borderTopColor: colors.line }, nextText: { color: colors.muted, fontSize: 12, fontWeight: '800' }, nextHint: { color: colors.muted, fontSize: 12, textAlign: 'center' },
   notSavedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, notSavedChip: { color: colors.warning, backgroundColor: '#FFF3D8', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', fontSize: 10, fontWeight: '900', letterSpacing: .6 },
-  sigCard: { borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 12, gap: 6, backgroundColor: '#FCFBF8' }, sigPreview: { height: 64, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: '#FFF' }, sigName: { color: colors.ink, fontSize: 14, fontWeight: '900' }, autoChip: { alignSelf: 'flex-start', color: colors.success, backgroundColor: '#E5F3EC', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', fontSize: 10, fontWeight: '900', letterSpacing: .6 }, sigEmpty: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, borderRadius: 12, padding: 14, gap: 8, backgroundColor: colors.surface },
-  loadNumberPreview: { backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: '#C9D7E6', padding: 14, gap: 3 }, loadNumberLabel: { color: colors.navy, fontSize: 12, fontWeight: '700' }, loadNumberValue: { color: colors.ink, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] }, loadNumberHint: { color: '#4F5B66', fontSize: 13, lineHeight: 18 },
-  screen: { flex: 1 }, content: { padding: 20, paddingBottom: 42, gap: 16 }, contentWithFooter: { paddingBottom: 125 }, flex: { flex: 1, minWidth: 0 },
+  sigOpen: { gap: 6 }, sigPreview: { height: 64, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: '#FFF' }, sigName: { color: colors.ink, fontSize: 14, fontWeight: '900' }, autoChip: { alignSelf: 'flex-start', color: colors.success, backgroundColor: '#E5F3EC', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden', fontSize: 10, fontWeight: '900', letterSpacing: .6 },
+  screen: { flex: 1 }, content: { padding: 20, paddingBottom: 42, gap: 16 }, flex: { flex: 1, minWidth: 0 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 60 }, loadingMark: { width: 46, height: 46, borderRadius: 23, textAlign: 'center', textAlignVertical: 'center', overflow: 'hidden', backgroundColor: colors.navy, color: '#FFF', fontSize: 24, fontWeight: '900' },
   helper: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   errorState: { backgroundColor: '#FCE8E6', borderRadius: 16, padding: 20, gap: 12, borderLeftWidth: 4, borderLeftColor: colors.danger, marginTop: 16 }, errorStateTitle: { color: colors.ink, fontSize: 17, fontWeight: '900' }, errorStateText: { color: colors.danger, fontSize: 13, lineHeight: 19, fontWeight: '700' }, retryButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ink, borderRadius: 11, paddingHorizontal: 16 }, retryButtonText: { color: '#FFF', fontWeight: '900', fontSize: 15 },
-  workflowHero: { marginTop: 16, backgroundColor: colors.navy, borderRadius: 18, padding: 17, gap: 16, overflow: 'hidden' }, workflowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, workflowKicker: { color: '#F2A184', fontSize: 11, fontWeight: '900', letterSpacing: 1 }, workflowTitle: { color: colors.cream, fontSize: 20, fontWeight: '900', marginTop: 3 }, autosaveBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#245274', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 7, maxWidth: 150 }, autosaveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#75C99A' }, autosaveDotBusy: { backgroundColor: '#F2A184' }, autosaveDotError: { backgroundColor: colors.warning }, autosave: { color: '#E7F5ED', fontSize: 11, fontWeight: '800', flexShrink: 1 },
-  progressTrack: { flexDirection: 'row', alignItems: 'center' }, progressStep: { width: 27, height: 27, borderRadius: 14, borderWidth: 1, borderColor: '#7390A7', alignItems: 'center', justifyContent: 'center' }, progressStepActive: { backgroundColor: colors.brand, borderColor: colors.brand }, progressStepDone: { backgroundColor: colors.success, borderColor: colors.success }, progressNumber: { color: '#BCD0DF', fontSize: 11, fontWeight: '900' }, progressNumberActive: { color: '#FFF', fontSize: 11, fontWeight: '900' }, progressLine: { flex: 1, height: 2, backgroundColor: '#547792' }, progressLineDone: { backgroundColor: colors.success }, progressLabels: { flexDirection: 'row', justifyContent: 'space-between' }, progressLabel: { color: '#BCD0DF', fontSize: 11, fontWeight: '700', width: '24%', textAlign: 'center' }, progressLabelDone: { color: '#75C99A' }, progressLabelCurrent: { color: '#F2A184' },
-  warning: { backgroundColor: '#FFF3D8', borderWidth: 1, borderColor: '#E3C681', padding: 15, borderRadius: 14, gap: 5 }, warningEyebrow: { color: colors.warning, fontSize: 11, fontWeight: '900', letterSpacing: 1 }, warningTitle: { color: colors.ink, fontSize: 17, fontWeight: '900' }, link: { alignSelf: 'flex-start', color: colors.brandDark, fontWeight: '900', marginTop: 5, borderBottomWidth: 1, borderBottomColor: colors.brandDark, paddingBottom: 2 },
-  receiptSection: { gap: 10 }, sectionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, sectionNumber: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center' }, sectionNumberText: { color: '#FFF', fontSize: 12, fontWeight: '900' }, sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: '900' }, sectionHint: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 2 },
-  methodLabel: { color: colors.navy, fontSize: 11, fontWeight: '900', letterSpacing: 1 }, methodSelector: { flexDirection: 'row', gap: 8 }, methodChoice: { flex: 1, minHeight: 70, borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 11, justifyContent: 'center', backgroundColor: colors.surface }, methodChoiceSelected: { backgroundColor: colors.navy, borderColor: colors.navy }, methodTitle: { color: colors.ink, fontWeight: '900', fontSize: 13 }, methodTitleSelected: { color: '#FFF' }, methodHint: { color: colors.muted, fontSize: 11, lineHeight: 15, marginTop: 3 }, methodHintSelected: { color: '#D8E4ED' }, directSummary: { backgroundColor: colors.resultSoft, borderWidth: 1, borderColor: colors.result, borderRadius: 11, padding: 12, color: colors.resultDark, fontWeight: '900' },
-  columns: { flexDirection: 'row', gap: 10 }, column: { flex: 1 }, metricRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  repeatCard: { backgroundColor: colors.creamSoft, borderWidth: 1, borderColor: '#E8DED0', borderRadius: 16, padding: 16, gap: 10 }, repeatTitle: { color: colors.ink, fontSize: 16, fontWeight: '900' },
-  manageActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, manageAction: { flex: 1, minWidth: 145 },
-  stickyAction: { position: 'absolute', left: 0, right: 0, bottom: 0, minHeight: 82, backgroundColor: '#FFFDF8', borderTopWidth: 1, borderTopColor: colors.line, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10, shadowColor: '#17212B', shadowOpacity: .12, shadowRadius: 8, shadowOffset: { width: 0, height: -3 }, elevation: 8 }, stickyCopy: { flex: 1, minWidth: 0 }, stickyStep: { color: colors.brand, fontSize: 11, fontWeight: '900', letterSpacing: .6 }, stickyHint: { color: colors.ink, fontSize: 12, fontWeight: '800', lineHeight: 16, marginTop: 3 }, stickyButton: { flex: 1.25 },
-  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 4, paddingVertical: 5 }, summaryLabel: { color: colors.muted, fontSize: 12, fontWeight: '700', flexShrink: 0 }, summaryValue: { color: colors.ink, fontSize: 13, fontWeight: '800', flexGrow: 1, flexShrink: 1, minWidth: 120, textAlign: 'right' }, summaryValueStrong: { color: colors.brandDark, fontSize: 15, fontWeight: '900' },
-  confirmedHero: { backgroundColor: colors.navy, borderRadius: 18, padding: 18, gap: 4, borderBottomWidth: 4, borderBottomColor: colors.brand }, confirmedKicker: { color: '#75C99A', fontSize: 11, fontWeight: '900', letterSpacing: 1 }, confirmedNumber: { color: '#FFF', fontSize: 25, fontWeight: '900' }, confirmedHint: { color: '#D8E4ED', fontSize: 12, lineHeight: 18, marginTop: 3 },
+  warning: { backgroundColor: '#FFF3D8', borderWidth: 1, borderColor: '#E3C681', padding: 15, borderRadius: 14, gap: 5, marginBottom: 12 }, warningEyebrow: { color: colors.warning, fontSize: 11, fontWeight: '900', letterSpacing: 1 }, warningTitle: { color: colors.ink, fontSize: 17, fontWeight: '900' }, link: { alignSelf: 'flex-start', color: colors.brandDark, fontWeight: '900', marginTop: 5, borderBottomWidth: 1, borderBottomColor: colors.brandDark, paddingBottom: 2 },
+  methodSelector: { flexDirection: 'row', gap: 8 }, methodChoice: { flex: 1, minHeight: 70, borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 11, justifyContent: 'center', backgroundColor: colors.surface }, methodChoiceSelected: { backgroundColor: colors.navy, borderColor: colors.navy }, methodTitle: { color: colors.ink, fontWeight: '900', fontSize: 13 }, methodTitleSelected: { color: '#FFF' }, methodHint: { color: colors.muted, fontSize: 11, lineHeight: 15, marginTop: 3 }, methodHintSelected: { color: '#D8E4ED' },
+  columns: { flexDirection: 'row', gap: 12 }, column: { flex: 1 },
+  repeatCard: { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 14, gap: 10 }, repeatTitle: { color: colors.ink, fontSize: 16, fontWeight: '900' },
+  // DEC-524. The Open form look of New Supplier Load: step bars, grouped headings, ruled review and the TOTAL bar.
+  stepTrack: { flexDirection: 'row', gap: 6 }, stepDot: { flex: 1, height: 6, borderRadius: 99, backgroundColor: '#E4E8EE' }, stepDotDone: { backgroundColor: colors.navy }, stepDotOn: { backgroundColor: colors.brand },
+  openHead: { gap: 2 }, openTitle: { color: colors.ink, fontSize: 22, fontWeight: '900' }, openSub: { color: colors.muted, fontSize: 12, fontWeight: '700' }, saveError: { color: colors.warning },
+  openGroup: { gap: 8, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 14, marginTop: 16 }, openGroupFirst: { borderTopWidth: 0, paddingTop: 0, marginTop: 4 }, openGroupLabel: { color: colors.muted, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  openLink: { color: colors.brand, fontSize: 13, fontWeight: '800' }, openLinkBox: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' }, openHelp: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  resultRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, paddingVertical: 11, paddingHorizontal: 2, borderBottomWidth: 1, borderBottomColor: colors.line }, resultLabel: { color: colors.muted, fontSize: 12 }, resultValue: { color: colors.ink, fontSize: 13, fontWeight: '700' }, resultStrongLabel: { color: colors.ink, fontSize: 13, fontWeight: '800', flexShrink: 1 }, resultStrongValue: { color: colors.navy, fontSize: 20, fontWeight: '900' },
+  ruled: { borderTopWidth: 1, borderTopColor: colors.line }, reviewList: { marginTop: 8 }, ruledRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, paddingVertical: 12, paddingHorizontal: 2, minHeight: 48, borderBottomWidth: 1, borderBottomColor: colors.line }, ruledLabel: { color: colors.muted, fontSize: 12, width: '30%' }, ruledValue: { flex: 1, color: colors.ink, fontSize: 13, fontWeight: '700', textAlign: 'right' }, ruledTotal: { borderBottomWidth: 0, paddingTop: 14, alignItems: 'baseline' }, ruledTotalLabel: { color: colors.ink, fontSize: 13, fontWeight: '800' }, ruledTotalValue: { color: colors.navy, fontSize: 22, fontWeight: '900' },
+  stepBar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.navy, paddingHorizontal: 16, paddingVertical: 10 }, stepBarLabel: { color: '#D5E4EF', fontSize: 10, fontWeight: '800', letterSpacing: 1 }, stepBarValue: { color: colors.cream, fontSize: 18, fontWeight: '900' }, stepActions: { flexDirection: 'row', gap: 8 }, stepBack: { minHeight: 48, minWidth: 78, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#D5E4EF', borderRadius: 12, paddingHorizontal: 14 }, stepBackText: { color: colors.cream, fontWeight: '800' }, stepNext: { minHeight: 48, minWidth: 96, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.brand, borderRadius: 12, paddingHorizontal: 16 }, stepNextText: { color: '#FFF', fontWeight: '900' },
+  confirmedHero: { backgroundColor: '#E7F3EC', borderRadius: 14, padding: 16, gap: 4 }, confirmedKicker: { color: colors.success, fontSize: 11, fontWeight: '900', letterSpacing: 1 }, confirmedNumber: { color: colors.ink, fontSize: 25, fontWeight: '900' }, confirmedHint: { color: '#3C4854', fontSize: 12, lineHeight: 18, marginTop: 3 },
 });

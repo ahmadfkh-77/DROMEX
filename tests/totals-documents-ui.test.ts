@@ -119,7 +119,7 @@ describe('Company Load Number Series',()=>{
     expect(series).toContain('The default series is used by every item that has no series of its own.');
   });
   it('shows the load number on Make Company Load, Load History and Corrections, honestly for legacy loads',()=>{
-    expect(receipt).toContain('Load number on confirmation');
+    expect(receipt).toContain('(given on confirm)');
     expect(receipt).toContain('previewNextLoadNumber(');
     expect(receipt).toContain('loadNumberLabel(record.loadNumber)');
     expect(history).toContain('loadNumberLabel(load.loadNumber)');

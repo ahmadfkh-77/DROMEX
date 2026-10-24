@@ -111,7 +111,7 @@ describe('the VAT choice on a load',()=>{
   it('shows the VAT choice under the price on Make Receipt and the VAT figure only when VAT is on',()=>{
     const screen=require('node:fs').readFileSync('src/ui/screens/MakeReceiptScreen.tsx','utf8') as string;
     expect(screen).toContain('<VatChoiceControl value={draft.vat}');expect(screen).toContain('No VAT is added unless you choose it.');
-    expect(screen).toContain('{vatRate > 0 ? <MetricCard label={`VAT ${vatRate}%`}');
+    expect(screen).toContain('{vatRate > 0 ? <OpenResult label={`VAT (${vatRate}%)`}');
     expect(screen).toContain('startingVatChoice(options?.customers.find');
   });
 });

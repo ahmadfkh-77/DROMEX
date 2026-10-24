@@ -136,8 +136,8 @@ describe('the choice is wired into both flows (static checks, no React Native re
     const receipt=read('src/ui/screens/MakeReceiptScreen.tsx');
     expect(receipt).toContain('<ContractItemChoice');
     expect(receipt).toContain('...(contractIssue ? [contractIssue] : [])');
-    expect(receipt.indexOf('<ContractItemChoice')).toBeGreaterThan(receipt.indexOf('title="Conversion and price"'));
-    expect(receipt.indexOf('<ContractItemChoice')).toBeLessThan(receipt.indexOf('title="Signatures"'));
+    expect(receipt.indexOf('<ContractItemChoice')).toBeGreaterThan(receipt.indexOf('CONVERSION</Text>'));
+    expect(receipt.indexOf('<ContractItemChoice')).toBeLessThan(receipt.indexOf('WHAT IT COMES TO</Text>'));
   });
   it('is in step 2 of New Supplier Load for the main item and every extra item, and on the Review summary',()=>{
     const wizard=read('src/ui/screens/QuarryPurchasesScreen.tsx');
