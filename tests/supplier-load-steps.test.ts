@@ -87,10 +87,10 @@ describe('every step in the Open form look',()=>{
     for(const label of ['WHEN','WHO','WHERE','WHAT','HOW IT CAME'])expect(screen).toContain(`>${label}</Text>`);
     for(const label of ['PRICE','VAT','WHAT IT COMES TO','NOTES · OPTIONAL'])expect(screen).toContain(`>${label}</Text>`);
   });
-  it('uses the underlined fields and the switches, and keeps the other screens on the boxed ones',()=>{
+  it('uses the underlined fields and the switches, and the correction page uses the same price control',()=>{
     expect(step(2)).toContain('variant="open"');expect(step(2)).toContain('<OpenSwitch label="Delivery handled by"');
     expect(screen).toContain('<PriceVatControls open value={draft}');
-    expect(screen).toContain('<PriceVatControls value={correction}');
+    expect(screen).toContain('<PriceVatControls open value={correction}');// DEC-525: the correction page's Price sheet uses the same open price control
   });
   it('shows the steel note only for a steel item, and keeps every extra item editable and removable',()=>{
     expect(step(2)).toContain('{isSteelItem(draft.itemId)?<Text style={styles.openHelp}>Steel: choose the unit kg');

@@ -41,6 +41,8 @@ const SUPPLIER_TRUCK_ID='system_supplier_delivery_truck';
 function makeId(prefix:string){return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;}
 function clean(value:string){const next=value.trim().replace(/\s+/g,' ');return next||null;}
 function dateKey(value:string){const date=new Date(value);return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
+/** DEC-525. Moves a saved timestamp to another calendar day and keeps its time of day, so a corrected date never invents a new time. */
+function movedToDate(original:string,value:string){const was=new Date(original),[year=0,month=0,day=0]=value.split('-').map(Number);return new Date(year,month-1,day,was.getHours(),was.getMinutes(),was.getSeconds(),was.getMilliseconds()).toISOString();}
 function timestampForDate(value:string){const now=new Date(),[year=0,month=0,day=0]=value.split('-').map(Number);return new Date(year,month-1,day,now.getHours(),now.getMinutes(),now.getSeconds(),now.getMilliseconds()).toISOString();}
 /** Steel and counted goods: pieces typed beside the quantity; blank means not recorded. */
 function piecesOf(value?:string){const text=value?.trim();return text?Number(text):null;}
@@ -225,19 +227,23 @@ export class SqliteQuarryRepository implements QuarryRepository {
     const status:QuarryPurchase['paymentStatus']=total===null?'Unpriced':total===0?'No Payment Due':paymentStatus(total,paid);
     const now=new Date().toISOString();
     const values:Record<string,string|null>={
-      Supplier:supplier.name,Destination:purchaseDestinationLabel({projectId:project?.id??null,projectName:project?.name??null,destinationType:destination.type,companySiteId:destination.companySiteId,companySiteName:site?.name??null}),Item:item.name,Unit:unit.symbol,Quantity:String(Number(draft.quantityCubicMetres)),Pieces:piecesOf(draft.pieces)===null?null:String(piecesOf(draft.pieces)),'Length per bar':steelRow(decimalOf(draft.lengthPerBarM)),Diameter:steelRow(decimalOf(draft.diameterMm)),'Calculated weight':steelRow(decimalOf(draft.calculatedWeightKg)),
+      Date:draft.recordDate,Supplier:supplier.name,Destination:purchaseDestinationLabel({projectId:project?.id??null,projectName:project?.name??null,destinationType:destination.type,companySiteId:destination.companySiteId,companySiteName:site?.name??null}),Item:item.name,Unit:unit.symbol,Quantity:String(Number(draft.quantityCubicMetres)),Pieces:piecesOf(draft.pieces)===null?null:String(piecesOf(draft.pieces)),'Length per bar':steelRow(decimalOf(draft.lengthPerBarM)),Diameter:steelRow(decimalOf(draft.diameterMm)),'Calculated weight':steelRow(decimalOf(draft.calculatedWeightKg)),
       Delivery:draft.deliveryMethod,Driver:driverName,Truck:truckPlate,Ticket:clean(draft.supplierTicketNumber),
       'Price basis':draft.priceBasis,Price:price===null?null:String(price),VAT:calculation.vatRatePercent===null?null:String(calculation.vatRatePercent),
       'VAT treatment':draft.vatInclusive?'Included':'Excluded',Notes:clean(draft.notes),
     };
     const oldValues:Record<string,string|null>={
-      Supplier:existing.supplierName,Destination:purchaseDestinationLabel(existing),Item:existing.itemName,Unit:existing.unitSymbol,Quantity:String(existing.quantityCubicMetres),Pieces:existing.pieces?String(existing.pieces):null,'Length per bar':steelRow(existing.lengthPerBarM),Diameter:steelRow(existing.diameterMm),'Calculated weight':steelRow(existing.calculatedWeightKg),
+      Date:dateKey(existing.confirmedAt),Supplier:existing.supplierName,Destination:purchaseDestinationLabel(existing),Item:existing.itemName,Unit:existing.unitSymbol,Quantity:String(existing.quantityCubicMetres),Pieces:existing.pieces?String(existing.pieces):null,'Length per bar':steelRow(existing.lengthPerBarM),Diameter:steelRow(existing.diameterMm),'Calculated weight':steelRow(existing.calculatedWeightKg),
       Delivery:existing.deliveryMethod,Driver:existing.driverName,Truck:existing.truckPlate,Ticket:existing.supplierTicketNumber,
       'Price basis':existing.priceBasis,Price:existing.unitPriceUsd===null?null:String(existing.unitPriceUsd),
       VAT:existing.vatRatePercent===null?null:String(existing.vatRatePercent),'VAT treatment':existing.vatInclusive?'Included':'Excluded',Notes:existing.notes,
     };
     const changes=Object.keys(values).filter(field=>values[field]!==oldValues[field]).map(field=>({field,originalValue:oldValues[field]??null,newValue:values[field]??null}));
     if(!changes.length)throw new Error('No information was changed.');
+    // DEC-525. A load's date can be corrected with the reason and audit like every other field; the number and the time of day stay. Stock copies the arrival date when a load is added to it, so that batch is cancelled first.
+    const dateChanged=values.Date!==oldValues.Date;
+    if(dateChanged){const inStock=await this.db.getFirstAsync<{batch_number:string}>("SELECT batch_number FROM stock_batches WHERE source_purchase_id=? AND status='Active'",id);if(inStock)throw new Error(`This supplier load is in Stock as ${inStock.batch_number}. Cancel that Stock batch first to change its date.`);}
+    const movedAt=dateChanged?movedToDate(existing.confirmedAt,draft.recordDate):null;
     const history=[...existing.correctionHistory,{correctedAt:now,correctedBy:'Admin',reason,changes}];
     await this.db.withTransactionAsync(async()=>{
       await this.db.runAsync(
@@ -247,10 +253,11 @@ export class SqliteQuarryRepository implements QuarryRepository {
         draft.priceBasis,price==null?null:Math.round(price*100),cents(calculation.subtotalUsd),draft.vatMode,draft.vatInclusive?1:0,
         calculation.vatRatePercent==null?null:Math.round(calculation.vatRatePercent*100),cents(calculation.vatAmountUsd),total,status,
         clean(draft.notes),JSON.stringify(history),now,id);
+      if(movedAt)await this.db.runAsync('UPDATE quarry_purchases SET confirmed_at=? WHERE id=?',movedAt,id);
       await this.db.runAsync('UPDATE quarry_purchases SET destination_type=?,company_site_id=? WHERE id=?',destination.type,destination.companySiteId,id);
       await this.db.runAsync('UPDATE quarry_purchases SET pieces=?,diameter_mm=?,length_per_bar_m=?,calculated_weight_kg=?,weight_source=? WHERE id=?',piecesOf(draft.pieces),decimalOf(draft.diameterMm),decimalOf(draft.lengthPerBarM),decimalOf(draft.calculatedWeightKg),sourceOf(draft),id);
       await reconcileContractLink(this.db,'supplier',id,now);
-      await this.enqueue('quarryPurchase',id,{id,correctedAt:now,reason,changes,paymentStatus:status,destinationType:destination.type,companySiteId:destination.companySiteId});
+      await this.enqueue('quarryPurchase',id,{id,correctedAt:now,reason,changes,...(movedAt?{confirmedAt:movedAt}:{}),paymentStatus:status,destinationType:destination.type,companySiteId:destination.companySiteId});
     });
     return this.get(id);
   }
