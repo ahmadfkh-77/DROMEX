@@ -1,7 +1,7 @@
 import {fuelDayLabel} from './fuelBatchViews';
 import {localDateKey} from './fuel';
 import {bitumenStatusLabels,formatKg,formatTons,formatUsd,priceBasisLabels,type BitumenBatch} from './bitumen';
-import {useLinesForBatch,type BitumenAdjustment,type BitumenUseRow} from './bitumenUse';
+import {loadsText,mixMadeForLines,useLinesForBatch,type BitumenAdjustment,type BitumenUseRow} from './bitumenUse';
 
 /**
  * The Bitumen Batch Report: one batch, one A4 page. The facts of the batch, its figures in kg with tons beside them, the delivery
@@ -22,7 +22,7 @@ export type BitumenBatchReport={
   estimated:boolean;
   figures:BitumenReportFigure[];
   /** The loads that took bitumen from this batch (a cancelled load nets to zero and is not listed); null when there is no use. */
-  use:null|{rows:BitumenReportUseRow[];total:string};
+  use:null|{rows:BitumenReportUseRow[];total:string;/** DEC-527. The tons of asphalt mix behind the counted loads, and how many loads. */mixTotal:string;loadCount:number};
   adjustments:null|{rows:BitumenReportAdjustmentRow[]};
   detail:{headers:string[];values:string[]};
   /** Present only when prices are included. */
@@ -44,11 +44,12 @@ export function buildBitumenBatchReport(batch:BitumenBatch,options:{includePrice
   const exportedAt=options.exportedAt??new Date().toISOString();
   const remaining=cancelled?0:batch.remainingKg;
   const lines=options.useRows?useLinesForBatch(options.useRows,batch.id):[];
+  const mix=mixMadeForLines(lines);
   const adjustmentRows=(options.adjustments??[]).filter(value=>value.batchId===batch.id);
   const estimated=Boolean(options.estimated)||lines.length>0||adjustmentRows.length>0;
   const figures:BitumenReportFigure[]=[
     {label:'Delivered',kg:formatKg(batch.deliveredKg),tons:cancelled?'not counted':formatTons(batch.deliveredKg),strong:false},
-    {label:estimated?'Est. used':'Used',kg:formatKg(batch.usedKg),tons:estimated&&lines.length?`from ${lines.length} asphalt load${lines.length===1?'':'s'}`:formatTons(batch.usedKg),strong:false},
+    {label:estimated?'Est. used':'Used',kg:formatKg(batch.usedKg),tons:estimated&&lines.length?`from ${lines.length} asphalt load${lines.length===1?'':'s'} · ${formatTons(mix.mixKg)} of mix`:formatTons(batch.usedKg),strong:false},
     {label:'Adjustments',kg:formatKg(batch.adjustmentKg),tons:adjustmentRows.length?`${adjustmentRows.length} adjustment${adjustmentRows.length===1?'':'s'}`:formatTons(batch.adjustmentKg),strong:false},
     {label:estimated?'Est. remaining':'Remaining',kg:formatKg(remaining),tons:cancelled?'cancelled':formatTons(remaining),strong:!cancelled},
   ];
@@ -56,6 +57,7 @@ export function buildBitumenBatchReport(batch:BitumenBatch,options:{includePrice
   const use=lines.length?{
     rows:lines.map(line=>({date:dayText(line.loadConfirmedAt),load:line.loadNumber??'Load',item:line.itemName,mix:formatTons(line.mixKg),rule:`${line.ruleBitumenKg.toLocaleString('en-US',{maximumFractionDigits:3})} kg per ${(line.ruleAggregateKg/1000).toLocaleString('en-US',{maximumFractionDigits:3})} t`,kg:formatKg(line.kg)})),
     total:formatKg(lines.reduce((sum,line)=>sum+line.kg,0)),
+    mixTotal:formatTons(mix.mixKg),loadCount:mix.loads,
   }:null;
   const adjustments=adjustmentRows.length?{rows:adjustmentRows.map(value=>({date:dayText(value.createdAt),reason:value.reason,kg:`${value.kg>0?'+':value.kg<0?'−':''}${Math.abs(value.kg).toLocaleString('en-US',{maximumFractionDigits:3})}`}))}:null;
   // The weighbridge ticket is a column only when it was filled in; so is nothing else that is empty and optional.

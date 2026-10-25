@@ -18,7 +18,7 @@ import {SearchableSelect} from '../components/SearchableSelect';
 import {SegmentedChoice} from '../components/SegmentedChoice';
 import {AdjustCard,AdjustmentsCard,AttentionCard,MoveLoadCard,RulesView,UseFromLoadsCard} from '../components/BitumenUsePanels';
 import {CloseBatchCard,ClosureCard,ReopenBatchCard} from '../components/BatchClosureCards';
-import type {AttentionItem,BatchLoadUse} from '../../domain/bitumenUse';
+import {loadsText,mixMadeForLines,useLinesForBatch,type AttentionItem,type BatchLoadUse} from '../../domain/bitumenUse';
 import {colors,radius} from '../theme';
 
 /**
@@ -121,8 +121,8 @@ function BatchCard({batch,estimated,chosen,busy,onOpen,onUseFirst,onCloseBatch}:
   </TouchableOpacity>;
 }
 
-function Figure({label,value,strong=false}:{label:string;value:string;strong?:boolean}){
-  return <View style={styles.figure}><Text style={styles.figureLabel}>{label.toUpperCase()}</Text><Text style={[styles.figureValue,strong&&styles.figureStrong]}>{value}</Text></View>;
+function Figure({label,value,strong=false,note}:{label:string;value:string;strong?:boolean;note?:string}){
+  return <View style={styles.figure}><Text style={styles.figureLabel}>{label.toUpperCase()}</Text><Text style={[styles.figureValue,strong&&styles.figureStrong]}>{value}</Text>{note?<Text style={styles.figureNote}>{note}</Text>:null}</View>;
 }
 
 function Fact({label,value}:{label:string;value:string}){return <View style={styles.fact}><Text style={styles.sub}>{label}</Text><Text style={styles.factValue}>{value}</Text></View>;}
@@ -132,6 +132,8 @@ function BatchDetail({repository,batch,overview,busy,error,message,onBack,onEdit
   const[sheet,setSheet]=useState<null|{kind:'move';line:BatchLoadUse}|{kind:'adjust'}|{kind:'close'}|{kind:'reopen'}>(startClosing&&isOpenBatch(batch)?{kind:'close'}:null);
   const estimated=(overview.rulesEnabled??0)>0||(overview.useRows??[]).some(row=>row.batchId===batch.id);
   const chosen=overview.usingBatchId===batch.id,cancelled=batch.status==='cancelled';
+  // DEC-527. The asphalt mix behind this batch's counted loads, said under Est. used.
+  const mix=useMemo(()=>mixMadeForLines(useLinesForBatch(overview.useRows??[],batch.id)),[overview.useRows,batch.id]);
   return <AppPage keyboard><PageHeader eyebrow="Bitumen" title={batch.batchNumber} onBack={onBack}/>
     {error?<Feedback kind="error">{error}</Feedback>:null}{message?<Feedback kind="success">{message}</Feedback>:null}
     <AppCard>
@@ -143,7 +145,7 @@ function BatchDetail({repository,batch,overview,busy,error,message,onBack,onEdit
       {batch.totalUsd!=null?<Fact label={batch.vatRatePercent?`Total (incl. VAT ${batch.vatRatePercent}%)`:'Total'} value={formatUsd(batch.totalUsd)}/>:null}
       {batch.notes?<Fact label="Notes" value={batch.notes}/>:null}
     </AppCard>
-    <View style={styles.batch}><View style={styles.figures}><Figure label="Delivered" value={formatKg(batch.deliveredKg)}/><Figure label={estimated?'Est. used':'Used'} value={formatKg(batch.usedKg)}/><Figure label={estimated?'Est. left':'Remaining'} value={formatKg(batch.remainingKg)} strong/></View><Text style={styles.sub}>{formatTons(batch.deliveredKg)} delivered.{estimated?' Used and left are estimates from the asphalt rules, not from a weighing.':' Tick asphalt items under Asphalt items and rules to estimate use from loads.'}</Text></View>
+    <View style={styles.batch}><View style={styles.figures}><Figure label="Delivered" value={formatKg(batch.deliveredKg)}/><Figure label={estimated?'Est. used':'Used'} value={formatKg(batch.usedKg)} note={estimated&&mix.loads>0?`${loadsText(mix.loads)} · ${formatTons(mix.mixKg)} of mix`:undefined}/><Figure label={estimated?'Est. left':'Remaining'} value={formatKg(batch.remainingKg)} strong/></View><Text style={styles.sub}>{formatTons(batch.deliveredKg)} delivered.{estimated?' Used and left are estimates from the asphalt rules, not from a weighing.':' Tick asphalt items under Asphalt items and rules to estimate use from loads.'}</Text></View>
     {sheet?.kind==='move'?<MoveLoadCard line={sheet.line} from={batch} overview={overview} busy={busy} onConfirm={toBatchId=>{onMoveLoad(sheet.line.loadId,toBatchId);setSheet(null);}} onClose={()=>setSheet(null)}/>:null}
     {sheet?.kind==='adjust'?<AdjustCard batch={batch} busy={busy} onSave={(real,why)=>{onAdjust(real,why);setSheet(null);}} onClose={()=>setSheet(null)}/>:null}
     {sheet?.kind==='close'?<CloseBatchCard batchLabel={batch.batchNumber} leftoverText={`${formatKg(batch.remainingKg)} are left in this batch`} nextText={nextText(batch,overview)} busy={busy} onConfirm={(closedOn,why)=>{onCloseBatch(closedOn,why);setSheet(null);}} onClose={()=>setSheet(null)}/>:null}
@@ -240,6 +242,7 @@ const styles=StyleSheet.create({
   figure:{flex:1,minWidth:0},
   figureLabel:{color:colors.muted,fontSize:10,fontWeight:'800',letterSpacing:.6},
   figureValue:{color:colors.ink,fontSize:14,fontWeight:'800'},
+  figureNote:{color:'#4F5B66',fontSize:11,lineHeight:15,marginTop:2},
   figureStrong:{color:colors.brand,fontSize:15},
   bar:{height:8,borderRadius:999,backgroundColor:'#E8DED0',overflow:'hidden'},
   barFill:{height:'100%',backgroundColor:colors.brand},

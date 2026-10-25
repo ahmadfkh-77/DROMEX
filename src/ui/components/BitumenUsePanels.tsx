@@ -3,7 +3,7 @@ import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import type {BitumenRepository} from '../../data/repositories/BitumenRepository';
 import {bitumenStatusLabels,formatKg,formatTons,isOpenBatch,type BitumenBatch,type BitumenOverview} from '../../domain/bitumen';
-import {adjustmentFor,DEFAULT_RULE,rulePercent,useLinesForBatch,type AttentionItem,type BatchLoadUse,type BitumenRule,type BitumenUseSetup} from '../../domain/bitumenUse';
+import {adjustmentFor,DEFAULT_RULE,loadsText,mixMadeForLines,rulePercent,useLinesForBatch,type AttentionItem,type BatchLoadUse,type BitumenRule,type BitumenUseSetup} from '../../domain/bitumenUse';
 import {fuelDayLabel} from '../../domain/fuelBatchViews';
 import {localDateKey} from '../../domain/fuel';
 import {AppButton,AppCard,AppField,Feedback} from './AppPrimitives';
@@ -24,6 +24,7 @@ export function UseFromLoadsCard({batch,overview,busy,onMove}:{batch:BitumenBatc
   const rows=overview.useRows??[];
   const lines=useMemo(()=>useLinesForBatch(rows,batch.id),[rows,batch.id]);
   const events=useMemo(()=>[...rows].filter(row=>row.batchId===batch.id).reverse(),[rows,batch.id]);
+  const mix=useMemo(()=>mixMadeForLines(lines),[lines]);
   const [showHistory,setShowHistory]=useState(false);
   if(!lines.length&&!events.length)return null;
   return <AppCard title="Use from asphalt loads" hint="An estimate from each load's quantity and its rule. Cancelled loads are reversed automatically.">
@@ -35,7 +36,7 @@ export function UseFromLoadsCard({batch,overview,busy,onMove}:{batch:BitumenBatc
       </View>
       <Text style={styles.kg}>{formatKg(line.kg)}</Text>
     </View>)}
-    {lines.length?<View style={styles.totalLine}><Text style={styles.strong}>Estimated use</Text><Text style={styles.strong}>{formatKg(lines.reduce((sum,line)=>sum+line.kg,0))}</Text></View>:<Text style={styles.sub}>No load is counted in this batch now.</Text>}
+    {lines.length?<><View style={styles.totalLine}><Text style={styles.strong}>Estimated use</Text><Text style={styles.strong}>{formatKg(lines.reduce((sum,line)=>sum+line.kg,0))}</Text></View><View style={styles.mixLine}><Text style={styles.mixText}>Asphalt mix made · {loadsText(mix.loads)}</Text><Text style={styles.mixValue}>{formatTons(mix.mixKg)}</Text></View></>:<Text style={styles.sub}>No load is counted in this batch now.</Text>}
     {events.length?<TouchableOpacity onPress={()=>setShowHistory(value=>!value)} accessibilityRole="button" accessibilityState={{expanded:showHistory}}><Text style={styles.link}>{showHistory?'Hide history of use':`Show history of use (${events.length})`}</Text></TouchableOpacity>:null}
     {showHistory?events.map(row=><View key={row.id} style={styles.event}>
       <Text style={styles.sub}>{new Date(row.createdAt).toLocaleString()} · {row.loadNumber??'Load'} · {row.kind==='use'?'Counted':row.kind==='reversal'?(row.note??'Reversed'):row.kind==='moved'?'Moved here':(row.note??'Corrected')}</Text>
@@ -137,6 +138,9 @@ const styles=StyleSheet.create({
   line:{flexDirection:'row',gap:10,paddingVertical:10,borderTopWidth:1,borderTopColor:colors.line},
   kg:{color:colors.ink,fontSize:15,fontWeight:'900'},
   totalLine:{flexDirection:'row',justifyContent:'space-between',paddingVertical:10,borderTopWidth:1.5,borderTopColor:colors.navy},
+  mixLine:{flexDirection:'row',justifyContent:'space-between',alignItems:'baseline',gap:10,paddingBottom:6},
+  mixText:{flex:1,color:colors.navy,fontSize:14,fontWeight:'800'},
+  mixValue:{color:colors.navy,fontSize:14,fontWeight:'900',flexShrink:0},
   event:{paddingVertical:6,borderTopWidth:1,borderTopColor:colors.line},
   eventKg:{color:colors.ink,fontSize:13,fontWeight:'700'},
   eventBack:{color:colors.success},

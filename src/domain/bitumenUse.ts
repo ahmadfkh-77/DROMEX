@@ -163,6 +163,10 @@ export function planMoveLoad(loadRows:readonly BitumenUseRow[],toBatchId:string)
 
 /** One line per load for a batch: its net use there, with the rule it was counted with. A load that nets to zero (cancelled) is not a line. */
 export type BatchLoadUse={loadId:string;loadNumber:string|null;loadConfirmedAt:string;itemName:string;mixKg:number;ruleAggregateKg:number;ruleBitumenKg:number;kg:number;lastAt:string};
+/** DEC-527. The asphalt mix behind a batch's counted loads: its weight (kept in kg, shown as tons) and how many loads. A load that is not counted is not in the lines, so it is not here. */
+export function mixMadeForLines(lines:readonly Pick<BatchLoadUse,'mixKg'>[]):{mixKg:number;loads:number}{return{mixKg:round3(lines.reduce((sum,line)=>sum+line.mixKg,0)),loads:lines.length};}
+export const loadsText=(count:number)=>`${count} load${count===1?'':'s'}`;
+
 export function useLinesForBatch(rows:readonly BitumenUseRow[],batchId:string):BatchLoadUse[]{
   const lines=new Map<string,BatchLoadUse>();
   for(const row of rows){
