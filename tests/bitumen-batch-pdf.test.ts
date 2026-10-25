@@ -87,12 +87,12 @@ describe('the printed page',()=>{
     }
     expect(bitumenTableWidths(['A','B'],['x','y']).reduce((a,b)=>a+b,0)).toBe(100);
   });
-  it('escapes names, keeps kg and tons apart, and says it is not an invoice',async()=>{
+  it('escapes names and ends after the history, with no closing note',async()=>{
     const {deliver}=await setup();
     const page=html(buildBitumenBatchReport(await deliver(),{includePrices:false}));
     expect(page).toContain('Khayat &lt;Al&gt; Sabouri');
     expect(page).not.toContain('<Al>');
-    expect(page).toContain('never added to kilograms');expect(page).toContain('not an invoice or bill');
-    expect(page).toContain('Prices are not included in this report.');
+    expect(page).not.toContain('class="note"');
+    for(const gone of ['never added to kilograms','not an invoice or bill','Prices are not included in this report.','All quantities are in kilograms'])expect(page).not.toContain(gone);
   });
 });

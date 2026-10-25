@@ -55,7 +55,6 @@ export function buildBitumenBatchHtml(report:BitumenBatchReport,company:BitumenR
     .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.lines{margin-top:2mm}.muted{color:#5A6570;font-size:7pt;font-weight:400}
     tr.tot td{font-weight:700;color:#173F67;border-top:1.5px solid #173F67;border-bottom:none}
     .stamp{display:inline-block;margin-top:2mm;border:2px solid #B3261E;color:#B3261E;font-weight:700;letter-spacing:2px;padding:.8mm 4mm;border-radius:1.6mm;transform:rotate(-4deg);font-size:11pt}
-    .note{color:#5A6570;font-size:7.5pt;margin-top:3mm}
   </style></head><body>
     <div class="head"><div>${company.logo?`<img class="logo" src="${company.logo}" alt=""/>`:''}<div class="brand">${t(company.companyName)}</div>${company.contactLine?`<div class="contact">${t(company.contactLine)}</div>`:''}</div>
       <div class="head-right"><h1>Bitumen Batch Report</h1><div class="when">${e(when(report.exportedAt))}${report.pricesIncluded?' · with prices':''}</div>${report.cancelled?'<div class="stamp">CANCELLED</div>':''}</div></div>
@@ -68,6 +67,5 @@ export function buildBitumenBatchHtml(report:BitumenBatchReport,company:BitumenR
     ${use}
     ${adjustments}
     <div class="band">HISTORY</div>${history}
-    <p class="note">All quantities are in kilograms; tons are shown for reference and are never added to kilograms. ${report.estimated?'Use is an estimate from each load\'s quantity and the rule in force when the load was counted; cancelled loads are reversed and not listed. ':''}${report.pricesIncluded?'An Unpriced batch says Unpriced; a missing price is never shown as zero. ':'Prices are not included in this report. '}${report.cancelled?'A cancelled batch stays on record and is never counted in any total. ':''}This is a report of one bitumen batch, not an invoice or bill.</p>
   </body></html>`;
 }
