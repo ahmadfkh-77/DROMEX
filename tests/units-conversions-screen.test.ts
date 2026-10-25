@@ -1,10 +1,10 @@
 import {readFileSync} from 'node:fs';
 import {describe,expect,it} from 'vitest';
 
-import {addAction,conversionEquation,conversionMatches,decimalsText,formatQuantity,inactiveLabel,needsSearch,SEARCH_THRESHOLD,unitMatches} from '../src/domain/unitsConversions';
+import {addAction,conversionEquation,conversionMatches,DECIMAL_CHOICES,decimalsText,formatQuantity,inactiveLabel,isDecimalChoice,needsSearch,ruleLine,SEARCH_THRESHOLD,unitChoiceText,unitMatches} from '../src/domain/unitsConversions';
 
 /**
- * DEC-526 Phase 1. Units & Conversions is two tabs, one list at a time, one-line rows, one fixed Add button, with Remove in the
+ * DEC-526 Phases 1 and 2. Units & Conversions is two tabs, one list at a time, one-line rows, one fixed Add button, with Remove in the
  * edit forms and Reactivate on inactive rows. These tests check the small rules (pure) and that every action the old screen
  * had is still there (static checks, no React Native renderer).
  */
@@ -60,6 +60,26 @@ describe('the small rules of the screen (pure)',()=>{
   });
 });
 
+describe('the conversion form rules (pure, Phase 2)',()=>{
+  it('offers decimal places 0 to 6 and marks the typed one',()=>{
+    expect([...DECIMAL_CHOICES]).toEqual([0,1,2,3,4,5,6]);
+    expect(isDecimalChoice('3',3)).toBe(true);
+    expect(isDecimalChoice(' 3 ',3)).toBe(true);
+    expect(isDecimalChoice('03',3)).toBe(false);
+    expect(isDecimalChoice('',0)).toBe(false);
+    expect(isDecimalChoice('7',6)).toBe(false);
+  });
+  it('reads the rule as typed, with a question mark for anything still missing',()=>{
+    expect(ruleLine('1000','kg','1','t')).toEqual({left:'1000',leftSymbol:'kg',right:'1',rightSymbol:'t',text:'1000 kg = 1 t'});
+    expect(ruleLine('','kg','  ','t').text).toBe('? kg = ? t');
+    expect(ruleLine('1',undefined,'12',undefined).text).toBe('1 ? = 12 ?');
+  });
+  it('shows the chosen unit, or an invitation to choose one',()=>{
+    expect(unitChoiceText({symbol:'kg',name:'Kilogram'})).toBe('kg Kilogram');
+    expect(unitChoiceText(undefined)).toBe('Choose a unit');
+  });
+});
+
 describe('the screen (static checks)',()=>{
   const screen=readFileSync('src/ui/screens/ReceiptSetupScreen.tsx','utf8');
   const unitRow=screen.slice(screen.indexOf('function UnitListRow('),screen.indexOf('function ConversionListRow('));
@@ -112,8 +132,33 @@ describe('the screen (static checks)',()=>{
   it('saves through the same repository calls and keeps the uniqueness messages',()=>{
     for(const text of ['repository.updateUnit(editing, { name: unitName, symbol: unitSymbol })','repository.createUnit({ name: unitName, symbol: unitSymbol })','repository.updateConversion(editing, draft)','repository.createConversion(draft)','Another unit already uses that name.','Another unit already uses that symbol.','Another conversion already uses that name.'])expect(screen).toContain(text);
   });
-  it('leaves the conversion form itself for Phase 2',()=>{
-    for(const text of ['Decimal places *','<UnitPicker label="Input unit *"','<UnitPicker label="Output unit *"','THIS RULE READS AS'])expect(screen).toContain(text);
+  const form=screen.slice(screen.indexOf("visible={conversionSheet !== 'closed'}"),screen.indexOf('function RuleLine('));
+  it('Phase 2: the conversion form is From, equals, To, with the rule shown large and updating as you type',()=>{
+    for(const text of ['This rule reads as','<RuleLine rule={ruleLine(inputQuantity, inputUnit?.symbol, outputQuantity, outputUnit?.symbol)} />','>From</Text>','>To</Text>','equals','label="Amount *" value={inputQuantity}','label="Amount *" value={outputQuantity}'])expect(form).toContain(text);
+  });
+  it('Phase 2: units are chosen from a list that opens inside the form, never a second pop-up',()=>{
+    expect(form).toContain("pickerOpen === 'input'");
+    expect(form).toContain("pickerOpen === 'output'");
+    expect(form).toContain('<UnitList label="From unit"');
+    expect(form).toContain('<UnitList label="To unit"');
+    const list=screen.slice(screen.indexOf('function UnitList('),screen.indexOf('function EmptyBlock('));
+    expect(list).not.toContain('Modal');
+    expect(list).toContain('needsSearch(units.length)');
+    expect(list).toContain('No unit matches that search.');
+  });
+  it('Phase 2: the old nine-chips pickers, the preview card and the numeric decimals field are gone',()=>{
+    for(const gone of ['UnitPicker','THIS RULE READS AS','Input unit *','Output unit *','Input quantity *','Output quantity *','A conversion states how much of the input unit equals','function Equation(']) expect(screen).not.toContain(gone);
+  });
+  it('Phase 2: decimals are 0 to 6 buttons, the name stays, and saving is unchanged',()=>{
+    expect(form).toContain('{DECIMAL_CHOICES.map((choice) => {');
+    expect(form).toContain('onPress={() => setDecimals(String(choice))}');
+    expect(form).toContain('label="Conversion name *"');
+    expect(form).toContain('How you will recognise this rule in a picker. Must be unique.');
+    for(const text of ['inputQuantity: Number(inputQuantity)','outputQuantity: Number(outputQuantity)','decimalPlaces: Number(decimals)','inputUnitId,','outputUnitId,'])expect(screen).toContain(text);
+  });
+  it('Phase 2: Remove is still at the bottom of the conversion edit form, and the picker is closed when the form opens',()=>{
+    expect(form).toContain('<RemoveBlock kind="conversion"');
+    expect(screen.split("setPickerOpen(null);").length - 1).toBeGreaterThanOrEqual(2);
   });
   it('uses the shared formatting from the domain file, not its own copy',()=>{
     expect(screen).toContain("from '../../domain/unitsConversions'");

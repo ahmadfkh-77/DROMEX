@@ -50,3 +50,22 @@ export function addAction(tab: UnitsTab, activeUnitCount: number): { label: stri
 
 /** The label of the collapsed Inactive row, for example "Inactive units · 1". */
 export const inactiveLabel = (tab: UnitsTab, count: number) => `Inactive ${tab} · ${count}`;
+
+/** The decimal places a conversion may show (the repository still refuses anything else). */
+export const DECIMAL_CHOICES = [0, 1, 2, 3, 4, 5, 6] as const;
+
+/** True when the typed decimal places equal this choice, so the matching button shows as selected. */
+export const isDecimalChoice = (typed: string, choice: number) => typed.trim() === String(choice);
+
+/**
+ * The rule as typed in the form, for the large line at the top: a missing amount or unit shows as "?" so the line
+ * is always readable while it is being filled in.
+ */
+export function ruleLine(inputQuantity: string, inputSymbol: string | undefined, outputQuantity: string, outputSymbol: string | undefined) {
+  const clean = (value: string | undefined) => (value ?? '').trim() || '?';
+  const left = clean(inputQuantity), right = clean(outputQuantity), leftSymbol = clean(inputSymbol), rightSymbol = clean(outputSymbol);
+  return { left, leftSymbol, right, rightSymbol, text: `${left} ${leftSymbol} = ${right} ${rightSymbol}` };
+}
+
+/** What the unit button shows: the symbol and the name, or an invitation when nothing is chosen yet. */
+export const unitChoiceText = (unit: Pick<MeasurementUnit, 'symbol' | 'name'> | undefined) => (unit ? `${unit.symbol} ${unit.name}` : 'Choose a unit');

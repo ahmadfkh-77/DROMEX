@@ -22,7 +22,7 @@ import type { ConversionOption, MeasurementUnit } from '../../domain/loads';
 import { PageHeader } from '../components/AppPrimitives';
 import { useReducedMotion } from '../components/ExpandableMenu';
 import { SegmentedChoice } from '../components/SegmentedChoice';
-import { addAction, conversionEquation, conversionMatches, decimalsText, formatQuantity, inactiveLabel, needsSearch, SEARCH_THRESHOLD, unitMatches, type UnitsTab } from '../../domain/unitsConversions';
+import { addAction, conversionEquation, conversionMatches, DECIMAL_CHOICES, decimalsText, inactiveLabel, isDecimalChoice, needsSearch, ruleLine, unitChoiceText, unitMatches, type UnitsTab } from '../../domain/unitsConversions';
 import { colors } from '../theme';
 
 /** Secondary text on the cream page, darker than `colors.muted` so it holds contrast in sunlight. */
@@ -68,6 +68,8 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
   const [inputQuantity, setInputQuantity] = useState('1000');
   const [outputQuantity, setOutputQuantity] = useState('1');
   const [decimals, setDecimals] = useState('3');
+  // DEC-526 Phase 2. Which unit list is open inside the conversion form (never a second pop-up).
+  const [pickerOpen, setPickerOpen] = useState<'input' | 'output' | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -170,6 +172,7 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
     setInputQuantity('1000');
     setOutputQuantity('1');
     setDecimals('3');
+    setPickerOpen(null);
     setConversionSheet('add');
   }
 
@@ -183,6 +186,7 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
     setInputQuantity(String(value.inputQuantity));
     setOutputQuantity(String(value.outputQuantity));
     setDecimals(String(value.decimalPlaces));
+    setPickerOpen(null);
     setConversionSheet('edit');
   }
 
@@ -313,6 +317,8 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
   const add = addAction(tab, activeUnits.length);
   const editingUnit = units.find((unit) => unit.id === editingUnitId) ?? null;
   const editingConversion = conversions.find((value) => value.id === editingConversionId) ?? null;
+  const inputUnit = units.find((unit) => unit.id === inputUnitId);
+  const outputUnit = units.find((unit) => unit.id === outputUnitId);
 
   return (
     <View style={styles.root}>
@@ -484,28 +490,62 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
           />
         }
       >
-        <Text style={styles.sheetIntro}>A conversion states how much of the input unit equals how much of the output unit.</Text>
         {error ? <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text> : null}
 
-        <View style={styles.previewCard}>
-          <Text style={styles.previewLabel}>THIS RULE READS AS</Text>
-          <Equation
-            inputQuantity={inputQuantity}
-            inputSymbol={units.find((unit) => unit.id === inputUnitId)?.symbol ?? '?'}
-            outputQuantity={outputQuantity}
-            outputSymbol={units.find((unit) => unit.id === outputUnitId)?.symbol ?? '?'}
-          />
+        <View style={styles.ruleBlock}>
+          <Text style={styles.ruleLabel}>This rule reads as</Text>
+          <RuleLine rule={ruleLine(inputQuantity, inputUnit?.symbol, outputQuantity, outputUnit?.symbol)} />
+        </View>
+
+        <View style={styles.pairGroup}>
+          <Text style={styles.groupTitle}>From</Text>
+          <View style={styles.pairRow}>
+            <View style={styles.amountCol}><Field label="Amount *" value={inputQuantity} onChangeText={setInputQuantity} keyboardType="decimal-pad" /></View>
+            <View style={styles.unitCol}>
+              <UnitSelect label="Unit *" unit={inputUnit} open={pickerOpen === 'input'} onToggle={() => setPickerOpen(pickerOpen === 'input' ? null : 'input')} />
+            </View>
+          </View>
+          {pickerOpen === 'input' ? <UnitList label="From unit" units={activeUnits} selectedId={inputUnitId} onSelect={(id) => { setInputUnitId(id); setPickerOpen(null); }} /> : null}
+        </View>
+
+        <View style={styles.equalsRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <View style={styles.equalsLine} /><Text style={styles.equalsText}>equals</Text><View style={styles.equalsLine} />
+        </View>
+
+        <View style={styles.pairGroup}>
+          <Text style={styles.groupTitle}>To</Text>
+          <View style={styles.pairRow}>
+            <View style={styles.amountCol}><Field label="Amount *" value={outputQuantity} onChangeText={setOutputQuantity} keyboardType="decimal-pad" /></View>
+            <View style={styles.unitCol}>
+              <UnitSelect label="Unit *" unit={outputUnit} open={pickerOpen === 'output'} onToggle={() => setPickerOpen(pickerOpen === 'output' ? null : 'output')} />
+            </View>
+          </View>
+          {pickerOpen === 'output' ? <UnitList label="To unit" units={activeUnits} selectedId={outputUnitId} onSelect={(id) => { setOutputUnitId(id); setPickerOpen(null); }} /> : null}
         </View>
 
         <Field label="Conversion name *" value={conversionName} onChangeText={setConversionName} placeholder="Kilograms to tonnes" helper="How you will recognise this rule in a picker. Must be unique." />
 
-        <UnitPicker label="Input unit *" units={activeUnits} selectedId={inputUnitId} onSelect={setInputUnitId} />
-        <Field label="Input quantity *" value={inputQuantity} onChangeText={setInputQuantity} keyboardType="decimal-pad" helper="How much of the input unit the rule starts from." />
-
-        <UnitPicker label="Output unit *" units={activeUnits} selectedId={outputUnitId} onSelect={setOutputUnitId} />
-        <Field label="Output quantity *" value={outputQuantity} onChangeText={setOutputQuantity} keyboardType="decimal-pad" helper="What that input quantity is equal to." />
-
-        <Field label="Decimal places *" value={decimals} onChangeText={setDecimals} keyboardType="number-pad" helper="How many decimals the converted quantity shows. A whole number from 0 to 6." />
+        <View style={styles.field}>
+          <Text style={styles.label}>Decimal places *</Text>
+          <View style={styles.decimalRow} accessibilityRole="radiogroup" accessibilityLabel="Decimal places">
+            {DECIMAL_CHOICES.map((choice) => {
+              const selected = isDecimalChoice(decimals, choice);
+              return (
+                <TouchableOpacity
+                  key={choice}
+                  style={[styles.decimalButton, selected && styles.decimalButtonSelected]}
+                  onPress={() => setDecimals(String(choice))}
+                  accessibilityRole="radio"
+                  accessibilityLabel={decimalsText(choice)}
+                  accessibilityState={{ checked: selected }}
+                >
+                  <Text style={[styles.decimalText, selected && styles.decimalTextSelected]}>{choice}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.fieldHelper}>How many decimals the converted quantity shows.</Text>
+        </View>
         {conversionSheet === 'edit' && editingConversion ? <RemoveBlock kind="conversion" busy={busy} onRemove={() => confirmRemoveConversion(editingConversion)} /> : null}
       </Sheet>
     </View>
@@ -515,30 +555,6 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
 
 
 
-/** The rule itself, given the weight of a headline so a conversion can never be mistaken for a unit. */
-function Equation({ inputQuantity, inputSymbol, outputQuantity, outputSymbol, muted = false }: {
-  inputQuantity: number | string; inputSymbol: string; outputQuantity: number | string; outputSymbol: string; muted?: boolean;
-}) {
-  const left = typeof inputQuantity === 'number' ? formatQuantity(inputQuantity) : (inputQuantity.trim() || '?');
-  const right = typeof outputQuantity === 'number' ? formatQuantity(outputQuantity) : (outputQuantity.trim() || '?');
-  return (
-    <View
-      style={[styles.equation, muted && styles.equationMuted]}
-      accessibilityRole="text"
-      accessibilityLabel={`${left} ${inputSymbol} equals ${right} ${outputSymbol}`}
-    >
-      <View style={styles.equationSide}>
-        <Text style={styles.equationValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{left}</Text>
-        <Text style={styles.equationSymbol} numberOfLines={1}>{inputSymbol}</Text>
-      </View>
-      <Text style={styles.equationSign}>=</Text>
-      <View style={styles.equationSide}>
-        <Text style={styles.equationValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{right}</Text>
-        <Text style={styles.equationSymbol} numberOfLines={1}>{outputSymbol}</Text>
-      </View>
-    </View>
-  );
-}
 
 
 
@@ -654,6 +670,62 @@ function RemoveBlock({ kind, busy, onRemove }: { kind: 'unit' | 'conversion'; bu
   );
 }
 
+/** The rule typed so far, large, so it can be read as a sentence while it is being filled in. */
+function RuleLine({ rule }: { rule: ReturnType<typeof ruleLine> }) {
+  return (
+    <Text style={styles.ruleText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} accessibilityRole="text" accessibilityLabel={`${rule.left} ${rule.leftSymbol} equals ${rule.right} ${rule.rightSymbol}`}>
+      {rule.left}<Text style={styles.ruleSymbol}> {rule.leftSymbol} </Text><Text style={styles.ruleSign}>= </Text>{rule.right}<Text style={styles.ruleSymbol}> {rule.rightSymbol}</Text>
+    </Text>
+  );
+}
+
+/** The closed unit control: the chosen unit, or an invitation to choose one. It opens a list inside the form. */
+function UnitSelect({ label, unit, open, onToggle }: { label: string; unit: MeasurementUnit | undefined; open: boolean; onToggle: () => void }) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <TouchableOpacity style={[styles.unitSelect, open && styles.unitSelectOpen]} onPress={onToggle} accessibilityRole="button" accessibilityLabel={`${label.replace(' *', '')}: ${unitChoiceText(unit)}`} accessibilityHint={open ? 'Closes the list of units' : 'Opens the list of units'} accessibilityState={{ expanded: open }}>
+        <Text style={[styles.unitSelectText, !unit && styles.unitSelectPlaceholder]} numberOfLines={1}>
+          {unit ? <Text style={styles.unitSelectSymbol}>{unit.symbol} </Text> : null}{unit ? unit.name : 'Choose a unit'}
+        </Text>
+        <ChevronIcon direction={open ? 'up' : 'down'} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+/**
+ * The units to choose from, opened inside the form (not as a second pop-up on top of the form). It has its own search
+ * once there are more than 8 units, and choosing one closes it.
+ */
+function UnitList({ label, units, selectedId, onSelect }: { label: string; units: MeasurementUnit[]; selectedId: string; onSelect: (id: string) => void }) {
+  const [query, setQuery] = useState('');
+  const visible = units.filter((unit) => unitMatches(unit, query));
+  return (
+    <View style={styles.unitList} accessibilityLabel={label}>
+      {needsSearch(units.length) ? <SearchBar value={query} onChange={setQuery} placeholder="Search units" label={`Search units for ${label}`} /> : null}
+      {visible.map((unit, index) => {
+        const selected = unit.id === selectedId;
+        return (
+          <TouchableOpacity
+            key={unit.id}
+            style={[styles.unitListRow, index > 0 && styles.listRowRule, selected && styles.unitListRowSelected]}
+            onPress={() => onSelect(unit.id)}
+            accessibilityRole="radio"
+            accessibilityLabel={`${unit.name}, symbol ${unit.symbol}`}
+            accessibilityState={{ checked: selected }}
+          >
+            <Text style={styles.unitListSymbol} numberOfLines={1}>{unit.symbol}</Text>
+            <Text style={styles.unitListName} numberOfLines={1}>{unit.name}</Text>
+            {selected ? <Text style={styles.unitListCheck}>Chosen</Text> : null}
+          </TouchableOpacity>
+        );
+      })}
+      {!visible.length ? <Text style={styles.fieldHelper}>No unit matches that search.</Text> : null}
+    </View>
+  );
+}
+
 function EmptyBlock({ title, body, onClearSearch }: { title: string; body: string; onClearSearch?: () => void }) {
   return (
     <View style={styles.empty}>
@@ -703,42 +775,6 @@ function Field({ label, helper, ...props }: {
   );
 }
 
-/**
- * Units are a small, fixed set, which the design system routes to chips rather than the
- * searchable modal picker. Keeping it inline also avoids nesting a Modal inside the sheet.
- */
-function UnitPicker({ label, units, selectedId, onSelect }: { label: string; units: MeasurementUnit[]; selectedId: string; onSelect: (id: string) => void }) {
-  const [query, setQuery] = useState('');
-  const needle = query.trim().toLocaleLowerCase('en-US');
-  const visible = needle ? units.filter((unit) => `${unit.name} ${unit.symbol}`.toLocaleLowerCase('en-US').includes(needle)) : units;
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      {units.length > SEARCH_THRESHOLD ? (
-        <SearchBar value={query} onChange={setQuery} placeholder="Search units" label={`Search units for ${label.replace(' *', '')}`} />
-      ) : null}
-      <View style={styles.chips} accessibilityRole="radiogroup" accessibilityLabel={label.replace(' *', '')}>
-        {visible.map((unit) => {
-          const selected = unit.id === selectedId;
-          return (
-            <TouchableOpacity
-              key={unit.id}
-              style={[styles.chip, selected && styles.chipSelected]}
-              onPress={() => onSelect(unit.id)}
-              accessibilityRole="radio"
-              accessibilityLabel={`${unit.name}, symbol ${unit.symbol}`}
-              accessibilityState={{ selected }}
-            >
-              <Text style={[styles.chipSymbol, selected && styles.chipSymbolSelected]}>{unit.symbol}</Text>
-              <Text style={[styles.chipName, selected && styles.chipNameSelected]} numberOfLines={1}>{unit.name}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      {!visible.length ? <Text style={styles.fieldHelper}>No unit matches that search.</Text> : null}
-    </View>
-  );
-}
 
 function Sheet({ visible, reducedMotion, eyebrow, title, onClose, footer, children }: {
   visible: boolean; reducedMotion: boolean; eyebrow: string; title: string; onClose: () => void;
@@ -827,12 +863,6 @@ const styles = StyleSheet.create({
   symbolTile: { minWidth: 46, height: 46, borderRadius: 13, paddingHorizontal: 8, backgroundColor: '#E8F0F6', alignItems: 'center', justifyContent: 'center' },
   symbolTileText: { color: colors.navy, fontSize: 15, fontWeight: '900' },
 
-  equation: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.cream, borderWidth: 1, borderColor: '#E8DED0', borderRadius: 13, paddingHorizontal: 14, paddingVertical: 12 },
-  equationMuted: { backgroundColor: colors.surface },
-  equationSide: { flex: 1, minWidth: 0, gap: 1 },
-  equationValue: { color: colors.navy, fontSize: 20, fontWeight: '900' },
-  equationSymbol: { color: colors.muted, fontSize: 12, fontWeight: '700' },
-  equationSign: { color: colors.brandDark, fontSize: 19, fontWeight: '900' },
 
   quietAction: { minHeight: 48, justifyContent: 'center' },
   quietActionText: { color: colors.brandDark, fontWeight: '800', fontSize: 14 },
@@ -882,8 +912,8 @@ const styles = StyleSheet.create({
   sheetTitle: { color: colors.ink, fontSize: 24, fontWeight: '900', marginTop: 2 },
   sheetClose: { minHeight: 48, minWidth: 48, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   sheetCloseText: { color: colors.ink, fontWeight: '800' },
-  sheetBody: { padding: 20, paddingTop: 4, paddingBottom: 28, gap: 16 },
   sheetIntro: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+  sheetBody: { padding: 20, paddingTop: 4, paddingBottom: 28, gap: 16 },
   sheetFooter: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface, shadowColor: '#17212B', shadowOpacity: .12, shadowRadius: 8, shadowOffset: { width: 0, height: -3 }, elevation: 8 },
   cancelButton: { minHeight: 48, paddingHorizontal: 20, borderRadius: 13, borderWidth: 1, borderColor: colors.navy, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   cancelButtonText: { color: colors.navy, fontWeight: '800', fontSize: 15 },
@@ -894,16 +924,38 @@ const styles = StyleSheet.create({
   previewLabel: { color: colors.muted, fontSize: 10, fontWeight: '900', letterSpacing: .7 },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
 
+  ruleBlock: { gap: 2 },
+  ruleLabel: { color: SECONDARY, fontSize: 12 },
+  ruleText: { color: colors.navy, fontSize: 30, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  ruleSymbol: { color: SECONDARY, fontSize: 17, fontWeight: '700' },
+  ruleSign: { color: colors.brandDark, fontWeight: '900' },
+  pairGroup: { gap: 8 },
+  groupTitle: { color: SECONDARY, fontSize: 12, fontWeight: '800' },
+  pairRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  amountCol: { flex: 0.8, minWidth: 0 },
+  unitCol: { flex: 1.2, minWidth: 0 },
+  equalsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: -4 },
+  equalsLine: { flex: 1, height: 1, backgroundColor: colors.line },
+  equalsText: { color: colors.brandDark, fontSize: 12, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
+  unitSelect: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderWidth: 1, borderColor: colors.line, borderRadius: 11, paddingHorizontal: 13, backgroundColor: '#FCFBF8' },
+  unitSelectOpen: { borderColor: colors.navy, borderWidth: 2 },
+  unitSelectText: { flex: 1, color: colors.ink, fontSize: 15 },
+  unitSelectSymbol: { color: colors.navy, fontWeight: '900' },
+  unitSelectPlaceholder: { color: '#6B7681' },
+  unitList: { borderWidth: 1, borderColor: colors.line, borderRadius: 12, backgroundColor: colors.surface, overflow: 'hidden', gap: 8, padding: 8 },
+  unitListRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10, borderRadius: 8 },
+  unitListRowSelected: { backgroundColor: '#EAF1F6' },
+  unitListSymbol: { width: 48, color: colors.navy, fontSize: 16, fontWeight: '900' },
+  unitListName: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: '600' },
+  unitListCheck: { color: colors.navy, fontSize: 12, fontWeight: '900' },
+  decimalRow: { flexDirection: 'row', gap: 6 },
+  decimalButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: colors.surface },
+  decimalButtonSelected: { borderColor: colors.navy, borderWidth: 2, backgroundColor: '#EAF1F6' },
+  decimalText: { color: SECONDARY, fontSize: 15, fontWeight: '800' },
+  decimalTextSelected: { color: colors.navy, fontWeight: '900' },
   field: { gap: 6 },
   label: { color: colors.ink, fontSize: 13, fontWeight: '800' },
   input: { minHeight: 48, borderWidth: 1, borderColor: colors.line, borderRadius: 11, paddingHorizontal: 13, paddingVertical: 11, color: colors.ink, fontSize: 15, backgroundColor: '#FCFBF8' },
   fieldHelper: { color: colors.muted, fontSize: 12, lineHeight: 17 },
 
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: colors.line, borderRadius: 13, paddingHorizontal: 13, paddingVertical: 7, backgroundColor: '#FCFBF8' },
-  chipSelected: { borderColor: colors.brand, backgroundColor: '#FBE9E4' },
-  chipSymbol: { color: colors.navy, fontWeight: '900', fontSize: 14 },
-  chipSymbolSelected: { color: colors.brandDark },
-  chipName: { color: colors.muted, fontSize: 11, marginTop: 1 },
-  chipNameSelected: { color: colors.brandDark },
 });
