@@ -2290,3 +2290,11 @@ Feature branch `feature/android-people-directories-supervisors-totals`; DEC-476 
 ### Status
 
 Implemented with automated tests (98 files, 1,349 tests green, typecheck clean). Physical acceptance in Expo Go pending.
+
+## Units & Conversions, two tabs (DEC-526, Phase 1)
+
+Branch `feature/android-receipts-history-pdfs`. The setup screen is now two tabs (Units, Conversions) with one-line rows, one fixed Add button, Remove inside the edit forms and Reactivate on inactive rows. The navy banner with counters, the section numbers and the repeated paragraphs were removed; a conversion reads as its rule. Phase 2 (the From / equals / To conversion form) is approved and not yet built.
+
+### Status
+
+Phase 1 implemented with automated tests. Physical acceptance on the device pending.

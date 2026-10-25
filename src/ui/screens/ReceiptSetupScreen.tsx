@@ -6,6 +6,7 @@ import {
   LayoutAnimation,
   Modal,
   Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -14,21 +15,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import type { LoadRepository } from '../../data/repositories/LoadRepository';
 import type { ConversionOption, MeasurementUnit } from '../../domain/loads';
+import { PageHeader } from '../components/AppPrimitives';
 import { useReducedMotion } from '../components/ExpandableMenu';
+import { SegmentedChoice } from '../components/SegmentedChoice';
+import { addAction, conversionEquation, conversionMatches, decimalsText, formatQuantity, inactiveLabel, needsSearch, SEARCH_THRESHOLD, unitMatches, type UnitsTab } from '../../domain/unitsConversions';
 import { colors } from '../theme';
 
-const SEARCH_THRESHOLD = 8;
-
-/** Grouped, trailing-zero-free rendering of a stored quantity, which SQLite keeps as a REAL. */
-function formatQuantity(value: number): string {
-  if (!Number.isFinite(value)) return String(value);
-  const [whole = '0', fraction] = Number(value.toFixed(6)).toString().split('.');
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return fraction ? `${grouped}.${fraction}` : grouped;
-}
+/** Secondary text on the cream page, darker than `colors.muted` so it holds contrast in sunlight. */
+const SECONDARY = '#4F5B66';
 
 /**
  * The uniqueness rules live in the database (`measurement_units.name/symbol` and
@@ -50,6 +48,8 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
   const [units, setUnits] = useState<MeasurementUnit[]>([]);
   const [conversions, setConversions] = useState<ConversionOption[]>([]);
 
+  // DEC-526. One list at a time: Units or Conversions.
+  const [tab, setTab] = useState<UnitsTab>('units');
   const [unitSearch, setUnitSearch] = useState('');
   const [conversionSearch, setConversionSearch] = useState('');
   const [inactiveUnitsOpen, setInactiveUnitsOpen] = useState(false);
@@ -120,25 +120,21 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
   const activeConversions = useMemo(() => conversions.filter((value) => value.isActive), [conversions]);
   const inactiveConversions = useMemo(() => conversions.filter((value) => !value.isActive), [conversions]);
 
-  const unitQuery = unitSearch.trim().toLocaleLowerCase('en-US');
-  const conversionQuery = conversionSearch.trim().toLocaleLowerCase('en-US');
-  const matchesUnit = useCallback(
-    (unit: MeasurementUnit) => !unitQuery || `${unit.name} ${unit.symbol}`.toLocaleLowerCase('en-US').includes(unitQuery),
-    [unitQuery],
-  );
-  const matchesConversion = useCallback(
-    (value: ConversionOption) =>
-      !conversionQuery ||
-      `${value.name} ${value.inputUnitName} ${value.inputUnitSymbol} ${value.outputUnitName} ${value.outputUnitSymbol}`
-        .toLocaleLowerCase('en-US')
-        .includes(conversionQuery),
-    [conversionQuery],
-  );
+  const unitQuery = unitSearch.trim();
+  const conversionQuery = conversionSearch.trim();
+  const matchesUnit = useCallback((unit: MeasurementUnit) => unitMatches(unit, unitSearch), [unitSearch]);
+  const matchesConversion = useCallback((value: ConversionOption) => conversionMatches(value, conversionSearch), [conversionSearch]);
 
   const visibleActiveUnits = activeUnits.filter(matchesUnit);
   const visibleInactiveUnits = inactiveUnits.filter(matchesUnit);
   const visibleActiveConversions = activeConversions.filter(matchesConversion);
   const visibleInactiveConversions = inactiveConversions.filter(matchesConversion);
+
+  function switchTab(next: UnitsTab) {
+    setTab(next);
+    setError(null);
+    setMessage(null);
+  }
 
   function toggleSection(setOpen: (update: (value: boolean) => boolean) => void) {
     if (!reducedMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -314,159 +310,133 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
     );
   }
 
+  const add = addAction(tab, activeUnits.length);
+  const editingUnit = units.find((unit) => unit.id === editingUnitId) ?? null;
+  const editingConversion = conversions.find((value) => value.id === editingConversionId) ?? null;
+
   return (
-    <>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.hero}>
-          <View style={styles.heroTopRow}>
-            <TouchableOpacity onPress={onBack} style={styles.heroBack} accessibilityRole="button" accessibilityLabel="Back">
-              <Text style={styles.heroBackText}>Back</Text>
-            </TouchableOpacity>
-            <View style={styles.flex}>
-              <Text style={styles.heroEyebrow}>SETUP</Text>
-              <Text style={styles.heroTitle}>Units & Conversions</Text>
-            </View>
-          </View>
-          <Text style={styles.heroPurpose}>Define how quantities are measured, and how one unit turns into another on receipts and supplier loads.</Text>
-          <View style={styles.heroSummaryRow}>
-            <View style={styles.heroSummaryItem}><Text style={styles.heroSummaryValue}>{activeUnits.length}</Text><Text style={styles.heroSummaryLabel}>ACTIVE UNITS</Text></View>
-            <View style={styles.heroSummaryItem}><Text style={styles.heroSummaryValue}>{activeConversions.length}</Text><Text style={styles.heroSummaryLabel}>ACTIVE CONVERSIONS</Text></View>
-            <View style={styles.heroSummaryItem}><Text style={styles.heroSummaryValue}>{inactiveUnits.length + inactiveConversions.length}</Text><Text style={styles.heroSummaryLabel}>INACTIVE</Text></View>
-          </View>
-        </View>
+    <View style={styles.root}>
+      <ScrollView style={styles.flex} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <PageHeader eyebrow="SETUP" title="Units & Conversions" onBack={onBack} />
 
         {error && unitSheet === 'closed' && conversionSheet === 'closed' ? (
           <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text>
         ) : null}
         {message ? <Text style={styles.success} accessibilityRole="alert" accessibilityLiveRegion="polite">{message}</Text> : null}
 
-        <SectionHeading number="01" title="Units" count={activeUnits.length} countLabel={`${activeUnits.length} active unit${activeUnits.length === 1 ? '' : 's'}`} />
-        <Text style={styles.sectionBody}>A unit is how a quantity is measured, such as tonnes, cubic metres, litres, or pieces.</Text>
-        <TouchableOpacity style={styles.primaryButton} onPress={openAddUnit} accessibilityRole="button" accessibilityLabel="Add a measurement unit">
-          <Text style={styles.primaryButtonLabel}>Add Unit</Text>
-        </TouchableOpacity>
+        <SegmentedChoice
+          mode="tabs"
+          options={[
+            { id: 'units' as const, label: 'Units', count: activeUnits.length },
+            { id: 'conversions' as const, label: 'Conversions', count: activeConversions.length },
+          ]}
+          selectedId={tab}
+          onSelect={switchTab}
+        />
 
-        {units.length > SEARCH_THRESHOLD ? (
-          <SearchBar
-            value={unitSearch}
-            onChange={setUnitSearch}
-            placeholder="Search unit name or symbol"
-            label="Search units by name or symbol"
-          />
-        ) : null}
-
-        {visibleActiveUnits.length ? (
-          visibleActiveUnits.map((unit) => (
-            <UnitRow key={unit.id} unit={unit} busy={busy} onEdit={() => openEditUnit(unit)} onRemove={() => confirmRemoveUnit(unit)} />
-          ))
-        ) : (
-          <EmptyBlock
-            title={unitQuery ? 'No matching units' : 'No active units yet'}
-            body={unitQuery ? `No active unit matches "${unitSearch.trim()}".` : 'Add a unit such as Tonne (t) or Cubic metre (m³) so quantities can be recorded.'}
-            onClearSearch={unitQuery ? () => setUnitSearch('') : undefined}
-          />
-        )}
-
-        {inactiveUnits.length ? (
+        {tab === 'units' ? (
           <>
-            <StatusBand
-              title="Inactive Units"
-              count={inactiveUnits.length}
-              noun="unit"
-              open={inactiveUnitsOpen}
-              onToggle={() => toggleSection(setInactiveUnitsOpen)}
-            />
-            {inactiveUnitsOpen ? (
-              visibleInactiveUnits.length ? (
-                visibleInactiveUnits.map((unit) => (
-                  <UnitRow
-                    key={unit.id}
-                    unit={unit}
-                    busy={busy}
-                    onEdit={() => openEditUnit(unit)}
-                    onRemove={() => confirmRemoveUnit(unit)}
-                    onReactivate={() => void run(() => repository.setUnitActive(unit.id, true), 'Unit reactivated.', 'Could not reactivate this unit.')}
-                  />
-                ))
-              ) : (
-                <EmptyBlock
-                  title="No matching units"
-                  body={`No inactive unit matches "${unitSearch.trim()}".`}
-                  onClearSearch={() => setUnitSearch('')}
-                />
-              )
+            {needsSearch(units.length) ? (
+              <SearchBar value={unitSearch} onChange={setUnitSearch} placeholder="Search unit name or symbol" label="Search units by name or symbol" />
+            ) : null}
+            {visibleActiveUnits.length ? (
+              <View style={styles.list}>
+                {visibleActiveUnits.map((unit, index) => (
+                  <UnitListRow key={unit.id} unit={unit} first={index === 0} busy={busy} onEdit={() => openEditUnit(unit)} />
+                ))}
+              </View>
+            ) : (
+              <EmptyBlock
+                title={unitQuery ? 'No matching units' : 'No active units yet'}
+                body={unitQuery ? `No active unit matches "${unitSearch.trim()}".` : 'A unit is how a quantity is measured. Add a unit such as Tonne (t) or Cubic metre (m³) so quantities can be recorded.'}
+                onClearSearch={unitQuery ? () => setUnitSearch('') : undefined}
+              />
+            )}
+            {inactiveUnits.length ? (
+              <>
+                <InactiveRow label={inactiveLabel('units', inactiveUnits.length)} open={inactiveUnitsOpen} onToggle={() => toggleSection(setInactiveUnitsOpen)} />
+                {inactiveUnitsOpen ? (
+                  visibleInactiveUnits.length ? (
+                    <View style={styles.list}>
+                      {visibleInactiveUnits.map((unit, index) => (
+                        <UnitListRow
+                          key={unit.id}
+                          unit={unit}
+                          first={index === 0}
+                          busy={busy}
+                          onEdit={() => openEditUnit(unit)}
+                          onReactivate={() => void run(() => repository.setUnitActive(unit.id, true), 'Unit reactivated.', 'Could not reactivate this unit.')}
+                        />
+                      ))}
+                    </View>
+                  ) : (
+                    <EmptyBlock title="No matching units" body={`No inactive unit matches "${unitSearch.trim()}".`} onClearSearch={() => setUnitSearch('')} />
+                  )
+                ) : null}
+              </>
             ) : null}
           </>
-        ) : null}
-
-        <SectionHeading number="02" title="Conversions" count={activeConversions.length} countLabel={`${activeConversions.length} active conversion${activeConversions.length === 1 ? '' : 's'}`} />
-        <Text style={styles.sectionBody}>A conversion changes one unit into another, such as 1,000 kg = 1 tonne. Confirmed receipts keep the conversion they were saved with, so an edit only affects future calculations.</Text>
-        <TouchableOpacity
-          style={[styles.primaryButton, !activeUnits.length && styles.buttonDisabled]}
-          onPress={openAddConversion}
-          disabled={!activeUnits.length}
-          accessibilityRole="button"
-          accessibilityLabel="Add a conversion"
-          accessibilityHint={activeUnits.length ? undefined : 'Add at least one unit first'}
-          accessibilityState={{ disabled: !activeUnits.length }}
-        >
-          <Text style={styles.primaryButtonLabel}>Add Conversion</Text>
-        </TouchableOpacity>
-        {!activeUnits.length ? <Text style={styles.helper}>Add at least one active unit before creating a conversion.</Text> : null}
-
-        {conversions.length > SEARCH_THRESHOLD ? (
-          <SearchBar
-            value={conversionSearch}
-            onChange={setConversionSearch}
-            placeholder="Search conversion or unit name"
-            label="Search conversions by name or unit"
-          />
-        ) : null}
-
-        {visibleActiveConversions.length ? (
-          visibleActiveConversions.map((value) => (
-            <ConversionRow key={value.id} conversion={value} busy={busy} onEdit={() => openEditConversion(value)} onRemove={() => confirmRemoveConversion(value)} />
-          ))
         ) : (
-          <EmptyBlock
-            title={conversionQuery ? 'No matching conversions' : 'No active conversions yet'}
-            body={conversionQuery ? `No active conversion matches "${conversionSearch.trim()}".` : 'Add a rule such as 1,000 kg = 1 t so receipts can bill in the unit you sell in.'}
-            onClearSearch={conversionQuery ? () => setConversionSearch('') : undefined}
-          />
-        )}
-
-        {inactiveConversions.length ? (
           <>
-            <StatusBand
-              title="Inactive Conversions"
-              count={inactiveConversions.length}
-              noun="conversion"
-              open={inactiveConversionsOpen}
-              onToggle={() => toggleSection(setInactiveConversionsOpen)}
-            />
-            {inactiveConversionsOpen ? (
-              visibleInactiveConversions.length ? (
-                visibleInactiveConversions.map((value) => (
-                  <ConversionRow
-                    key={value.id}
-                    conversion={value}
-                    busy={busy}
-                    onEdit={() => openEditConversion(value)}
-                    onRemove={() => confirmRemoveConversion(value)}
-                    onReactivate={() => void run(() => repository.setConversionActive(value.id, true), 'Conversion reactivated.', 'Could not reactivate this conversion.')}
-                  />
-                ))
-              ) : (
-                <EmptyBlock
-                  title="No matching conversions"
-                  body={`No inactive conversion matches "${conversionSearch.trim()}".`}
-                  onClearSearch={() => setConversionSearch('')}
-                />
-              )
+            {needsSearch(conversions.length) ? (
+              <SearchBar value={conversionSearch} onChange={setConversionSearch} placeholder="Search conversion or unit name" label="Search conversions by name or unit" />
             ) : null}
+            {visibleActiveConversions.length ? (
+              <View style={styles.list}>
+                {visibleActiveConversions.map((value, index) => (
+                  <ConversionListRow key={value.id} conversion={value} first={index === 0} busy={busy} onEdit={() => openEditConversion(value)} />
+                ))}
+              </View>
+            ) : (
+              <EmptyBlock
+                title={conversionQuery ? 'No matching conversions' : 'No active conversions yet'}
+                body={conversionQuery ? `No active conversion matches "${conversionSearch.trim()}".` : 'A conversion changes one unit into another. Add a rule such as 1,000 kg = 1 t so receipts can bill in the unit you sell in.'}
+                onClearSearch={conversionQuery ? () => setConversionSearch('') : undefined}
+              />
+            )}
+            {inactiveConversions.length ? (
+              <>
+                <InactiveRow label={inactiveLabel('conversions', inactiveConversions.length)} open={inactiveConversionsOpen} onToggle={() => toggleSection(setInactiveConversionsOpen)} />
+                {inactiveConversionsOpen ? (
+                  visibleInactiveConversions.length ? (
+                    <View style={styles.list}>
+                      {visibleInactiveConversions.map((value, index) => (
+                        <ConversionListRow
+                          key={value.id}
+                          conversion={value}
+                          first={index === 0}
+                          busy={busy}
+                          onEdit={() => openEditConversion(value)}
+                          onReactivate={() => void run(() => repository.setConversionActive(value.id, true), 'Conversion reactivated.', 'Could not reactivate this conversion.')}
+                        />
+                      ))}
+                    </View>
+                  ) : (
+                    <EmptyBlock title="No matching conversions" body={`No inactive conversion matches "${conversionSearch.trim()}".`} onClearSearch={() => setConversionSearch('')} />
+                  )
+                ) : null}
+              </>
+            ) : null}
+            <Text style={styles.note}>Confirmed receipts keep the conversion they were saved with, so editing a rule only changes future calculations.</Text>
           </>
-        ) : null}
+        )}
       </ScrollView>
+
+      <View style={styles.addBar}>
+        {add.hint ? <Text style={styles.addHint}>{add.hint}</Text> : null}
+        <TouchableOpacity
+          style={[styles.addButton, !add.enabled && styles.buttonDisabled]}
+          onPress={tab === 'units' ? openAddUnit : openAddConversion}
+          disabled={!add.enabled}
+          accessibilityRole="button"
+          accessibilityLabel={tab === 'units' ? 'Add a measurement unit' : 'Add a conversion'}
+          accessibilityHint={add.enabled ? undefined : 'Add at least one unit first'}
+          accessibilityState={{ disabled: !add.enabled }}
+        >
+          <PlusIcon />
+          <Text style={styles.addButtonLabel}>{add.label}</Text>
+        </TouchableOpacity>
+      </View>
 
       <Sheet
         visible={unitSheet !== 'closed'}
@@ -495,6 +465,7 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
             <Text style={styles.rowTitle} numberOfLines={2}>{unitName.trim() || 'Unit name'}</Text>
           </View>
         </View>
+        {unitSheet === 'edit' && editingUnit ? <RemoveBlock kind="unit" busy={busy} onRemove={() => confirmRemoveUnit(editingUnit)} /> : null}
       </Sheet>
 
       <Sheet
@@ -535,80 +506,14 @@ export function ReceiptSetupScreen({ repository, onBack }: { repository: LoadRep
         <Field label="Output quantity *" value={outputQuantity} onChangeText={setOutputQuantity} keyboardType="decimal-pad" helper="What that input quantity is equal to." />
 
         <Field label="Decimal places *" value={decimals} onChangeText={setDecimals} keyboardType="number-pad" helper="How many decimals the converted quantity shows. A whole number from 0 to 6." />
+        {conversionSheet === 'edit' && editingConversion ? <RemoveBlock kind="conversion" busy={busy} onRemove={() => confirmRemoveConversion(editingConversion)} /> : null}
       </Sheet>
-    </>
-  );
-}
-
-function SectionHeading({ number, title, count, countLabel }: { number: string; title: string; count: number; countLabel: string }) {
-  return (
-    <View style={styles.sectionHeading} accessibilityRole="header" accessibilityLabel={`Section ${number}. ${title}. ${countLabel}.`}>
-      <View style={styles.sectionMarker}><Text style={styles.sectionMarkerText}>{number}</Text></View>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <Text style={styles.sectionCount}>{count}</Text>
     </View>
   );
 }
 
-function UnitRow({ unit, busy, onEdit, onRemove, onReactivate }: {
-  unit: MeasurementUnit; busy: boolean; onEdit: () => void; onRemove: () => void; onReactivate?: () => void;
-}) {
-  return (
-    <View style={[styles.record, !unit.isActive && styles.recordInactive]}>
-      <View style={styles.recordTop}>
-        <View style={[styles.symbolTile, !unit.isActive && styles.symbolTileInactive]}>
-          <Text style={styles.symbolTileText} numberOfLines={1}>{unit.symbol}</Text>
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.rowTitle} numberOfLines={2}>{unit.name}</Text>
-          <Text style={styles.rowMeta} numberOfLines={1}>Symbol {unit.symbol}</Text>
-        </View>
-        {!unit.isActive ? <InactivePill /> : null}
-      </View>
-      <RowActions
-        busy={busy}
-        name={unit.name}
-        kind="unit"
-        onEdit={onEdit}
-        onRemove={onRemove}
-        onReactivate={onReactivate}
-      />
-    </View>
-  );
-}
 
-function ConversionRow({ conversion, busy, onEdit, onRemove, onReactivate }: {
-  conversion: ConversionOption; busy: boolean; onEdit: () => void; onRemove: () => void; onReactivate?: () => void;
-}) {
-  return (
-    <View style={[styles.record, !conversion.isActive && styles.recordInactive]}>
-      <View style={styles.recordTop}>
-        <View style={styles.flex}>
-          <Text style={styles.rowTitle} numberOfLines={2}>{conversion.name}</Text>
-          <Text style={styles.rowMeta} numberOfLines={1}>
-            {conversion.inputUnitName} to {conversion.outputUnitName} · {conversion.decimalPlaces} decimal{conversion.decimalPlaces === 1 ? '' : 's'}
-          </Text>
-        </View>
-        {!conversion.isActive ? <InactivePill /> : null}
-      </View>
-      <Equation
-        inputQuantity={conversion.inputQuantity}
-        inputSymbol={conversion.inputUnitSymbol}
-        outputQuantity={conversion.outputQuantity}
-        outputSymbol={conversion.outputUnitSymbol}
-        muted={!conversion.isActive}
-      />
-      <RowActions
-        busy={busy}
-        name={conversion.name}
-        kind="conversion"
-        onEdit={onEdit}
-        onRemove={onRemove}
-        onReactivate={onReactivate}
-      />
-    </View>
-  );
-}
+
 
 /** The rule itself, given the weight of a headline so a conversion can never be mistaken for a unit. */
 function Equation({ inputQuantity, inputSymbol, outputQuantity, outputSymbol, muted = false }: {
@@ -635,80 +540,117 @@ function Equation({ inputQuantity, inputSymbol, outputQuantity, outputSymbol, mu
   );
 }
 
-function RowActions({ busy, name, kind, onEdit, onRemove, onReactivate }: {
-  busy: boolean; name: string; kind: 'unit' | 'conversion'; onEdit: () => void; onRemove: () => void; onReactivate?: () => void;
-}) {
+
+
+
+function ChevronIcon({ direction = 'right' }: { direction?: 'right' | 'down' | 'up' }) {
+  const d = direction === 'right' ? 'M9 5l7 7-7 7' : direction === 'down' ? 'M5 9l7 7 7-7' : 'M5 15l7-7 7 7';
   return (
-    <View style={styles.rowActions}>
-      <TouchableOpacity
-        style={styles.quietAction}
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={SECONDARY} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" accessibilityElementsHidden importantForAccessibility="no">
+      <Path d={d} />
+    </Svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" accessibilityElementsHidden importantForAccessibility="no">
+      <Path d="M12 5v14M5 12h14" />
+    </Svg>
+  );
+}
+
+/** One line per unit: the symbol, then the name. Tapping opens the edit form, where Remove lives. */
+function UnitListRow({ unit, first, busy, onEdit, onReactivate }: { unit: MeasurementUnit; first: boolean; busy: boolean; onEdit: () => void; onReactivate?: () => void }) {
+  return (
+    <View style={[styles.listRow, !first && styles.listRowRule]}>
+      <Pressable
+        style={styles.rowMain}
         onPress={onEdit}
         disabled={busy}
+        android_ripple={{ color: '#EFE9DF' }}
         accessibilityRole="button"
-        accessibilityLabel={`Edit ${name}`}
-        accessibilityHint={`Opens a form to change this ${kind}`}
+        accessibilityLabel={`${unit.name}, symbol ${unit.symbol}${unit.isActive ? '' : ', inactive'}`}
+        accessibilityHint="Opens the form to edit or remove this unit"
         accessibilityState={{ disabled: busy }}
       >
-        <Text style={styles.quietActionText}>Edit</Text>
-      </TouchableOpacity>
-      {onReactivate ? (
-        <TouchableOpacity
-          style={styles.quietAction}
-          onPress={onReactivate}
-          disabled={busy}
-          accessibilityRole="button"
-          accessibilityLabel={`Reactivate ${name}`}
-          accessibilityHint={`Makes this ${kind} selectable again on new records`}
-          accessibilityState={{ disabled: busy, busy }}
-        >
-          <Text style={styles.reactivateActionText}>Reactivate</Text>
-        </TouchableOpacity>
-      ) : null}
-      <View style={styles.flex} />
-      <TouchableOpacity
-        style={styles.quietAction}
-        onPress={onRemove}
-        disabled={busy}
-        accessibilityRole="button"
-        accessibilityLabel={`Remove ${name}`}
-        accessibilityHint={`Deletes this ${kind} if nothing uses it, otherwise moves it to Inactive`}
-        accessibilityState={{ disabled: busy }}
-      >
-        <Text style={styles.removeActionText}>Remove</Text>
-      </TouchableOpacity>
+        <Text style={[styles.rowSymbol, !unit.isActive && styles.rowInactive]} numberOfLines={1}>{unit.symbol}</Text>
+        <Text style={[styles.rowName, !unit.isActive && styles.rowInactive]} numberOfLines={2}>{unit.name}</Text>
+        {onReactivate ? null : <ChevronIcon />}
+      </Pressable>
+      {onReactivate ? <ReactivateButton name={unit.name} kind="unit" busy={busy} onPress={onReactivate} /> : null}
     </View>
   );
 }
 
-function InactivePill() {
+/** One row per conversion with the rule itself as the headline, so it reads as "1,000 kg = 1 t" and not as a card in a card. */
+function ConversionListRow({ conversion, first, busy, onEdit, onReactivate }: { conversion: ConversionOption; first: boolean; busy: boolean; onEdit: () => void; onReactivate?: () => void }) {
+  const equation = conversionEquation(conversion);
+  const muted = !conversion.isActive;
   return (
-    <View style={styles.inactivePill}>
-      <View style={styles.inactiveDot} />
-      <Text style={styles.inactivePillText}>Inactive</Text>
+    <View style={[styles.listRow, styles.listRowTall, !first && styles.listRowRule]}>
+      <Pressable
+        style={styles.rowMain}
+        onPress={onEdit}
+        disabled={busy}
+        android_ripple={{ color: '#EFE9DF' }}
+        accessibilityRole="button"
+        accessibilityLabel={`${conversion.name}. ${equation.left} ${equation.leftSymbol} equals ${equation.right} ${equation.rightSymbol}. ${decimalsText(conversion.decimalPlaces)}${muted ? '. Inactive' : ''}`}
+        accessibilityHint="Opens the form to edit or remove this conversion"
+        accessibilityState={{ disabled: busy }}
+      >
+        <View style={styles.flex}>
+          <Text style={[styles.rowEq, muted && styles.rowInactive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+            {equation.left}<Text style={styles.rowEqSymbol}> {equation.leftSymbol} </Text><Text style={styles.rowEqSign}>= </Text>{equation.right}<Text style={styles.rowEqSymbol}> {equation.rightSymbol}</Text>
+          </Text>
+          <Text style={styles.rowSub} numberOfLines={2}>{conversion.name} · {decimalsText(conversion.decimalPlaces)}</Text>
+        </View>
+        {onReactivate ? null : <ChevronIcon />}
+      </Pressable>
+      {onReactivate ? <ReactivateButton name={conversion.name} kind="conversion" busy={busy} onPress={onReactivate} /> : null}
     </View>
   );
 }
 
-function StatusBand({ title, count, noun, open, onToggle }: { title: string; count: number; noun: string; open: boolean; onToggle: () => void }) {
+function ReactivateButton({ name, kind, busy, onPress }: { name: string; kind: 'unit' | 'conversion'; busy: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity
-      activeOpacity={0.75}
-      style={styles.band}
-      onPress={onToggle}
+      style={styles.reactivate}
+      onPress={onPress}
+      disabled={busy}
       accessibilityRole="button"
-      accessibilityState={{ expanded: open }}
-      accessibilityLabel={`${title}, ${count} ${noun}${count === 1 ? '' : 's'}`}
-      accessibilityHint={open ? 'Hides this list' : 'Shows this list'}
+      accessibilityLabel={`Reactivate ${name}`}
+      accessibilityHint={`Makes this ${kind} selectable again on new records`}
+      accessibilityState={{ disabled: busy, busy }}
     >
-      <View style={styles.flex}>
-        <Text style={styles.bandTitle}>{title}</Text>
-        <Text style={styles.bandHint}>{open ? 'Tap to hide' : 'Tap to view'} · {count} {noun}{count === 1 ? '' : 's'}</Text>
-      </View>
-      <View style={styles.bandRight}>
-        <View style={styles.countBadge}><Text style={styles.countBadgeText}>{count}</Text></View>
-        <Text style={styles.expandMark}>{open ? '×' : '+'}</Text>
-      </View>
+      <Text style={styles.reactivateText}>Reactivate</Text>
     </TouchableOpacity>
+  );
+}
+
+/** The collapsed "Inactive units · 1" row that opens the inactive list for the tab. */
+function InactiveRow({ label, open, onToggle }: { label: string; open: boolean; onToggle: () => void }) {
+  return (
+    <TouchableOpacity style={styles.inactiveRow} onPress={onToggle} activeOpacity={0.75} accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={label} accessibilityHint={open ? 'Hides this list' : 'Shows this list'}>
+      <Text style={styles.inactiveRowText}>{label}</Text>
+      <ChevronIcon direction={open ? 'up' : 'down'} />
+    </TouchableOpacity>
+  );
+}
+
+/** Remove, at the bottom of an edit form, with the same promise as the confirmation that follows it. */
+function RemoveBlock({ kind, busy, onRemove }: { kind: 'unit' | 'conversion'; busy: boolean; onRemove: () => void }) {
+  return (
+    <View style={styles.removeBlock}>
+      <Text style={styles.removeHelp}>
+        {kind === 'unit'
+          ? 'Removing deletes this unit if nothing uses it. If a record, conversion, or catalog item depends on it, DROMEX keeps that history and moves the unit to Inactive instead.'
+          : "Removing deletes this conversion if no receipt uses it. If a confirmed receipt depends on it, DROMEX keeps that receipt's saved snapshot and moves the conversion to Inactive instead."}
+      </Text>
+      <TouchableOpacity style={styles.removeButton} onPress={onRemove} disabled={busy} accessibilityRole="button" accessibilityLabel={`Remove this ${kind}`} accessibilityState={{ disabled: busy }}>
+        <Text style={styles.removeButtonText}>Remove {kind}</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -858,9 +800,9 @@ function SheetFooter({ busy, saveLabel, saveAccessibilityLabel, onCancel, onSave
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 20, paddingBottom: 42, gap: 14 },
+  root: { flex: 1 },
+  content: { padding: 20, paddingBottom: 24, gap: 14 },
   flex: { flex: 1, minWidth: 0 },
-  helper: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   error: { color: colors.danger, backgroundColor: '#FCE8E6', borderRadius: 10, padding: 12, fontWeight: '700', lineHeight: 19 },
   success: { color: colors.success, backgroundColor: '#E5F3EC', borderRadius: 10, padding: 12, fontWeight: '700', lineHeight: 19 },
 
@@ -870,28 +812,9 @@ const styles = StyleSheet.create({
   retryButton: { minHeight: 48, marginTop: 6, paddingHorizontal: 24, borderRadius: 13, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   retryButtonText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
 
-  hero: { backgroundColor: colors.navy, borderRadius: 18, padding: 18, gap: 12, shadowColor: colors.navyDeep, shadowOpacity: .22, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
-  heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  heroBack: { minHeight: 48, minWidth: 48, paddingHorizontal: 14, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' },
-  heroBackText: { color: '#FFF8ED', fontWeight: '800' },
-  heroEyebrow: { color: '#F2A184', fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
-  heroTitle: { color: '#FFF8ED', fontSize: 26, fontWeight: '900', marginTop: 2 },
-  heroPurpose: { color: '#D5E4EF', fontSize: 12, lineHeight: 17 },
-  heroSummaryRow: { flexDirection: 'row', gap: 12, marginTop: 2, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.22)' },
-  heroSummaryItem: { flex: 1, gap: 2 },
-  heroSummaryValue: { color: '#FFF8ED', fontSize: 20, fontWeight: '900' },
-  heroSummaryLabel: { color: '#D5E4EF', fontSize: 9, fontWeight: '800', letterSpacing: .6 },
 
-  sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
-  sectionMarker: { minWidth: 30, height: 30, borderRadius: 9, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  sectionMarkerText: { color: '#FFF8ED', fontSize: 12, fontWeight: '900', letterSpacing: .4 },
-  sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: '800', flex: 1 },
-  sectionCount: { color: colors.brandDark, backgroundColor: '#FBE9E4', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 11, fontWeight: '900', fontSize: 12, overflow: 'hidden' },
-  sectionBody: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: -4 },
 
-  primaryButton: { minHeight: 48, borderRadius: 13, backgroundColor: colors.brand, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
-  primaryButtonLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
-  buttonDisabled: { opacity: .4 },
+
 
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 14, shadowColor: '#17212B', shadowOpacity: .05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
   searchGlyph: { color: colors.brand, fontSize: 19, fontWeight: '900' },
@@ -899,14 +822,9 @@ const styles = StyleSheet.create({
   searchClear: { minHeight: 32, minWidth: 32, borderRadius: 16, backgroundColor: '#EEEAE2', alignItems: 'center', justifyContent: 'center' },
   searchClearText: { color: colors.muted, fontSize: 16, fontWeight: '900', lineHeight: 18 },
 
-  record: { backgroundColor: colors.surface, borderRadius: 16, padding: 14, gap: 10 },
-  recordInactive: { backgroundColor: colors.creamSoft, borderWidth: 1, borderColor: colors.line },
-  recordTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowTitle: { color: colors.ink, fontSize: 16, fontWeight: '700' },
-  rowMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
 
   symbolTile: { minWidth: 46, height: 46, borderRadius: 13, paddingHorizontal: 8, backgroundColor: '#E8F0F6', alignItems: 'center', justifyContent: 'center' },
-  symbolTileInactive: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
   symbolTileText: { color: colors.navy, fontSize: 15, fontWeight: '900' },
 
   equation: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.cream, borderWidth: 1, borderColor: '#E8DED0', borderRadius: 13, paddingHorizontal: 14, paddingVertical: 12 },
@@ -916,29 +834,48 @@ const styles = StyleSheet.create({
   equationSymbol: { color: colors.muted, fontSize: 12, fontWeight: '700' },
   equationSign: { color: colors.brandDark, fontSize: 19, fontWeight: '900' },
 
-  rowActions: { flexDirection: 'row', alignItems: 'center', gap: 16, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 2 },
   quietAction: { minHeight: 48, justifyContent: 'center' },
   quietActionText: { color: colors.brandDark, fontWeight: '800', fontSize: 14 },
-  reactivateActionText: { color: colors.success, fontWeight: '800', fontSize: 14 },
-  removeActionText: { color: colors.danger, fontWeight: '800', fontSize: 14 },
 
-  inactivePill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, borderWidth: 1, borderColor: colors.line, flexShrink: 0 },
-  inactiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.muted },
-  inactivePillText: { color: colors.muted, fontWeight: '900', fontSize: 11 },
 
-  band: { minHeight: 56, backgroundColor: colors.creamSoft, borderRadius: 14, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  bandTitle: { color: colors.ink, fontSize: 15, fontWeight: '800' },
-  bandHint: { color: colors.muted, fontSize: 11, marginTop: 2 },
-  bandRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  countBadge: { minWidth: 26, height: 26, borderRadius: 13, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  countBadgeText: { color: colors.brandDark, fontWeight: '900', fontSize: 12 },
-  expandMark: { color: colors.brandDark, fontSize: 24, fontWeight: '700', width: 22, textAlign: 'center' },
 
   empty: { borderWidth: 1, borderColor: colors.line, borderStyle: 'dashed', borderRadius: 14, padding: 18, gap: 5 },
   emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: '800' },
   emptyClear: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   emptyClearText: { color: colors.brandDark, fontWeight: '900', fontSize: 12 },
 
+  buttonDisabled: { opacity: .4 },
+  note: { color: SECONDARY, fontSize: 13, lineHeight: 19 },
+
+  list: { backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.line, overflow: 'hidden', shadowColor: '#17212B', shadowOpacity: .06, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
+  listRow: { flexDirection: 'row', alignItems: 'center', minHeight: 56 },
+  listRowTall: { minHeight: 68 },
+  listRowRule: { borderTopWidth: 1, borderTopColor: '#ECE6DA' },
+  rowMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 8, minHeight: 56 },
+  rowSymbol: { width: 52, color: colors.navy, fontSize: 17, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  rowName: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 16, fontWeight: '600' },
+  rowInactive: { color: SECONDARY },
+  rowEq: { color: colors.navy, fontSize: 18, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  rowEqSymbol: { color: SECONDARY, fontSize: 13, fontWeight: '700' },
+  rowEqSign: { color: colors.brandDark, fontWeight: '900' },
+  rowSub: { color: SECONDARY, fontSize: 13, lineHeight: 18, marginTop: 3 },
+  reactivate: { minHeight: 48, minWidth: 48, justifyContent: 'center', paddingHorizontal: 14 },
+  reactivateText: { color: colors.success, fontWeight: '800', fontSize: 14 },
+
+  inactiveRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
+  inactiveRowText: { color: SECONDARY, fontSize: 14, fontWeight: '700' },
+
+  addBar: { backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.line, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12, gap: 6, shadowColor: '#17212B', shadowOpacity: .1, shadowRadius: 8, shadowOffset: { width: 0, height: -3 }, elevation: 8 },
+  addHint: { color: SECONDARY, fontSize: 12, textAlign: 'center' },
+  addButton: { minHeight: 50, borderRadius: 13, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16 },
+  addButtonLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+
+  removeBlock: { gap: 10, marginTop: 8, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.line },
+  removeHelp: { color: SECONDARY, fontSize: 12, lineHeight: 17 },
+  removeButton: { minHeight: 48, borderRadius: 13, borderWidth: 1.5, borderColor: colors.danger, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  removeButtonText: { color: colors.danger, fontWeight: '800', fontSize: 15 },
+
+  helper: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   sheet: { flex: 1, backgroundColor: colors.background },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14 },
   sheetEyebrow: { color: colors.brand, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
