@@ -49,7 +49,7 @@ export function HomeSkyline({style,image,compact=false}:{style:SkylineStyle;imag
 
   if(shown==='custom')return null;
   const box=singleBox[shown];
-  return <View style={compact?undefined:styles.singleWrap}>
+  return <View style={compact?styles.fullWidth:styles.singleWrap}>
     <Svg width="100%" height={previewHeight??104} viewBox={`0 0 ${box.width} ${SKYLINE_HEIGHT}`} preserveAspectRatio="xMidYMax meet" accessibilityLabel={SKYLINE_LABEL}><Single style={shown} palette={onLight}/></Svg>
     {compact?null:<View style={styles.ground}/>}
   </View>;
@@ -57,7 +57,8 @@ export function HomeSkyline({style,image,compact=false}:{style:SkylineStyle;imag
 
 const styles=StyleSheet.create({
   banner:{backgroundColor:'#0B2A5B',borderRadius:19,paddingHorizontal:14,paddingTop:16,paddingBottom:12,gap:8},
-  bannerCompact:{borderRadius:8,padding:4},
+  bannerCompact:{width:'100%',borderRadius:8,padding:4},
+  fullWidth:{width:'100%'},
   bannerTag:{color:'#F2A184',fontWeight:'700',fontSize:11,letterSpacing:3,textAlign:'center'},
   singleWrap:{gap:0},
   ground:{height:5,borderRadius:1,backgroundColor:'#F2620F'},
