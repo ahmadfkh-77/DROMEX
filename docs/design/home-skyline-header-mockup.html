@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Skyline Mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --brand:#C84B31; --navy:#173F67; --bg:#F5F2EC; --line:#DDD7CC; --muted:#65717D; --ink:#17212B; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#E4E1DA; font-family:system-ui, Roboto, "Segoe UI", sans-serif; color:var(--ink); }
+  h1 { font-family:Oswald; font-weight:700; letter-spacing:.06em; color:#0B2A5B; text-align:center; margin:26px 16px 4px; }
+  .lead { text-align:center; max-width:760px; margin:0 auto 18px; padding:0 16px; line-height:1.5; color:#3b4652; }
+  .row { display:flex; flex-wrap:wrap; gap:28px; justify-content:center; padding:0 16px 30px; }
+  .col { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .label { font-family:Oswald; font-weight:500; letter-spacing:.08em; color:#0B2A5B; font-size:15px; text-align:center; }
+  .label small { display:block; font-family:system-ui; letter-spacing:0; color:#5b6670; font-size:12px; margin-top:2px; }
+  .rec { color:#fff; background:#287A55; border-radius:999px; padding:2px 10px; font-size:11px; letter-spacing:.06em; }
+  /* phone */
+  .phone { width:360px; height:740px; background:#111; border-radius:36px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+  .screen { width:100%; height:100%; background:var(--bg); border-radius:28px; overflow:hidden; position:relative; }
+  .sb { height:26px; display:flex; justify-content:space-between; align-items:center; padding:0 20px; font-size:12px; font-weight:600; color:#222; }
+  .content { padding:12px 20px 20px; display:flex; flex-direction:column; gap:16px; }
+  .header { display:flex; flex-direction:column; gap:9px; }
+  .hline { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .logo { width:168px; height:87px; object-fit:contain; }
+  .tools { display:flex; flex-direction:column; align-items:flex-end; gap:7px; }
+  .search { min-width:74px; height:48px; border:1.5px solid var(--navy); border-radius:12px; background:#fff; display:flex; align-items:center; justify-content:center; gap:5px; color:var(--navy); font-size:11px; font-weight:700; }
+  .search b { font-size:18px; }
+  .status { min-height:48px; display:flex; align-items:center; gap:8px; padding:8px 11px; border-radius:16px; background:#fff; border:1px solid var(--line); }
+  .dot { width:8px; height:8px; border-radius:4px; background:#287A55; }
+  .status .t { font-size:12px; font-weight:700; color:var(--navy); } .status .h { font-size:11px; color:var(--muted); }
+  .eyebrow { width:168px; text-align:center; color:var(--brand); font-weight:700; font-size:11px; letter-spacing:1.6px; }
+  .date, .ver { width:168px; text-align:center; color:var(--muted); font-size:11px; } .ver { font-size:10px; font-weight:700; }
+  .receipt { background:var(--brand); border-radius:19px; padding:21px; color:#FFFCF6; box-shadow:0 6px 12px rgba(142,46,27,.28); }
+  .receipt .e { font-size:11px; font-weight:700; letter-spacing:1.2px; } .receipt .t { font-size:26px; font-weight:900; margin:4px 0; } .receipt .h { font-size:13px; line-height:18px; }
+  .attn { min-height:64px; border-radius:16px; padding:11px; display:flex; align-items:center; gap:11px; background:#E5F3EC; border-left:4px solid #287A55; }
+  .attn .n { width:38px; height:38px; border-radius:19px; background:#287A55; color:#fff; font-weight:900; display:flex; align-items:center; justify-content:center; }
+  .attn .e { font-size:11px; font-weight:700; color:#8E2E1B; letter-spacing:.8px; } .attn .t { font-size:15px; font-weight:700; }
+  .draft { height:48px; border:1px solid var(--navy); border-radius:12px; background:#fff; display:flex; align-items:center; justify-content:space-between; padding:0 14px; color:var(--navy); font-size:12px; font-weight:700; }
+  .sky { display:block; width:100%; height:auto; }
+  .banner { background:#0B2A5B; border-radius:19px; padding:16px 14px 12px; }
+  .banner .tag { color:#F2A184; font-family:Oswald; font-weight:500; letter-spacing:3px; font-size:11px; text-align:center; margin-top:8px; }
+  .brand { display:flex; flex-direction:column; align-items:center; }
+  .eyebrow.tight { margin-top:-8px; }
+  .datebox { min-height:48px; padding:7px 11px; border-radius:16px; background:#fff; border:1px solid var(--line); text-align:right; }
+  .datebox .d1 { font-size:12px; font-weight:700; color:var(--navy); } .datebox .d2 { font-size:11px; color:var(--muted); } .datebox .v { font-size:10px; font-weight:700; color:var(--muted); margin-top:1px; }
+  .plaindate { text-align:right; align-self:center; }
+  .plaindate .d1 { font-size:15px; font-weight:700; color:var(--navy); } .plaindate .d2 { font-size:13px; color:var(--muted); margin-top:2px; } .plaindate .v { font-size:10px; font-weight:700; color:var(--muted); margin-top:4px; }
+  .hl { outline:2px dashed #F2620F; outline-offset:4px; border-radius:6px; }
+  /* icon section */
+  .icons { display:flex; flex-wrap:wrap; gap:24px; justify-content:center; align-items:flex-end; }
+  .icons figure { margin:0; display:flex; flex-direction:column; align-items:center; gap:6px; font-size:12px; color:#3b4652; }
+  .wall { border-radius:18px; padding:18px 22px; display:flex; gap:22px; align-items:flex-end; }
+  .wall figure { color:inherit; margin:0; display:flex; flex-direction:column; align-items:center; gap:6px; font-size:12px; }
+  .notes { max-width:900px; margin:0 auto 40px; padding:0 16px; line-height:1.55; color:#2c3640; }
+  .notes h2 { font-family:Oswald; color:#0B2A5B; letter-spacing:.05em; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <!-- ================= QUARRY ================= -->
+    <symbol id="quarry" viewBox="0 0 264 150" preserveAspectRatio="xMidYMax meet">
+      <!-- stockpile (behind the crusher) -->
+      <polygon points="200,146 238,76 264,146" fill="var(--acc,#F2620F)"/>
+      <polygon points="238,76 264,146 244,146" fill="var(--acs,#B8420A)"/>
+      <g fill="currentColor">
+        <!-- benched pit -->
+        <polygon points="0,36 32,36 38,56 64,56 70,76 94,76 100,96 116,96 128,146 0,146"/>
+      </g>
+      <g fill="var(--sh,#2F5A96)">
+        <rect x="0" y="62" width="60" height="3"/><rect x="0" y="84" width="90" height="3"/>
+        <rect x="0" y="106" width="104" height="3"/><rect x="0" y="126" width="116" height="3"/>
+        <polygon points="8,48 14,44 20,48"/><polygon points="22,70 30,65 37,70"/><polygon points="52,92 60,87 67,92"/>
+      </g>
+      <g fill="var(--acc,#F2620F)">
+        <rect x="0" y="36" width="32" height="3"/><rect x="38" y="56" width="26" height="3"/>
+        <rect x="70" y="76" width="24" height="3"/><rect x="100" y="96" width="16" height="3"/>
+      </g>
+      <!-- excavator on the second bench -->
+      <rect x="44" y="50" width="18" height="6" rx="3" fill="var(--sh,#2F5A96)"/>
+      <g fill="var(--acc,#F2620F)">
+        <rect x="46" y="42" width="15" height="8" rx="1"/>
+        <rect x="54" y="35" width="7" height="8" rx="1"/>
+        <polygon points="48,44 40,27 43.5,26 51.5,42"/>
+        <polygon points="40,27 32,39 35,41 43,29"/>
+        <polygon points="29,37 37,40 34,46 28,44"/>
+      </g>
+      <rect x="56" y="37" width="4" height="3.5" fill="currentColor"/>
+      <!-- haul truck on the pit floor -->
+      <polygon points="130,118 156,118 158,131 132,131" fill="var(--acc,#F2620F)"/>
+      <polygon points="130,118 156,118 156,121 130,121" fill="var(--acs,#B8420A)"/>
+      <g fill="currentColor">
+        <rect x="157" y="121" width="11" height="11" rx="1.5"/>
+        <rect x="129" y="131" width="40" height="3.5"/>
+        <circle cx="138" cy="140.5" r="5.5"/><circle cx="162" cy="140.5" r="5.5"/>
+      </g>
+      <rect x="161" y="123.5" width="5" height="4" fill="var(--sh,#2F5A96)"/>
+      <circle cx="138" cy="140.5" r="2" fill="var(--sh,#2F5A96)"/><circle cx="162" cy="140.5" r="2" fill="var(--sh,#2F5A96)"/>
+      <!-- primary crusher station -->
+      <g fill="currentColor">
+        <polygon points="172,88 200,88 194,100 178,100"/>
+        <rect x="180" y="100" width="13" height="14"/>
+        <rect x="172" y="114" width="28" height="2.5"/>
+        <rect x="175" y="100" width="3" height="46"/><rect x="195" y="100" width="3" height="46"/>
+      </g>
+      <rect x="187" y="100" width="6" height="14" fill="var(--sh,#2F5A96)"/>
+      <g stroke="currentColor" stroke-width="1.6"><line x1="178" y1="118" x2="195" y2="144"/><line x1="195" y1="118" x2="178" y2="144"/></g>
+      <!-- conveyor to the stockpile -->
+      <polygon points="192,117 234,70 237,72.5 195,119.5" fill="currentColor"/>
+      <polyline points="198,122.1 204,109.4 210,108.7 216,96 222,95.3 228,82.5 234,81.8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <rect x="218" y="92" width="2.5" height="54" fill="currentColor"/>
+      <circle cx="236" cy="71" r="3" fill="currentColor"/>
+    </symbol>
+
+    <!-- ================= ASPHALT BATCH PLANT ================= -->
+    <symbol id="asphalt" viewBox="0 0 260 150" preserveAspectRatio="xMidYMax meet">
+      <!-- cold feed bins -->
+      <g fill="var(--sh,#2F5A96)">
+        <polygon points="3,100 9,95 15,100"/><polygon points="18,100 24,95 30,100"/>
+        <polygon points="33,100 39,95 45,100"/><polygon points="48,100 54,95 60,100"/>
+      </g>
+      <g fill="currentColor">
+        <polygon points="2,100 16,100 16,103 12,116 6,116 2,103"/>
+        <polygon points="17,100 31,100 31,103 27,116 21,116 17,103"/>
+        <polygon points="32,100 46,100 46,103 42,116 36,116 32,103"/>
+        <polygon points="47,100 61,100 61,103 57,116 51,116 47,103"/>
+        <rect x="0" y="117" width="64" height="3"/>
+        <rect x="3" y="120" width="2.5" height="26"/><rect x="30" y="120" width="2.5" height="26"/><rect x="58" y="120" width="2.5" height="26"/>
+        <!-- charging belt -->
+        <polygon points="60,118 82,96 84.5,98.5 62.5,120.5"/>
+        <rect x="70" y="110" width="2.5" height="36"/>
+      </g>
+      <!-- drier drum on its frame -->
+      <g fill="currentColor">
+        <rect x="78" y="86" width="9" height="26" rx="1"/>
+        <rect x="80" y="116" width="78" height="4"/>
+        <rect x="84" y="120" width="3" height="26"/><rect x="116" y="120" width="3" height="26"/><rect x="150" y="120" width="3" height="26"/>
+      </g>
+      <g transform="rotate(5 115 101)">
+        <rect x="87" y="92" width="56" height="18" rx="3" fill="var(--acc,#F2620F)"/>
+        <rect x="87" y="103" width="56" height="7" rx="2" fill="var(--acs,#B8420A)"/>
+        <rect x="95" y="89.5" width="4.5" height="23" rx="1" fill="currentColor"/>
+        <rect x="128" y="89.5" width="4.5" height="23" rx="1" fill="currentColor"/>
+      </g>
+      <g fill="currentColor">
+        <rect x="143" y="96" width="10" height="20" rx="1.5"/>
+        <rect x="153" y="102" width="6" height="7"/>
+        <!-- hot elevator -->
+        <rect x="162" y="20" width="7" height="126"/>
+        <rect x="160" y="15" width="13" height="8" rx="1"/>
+        <!-- mixing tower -->
+        <rect x="174" y="14" width="38" height="14"/>
+        <polygon points="172,14.5 193,6 214,14.5"/>
+        <rect x="170" y="28" width="46" height="2.5"/>
+        <rect x="177" y="31" width="32" height="22"/>
+        <polygon points="180,54 206,54 199,64 187,64"/>
+        <rect x="179" y="66" width="28" height="12" rx="1.5"/>
+        <rect x="170" y="80" width="46" height="2.5"/>
+        <rect x="170" y="74" width="1.5" height="6"/><rect x="214.5" y="74" width="1.5" height="6"/>
+        <rect x="175" y="30" width="3" height="116"/><rect x="208" y="30" width="3" height="116"/>
+      </g>
+      <g fill="var(--sh,#2F5A96)">
+        <rect x="178" y="18" width="30" height="3"/>
+        <rect x="185" y="31" width="1.5" height="22"/><rect x="193" y="31" width="1.5" height="22"/><rect x="201" y="31" width="1.5" height="22"/>
+        <rect x="179" y="73" width="28" height="5"/>
+      </g>
+      <rect x="174" y="22" width="38" height="3" fill="var(--acc,#F2620F)"/>
+      <g stroke="currentColor" stroke-width="1.6"><line x1="178" y1="84" x2="208" y2="104"/><line x1="208" y1="84" x2="178" y2="104"/></g>
+      <!-- truck loading under the pugmill -->
+      <polygon points="180,124 200,124 202,136 182,136" fill="var(--sh,#2F5A96)"/>
+      <g fill="currentColor">
+        <rect x="202" y="126" width="8" height="10" rx="1.5"/>
+        <rect x="180" y="136" width="30" height="3"/>
+        <circle cx="186" cy="142" r="4"/><circle cx="205" cy="142" r="4"/>
+      </g>
+      <rect x="204" y="128" width="4" height="3" fill="var(--sh,#2F5A96)"/>
+      <!-- baghouse, stack, bitumen tank -->
+      <g fill="currentColor">
+        <rect x="211" y="60" width="10" height="6"/>
+        <rect x="220" y="52" width="24" height="38"/>
+        <polygon points="220,52.5 232,46 244,52.5"/>
+        <polygon points="220,90 232,90 226,98"/><polygon points="232,90 244,90 238,98"/>
+        <rect x="221" y="90" width="2.5" height="32"/><rect x="240.5" y="90" width="2.5" height="32"/>
+        <rect x="248" y="4" width="7" height="142"/>
+        <rect x="246.5" y="2.5" width="10" height="3"/>
+        <rect x="245" y="24" width="13" height="2"/>
+        <rect x="214" y="122" width="32" height="18" rx="9"/>
+        <rect x="218" y="138" width="4" height="8"/><rect x="238" y="138" width="4" height="8"/>
+      </g>
+      <g fill="var(--sh,#2F5A96)">
+        <rect x="228" y="54" width="1.5" height="34"/><rect x="236" y="54" width="1.5" height="34"/>
+        <rect x="218" y="132" width="24" height="5" rx="2.5"/>
+      </g>
+      <rect x="248" y="10" width="7" height="4" fill="var(--acc,#F2620F)"/>
+    </symbol>
+
+    <!-- ================= CONCRETE BATCHING PLANT ================= -->
+    <clipPath id="c-drumclip"><ellipse cx="100" cy="118" rx="17" ry="10" transform="rotate(14 100 118)"/></clipPath>
+    <symbol id="concrete" viewBox="0 0 260 150" preserveAspectRatio="xMidYMax meet">
+      <!-- three cement silos -->
+      <g fill="currentColor">
+        <rect x="2" y="14" width="20" height="68" rx="2"/><polygon points="2,15 12,9 22,15"/><rect x="8" y="4" width="8" height="6"/>
+        <polygon points="2,82 22,82 14,96 10,96"/>
+        <rect x="26" y="14" width="20" height="68" rx="2"/><polygon points="26,15 36,9 46,15"/><rect x="32" y="4" width="8" height="6"/>
+        <polygon points="26,82 46,82 38,96 34,96"/>
+        <rect x="50" y="14" width="20" height="68" rx="2"/><polygon points="50,15 60,9 70,15"/><rect x="56" y="4" width="8" height="6"/>
+        <polygon points="50,82 70,82 62,96 58,96"/>
+        <rect x="0" y="1.5" width="72" height="1.6"/>
+        <rect x="3" y="82" width="2.5" height="64"/><rect x="18.5" y="82" width="2.5" height="64"/>
+        <rect x="27" y="82" width="2.5" height="64"/><rect x="42.5" y="82" width="2.5" height="64"/>
+        <rect x="51" y="82" width="2.5" height="64"/><rect x="66.5" y="82" width="2.5" height="64"/>
+      </g>
+      <g fill="var(--sh,#2F5A96)">
+        <rect x="15" y="16" width="6" height="66"/><rect x="39" y="16" width="6" height="66"/><rect x="63" y="16" width="6" height="66"/>
+      </g>
+      <g fill="var(--acc,#F2620F)">
+        <rect x="2" y="24" width="20" height="4"/><rect x="26" y="24" width="20" height="4"/><rect x="50" y="24" width="20" height="4"/>
+      </g>
+      <g stroke="currentColor" stroke-width="1.3">
+        <line x1="5" y1="104" x2="19" y2="144"/><line x1="19" y1="104" x2="5" y2="144"/>
+        <line x1="29" y1="104" x2="43" y2="144"/><line x1="43" y1="104" x2="29" y2="144"/>
+        <line x1="53" y1="104" x2="67" y2="144"/><line x1="67" y1="104" x2="53" y2="144"/>
+      </g>
+      <!-- screw conveyors to the mixer -->
+      <g fill="currentColor">
+        <polygon points="34,95 92,68 93.5,71 35.5,97.6"/>
+        <polygon points="58,94 94,62 96,64.5 60,96.5"/>
+        <!-- mixer tower -->
+        <rect x="88" y="52" width="40" height="28"/>
+        <polygon points="86,52.5 108,42 130,52.5"/>
+        <rect x="116" y="38" width="12" height="9" rx="2"/>
+        <rect x="82" y="80" width="52" height="2.5"/>
+        <rect x="82" y="74" width="1.5" height="6"/><rect x="132.5" y="74" width="1.5" height="6"/>
+        <polygon points="102,82.5 114,82.5 111,90 105,90"/>
+        <rect x="88" y="82" width="3" height="64"/><rect x="125" y="82" width="3" height="64"/>
+      </g>
+      <rect x="94" y="58" width="14" height="8" fill="var(--acc,#F2620F)"/>
+      <rect x="114" y="58" width="9" height="16" fill="var(--sh,#2F5A96)"/>
+      <g stroke="currentColor" stroke-width="1.6"><line x1="91" y1="84" x2="125" y2="100"/><line x1="125" y1="84" x2="91" y2="100"/></g>
+      <!-- mixer truck loading -->
+      <ellipse cx="100" cy="118" rx="17" ry="10" transform="rotate(14 100 118)" fill="var(--acc,#F2620F)"/>
+      <g clip-path="url(#c-drumclip)" stroke="var(--acs,#B8420A)" stroke-width="2.4">
+        <line x1="94" y1="102" x2="89" y2="130"/><line x1="103" y1="104" x2="98" y2="132"/><line x1="112" y1="106" x2="107" y2="134"/>
+      </g>
+      <g fill="currentColor">
+        <rect x="83" y="121" width="4" height="12"/>
+        <rect x="118" y="116" width="14" height="17" rx="2"/>
+        <rect x="82" y="132" width="52" height="4"/>
+        <circle cx="89" cy="141" r="5"/><circle cx="101" cy="141" r="5"/><circle cx="125" cy="141" r="5"/>
+      </g>
+      <g fill="var(--sh,#2F5A96)">
+        <rect x="124" y="119" width="6" height="6"/>
+        <circle cx="89" cy="141" r="1.8"/><circle cx="101" cy="141" r="1.8"/><circle cx="125" cy="141" r="1.8"/>
+      </g>
+      <!-- covered aggregate belt gallery -->
+      <polygon points="128,46 256,134 256,142 128,54" fill="currentColor"/>
+      <polygon points="134,51.8 252,133 252,135 134,53.8" fill="var(--sh,#2F5A96)"/>
+      <rect x="168.5" y="82" width="2.5" height="64" fill="currentColor"/>
+      <rect x="191.5" y="97" width="2.5" height="49" fill="currentColor"/>
+      <!-- aggregate bins + weigh belt -->
+      <g fill="var(--sh,#2F5A96)">
+        <polygon points="149,124 158,116 167,124"/><polygon points="172,124 181,116 190,124"/><polygon points="195,124 204,116 213,124"/>
+      </g>
+      <g fill="currentColor">
+        <polygon points="148,124 168,124 168,127 162,136 154,136 148,127"/>
+        <polygon points="171,124 191,124 191,127 185,136 177,136 171,127"/>
+        <polygon points="194,124 214,124 214,127 208,136 200,136 194,127"/>
+        <rect x="146" y="137" width="110" height="3"/>
+        <rect x="149" y="140" width="2.5" height="6"/><rect x="211" y="140" width="2.5" height="6"/>
+      </g>
+    </symbol>
+
+    <!-- full skyline -->
+    <symbol id="plants" viewBox="0 0 804 152">
+      <use href="#quarry" x="0" y="0" width="264" height="150"/>
+      <use href="#asphalt" x="272" y="0" width="260" height="150"/>
+      <use href="#concrete" x="544" y="0" width="260" height="150"/>
+      <rect x="0" y="146" width="804" height="5" rx="1" fill="var(--acc,#F2620F)"/>
+    </symbol>
+
+    <symbol id="homeLogo" viewBox="0 0 168 87"><rect x="2" y="8" width="164" height="71" rx="24" fill="#082D61"/><rect x="26" y="18" width="116" height="51" fill="#FF5200"/><text x="84" y="58" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="34" textLength="100" lengthAdjust="spacingAndGlyphs" fill="#082D61" stroke="#fff" stroke-width="1" paint-order="stroke">DROMEX</text></symbol></defs></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- app icon artwork on the 108 x 108 adaptive-icon grid (visible area is the centre 72 x 72) -->
+    <symbol id="iconFg" viewBox="0 0 108 108">
+      <use href="#asphalt" x="31" y="31" width="46" height="26.5" style="color:var(--fg,#fff);--sh:var(--fsh,#AFC0DA);--acc:var(--facc,#F2620F);--acs:var(--facs,#C4470C)"/>
+      <rect x="30" y="57.5" width="48" height="2.6" fill="var(--facc,#F2620F)"/>
+      <text x="54" y="72" text-anchor="middle" font-family="Oswald" font-weight="700" font-size="10.5" letter-spacing="1.4" fill="var(--fg,#fff)">DROMEX</text>
+    </symbol>
+    <clipPath id="mCircle"><circle cx="54" cy="54" r="36"/></clipPath>
+    <clipPath id="mRound"><rect x="18" y="18" width="72" height="72" rx="16"/></clipPath>
+    <clipPath id="mSquircle"><path d="M54,18 C82,18 90,26 90,54 C90,82 82,90 54,90 C26,90 18,82 18,54 C18,26 26,18 54,18 Z"/></clipPath>
+  </defs>
+</svg>
+
+<h1>HOME — NEW SKYLINE HEADER</h1>
+<p class="lead">Left: Home as it is today. Middle and right: two ways to add the full plant skyline. In both options the Offline ready badge is removed, Search is removed (it stays in the More tab), the date and version sit on the right as plain text, and PLANT MANAGEMENT sits tight under the logo. The skyline is outlined in dashed orange here so you can spot it.</p>
+
+<div class="row">
+  <!-- TODAY -->
+  <div class="col">
+    <div class="label">TODAY<small>Current Home (version 0.25.0)</small></div>
+    <div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span>▮▮▮ 100%</span></div>
+      <div class="content">
+        <div class="header">
+          <div class="hline"><svg class="logo"><use href="#homeLogo"/></svg><div class="tools"><div class="search"><b>⌕</b>Search</div><div class="status"><span class="dot"></span><div><div class="t">Offline ready</div><div class="h">Cloud not configured</div></div></div></div></div>
+          <div class="eyebrow">PLANT MANAGEMENT</div><div class="date">Monday, 26 October 2026</div><div class="ver">0.25.0 (44)</div>
+        </div>
+        <div class="receipt"><div class="e">NEW OUTGOING LOAD</div><div class="t">Make Receipt</div><div class="h">Enter the load once, calculate it, preview both documents, and confirm.</div></div>
+        <div class="attn"><div class="n">0</div><div><div class="e">NEEDS ATTENTION</div><div class="t">No urgent record alerts</div></div></div>
+        <div class="draft">Draft Center<span>›</span></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- OPTION 1 -->
+  <div class="col">
+    <div class="label">OPTION 1 <span class="rec">RECOMMENDED</span><small>Skyline closes the header, full width</small></div>
+    <div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span>▮▮▮ 100%</span></div>
+      <div class="content">
+        <div class="header">
+          <div class="hline"><div class="brand"><svg class="logo"><use href="#homeLogo"/></svg><div class="eyebrow tight">PLANT MANAGEMENT</div></div><div class="plaindate"><div class="d1">Monday</div><div class="d2">26 October 2026</div><div class="v">0.25.0 (44)</div></div></div>
+          <svg class="sky hl" viewBox="0 0 804 152" style="color:#0B2A5B;margin-top:6px"><use href="#plants"/></svg>
+        </div>
+        <div class="receipt"><div class="e">NEW OUTGOING LOAD</div><div class="t">Make Receipt</div><div class="h">Enter the load once, calculate it, preview both documents, and confirm.</div></div>
+        <div class="attn"><div class="n">0</div><div><div class="e">NEEDS ATTENTION</div><div class="t">No urgent record alerts</div></div></div>
+        <div class="draft">Draft Center<span>›</span></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- OPTION 2 -->
+  <div class="col">
+    <div class="label">OPTION 2<small>Skyline on a navy banner card</small></div>
+    <div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span>▮▮▮ 100%</span></div>
+      <div class="content">
+        <div class="header">
+          <div class="hline"><div class="brand"><svg class="logo"><use href="#homeLogo"/></svg><div class="eyebrow tight">PLANT MANAGEMENT</div></div><div class="plaindate"><div class="d1">Monday</div><div class="d2">26 October 2026</div><div class="v">0.25.0 (44)</div></div></div>
+        </div>
+        <div class="banner hl"><svg class="sky" viewBox="0 0 804 152" style="color:#fff;--sh:#AFC0DA;--acs:#C4470C"><use href="#plants"/></svg><div class="tag">ASPHALT · CONCRETE · QUARRY</div></div>
+        <div class="receipt"><div class="e">NEW OUTGOING LOAD</div><div class="t">Make Receipt</div><div class="h">Enter the load once, calculate it, preview both documents, and confirm.</div></div>
+        <div class="attn"><div class="n">0</div><div><div class="e">NEEDS ATTENTION</div><div class="t">No urgent record alerts</div></div></div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<h1>NEW APP ICON — ASPHALT PLANT</h1>
+<p class="lead">Your chosen icon: the white asphalt plant on navy with the orange ground line and DROMEX. Android cuts every icon into the phone's own shape, so everything important stays inside the centre safe circle (dashed).</p>
+
+<div class="row">
+  <div class="icons">
+    <figure>
+      <svg width="220" height="220" viewBox="0 0 108 108"><rect width="108" height="108" fill="#0B2A5B"/><use href="#iconFg" width="108" height="108"/><rect x="18" y="18" width="72" height="72" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width=".5" stroke-dasharray="2 2"/><circle cx="54" cy="54" r="33" fill="none" stroke="#F2620F" stroke-width=".6" stroke-dasharray="2 1.5"/></svg>
+      Full 1024 × 1024 canvas<br>(dashed circle = safe zone)
+    </figure>
+    <figure>
+      <svg width="110" height="110" viewBox="0 0 108 108"><rect width="108" height="108" fill="#fff" stroke="#ccc"/><use href="#iconFg" width="108" height="108" style="--fg:#0B2A5B;--fsh:#2F5A96"/></svg>
+      Foreground layer<br>(transparent PNG)
+    </figure>
+    <figure>
+      <svg width="110" height="110" viewBox="0 0 108 108"><rect width="108" height="108" fill="#0B2A5B"/></svg>
+      Background layer<br>(navy #0B2A5B)
+    </figure>
+    <figure>
+      <svg width="110" height="110" viewBox="0 0 108 108"><rect width="108" height="108" fill="#DCE4F2"/><use href="#iconFg" width="108" height="108" style="--fg:#1D3A66;--fsh:#1D3A66;--facc:#1D3A66;--facs:#1D3A66"/></svg>
+      Monochrome<br>(Android themed icons)
+    </figure>
+  </div>
+</div>
+
+<div class="row">
+  <div class="wall" style="background:#EDE7DD">
+    <figure><svg width="96" height="96" viewBox="18 18 72 72"><g clip-path="url(#mCircle)"><rect width="108" height="108" fill="#0B2A5B"/><use href="#iconFg" width="108" height="108"/></g></svg>Circle · 96 px</figure>
+    <figure><svg width="96" height="96" viewBox="18 18 72 72"><g clip-path="url(#mSquircle)"><rect width="108" height="108" fill="#0B2A5B"/><use href="#iconFg" width="108" height="108"/></g></svg>Squircle · 96 px</figure>
+    <figure><svg width="96" height="96" viewBox="18 18 72 72"><g clip-path="url(#mRound)"><rect width="108" height="108" fill="#0B2A5B"/><use href="#iconFg" width="108" height="108"/></g></svg>Rounded square · 96 px</figure>
+    <figure><svg width="48" height="48" viewBox="18 18 72 72"><g clip-path="url(#mCircle)"><rect width="108" height="108" fill="#0B2A5B"/><use href="#iconFg" width="108" height="108"/></g></svg>48 px</figure>
+    <figure><svg width="48" height="48" viewBox="18 18 72 72"><g clip-path="url(#mCircle)"><rect width="108" height="108" fill="#DCE4F2"/><use href="#iconFg" width="108" height="108" style="--fg:#1D3A66;--fsh:#1D3A66;--facc:#1D3A66;--facs:#1D3A66"/></g></svg>Themed · 48 px</figure>
+    <div style="font-size:12px;color:#3b4652;align-self:center">Light wallpaper</div>
+  </div>
+  <div class="wall" style="background:#1B1F27;color:#cfd6df">
+    <figure><svg width="96" height="96" viewBox="18 18 72 72"><g clip-path="url(#mCircle)"><rect width="108" height="108" fill="#0B2A5B"/><use href="#iconFg" width="108" height="108"/></g></svg>Circle · 96 px</figure>
+    <figure><svg width="96" height="96" viewBox="18 18 72 72"><g clip-path="url(#mSquircle)"><rect width="108" height="108" fill="#0B2A5B"/><use href="#iconFg" width="108" height="108"/></g></svg>Squircle · 96 px</figure>
+    <figure><svg width="48" height="48" viewBox="18 18 72 72"><g clip-path="url(#mCircle)"><rect width="108" height="108" fill="#0B2A5B"/><use href="#iconFg" width="108" height="108"/></g></svg>48 px</figure>
+    <figure><svg width="48" height="48" viewBox="18 18 72 72"><g clip-path="url(#mCircle)"><rect width="108" height="108" fill="#2A3345"/><use href="#iconFg" width="108" height="108" style="--fg:#C9D6EE;--fsh:#C9D6EE;--facc:#C9D6EE;--facs:#C9D6EE"/></g></svg>Themed · 48 px</figure>
+    <div style="font-size:12px;align-self:center">Dark wallpaper</div>
+  </div>
+</div>
+</body>
+</html>

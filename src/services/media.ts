@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
+import { SKYLINE_IMAGE_MAX_WIDTH, isSkylineImageValue } from '../domain/appearance';
 
 async function persistAsset(uri: string, folder: string): Promise<string> {
   if (!FileSystem.documentDirectory) throw new Error('Permanent app storage is unavailable.');
@@ -91,4 +92,27 @@ export async function photoDataUrlsForPrint(uris: (string | null)[]): Promise<(s
     results.push(await photoDataUrlForPrint(uri));
   }
   return results;
+}
+
+/**
+ * The owner's own Home skyline picture (DEC-530). The picture is shrunk to a banner width and returned as a data URL, because it is kept
+ * inside a saved preference (which a backup carries) rather than as a separate file. A transparent PNG is kept as it is; a picture too
+ * large as PNG is saved as a JPEG instead.
+ */
+export async function pickSkylineImage(): Promise<string | null> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) throw new Error('Photo-library permission is required.');
+  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 1 });
+  if (result.canceled || !result.assets[0]) return null;
+  const asset = result.assets[0];
+  const resize = asset.width > SKYLINE_IMAGE_MAX_WIDTH ? [{ resize: { width: SKYLINE_IMAGE_MAX_WIDTH } }] : [];
+  const png = await manipulateAsync(asset.uri, resize, { format: SaveFormat.PNG, base64: true });
+  if (png.base64) {
+    const dataUrl = `data:image/png;base64,${png.base64}`;
+    if (isSkylineImageValue(dataUrl)) return dataUrl;
+  }
+  const jpeg = await manipulateAsync(asset.uri, resize, { format: SaveFormat.JPEG, compress: 0.8, base64: true });
+  const dataUrl = jpeg.base64 ? `data:image/jpeg;base64,${jpeg.base64}` : '';
+  if (!isSkylineImageValue(dataUrl)) throw new Error('That picture is too detailed to keep. Choose a simpler or smaller picture.');
+  return dataUrl;
 }
