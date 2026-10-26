@@ -1,4 +1,5 @@
-import {Modal,Pressable,ScrollView,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
+import {useEffect,useMemo,useState} from 'react';
+import {KeyboardAvoidingView,Modal,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,TouchableOpacity,View} from 'react-native';
 import Svg,{Circle,Path} from 'react-native-svg';
 import type {Project} from '../../domain/loads';
 import {createGroups,type CreateAction,type CreateTone} from '../../domain/createActions';
@@ -27,11 +28,25 @@ function ActionIcon({id,color}:{id:CreateAction;color:string}){
   return <Svg width={22} height={22} viewBox="0 0 24 24"><Path d={paths[id]} {...common}/>{id==='photo'?<Circle cx={12} cy={13} r={3.5} {...common}/>:null}{id==='quarry'?<><Circle cx={7} cy={18} r={1.6} {...common}/><Circle cx={17} cy={18} r={1.6} {...common}/></>:null}</Svg>;
 }
 
-export function CreateActionSheet({visible,activeProject,onClose,onSelect,onChooseProject}:{visible:boolean;activeProject:Project|null;onClose:()=>void;onSelect:(action:CreateAction)=>void;onChooseProject:()=>void}){
-  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><View style={styles.overlay}><Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close"/>
+export function CreateActionSheet({visible,activeProject,onClose,onSelect,onSelectProject,onOpenProjects,loadProjects}:{visible:boolean;activeProject:Project|null;onClose:()=>void;onSelect:(action:CreateAction)=>void;onSelectProject:(project:Project|null)=>void;onOpenProjects:()=>void;loadProjects:()=>Promise<Project[]>}){
+  const[picking,setPicking]=useState(false),[projects,setProjects]=useState<Project[]|null>(null),[search,setSearch]=useState('');
+  useEffect(()=>{if(!visible){setPicking(false);setSearch('');}},[visible]);
+  useEffect(()=>{if(!picking)return;let mounted=true;setProjects(null);void loadProjects().then(list=>{if(mounted)setProjects(list.filter(project=>project.status==='active'));}).catch(()=>{if(mounted)setProjects([]);});return()=>{mounted=false;};},[picking,loadProjects]);
+  const shown=useMemo(()=>{const query=search.trim().toLocaleLowerCase('en-US');if(!projects||!query)return projects??[];return projects.filter(project=>`${project.name} ${project.customerName} ${project.location}`.toLocaleLowerCase('en-US').includes(query));},[projects,search]);
+  const choose=(project:Project|null)=>{onSelectProject(project);setPicking(false);setSearch('');};
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={picking?()=>setPicking(false):onClose}><KeyboardAvoidingView style={styles.flex} behavior={Platform.OS==='ios'?'padding':undefined}><View style={styles.overlay}><Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close"/>
     <View style={styles.sheet}><View style={styles.handle}/>
-      <View style={styles.header}><View style={styles.flex}><Text style={styles.eyebrow}>CREATE</Text><Text style={styles.title}>What are you recording?</Text></View><TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close"><Text style={styles.closeText}>×</Text></TouchableOpacity></View>
-      <TouchableOpacity style={styles.projectBar} onPress={onChooseProject} accessibilityRole="button" accessibilityLabel={activeProject?`Project ${activeProject.name}. Change`:'No project chosen. Choose one'}>
+      <View style={styles.header}><View style={styles.flex}><Text style={styles.eyebrow}>{picking?'CREATE · PROJECT':'CREATE'}</Text><Text style={styles.title}>{picking?'Choose a project':'What are you recording?'}</Text></View><TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close"><Text style={styles.closeText}>×</Text></TouchableOpacity></View>
+      {picking?<>
+        <TouchableOpacity style={styles.back} onPress={()=>{setPicking(false);setSearch('');}} accessibilityRole="button" accessibilityLabel="Back to actions"><Text style={styles.change}>‹ Back to actions</Text></TouchableOpacity>
+        {projects&&projects.length===0?<View style={styles.empty}><Text style={styles.emptyTitle}>No active projects</Text><Text style={styles.emptyBody}>Create a project, or reactivate a completed one, then come back.</Text><TouchableOpacity style={styles.emptyButton} onPress={onOpenProjects} accessibilityRole="button"><Text style={styles.emptyButtonText}>Open Projects</Text></TouchableOpacity></View>:<>
+          <TextInput style={styles.search} value={search} onChangeText={setSearch} placeholder="Search name, customer, location" placeholderTextColor={colors.muted} autoCorrect={false} accessibilityLabel="Search projects"/>
+          <ScrollView contentContainerStyle={styles.options} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {projects===null?<Text style={styles.emptyBody}>Loading projects…</Text>:shown.length===0?<Text style={styles.emptyBody}>No project matches your search.</Text>:shown.map(project=>{const selected=project.id===activeProject?.id;return <TouchableOpacity key={project.id} style={[styles.option,selected&&styles.optionSelected]} onPress={()=>choose(project)} accessibilityRole="button" accessibilityState={{selected}} accessibilityLabel={`${project.name}, ${project.customerName}, ${project.location}`}><View style={styles.flex}><Text style={styles.optionTitle} numberOfLines={1}>{project.name}</Text><Text style={styles.tileHint} numberOfLines={1}>{`${project.customerName} · ${project.location}`}</Text></View>{selected?<Text style={styles.arrow}>✓</Text>:null}</TouchableOpacity>;})}
+            {projects&&activeProject?<TouchableOpacity style={[styles.option,styles.optionClear]} onPress={()=>choose(null)} accessibilityRole="button" accessibilityLabel="No project. Clear the chosen project"><View style={styles.flex}><Text style={[styles.optionTitle,styles.projectNone]}>No project</Text><Text style={styles.tileHint}>Clear the chosen project</Text></View></TouchableOpacity>:null}
+          </ScrollView></>}
+      </>:<>
+      <TouchableOpacity style={styles.projectBar} onPress={()=>setPicking(true)} accessibilityRole="button" accessibilityLabel={activeProject?`Project ${activeProject.name}. Change`:'No project chosen. Choose one'}>
         <View style={styles.flex}><Text style={styles.projectLabel}>PROJECT</Text><Text style={[styles.projectName,!activeProject&&styles.projectNone]} numberOfLines={1}>{activeProject?.name??'None chosen'}</Text></View>
         <Text style={styles.change}>{activeProject?'Change':'Choose'}</Text>
       </TouchableOpacity>
@@ -48,8 +63,8 @@ export function CreateActionSheet({visible,activeProject,onClose,onSelect,onChoo
             </TouchableOpacity>;
           })}</View>
         </View>)}
-      </ScrollView>
-    </View></View></Modal>;
+      </ScrollView></>}
+    </View></View></KeyboardAvoidingView></Modal>;
 }
 
 const styles=StyleSheet.create({
@@ -79,5 +94,17 @@ const styles=StyleSheet.create({
   tileTitle:{color:colors.ink,fontSize:14,fontWeight:'800',lineHeight:18},
   tileHint:{color:colors.muted,fontSize:11,lineHeight:15,marginTop:1},
   tag:{position:'absolute',top:6,right:6,fontSize:9,fontWeight:'800',color:colors.warning,backgroundColor:'#FFF4DC',borderWidth:1,borderColor:'#E8CB8A',borderRadius:999,paddingHorizontal:6,paddingVertical:1,overflow:'hidden'},
+  back:{minHeight:48,justifyContent:'center'},
+  search:{minHeight:48,borderWidth:2,borderColor:colors.brand,borderRadius:14,backgroundColor:colors.surface,paddingHorizontal:14,fontSize:16,color:colors.ink},
+  options:{gap:8,paddingBottom:6},
+  option:{minHeight:56,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.line,borderRadius:14,paddingHorizontal:14,paddingVertical:8,flexDirection:'row',alignItems:'center',gap:10},
+  optionSelected:{borderWidth:2,borderColor:colors.brand,backgroundColor:colors.cream},
+  optionClear:{borderStyle:'dashed'},
+  optionTitle:{color:colors.navy,fontSize:15,fontWeight:'800'},
+  empty:{backgroundColor:colors.surface,borderWidth:1,borderStyle:'dashed',borderColor:colors.line,borderRadius:16,padding:18,gap:8,alignItems:'center'},
+  emptyTitle:{color:colors.ink,fontSize:16,fontWeight:'800'},
+  emptyBody:{color:colors.muted,fontSize:13,textAlign:'center'},
+  emptyButton:{minHeight:48,alignSelf:'stretch',borderRadius:14,backgroundColor:colors.brand,alignItems:'center',justifyContent:'center'},
+  emptyButtonText:{color:'#fff',fontSize:15,fontWeight:'800'},
   arrow:{color:colors.brand,fontSize:24,fontWeight:'900'},
 });

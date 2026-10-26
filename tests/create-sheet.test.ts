@@ -52,3 +52,30 @@ describe('the sheet (screen)',()=>{
     expect(app).toContain("import {CreateActionSheet,type CreateAction} from './components/CreateActionSheet';");
   });
 });
+
+describe('the project picker inside the sheet (DEC-529)',()=>{
+  it('opens in the sheet and does not navigate when the project line is tapped',()=>{
+    expect(sheet).toContain('onPress={()=>setPicking(true)}');
+    expect(sheet).not.toContain('onChooseProject');expect(app).not.toContain('onChooseProject');
+    // Only the empty-state button leaves the sheet, and it goes to Projects.
+    expect(app).toContain("onOpenProjects={()=>{setCreateOpen(false);goRoot('projects');}}");
+  });
+  it('lists active projects only, with customer and location, and a search',()=>{
+    expect(sheet).toContain("list.filter(project=>project.status==='active')");
+    expect(sheet).toContain('`${project.customerName} · ${project.location}`');
+    expect(sheet).toContain('placeholder="Search name, customer, location"');
+  });
+  it('choosing a project uses the app-wide chooseActiveProject, the same one the Projects screen uses',()=>{
+    expect(app).toContain('onSelectProject={chooseActiveProject}');
+    expect(app).toContain("if(project.status==='active')chooseActiveProject(project);");
+    expect(sheet).toContain('onSelectProject(project);setPicking(false)');
+  });
+  it('clears the Needs project tags once a project is chosen, and offers No project to clear it',()=>{
+    expect(sheet).toContain('needs=action.needsProject&&!activeProject');
+    expect(sheet).toContain('choose(null)');expect(sheet).toContain('No project');
+  });
+  it('shows an empty state with a button to Projects when there are no active projects',()=>{
+    expect(sheet).toContain('No active projects');expect(sheet).toContain('Open Projects');
+    expect(sheet).toContain('projects&&projects.length===0');
+  });
+});

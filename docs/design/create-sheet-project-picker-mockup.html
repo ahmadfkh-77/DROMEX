@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Create (+) sheet: project picker mockup</title>
+<style>
+:root{--bg:#F6F1E8;--surface:#fff;--line:#E3DACB;--ink:#14222E;--navy:#173A5A;--muted:#6B7580;--brand:#D9541E;--cream:#FFF4EA;--warn:#8A5A00;--teal:#1F6F78}
+*{box-sizing:border-box}body{margin:0;padding:24px;background:#d9d4ca;font-family:system-ui,Segoe UI,sans-serif;color:var(--ink)}
+h1{font-size:20px;margin:0 0 4px}p.sub{margin:0 0 20px;color:#444;max-width:900px}
+.row{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.col h2{font-size:13px;margin:0 0 8px;letter-spacing:.5px}
+.phone{width:390px;height:760px;background:rgba(8,27,45,.55);border-radius:22px;position:relative;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:92%;background:var(--bg);border-radius:26px 26px 0 0;padding:16px 16px 24px;display:flex;flex-direction:column;gap:12px}
+.handle{width:48px;height:5px;border-radius:3px;background:#C6BFB4;align-self:center}
+.hd{display:flex;gap:12px}.hd div{flex:1}.eye{color:var(--brand);font-size:10px;font-weight:900;letter-spacing:1.4px}.ttl{font-size:23px;font-weight:900;margin-top:2px}
+.x{width:44px;height:44px;border-radius:13px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--navy);flex:none}
+.pbar{min-height:52px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:8px 14px;display:flex;align-items:center;gap:10px}
+.pbar .l{font-size:10px;font-weight:800;letter-spacing:1px;color:var(--muted)}.pbar .n{font-size:16px;font-weight:800;color:var(--navy)}.pbar .n.none{color:var(--muted);font-weight:700}
+.pbar .grow{flex:1;min-width:0}.act{color:var(--brand);font-weight:800;font-size:14px;min-height:48px;display:flex;align-items:center;padding:0 4px}
+.clear{color:var(--muted)}
+.sec{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px;font-weight:900;letter-spacing:1.2px;margin-top:2px}.sec i{flex:1;height:1px;background:var(--line)}
+.grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.tile{flex:1 1 46%;min-height:64px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:11px;display:flex;align-items:center;gap:10px;position:relative}
+.tile.p{flex-basis:100%;border:2px solid var(--brand);background:var(--cream);min-height:70px}
+.b{width:38px;height:38px;border-radius:12px;background:#E1EAF3;flex:none}.p .b{background:#FBE6DF}
+.tile b{font-size:14px;display:block}.tile small{font-size:11px;color:var(--muted)}
+.tag{position:absolute;top:6px;right:6px;font-size:9px;font-weight:800;color:var(--warn);background:#FFF4DC;border:1px solid #E8CB8A;border-radius:999px;padding:1px 6px}
+.dim{opacity:.35}
+/* picker */
+.picker{display:flex;flex-direction:column;gap:10px}
+.search{min-height:48px;border:2px solid var(--brand);border-radius:14px;background:#fff;padding:0 14px;display:flex;align-items:center;font-size:16px;color:var(--muted)}
+.opt{min-height:56px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:8px 14px;display:flex;align-items:center;gap:10px}
+.opt.sel{border:2px solid var(--brand);background:var(--cream)}
+.opt .t{font-weight:800;font-size:15px;color:var(--navy)}.opt .d{font-size:12px;color:var(--muted)}.opt .grow{flex:1;min-width:0}
+.tick{color:var(--brand);font-weight:900;font-size:18px}
+.back{color:var(--brand);font-weight:800;font-size:14px;min-height:48px;display:flex;align-items:center}
+.empty{background:#fff;border:1px dashed #C9BDA9;border-radius:16px;padding:18px;text-align:center}
+.empty b{font-size:16px}.empty p{margin:6px 0 12px;color:var(--muted);font-size:13px}
+.btn{min-height:48px;border-radius:14px;background:var(--brand);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center}
+.kb{height:150px;background:#cfd3d8;margin:10px -16px -24px;display:flex;align-items:center;justify-content:center;color:#555;font-size:12px}
+.flow{margin-top:30px;background:#fff;border-radius:16px;padding:18px 20px;max-width:1260px}
+.flow h2{margin:0 0 10px;font-size:16px}.steps{display:flex;gap:10px;flex-wrap:wrap}
+.st{flex:1 1 180px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px;background:var(--bg)}
+.st em{display:block;font-style:normal;font-weight:900;color:var(--brand);font-size:11px;letter-spacing:1px;margin-bottom:4px}
+.note{font-size:12px;color:#444;margin-top:10px}
+</style></head><body>
+<h1>Create (+) sheet: project picker inside the sheet</h1>
+<p class="sub">390 px wide. Mockup only, nothing is built. Tapping the PROJECT line swaps the sheet content to a searchable list of active projects. The user never leaves the sheet. Tiles, groups and the other nine actions stay as in DEC-513.</p>
+
+<div class="row">
+<div class="col"><h2>1 · NO PROJECT, TAGS SHOWING (today's start)</h2>
+<div class="phone"><div class="sheet">
+<div class="handle"></div><div class="hd"><div><div class="eye">CREATE</div><div class="ttl">What are you recording?</div></div><span class="x">×</span></div>
+<div class="pbar"><div class="grow"><div class="l">PROJECT</div><div class="n none">None chosen</div></div><span class="act">Choose</span></div>
+<div><div class="sec">LOADS AND DOCUMENTS<i></i></div><div class="grid"><div class="tile p"><span class="b"></span><div><b>Make Receipt</b><small>Record a load</small></div></div><div class="tile"><span class="b"></span><div><b>Quick Text</b><small>Short document</small></div></div></div></div>
+<div><div class="sec">SITE WORK<i></i></div><div class="grid"><div class="tile"><span class="b"></span><div><b>Daily Report</b><small>Day on site</small></div></div><div class="tile"><span class="b"></span><div><b>Scheduled Work</b><small>Plan a task</small></div></div><div class="tile"><span class="b"></span><div><b>Project Issue</b><small>Log a problem</small></div><span class="tag">Needs project</span></div><div class="tile"><span class="b"></span><div><b>Site Photo</b><small>Add a photo</small></div><span class="tag">Needs project</span></div></div></div>
+</div></div></div>
+
+<div class="col"><h2>2 · PICKER OPEN (tap PROJECT line)</h2>
+<div class="phone"><div class="sheet picker">
+<div class="handle"></div><div class="hd"><div><div class="eye">CREATE · PROJECT</div><div class="ttl">Choose a project</div></div><span class="x">×</span></div>
+<span class="back">‹ Back to actions</span>
+<div class="search">Search name, customer, location</div>
+<div class="opt"><div class="grow"><div class="t">Airport Road Widening</div><div class="d">Al Noor Contracting · Km 12</div></div></div>
+<div class="opt sel"><div class="grow"><div class="t">Harbor Parking Lot</div><div class="d">Gulf Builders · Port Zone B</div></div><span class="tick">✓</span></div>
+<div class="opt"><div class="grow"><div class="t">North Villa Compound</div><div class="d">Samir Holdings · Hills District</div></div></div>
+<div class="opt"><div class="grow"><div class="t">School Yard Paving</div><div class="d">City Works · East Quarter</div></div></div>
+<div class="opt" style="border-style:dashed"><div class="grow"><div class="t" style="color:var(--muted)">No project</div><div class="d">Clear the chosen project</div></div></div>
+<div class="kb">keyboard-safe: list scrolls above the keyboard</div>
+</div></div></div>
+
+<div class="col"><h2>3 · PROJECT CHOSEN, TAGS GONE</h2>
+<div class="phone"><div class="sheet">
+<div class="handle"></div><div class="hd"><div><div class="eye">CREATE</div><div class="ttl">What are you recording?</div></div><span class="x">×</span></div>
+<div class="pbar"><div class="grow"><div class="l">PROJECT</div><div class="n">Harbor Parking Lot</div></div><span class="act">Change</span></div>
+<div><div class="sec">LOADS AND DOCUMENTS<i></i></div><div class="grid"><div class="tile p"><span class="b"></span><div><b>Make Receipt</b><small>Record a load</small></div></div><div class="tile"><span class="b"></span><div><b>Quick Text</b><small>Short document</small></div></div></div></div>
+<div><div class="sec">SITE WORK<i></i></div><div class="grid"><div class="tile"><span class="b"></span><div><b>Daily Report</b><small>Day on site</small></div></div><div class="tile"><span class="b"></span><div><b>Scheduled Work</b><small>Plan a task</small></div></div><div class="tile"><span class="b"></span><div><b>Project Issue</b><small>Log a problem</small></div></div><div class="tile"><span class="b"></span><div><b>Site Photo</b><small>Add a photo</small></div></div></div></div>
+</div></div></div>
+
+<div class="col"><h2>4 · EMPTY STATE (no active projects)</h2>
+<div class="phone"><div class="sheet picker">
+<div class="handle"></div><div class="hd"><div><div class="eye">CREATE · PROJECT</div><div class="ttl">Choose a project</div></div><span class="x">×</span></div>
+<span class="back">‹ Back to actions</span>
+<div class="empty"><b>No active projects</b><p>Create a project, or reactivate a completed one, then come back.</p><div class="btn">Open Projects</div></div>
+</div></div></div>
+</div>
+
+<div class="flow"><h2>Workflow</h2>
+<div class="steps">
+<div class="st"><em>1 · OPEN</em>Tap + . Sheet shows PROJECT line (name or "None chosen") and the ten actions.</div>
+<div class="st"><em>2 · TAP PROJECT LINE</em>Sheet content swaps to the picker. No navigation, sheet stays open, Back returns to actions.</div>
+<div class="st"><em>3 · SEARCH / PICK</em>Filter by name, customer or location. Tap a row: runs the same chooseActiveProject as the Projects screen, persisted for next launch.</div>
+<div class="st"><em>4 · RETURN</em>Picker closes, sheet shows the new name with "Change". Needs-project tags vanish. Context bar appears under the status bar as it does today.</div>
+<div class="st"><em>5 · ACT</em>Project Issue / Site Photo open the project's Issues / Photos panel directly. Other eight actions behave as today (they prefill the active project).</div>
+<div class="st"><em>6 · CHANGE / CLEAR</em>"Change" reopens the picker with the current project ticked. "No project" row clears it (the app's context bar already offers Clear today).</div>
+<div class="st"><em>7 · EMPTY</em>No active projects: empty-state card, "Open Projects" closes the sheet and goes to Projects.</div>
+</div>
+<p class="note">Component choice: the picker is drawn inside the sheet (a view state, not a second Modal on top of the Modal) using the same row and search styling as SearchableSelect (name, with customer · location detail, as in the Pavement and Schedule project selectors). Active projects only.</p></div>
+</body></html>
