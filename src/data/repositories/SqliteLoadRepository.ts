@@ -40,7 +40,7 @@ import { supplierSignatureForNewLoad } from './SqliteCompanyHeaderRepository';
 import { correctionChanges, correctionToLoadDraft, correctionVatRate, isFullCorrection, loadLocalDate, validateLoadCorrection, type LoadCorrectionContext } from '../../domain/loadCorrection';
 import type { SignerDisplay, SignerSnapshot } from '../../domain/documentSigners';
 import { parseStoredSignature } from '../../domain/supervisors';
-import { linkAtConfirmation, reconcileContractLink } from './contractLinks';
+import { applyCompanyContractLink, linkAtConfirmation, planCompanyContractLink } from './contractLinks';
 
 type UnitRow = { id: string; name: string; symbol: string; is_active: number };
 type ConversionRow = {
@@ -667,7 +667,8 @@ export class SqliteLoadRepository implements LoadRepository {
     const paid=await this.db.getFirstAsync<{count:number;total:number}>("SELECT COUNT(*) count, COALESCE(SUM(amount_usd_cents),0) total FROM payment_entries WHERE load_id=? AND status='Active'",loadId);
     const versions=await this.db.getAllAsync<{version:number;corrected_at:string;reason:string}>('SELECT version, corrected_at, reason FROM load_versions WHERE load_id=? ORDER BY version',loadId);
     const issued=await this.db.getFirstAsync<{count:number}>("SELECT COUNT(*) count FROM business_document_records WHERE load_id=? AND document_status='Issued'",loadId);
-    return {options:{...options,customers,projects,items,conversions,units,drivers,trucks},activePaymentCount:paid?.count??0,activePaymentCents:paid?.total??0,versions:versions.map(value=>({version:value.version,correctedAt:value.corrected_at,reason:value.reason})),issuedDocumentCount:issued?.count??0};
+    const target=row.contract_item_id?await this.db.getFirstAsync<{name:string}>('SELECT name FROM contract_items WHERE id=?',row.contract_item_id):null;
+    return {options:{...options,customers,projects,items,conversions,units,drivers,trucks},activePaymentCount:paid?.count??0,activePaymentCents:paid?.total??0,versions:versions.map(value=>({version:value.version,correctedAt:value.corrected_at,reason:value.reason})),issuedDocumentCount:issued?.count??0,contractTargetName:target?.name??null};
   }
 
   /** Phase 4. The full correction: every field of a confirmed load can change, the original is saved first, and the load number never changes. */
@@ -680,9 +681,12 @@ export class SqliteLoadRepository implements LoadRepository {
     if(issues.length)throw new Error(issues.join('\n'));
     const supplier=draft.supplierSignature?await deliverySignatureFor(this.db,draft.supplierSignature):null;
     const supplierLabel=supplier?`${supplier.name}${supplier.display==='name_only'?' (name only)':''}`:'None';
-    const changes=correctionChanges(selected,draft,options,()=>supplierLabel);
-    if(!changes.length)throw new Error('No information was changed.');
     const effective=correctionToLoadDraft(selected,draft);
+    // DEC-536. The target the corrected load counts toward: the one named in the correction, or the existing one while it still fits.
+    const plan=await planCompanyContractLink(this.db,loadId,draft.contractItemId,effective.projectId||null,effective.itemId,options.items.find(value=>value.id===effective.itemId)?.name??selected.itemName);
+    if(plan.problem)throw new Error(plan.problem);
+    const changes=correctionChanges(selected,draft,options,()=>supplierLabel,plan.final!==plan.previousId?{was:plan.previousName,now:plan.finalName}:undefined);
+    if(!changes.length)throw new Error('No information was changed.');
     const isDirect=selected.quantityMethod==='direct';
     const conversion=options.conversions.find(value=>value.id===effective.conversionId);
     const directUnit=options.units.find(value=>value.id===effective.directUnitId);
@@ -723,7 +727,7 @@ export class SqliteLoadRepository implements LoadRepository {
         conversionId,conversionName,conversionRule,outputSymbol,calculation.convertedQuantity,calculation.billedQuantity,
         isDirect?entered:null,isDirect?directUnit!.id:null,isDirect?directUnit!.name:null,isDirect?directUnit!.symbol:null,
         price==null?null:Math.round(price*100),subtotal,price==null?null:Math.round(vatRate*100),vat,total,paymentStatusValue,clean(effective.notes),signaturePaths.length?JSON.stringify(signaturePaths):null,signaturePaths.length?'Signed':'Unsigned',JSON.stringify(history),now,loadId);
-      await reconcileContractLink(this.db,'company',loadId,now);
+      await applyCompanyContractLink(this.db,loadId,plan,now,selected.loadNumber??selected.transactionNumber);
       if(draft.supplierSignature!==undefined){
         await this.db.runAsync('UPDATE loads SET supplier_signature_json=? WHERE id=?',supplier?JSON.stringify(supplier):null,loadId);
         if(supplier)await recordSignerEvent(this.db,supplier.signerId,'used',now,null,`Delivery Authorization ${row.transaction_number}`);

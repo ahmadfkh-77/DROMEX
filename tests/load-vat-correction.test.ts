@@ -108,7 +108,7 @@ describe('VAT on a saved load',()=>{
   });
   it('shows the VAT choice on the correction form, under the price, locked with payments',()=>{
     const screen=require('node:fs').readFileSync('src/ui/components/LoadCorrectionForm.tsx','utf8') as string;
-    expect(screen).toContain('<VatChoiceControl label=""');expect(screen).toContain("{locks.vat?<Locked label=\"VAT\" value={vatLabel}/>");
-    expect(screen).toContain("{vatRate>0?<MetricCard label={`VAT ${vatRate}%`}");expect(screen).toContain('Changing VAT needs the correction reason below.');
+    expect(screen).toContain('<VatChoiceControl label="VAT"');expect(screen).toContain("{locks.vat?<Locked value={vatRate>0?`${vatRate}%`:'No VAT'}/>");
+    expect(require('node:fs').readFileSync('src/ui/components/LoadCorrectionPage.tsx','utf8')).toContain('VAT ({totals.vatRatePercent}%)');expect(screen).toContain('Changing VAT needs the correction reason.');
   });
 });

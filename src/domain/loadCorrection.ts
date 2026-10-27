@@ -32,7 +32,7 @@ export function loadLocalDate(confirmedAt: string): string {
 
 /** True when a correction uses any of the Phase 4 fields (the full form) rather than the older partial one. */
 export function isFullCorrection(draft: LoadCorrectionDraft): boolean {
-  return [draft.recordDate, draft.customerId, draft.projectId, draft.itemId, draft.driverName, draft.truckId, draft.truckPlate, draft.conversionId, draft.directUnitId, draft.driverSignaturePaths, draft.supplierSignature, draft.vat].some((value) => value !== undefined);
+  return [draft.recordDate, draft.customerId, draft.projectId, draft.itemId, draft.driverName, draft.truckId, draft.truckPlate, draft.conversionId, draft.directUnitId, draft.driverSignaturePaths, draft.supplierSignature, draft.vat, draft.contractItemId].some((value) => value !== undefined);
 }
 
 /** A direct load that did not use a conversion keeps a retained internal conversion that must not be shown or chosen. */
@@ -150,7 +150,7 @@ export function correctedUnitSymbol(effective: LoadDraft, options: LoadSetupOpti
  * The fields this correction changes, each with what it was and what it becomes. Used for the CHANGED tags and
  * the list above the reason, and saved as the history entry. Only fields that really differ are returned.
  */
-export function correctionChanges(selected: ConfirmedLoad, draft: LoadCorrectionDraft, options: LoadSetupOptions, signerLabel: (selection: { signerId: string; display: SignerDisplay }) => string = (selection) => selection.signerId): LoadCorrectionChange[] {
+export function correctionChanges(selected: ConfirmedLoad, draft: LoadCorrectionDraft, options: LoadSetupOptions, signerLabel: (selection: { signerId: string; display: SignerDisplay }) => string = (selection) => selection.signerId, target?: { was: string | null; now: string | null }): LoadCorrectionChange[] {
   const effective = correctionToLoadDraft(selected, draft);
   const isDirect = selected.quantityMethod === 'direct';
   const conversion = options.conversions.find((value) => value.id === effective.conversionId);
@@ -183,6 +183,7 @@ export function correctionChanges(selected: ConfirmedLoad, draft: LoadCorrection
   const before = selected.signaturePaths;
   const after = effective.driverSignaturePaths;
   if (!same(before, after)) rows.push(['Driver signature', before.length ? 'Signed' : 'Unsigned', after.length ? (before.length ? 'Re-signed' : 'Signed') : 'Unsigned']);
+  if (target) rows.splice(5, 0, ['Counts toward target', target.was ?? 'Not linked', target.now ?? 'Not linked']);
   if (draft.supplierSignature !== undefined) {
     const was = selected.supplierSignature ? `${selected.supplierSignature.name}${selected.supplierSignature.display === 'name_only' ? ' (name only)' : ''}` : 'None';
     const now = draft.supplierSignature ? signerLabel(draft.supplierSignature) : 'None';
@@ -201,4 +202,6 @@ export type LoadCorrectionContext = {
   versions: { version: number; correctedAt: string; reason: string }[];
   /** How many issued documents (statements, invoices) include this load. They keep their own copy. */
   issuedDocumentCount: number;
+  /** DEC-536. The name of the Quantity Target this load counts toward today, or null when it is not linked. */
+  contractTargetName: string | null;
 };

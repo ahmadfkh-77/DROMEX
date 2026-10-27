@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Correct Supplier Load - as built</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --brand:#C84B31; --brandDark:#8E2E1B; --navy:#173F67; --bg:#F5F2EC; --cream:#FFF8ED; --line:#DDD7CC; --muted:#65717D; --ink:#17212B; --ok:#287A55; --warn:#9A6512; --danger:#B3261E; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#E4E1DA; font-family:Roboto, system-ui, "Segoe UI", sans-serif; color:var(--ink); }
+  h1 { font-family:Oswald; font-weight:700; letter-spacing:.06em; color:#0B2A5B; text-align:center; margin:26px 16px 4px; }
+  h2.sec { font-family:Oswald; font-weight:500; letter-spacing:.08em; color:#0B2A5B; text-align:center; margin:24px 16px 6px; font-size:21px; }
+  p.lead { text-align:center; max-width:900px; margin:0 auto 14px; padding:0 16px; line-height:1.5; color:#3b4652; }
+  .row { display:flex; flex-wrap:wrap; gap:26px; justify-content:center; padding:0 16px 22px; }
+  .col { display:flex; flex-direction:column; align-items:center; gap:9px; }
+  .label { font-family:Oswald; font-weight:500; letter-spacing:.05em; color:#0B2A5B; font-size:15px; text-align:center; max-width:360px; }
+  .label small { display:block; font-family:system-ui; letter-spacing:0; color:#5b6670; font-size:12px; margin-top:2px; line-height:1.4; }
+  .flow { max-width:1180px; margin:0 auto 10px; padding:0 16px; display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:stretch; }
+  .fs { background:#fff; border:1px solid var(--line); border-radius:14px; padding:11px 13px; width:208px; font-size:13px; line-height:1.45; }
+  .fs b { display:block; color:var(--navy); font-size:14px; margin-bottom:3px; } .fs span { color:var(--muted); }
+  .fs.red { border-color:#F3C4BF; background:#FFF6F5; } .fs.grn { border-color:#CFE3D6; background:#F4FAF6; }
+  .arrow { align-self:center; color:var(--brand); font-size:22px; font-weight:900; }
+  .phone { width:360px; height:780px; background:#111; border-radius:36px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+  .screen { width:100%; height:100%; background:var(--bg); border-radius:28px; overflow:hidden; position:relative; display:flex; flex-direction:column; }
+  .sb { height:26px; flex:none; display:flex; justify-content:space-between; align-items:center; padding:0 20px; font-size:12px; font-weight:600; color:#222; }
+  .ctx { flex:none; background:var(--navy); border-bottom:3px solid var(--brand); padding:5px 14px 7px; color:#fff; display:flex; justify-content:space-between; align-items:center; }
+  .ctx .k { color:#F2A184; font-size:9px; font-weight:900; letter-spacing:1.4px; } .ctx .v { font-size:15px; font-weight:800; } .ctx .c { font-size:12px; font-weight:800; }
+  .scroll { flex:1; overflow:hidden; padding:14px 18px 10px; display:flex; flex-direction:column; gap:10px; }
+  .hd { display:flex; align-items:center; gap:12px; }
+  .bk { min-height:40px; padding:0 14px; display:flex; align-items:center; background:#fff; border-radius:12px; font-weight:800; font-size:15px; flex:none; }
+  .eyebrow { color:var(--brand); font-weight:800; font-size:11px; letter-spacing:1.6px; } .title { font-size:25px; font-weight:900; color:var(--navy); line-height:1.1; margin-top:1px; }
+  .title.long { font-size:22px; word-break:break-all; }
+  .status { display:flex; align-items:center; gap:8px; }
+  .chip { color:var(--ok); background:#E5F3EC; border-radius:6px; padding:3px 9px; font-size:11px; font-weight:900; letter-spacing:.7px; } .chip.x { color:var(--danger); background:#FCE8E6; } .stat { color:var(--muted); font-size:13px; font-weight:700; }
+  .help { color:var(--muted); font-size:12.5px; line-height:18px; }
+  .warn { color:#5A4210; background:#FFF3D8; padding:10px 12px; border-radius:10px; font-size:12px; line-height:17px; border-left:4px solid #E3A23A; }
+  .cbox { color:#7A1D17; background:#FCE8E6; padding:10px 12px; border-radius:10px; font-size:12px; line-height:17px; border-left:4px solid var(--danger); font-weight:700; }
+  .ok { color:var(--ok); background:#E5F3EC; padding:11px 12px; border-radius:10px; font-weight:800; font-size:13px; }
+  .err { color:var(--danger); background:#FCE8E6; padding:11px 12px; border-radius:10px; font-weight:700; font-size:13px; line-height:18px; }
+  .ruled { border-top:1px solid var(--line); }
+  .rr { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:11px 2px; min-height:46px; border-bottom:1px solid var(--line); }
+  .rl { color:var(--muted); font-size:13px; width:30%; flex:none; }
+  .rv { flex:1; color:var(--ink); font-size:14px; font-weight:700; text-align:right; }
+  .rv.chg { color:var(--navy); } .was { color:#8A949E; font-weight:500; text-decoration:line-through; }
+  .edit { color:var(--brand); font-size:13px; font-weight:800; } .lock { color:#8A949E; font-size:13px; font-weight:800; }
+  .rr.tot { border-bottom:0; padding-top:12px; align-items:baseline; } .rr.tot .rl { color:var(--ink); font-size:14px; font-weight:800; } .rr.tot .rv { color:var(--navy); font-size:22px; font-weight:900; }
+  .secrow { display:flex; align-items:center; gap:10px; min-height:54px; padding:8px 0; border-top:1px solid var(--line); }
+  .secrow .t { color:var(--navy); font-size:14px; font-weight:900; } .secrow .s { color:var(--muted); font-size:12px; } .secrow .c { margin-left:auto; color:var(--muted); font-size:18px; }
+  .sbody { display:flex; flex-direction:column; gap:6px; padding-bottom:6px; } .plain { display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--muted); } .plain b { color:var(--ink); }
+  .hist { border-left:3px solid #C9D7E6; padding-left:10px; display:flex; flex-direction:column; gap:2px; margin:4px 0; } .hist .d { color:var(--muted); font-size:11px; } .hist .r { color:var(--ink); font-size:12px; font-weight:700; } .hist .c { color:var(--muted); font-size:12px; line-height:17px; }
+  .danger { border-top:1px solid var(--line); padding-top:12px; margin-top:4px; } .dlink { color:var(--danger); font-size:14px; font-weight:900; min-height:40px; display:flex; align-items:center; }
+  .bar { flex:none; background:var(--navy); padding:10px 16px; display:flex; align-items:center; gap:10px; }
+  .bar .bl { color:#D5E4EF; font-size:10px; font-weight:800; letter-spacing:1px; } .bar .bv { color:var(--cream); font-size:20px; font-weight:900; } .bar .acts { margin-left:auto; display:flex; gap:8px; }
+  .bback { min-height:46px; min-width:76px; padding:0 12px; display:flex; align-items:center; justify-content:center; border:1.5px solid #D5E4EF; border-radius:12px; color:var(--cream); font-weight:800; }
+  .bnext { min-height:46px; min-width:96px; padding:0 14px; display:flex; align-items:center; justify-content:center; background:var(--brand); border-radius:12px; color:#fff; font-weight:900; } .bnext.off { opacity:.45; } .bnext.red { background:var(--danger); }
+  .dim { position:absolute; left:0; right:0; top:0; bottom:0; background:rgba(23,33,43,.5); }
+  .sheet { position:absolute; left:0; right:0; bottom:0; background:var(--bg); border-top-left-radius:22px; border-top-right-radius:22px; padding:10px 18px 14px; display:flex; flex-direction:column; gap:11px; max-height:92%; overflow:hidden; }
+  .grab { width:44px; height:5px; border-radius:3px; background:#C9C3B6; align-self:center; }
+  .stitle { font-size:25px; font-weight:900; line-height:1.15; } .was2 { color:var(--muted); font-size:13px; } .was2 b { color:var(--ink); }
+  .of { display:flex; flex-direction:column; gap:3px; } .fl { font-size:14px; font-weight:800; }
+  .ov { min-height:50px; display:flex; align-items:center; justify-content:space-between; gap:8px; border-bottom:2px solid #C4C9CF; padding:6px 2px; }
+  .ovv { font-size:20px; font-weight:700; } .ovv.ph { color:#9AA3AB; font-weight:400; } .ovd { color:var(--muted); font-size:13px; margin-top:1px; }
+  .ov.area { min-height:96px; align-items:flex-start; } .chev { color:var(--brand); font-weight:900; font-size:18px; }
+  .choices { display:flex; gap:9px; } .choice { flex:1; min-height:46px; display:flex; align-items:center; justify-content:center; border:1.5px solid var(--line); border-radius:13px; background:#fff; font-weight:800; font-size:13px; color:var(--muted); text-align:center; padding:0 4px; white-space:nowrap; }
+  .choice.on { border:2.5px solid var(--navy); background:#EAF1F9; color:var(--navy); }
+  .pill { display:flex; background:#E8E4DA; border-radius:14px; padding:4px; } .pill div { flex:1; min-height:44px; display:flex; align-items:center; justify-content:center; border-radius:11px; font-weight:800; color:var(--muted); text-align:center; font-size:13px; } .pill .on { background:var(--navy); color:#fff; }
+  .group { border-top:1px solid var(--line); padding-top:11px; display:flex; flex-direction:column; gap:8px; } .gl { color:var(--muted); font-size:12px; font-weight:900; letter-spacing:1.3px; }
+  .btns { display:flex; gap:12px; margin-top:2px; } .ghost { flex:1; min-height:50px; display:flex; align-items:center; justify-content:center; border:2px solid var(--ink); border-radius:13px; font-weight:800; font-size:16px; } .prim { flex:1.4; min-height:50px; display:flex; align-items:center; justify-content:center; background:var(--brand); border-radius:13px; color:#fff; font-weight:900; font-size:16px; } .prim.off { opacity:.45; }
+  .reason { min-height:76px; border-bottom:2px solid #C4C9CF; padding:6px 2px; color:#17212B; font-size:17px; } .reason.ph { color:#9AA3AB; }
+  .cmpbox { background:#fff; border:1px solid var(--line); border-radius:12px; padding:9px 11px; font-size:12px; line-height:17px; color:var(--muted); }
+  .alertbg { position:absolute; left:0; right:0; top:0; bottom:0; background:rgba(23,33,43,.55); display:flex; align-items:center; justify-content:center; padding:18px; }
+  .abox { background:#fff; border-radius:16px; padding:18px; width:100%; } .abox h4 { margin:0 0 6px; font-size:17px; } .abox p { margin:0 0 6px; color:#3C4854; font-size:13px; line-height:1.45; }
+  .acts2 { display:flex; justify-content:flex-end; gap:18px; margin-top:12px; font-weight:900; font-size:13px; } .acts2 span:last-child { color:var(--brand); } .acts2 .rd { color:var(--danger) !important; }
+  .notes { max-width:960px; margin:6px auto 34px; padding:0 16px; line-height:1.55; color:#2c3640; } .notes h2 { font-family:Oswald; color:#0B2A5B; letter-spacing:.05em; } .notes li { margin:6px 0; }
+</style>
+</head>
+<body>
+<h1>CORRECT SUPPLIER LOAD — AS IT IS BUILT TODAY</h1>
+<p class="lead">This is the Supplier Load correction page that is already in the app (DEC-525), drawn from its code and your screenshots: the whole workflow first, then every screen and state. It is a reference of what exists, not a new design.</p>
+
+<h2 class="sec">THE WORKFLOW</h2>
+<div class="flow">
+  <div class="fs"><b>1 · Open a load</b><span>From Supplier history (or Load History), tap a supplier load. It opens the correction page.</span></div><div class="arrow">›</div>
+  <div class="fs"><b>2 · The page</b><span>A plain list of the load. Each line has <b style="display:inline;color:var(--brand)">Edit</b>. Nothing changes yet. The bar shows TOTAL.</span></div><div class="arrow">›</div>
+  <div class="fs"><b>3 · Edit one line</b><span>Tap Edit: only that line opens in a small sheet with "Was …". <b style="display:inline">Done</b> keeps it, <b style="display:inline">Cancel</b> throws that edit away.</span></div><div class="arrow">›</div>
+  <div class="fs"><b>4 · See the change</b><span>The line shows the old value crossed out beside the new one. The bar now says "N CHANGES", and Review turns on.</span></div><div class="arrow">›</div>
+  <div class="fs"><b>5 · Review</b><span>A sheet lists every old and new value and the new total, and asks for the required reason. <b style="display:inline">Save correction</b>.</span></div><div class="arrow">›</div>
+  <div class="fs grn"><b>6 · Saved</b><span>"Supplier load corrected. Totals, balance, and audit history were updated." The original is kept in the history.</span></div>
+</div>
+<div class="flow">
+  <div class="fs red"><b>Cancel a load</b><span>Red link <b style="display:inline">Cancel this load</b> at the bottom → its own screen with the warning and a required reason → "Cancel this supplier load?" → the load stays in history, out of totals.</span></div>
+  <div class="fs red"><b>Reactivate</b><span>A cancelled load opens the same page with its reason. Correct what is wrong, tap <b style="display:inline">Reactivate</b>, give a reason: it becomes active again, no duplicate.</span></div>
+  <div class="fs"><b>Leaving early</b><span>Back with unsaved changes asks "Leave without saving?" (Keep editing / Leave).</span></div>
+  <div class="fs"><b>Payments lock</b><span>With an active payment the Supplier line shows Locked, and a note explains why. Everything else can still be corrected.</span></div>
+</div>
+
+<h2 class="sec">THE PAGE</h2>
+<div class="row" id="r-page"></div>
+<h2 class="sec">THE EDIT SHEETS — ONE PER LINE</h2>
+<div class="row" id="r-sheets"></div>
+<h2 class="sec">REVIEW, SAVE, CANCEL AND REACTIVATE</h2>
+<div class="row" id="r-flow"></div>
+
+<div class="notes">
+  <h2>Rules behind these screens (unchanged by anything else)</h2>
+  <ul>
+    <li><b>Lines that can be corrected:</b> Date, Supplier, Delivered to, Item, Quantity (with Pieces and the steel fields), Delivery, Ticket / invoice, Price (with VAT) and Notes. The load number and the time of day never change.</li>
+    <li><b>Date:</b> a normal audited change with a required reason, not in the future and inside the project's dates. It is refused while the load is in an active Stock batch.</li>
+    <li><b>Payments:</b> the supplier is locked while an active payment exists; changing to Unpriced is blocked too. Balances and status recalculate.</li>
+    <li><b>Reason and history:</b> every correction stores the reason, time, the user and the old and new values. Quantity Target links, steel details, price and VAT rules and the database are unchanged by this page.</li>
+    <li><b>Total:</b> recalculated from the price, shown crossed out beside the new one if it changed.</li>
+  </ul>
+</div>
+
+<script>
+const S = { no: 'SUP-20261021-0150-00132' };
+const ctxBar = `<div class="ctx"><div><div class="k">ACTIVE PROJECT</div><div class="v">Abed tayyar project 2</div></div><div class="c">Change</div></div>`;
+const sb = `<div class="sb"><span>15:24</span><span>▮▮▮ 93</span></div>`;
+const hd = (eb, title, long) => `<div class="hd"><div class="bk">Back</div><div><div class="eyebrow">${eb}</div><div class="title ${long ? 'long' : ''}">${title}</div></div></div>`;
+const statusRow = (x) => `<div class="status"><span class="chip ${x ? 'x' : ''}">${x ? 'CANCELLED' : 'ACTIVE'}</span><span class="stat">21 Oct 2026 · 13:35</span></div>`;
+const R = (l, v, s, was) => `<div class="rr"><div class="rl">${l}</div><div class="rv ${was ? 'chg' : ''}">${was ? `<span class="was">${was}</span> ` : ''}${v}${s === 'edit' ? '<span class="edit">  Edit</span>' : s === 'lock' ? '<span class="lock">  Locked</span>' : ''}</div></div>`;
+const rows = (o = {}) => [
+  R('Date', o.date ? o.date[1] : '21 Oct 2026', 'edit', o.date && o.date[0]),
+  R('Supplier', 'Adel zorkot', o.lock ? 'lock' : 'edit'),
+  R('Delivered to', 'Project · Zebdine -Choukine Road', 'edit'),
+  R('Item', 'BaseCourse', 'edit'),
+  R('Quantity', o.qty ? o.qty[1] : '20 M³', 'edit', o.qty && o.qty[0]),
+  R('Pieces', 'Not recorded', 'edit'),
+  R('Delivery', 'Our driver · Abbas Sabbah · OUTGOING TRUCK', 'edit'),
+  R('Ticket / invoice', 'Not recorded', 'edit'),
+  R('Price', o.price ? o.price[1] : 'Unpriced', 'edit', o.price && o.price[0]),
+].join('');
+const totalRow = (t, was) => `<div class="rr tot"><div class="rl">Total</div><div class="rv">${was ? `<span class="was" style="font-size:13px">${was}</span>  ` : ''}${t}</div></div>`;
+const sec = (t, s, open) => `<div class="secrow"><div><div class="t">${t}</div><div class="s">${s}</div></div><div class="c">${open ? '⌃' : '⌄'}</div></div>`;
+const bar = (l, v, next, off, red) => `<div class="bar"><div><div class="bl">${l}</div><div class="bv">${v}</div></div><div class="acts"><div class="bback">${red ? 'Keep load' : 'Back'}</div><div class="bnext ${off ? 'off' : ''} ${red ? 'red' : ''}">${next}</div></div></div>`;
+const help0 = 'Tap Edit on a line to correct it. The load number and the time of day never change.';
+const danger = `<div class="danger"><div class="help">Entered by mistake or duplicate?</div><div class="dlink">Cancel this load</div></div>`;
+
+const of = (label, value, detail, o = {}) => `<div class="of"><div class="fl">${label}</div><div class="ov ${o.area ? 'area' : ''}"><div><div class="ovv ${o.ph ? 'ph' : ''}">${value}</div>${detail ? `<div class="ovd">${detail}</div>` : ''}</div>${o.sel ? '<div class="chev">v</div>' : ''}</div></div>`;
+const choices = (opts, on) => `<div class="choices">${opts.map((x, i) => `<div class="choice ${i === on ? 'on' : ''}">${i === on ? '✓ ' : ''}${x}</div>`).join('')}</div>`;
+const pill = (opts, on) => `<div class="pill">${opts.map((x, i) => `<div class="${i === on ? 'on' : ''}">${x}</div>`).join('')}</div>`;
+const group = (l, inner) => `<div class="group"><div class="gl">${l}</div>${inner}</div>`;
+const help = (t) => `<div class="help">${t}</div>`;
+const btns = (a, b, off) => `<div class="btns"><div class="ghost">${a}</div><div class="prim ${off ? 'off' : ''}">${b}</div></div>`;
+const sheet = (title, was, body, done = 'Done', cancel = 'Cancel') => `<div class="sheet"><div class="grab"></div><div class="stitle">${title}</div>${was ? `<div class="was2">Was <b>${was}</b></div>` : ''}${body}${btns(cancel, done)}</div>`;
+
+const pageInner = (extra) => `${ctxBar}<div class="scroll">${hd('SUPPLIER LOAD', S.no, true)}${statusRow()}<div class="help">${help0}</div><div class="ruled">${rows()}${totalRow('Unpriced')}</div></div><div class="dim"></div>${extra}`;
+const phone = (label, small, inner) => `<div class="col"><div class="label">${label}<small>${small}</small></div><div class="phone"><div class="screen">${sb}${inner}</div></div></div>`;
+const sheetPhone = (label, small, s) => phone(label, small, pageInner(s));
+
+// ---- THE PAGE
+const p1 = phone('1 · THE PAGE, NOTHING CHANGED', 'Exactly as in your screenshot. Review is greyed out until something changes.',
+  `${ctxBar}<div class="scroll">${hd('SUPPLIER LOAD', S.no, true)}${statusRow()}<div class="help">${help0}</div><div class="ruled">${rows()}</div></div>${bar('TOTAL', 'Unpriced', 'Review', true)}`);
+const p2 = phone('2 · THE PAGE, WITH CHANGES', 'Changed lines show the old value crossed out. A VAT line and the total appear once the load is priced. The bar says "3 CHANGES".',
+  `${ctxBar}<div class="scroll">${hd('SUPPLIER LOAD', S.no, true)}${statusRow()}<div class="help">${help0}</div><div class="ruled">${rows({ date: ['21 Oct 2026', '20 Oct 2026'], qty: ['20 M³', '22 M³'], price: ['Unpriced', '$18.00 per M³ · 11% VAT excluded'] })}<div class="rr"><div class="rl">VAT (11%)</div><div class="rv">$43.56</div></div>${totalRow('$439.56', 'Unpriced')}</div></div>${bar('3 CHANGES', '$439.56', 'Review')}`);
+const p3 = phone('3 · BELOW THE LIST', 'Collapsed rows (tap to open) and the Cancel link. Documents, Steel details and Same delivery note only appear when they apply.',
+  `${ctxBar}<div class="scroll"><div class="ruled">${R('Price', 'Unpriced', 'edit')}${totalRow('Unpriced')}</div>
+   ${sec('Documents', 'Ticket photos and files')}${sec('Steel details', 'Pieces, bar length and where the weight came from')}${sec('Same delivery note', '2 items recorded together')}${sec('Correction history', '1 correction')}${danger}</div>${bar('TOTAL', 'Unpriced', 'Review', true)}`);
+const p4 = phone('4 · THE ROWS OPENED', 'Steel details, Same delivery note and Correction history opened. History shows who, when, the reason and old → new.',
+  `${ctxBar}<div class="scroll">${sec('Steel details', 'Pieces, bar length and where the weight came from', true)}
+   <div class="sbody"><div class="plain"><span>Pieces</span><b>120 pieces</b></div><div class="plain"><span>Diameter · length per bar</span><b>16 mm · 12 m</b></div><div class="plain"><span>Total meters</span><b>1440 m</b></div><div class="plain"><span>Calculated weight</span><b>2272.3 kg</b></div><div class="plain"><span>Weight used (calculated)</span><b>2272.3 kg</b></div></div>
+   ${sec('Same delivery note', '2 items recorded together', true)}<div class="sbody"><div class="plain"><b>Rebar 16 · SUP-…-00132</b><b>2272.3 kg</b></div><div class="plain"><span>Rebar 12 · SUP-…-00133</span><span>1010.4 kg</span></div></div>
+   ${sec('Correction history', '1 correction', true)}<div class="sbody"><div class="hist"><div class="d">22 Oct 2026, 09:12 · Admin</div><div class="r">Reason: Wrong supplier chosen</div><div class="c">Supplier: <span class="was">Hassan zorkot</span> → <b style="color:var(--ink)">Adel zorkot</b></div></div><div class="help">Confirmed 21 Oct 2026, 13:35 · the original record is never changed.</div></div></div>${bar('TOTAL', '$1,200.00', 'Review', true)}`);
+const p5 = phone('5 · SUPPLIER LOCKED BY A PAYMENT', 'The Supplier line shows Locked and cannot be opened. Everything else still can.',
+  `${ctxBar}<div class="scroll">${hd('SUPPLIER LOAD', S.no, true)}${statusRow()}<div class="help">${help0}</div><div class="warn">The supplier cannot be changed while this load has an active payment. Cancel the payment in Payments first, then come back. Everything else can still be corrected.</div><div class="ruled">${rows({ lock: true })}</div></div>${bar('TOTAL', 'Unpriced', 'Review', true)}`);
+document.getElementById('r-page').innerHTML = p1 + p2 + p3 + p4 + p5;
+
+// ---- SHEETS
+const sh = [];
+sh.push(sheetPhone('6 · DATE', 'Same rules as a new load. A reason is required at Review.', sheet('Date', '21 Oct 2026', of('Record date *', '21 Oct 2026', '', { sel: true }) + help("The day the material arrived. Not later than today, and inside the project's dates (14 Oct 2026 to today). The load number does not change, and the load moves to the new day in reports and totals."))));
+sh.push(sheetPhone('7 · SUPPLIER', 'Searchable list with the phone number. Locked line when a payment exists.', sheet('Supplier', 'Adel zorkot', of('Supplier *', 'Adel zorkot', '+961 70 123 456', { sel: true }))));
+sh.push(sheetPhone('8 · DELIVERED TO (PROJECT)', 'A three-way switch: Project, Company Site or Unassigned.', sheet('Delivered to', 'Project · Zebdine -Choukine Road', `<div class="of"><div class="fl">Delivered to *</div>${pill(['Project', 'Company Site', 'Unassigned'], 0)}</div>${help('Material delivered to a construction project')}` + of('Select project *', 'Zebdine -Choukine Road', 'Fakih Brothers Construction · Zebdine nabatieh', { sel: true }))));
+sh.push(sheetPhone('9 · DELIVERED TO (COMPANY SITE)', 'For material that went to the plant, yard, workshop or warehouse.', sheet('Delivered to', 'Project · Zebdine -Choukine Road', `<div class="of"><div class="fl">Delivered to *</div>${pill(['Project', 'Company Site', 'Unassigned'], 1)}</div>${help('Material delivered to a saved company location, such as the plant or yard')}` + of('Select company site *', 'Main plant', 'Company site', { sel: true }))));
+sh.push(sheetPhone('10 · ITEM', 'As in your screenshot: grouped by category.', sheet('Item', 'BaseCourse', of('Item *', 'BaseCourse', 'Materials', { sel: true }))));
+sh.push(sheetPhone('11 · QUANTITY (WITH PIECES)', 'As in your screenshot. One sheet for both the Quantity and Pieces lines.', sheet('Quantity', '20 M³', of('Measurement unit *', 'Cubic meter', 'M³', { sel: true }) + of('Quantity *', '20') + of('Pieces (optional)', '', '', { ph: true }) + help('The total is recalculated from the price.'))));
+sh.push(sheetPhone('12 · QUANTITY (A STEEL ITEM)', 'For steel, the sheet also shows the bar length, the total metres and the weight check.', sheet('Quantity', '2272.3 kg', of('Measurement unit *', 'Kilogram', 'kg', { sel: true }) + of('Quantity *', '2272.3') + of('Pieces (optional)', '120') + of('Length per bar (m, optional)', '12') + help('Total meters: 1440 m (120 pcs × 12 m)') + `<div class="cmpbox">Calculated 2272.3 kg, typed 2272.3 kg. The weight you entered is the quantity used.</div>` + help('The total is recalculated from the price.'))));
+sh.push(sheetPhone('13 · DELIVERY (OUR DRIVER)', 'A switch first, then the driver and the truck plate.', sheet('Delivery', 'Our driver · Abbas Sabbah · OUTGOING TRUCK', `<div class="of"><div class="fl">Delivery handled by</div>${pill(['Our Driver', 'Supplier Delivering'], 0)}</div>` + of('Driver *', 'Abbas Sabbah', 'Driver', { sel: true }) + of('Truck plate *', 'OUTGOING TRUCK', 'Actros', { sel: true }))));
+sh.push(sheetPhone('14 · DELIVERY (SUPPLIER DELIVERING)', 'No company driver is needed. A plate is optional.', sheet('Delivery', 'Our driver · Abbas Sabbah · OUTGOING TRUCK', `<div class="of"><div class="fl">Delivery handled by</div>${pill(['Our Driver', 'Supplier Delivering'], 1)}</div>` + of('Supplier truck / plate (optional)', 'Leave blank if not known', '', { ph: true }) + help('No company driver is required. If the plate is blank, reports show Supplier Delivering.'))));
+sh.push(sheetPhone('15 · TICKET / INVOICE', 'Free text, no "Was" line.', sheet('Ticket / invoice', '', of('Supplier ticket / invoice number', 'T-48812'))));
+sh.push(sheetPhone('16 · PRICE', 'As in your screenshot: PRICE and VAT groups and the new total.', sheet('Price', 'Unpriced', group('PRICE', `<div class="of"><div class="fl">Price is</div>${pill(['Per unit', 'As a whole'], 0)}</div>` + of('Price per unit (USD, optional)', 'Leave blank for Unpriced', '', { ph: true })) + group('VAT', `<div class="fl" style="margin-bottom:0">VAT</div>${choices(['No VAT', 'Universal', 'Own %'], 0)}` + help('No VAT is added unless you choose it.')) + `<div class="ruled">${R('Subtotal', 'Unpriced')}${totalRow('Unpriced').replace('Total</div>', 'Corrected total</div>')}</div>`)));
+sh.push(sheetPhone('17 · NOTES', 'Free text, no "Was" line.', sheet('Notes', '', of('Notes', 'Delivered to the north gate before 7 am.', '', { area: true }))));
+document.getElementById('r-sheets').innerHTML = sh.join('');
+
+// ---- REVIEW / FLOW
+const fl = [];
+fl.push(phone('18 · REVIEW CHANGES', 'Old and new values, the new total, and the required reason. Back returns to the page; Save correction saves.',
+  `${ctxBar}<div class="scroll" style="opacity:.5">${hd('SUPPLIER LOAD', S.no, true)}</div><div class="dim"></div>
+   <div class="sheet"><div class="grab"></div><div class="stitle">Review changes</div>${help('The original and the new values are saved permanently in the audit history.')}
+   <div class="ruled">${R('Date', '<br>20 Oct 2026', '', '21 Oct 2026')}${R('Quantity', '<br>22 M³', '', '20 M³')}${R('Price', '<br>$18.00 per M³ · 11% VAT excluded', '', 'Unpriced')}${totalRow('$439.56', 'Unpriced')}</div>
+   ${group('WHY IS IT BEING CORRECTED?', `<div class="of"><div class="fl">Correction reason *</div><div class="reason ph">Required</div></div>${help('It is saved with the original and new values.')}`)}
+   ${btns('Back', 'Save correction')}</div>`));
+fl.push(phone('19 · REVIEW, REASON MISSING', 'Saving without a reason shows this message and stays on the sheet.',
+  `${ctxBar}<div class="scroll" style="opacity:.5">${hd('SUPPLIER LOAD', S.no, true)}</div><div class="dim"></div>
+   <div class="sheet"><div class="grab"></div><div class="stitle">Review changes</div>${help('The original and the new values are saved permanently in the audit history.')}
+   <div class="err">Enter the reason for this correction.</div>
+   <div class="ruled">${R('Quantity', '<br>22 M³', '', '20 M³')}${totalRow('Unpriced')}</div>
+   ${group('WHY IS IT BEING CORRECTED?', `<div class="of"><div class="fl">Correction reason *</div><div class="reason ph">Required</div></div>`)}
+   ${btns('Back', 'Save correction')}</div>`));
+fl.push(phone('20 · LEAVING WITH UNSAVED CHANGES', 'Tapping Back (or the Back button) with changes asks first.',
+  `${ctxBar}<div class="scroll" style="opacity:.5">${hd('SUPPLIER LOAD', S.no, true)}${statusRow()}<div class="ruled">${rows({ qty: ['20 M³', '22 M³'] })}</div></div>${bar('1 CHANGE', 'Unpriced', 'Review')}
+   <div class="alertbg"><div class="abox"><h4>Leave without saving?</h4><p>Your changes on this page will be lost.</p><div class="acts2"><span>Keep editing</span><span class="rd">Leave</span></div></div></div>`));
+fl.push(phone('21 · CANCEL THIS LOAD', 'Its own screen. A reason is required; the load stays in history and leaves quantities, VAT, balances and reports.',
+  `${ctxBar}<div class="scroll">${hd('SUPPLIER LOAD ' + S.no.slice(0, 15) + '…', 'Cancel this load', false)}<div class="warn">Cancelling is audited. It is blocked until every active payment linked to this load is cancelled. The record stays in history and is left out of quantities, VAT, balances and reports. A cancelled load can later be corrected and reactivated.</div>
+   <div class="ruled"><div class="rr"><div class="rl">Supplier</div><div class="rv">Adel zorkot</div></div><div class="rr"><div class="rl">Item</div><div class="rv">20 M³ · BaseCourse</div></div>${totalRow('Unpriced')}</div>
+   ${group('WHY?', `<div class="of"><div class="fl">Cancellation reason *</div><div class="reason ph"></div></div>`)}</div>${bar('TOTAL', 'Unpriced', 'Cancel load', false, true)}`));
+fl.push(phone('22 · CONFIRM THE CANCEL', 'The last check. It cannot be undone, but a cancelled load can be reactivated by correcting it.',
+  `${ctxBar}<div class="scroll" style="opacity:.5">${hd('SUPPLIER LOAD', 'Cancel this load', false)}</div>${bar('TOTAL', 'Unpriced', 'Cancel load', false, true)}
+   <div class="alertbg"><div class="abox"><h4>Cancel this supplier load?</h4><p>The record will remain in history and be excluded from quantities, VAT, balances, and reports. This cannot be undone.</p><div class="acts2"><span>Keep record</span><span class="rd">Cancel supplier load</span></div></div></div>`));
+fl.push(phone('23 · A CANCELLED LOAD', 'Red CANCELLED chip, when and why, no Cancel link. The button becomes Reactivate.',
+  `${ctxBar}<div class="scroll">${hd('SUPPLIER LOAD', S.no, true)}${statusRow(true)}<div class="ok" style="color:#7A1D17;background:#E5F3EC;color:var(--ok)">Supplier load cancelled and retained in history.</div><div class="cbox">Cancelled 24 Oct 2026, 16:40<br>Reason: Entered twice by mistake</div><div class="help">Correct what is wrong, then reactivate. A reason is saved with the original and new values.</div><div class="ruled">${rows()}</div></div>${bar('TOTAL', 'Unpriced', 'Reactivate')}`));
+fl.push(phone('24 · REACTIVATE', 'Same review sheet, with its own wording. Saves without creating a duplicate.',
+  `${ctxBar}<div class="scroll" style="opacity:.5">${hd('SUPPLIER LOAD', S.no, true)}</div><div class="dim"></div>
+   <div class="sheet"><div class="grab"></div><div class="stitle">Reactivate this load</div>${help('The original and the new values are saved permanently in the audit history.')}
+   <div class="help">No fields changed. The load is made active again as it is.</div>
+   ${group('WHY IS IT BEING REACTIVATED?', `<div class="of"><div class="fl">Reactivation reason *</div><div class="reason ph">Required</div></div>${help('It is saved with the original and new values.')}`)}
+   ${btns('Back', 'Save and Reactivate')}</div>`));
+document.getElementById('r-flow').innerHTML = fl.join('');
+</script>
+</body>
+</html>

@@ -86,8 +86,9 @@ describe('DEC-524 Make Receipt screen structure (static checks)',()=>{
     expect(screen).toContain('Confirmation assigns the permanent load number and transaction number. The record cannot return to Draft.');
     expect(screen).toContain('repository.saveDraft(draft)');
   });
-  it('does not touch the printed documents or the other screens that use the pad',()=>{
-    expect(read('src/ui/components/LoadCorrectionForm.tsx')).not.toContain('SignaturePad large');
+  it('does not touch the printed documents or Load History, and the correction uses the same bigger, fitted pad (DEC-536)',()=>{
+    expect(read('src/ui/components/LoadCorrectionForm.tsx')).toContain('<SignaturePad large');
+    expect(read('src/ui/components/LoadCorrectionForm.tsx')).toContain('fitSignatureToBox(value.driverSignaturePaths)');
     expect(read('src/ui/screens/LoadHistoryScreen.tsx')).not.toContain('SignaturePad large');
   });
 });

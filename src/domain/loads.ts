@@ -90,6 +90,8 @@ export type LoadFullCorrectionFields = {
   driverSignaturePaths?: string[];
   /** A saved signer for the supplier signature; null removes it. Absent keeps it. */
   supplierSignature?: { signerId: string; display: SignerDisplay } | null;
+  /** DEC-536. The Quantity Target this load counts toward: an item id, or '' / null for Not linked. Absent keeps the link, which is still removed automatically when the project or the material no longer fits it (Option 1, DEC-522). */
+  contractItemId?: string | null;
 };
 export type LoadCorrectionDraft = { requestedQuantityKg: string; emptyWeightKg: string; fullWeightKg: string; directQuantity: string; unitPriceUsd: string; destinationAddress: string; notes: string; correctionReason?: string; driverId?: string } & LoadFullCorrectionFields;
 export type LoadStatus = 'Active' | 'Cancelled';

@@ -280,11 +280,14 @@ describe('the Correct this load context',()=>{
 describe('the Correct this load screen',()=>{
   const screen=readFileSync('src/ui/components/LoadCorrectionForm.tsx','utf8');
   it('uses the calendar date picker for the record date',()=>{
-    expect(screen).toContain('<DatePickerField label="" value={form.recordDate');expect(screen).toContain('Record date *');
+    expect(screen).toContain('<DatePickerField variant="open" label="Record date *" value={form.recordDate');expect(screen).toContain('Record date *');
     expect(screen).toContain('minDate=');
   });
   it('follows the approved layout and wording',()=>{
-    for(const text of ['Confirmed records are never edited directly. Everything can be corrected: your change is saved with the original in the history, and a reason is required.','number="01"','number="02"','number="03"','number="04"','CHANGED','UNIT CHANGED','LOCKED · PAYMENTS','Re-sign Supplier','Re-sign Driver','Reason for correction *','Save Correction','Correction history','ORIGINAL SAVED','Save this correction?'])expect(screen).toContain(text);
+    // DEC-536. The screen is the Supplier-style page: a list where each line opens its own sheet, then a review that asks for the reason.
+    const page=readFileSync('src/ui/components/LoadCorrectionPage.tsx','utf8');
+    for(const text of ['Tap Edit on a line to correct it. The load number and the time of day never change.','Review changes','Save correction','Correction reason *','Correction history','ORIGINAL SAVED · VERSION','Cancel this load','Leave without saving?','Preview documents · Receipt and Authorization','Signatures'])expect(page).toContain(text);
+    for(const text of ['LOCKED · PAYMENTS','KEPT AS CONFIRMED','SUPPLIER SIGNATURE CHANGED','NOT SAVED','Counts toward target','Delivered to *','Load-enabled item *'])expect(screen).toContain(text);
   });
   it('is reached from the load detail as "Correct This Load"',()=>{
     expect(readFileSync('src/ui/screens/LoadHistoryScreen.tsx','utf8')).toContain('label="Correct This Load"');

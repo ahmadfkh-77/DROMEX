@@ -2,6 +2,7 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import {loadNumberLabel} from '../../domain/loadNumberSeries';
 import {Alert,LayoutAnimation,ScrollView,StyleSheet,Text,TextInput,TouchableOpacity,View} from 'react-native';
 import type {LoadRepository} from '../../data/repositories/LoadRepository';
+import type {ContractQuantitiesRepository} from '../../data/repositories/ContractQuantitiesRepository';
 import type {DocumentSignerRepository} from '../../data/repositories/DocumentSignerRepository';
 import type {ConfirmedLoad} from '../../domain/loads';
 import {AppButton,AppCard,Feedback,PageHeader} from '../components/AppPrimitives';
@@ -17,9 +18,11 @@ type Stage='browse'|'blocked'|'edit';
 const localDate=(value:string)=>{const date=new Date(value);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
 const unique=(values:string[])=>[...new Set(values)].sort((a,b)=>a.localeCompare(b));
 
-export function LoadCorrectionsScreen({repository,onBack,initialLoadId,signers}:{repository:LoadRepository;onBack:()=>void;initialLoadId?:string|null;
+export function LoadCorrectionsScreen({repository,onBack,initialLoadId,signers,contracts}:{repository:LoadRepository;onBack:()=>void;initialLoadId?:string|null;
   /** Phase 4. Saved signers for re-signing the supplier signature. */
-  signers?:DocumentSignerRepository}){
+  signers?:DocumentSignerRepository;
+  /** DEC-536. The Quantity Targets, for Counts toward target on the correction page. */
+  contracts?:ContractQuantitiesRepository}){
   const reducedMotion=useReducedMotion();
   const[loads,setLoads]=useState<ConfirmedLoad[]>([]);const[selected,setSelected]=useState<ConfirmedLoad|null>(null);const[stage,setStage]=useState<Stage>('browse');const[signing,setSigning]=useState(false);
   const[groupMode,setGroupMode]=useState<GroupMode>('project');const[projectFilter,setProjectFilter]=useState('');const[customerFilter,setCustomerFilter]=useState('');const[fromDate,setFromDate]=useState('');const[toDate,setToDate]=useState('');const[search,setSearch]=useState('');
@@ -36,6 +39,11 @@ export function LoadCorrectionsScreen({repository,onBack,initialLoadId,signers}:
   function choose(load:ConfirmedLoad){animateLayout();setSelected(load);setMessage(null);setStage(load.status==='Cancelled'?'blocked':'edit');}
   function chooseAnother(){animateLayout();setSelected(null);setStage('browse');setMessage(null);setSigning(false);}
   function clearFilters(){setProjectFilter('');setCustomerFilter('');setFromDate('');setToDate('');setSearch('');}
+
+  // DEC-536. The correction page is the Supplier-style page with its own bar, so it fills the screen instead of sitting in this list's scroll.
+  if(stage==='edit'&&selected)return <LoadCorrectionForm key={selected.id+selected.correctionHistory.length} repository={repository} signers={signers} contracts={contracts} selected={selected} message={message} onChooseAnother={chooseAnother}
+    onSaved={updated=>{setSelected(updated);setMessage('Load corrected. The original is saved in the history. The load number and transaction number did not change. Future PDFs and reprints use the corrected values.');void refresh();}}
+    onCancelled={updated=>{animateLayout();setSelected(updated);setStage('blocked');setMessage('This load is now cancelled. It remains fully visible in Load History.');void refresh();}}/>;
 
   return <ScrollView scrollEnabled={!signing} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
     <PageHeader eyebrow="AUDITED CORRECTION" title={stage==='edit'?'Correct this load':'Correct Confirmed Load'} onBack={stage==='edit'?chooseAnother:onBack}/>
@@ -66,7 +74,6 @@ export function LoadCorrectionsScreen({repository,onBack,initialLoadId,signers}:
       <AppButton label="Choose Another Load" tone="secondary" onPress={chooseAnother}/>
     </AppCard>:null}
 
-    {stage==='edit'&&selected?<LoadCorrectionForm key={selected.id+selected.correctionHistory.length} repository={repository} signers={signers} selected={selected} onChooseAnother={chooseAnother} onSigningChange={setSigning} onSaved={updated=>{setSelected(updated);setMessage('Load corrected. The original is saved in the history. The load number and transaction number did not change. Future PDFs and reprints use the corrected values.');void refresh();}}/>:null}
   </ScrollView>;
 }
 

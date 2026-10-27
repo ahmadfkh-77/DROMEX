@@ -1,6 +1,6 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
-import type {ContractHistoryKind} from '../../domain/contractQuantities';
+import {plannedContractLink,type ContractHistoryKind,type ContractLinkFacts} from '../../domain/contractQuantities';
 
 /** Which load table a contract link lives on: company loads (`loads`) or supplier loads (`quarry_purchases`). */
 export type ContractLoadSource='company'|'supplier';
@@ -52,4 +52,41 @@ export async function linkAtConfirmation(db:SQLiteDatabase,source:ContractLoadSo
   if(problem){if(options.keepLoadIfInvalid)return;throw new Error(problem);}
   await db.runAsync(`UPDATE ${table} SET contract_item_id=? WHERE id=?`,contractItemId,loadId);
   await insertContractHistory(db,{contractItemId,kind:'load_linked',reason:null,details:{source,loadId,reference:load!.reference,atConfirmation:true},createdAt:now});
+}
+
+export type CompanyContractLinkPlan={previousId:string|null;previousName:string|null;final:string|null;finalName:string|null;automatic:'project'|'material'|null;problem:string|null};
+
+/**
+ * DEC-536. Works out, before anything is saved, what a company load correction does to the load's target link (see plannedContractLink),
+ * reading the targets that matter from the database. `requested` is the target named in the correction: undefined keeps the link.
+ */
+export async function planCompanyContractLink(db:SQLiteDatabase,loadId:string,requested:string|null|undefined,projectId:string|null,itemId:string,itemName:string):Promise<CompanyContractLinkPlan>{
+  const row=await db.getFirstAsync<{contract_item_id:string|null}>('SELECT contract_item_id FROM loads WHERE id=?',loadId);
+  const previousId=row?.contract_item_id??null;
+  const ids=[...new Set([previousId,requested||null].filter((value):value is string=>!!value))];
+  const targets:ContractLinkFacts[]=[];
+  const names=new Map<string,string>();
+  for(const id of ids){
+    const item=await db.getFirstAsync<{id:string;project_id:string;name:string;cancelled_at:string|null}>('SELECT id,project_id,name,cancelled_at FROM contract_items WHERE id=?',id);
+    if(!item)continue;
+    const materials=await db.getAllAsync<{item_id:string}>('SELECT item_id FROM contract_item_materials WHERE contract_item_id=? AND removed_at IS NULL',id);
+    targets.push({id:item.id,projectId:item.project_id,cancelled:!!item.cancelled_at,materialIds:materials.map(value=>value.item_id)});
+    names.set(item.id,item.name);
+  }
+  const plan=plannedContractLink({current:previousId,requested,projectId,itemId,itemName,targets});
+  return{previousId,previousName:previousId?names.get(previousId)??null:null,final:plan.final,finalName:plan.final?names.get(plan.final)??null:null,automatic:plan.automatic,problem:plan.problem};
+}
+
+/**
+ * DEC-536. Saves the link a correction plan decided, inside the correction's own transaction, and writes the history of the targets
+ * involved: the old target says why the load left it, the new one says the load was linked in a correction.
+ */
+export async function applyCompanyContractLink(db:SQLiteDatabase,loadId:string,plan:CompanyContractLinkPlan,now:string,reference:string):Promise<void>{
+  if(plan.final===plan.previousId)return;
+  await db.runAsync('UPDATE loads SET contract_item_id=? WHERE id=?',plan.final,loadId);
+  if(plan.previousId){
+    const reason=plan.automatic==='project'?'Project changed in correction':plan.automatic==='material'?'Material changed in correction':plan.final?'Target changed in correction':'Target removed in correction';
+    await insertContractHistory(db,{contractItemId:plan.previousId,kind:'load_unlinked',reason,details:{source:'company',loadId,automatic:plan.automatic!==null},createdAt:now});
+  }
+  if(plan.final)await insertContractHistory(db,{contractItemId:plan.final,kind:'load_linked',reason:null,details:{source:'company',loadId,reference,inCorrection:true},createdAt:now});
 }

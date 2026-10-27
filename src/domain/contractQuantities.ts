@@ -325,3 +325,32 @@ export function adjustmentPreview(usage:Pick<ContractUsage,'used'|'allowed'>,dir
   const usedAfter=round6(usage.used+(direction==='take'?-value:value));
   return{amount:`${direction==='take'?'-':''}${amountText.trim().replace(',','.')}`,usedAfter,percentAfter:round1(usedAfter/usage.allowed)};
 }
+
+/* ── Counts toward target in a company load correction (DEC-536) ─────────────────────────────── */
+
+/** What a correction needs to know about a target to decide whether a load may count toward it. */
+export type ContractLinkFacts={id:string;projectId:string;cancelled:boolean;materialIds:readonly string[]};
+
+/**
+ * What a correction does to a company load's target link. A target named in the correction (an id, or ''/null for Not linked) is used as
+ * given, and is refused when it is cancelled, belongs to another project, or does not list the load's material. With no target named the
+ * existing link is kept, and removed automatically when the corrected project or material no longer fits it (Option 1, DEC-522).
+ */
+export function plannedContractLink(input:{current:string|null;requested:string|null|undefined;projectId:string|null;itemId:string;itemName?:string;targets:readonly ContractLinkFacts[]}):{final:string|null;automatic:'project'|'material'|null;problem:string|null}{
+  const find=(id:string)=>input.targets.find(target=>target.id===id);
+  if(input.requested!==undefined){
+    const wanted=input.requested||null;
+    if(!wanted)return{final:null,automatic:null,problem:null};
+    const target=find(wanted);
+    const problem=!target?'The chosen target was not found.'
+      :target.cancelled?'The chosen target is cancelled. Choose another or Not linked.'
+      :target.projectId!==input.projectId?'The chosen target belongs to another project.'
+      :!target.materialIds.includes(input.itemId)?`${input.itemName??'This material'} is not one of the materials of the chosen target.`:null;
+    return problem?{final:null,automatic:null,problem}:{final:wanted,automatic:null,problem:null};
+  }
+  if(!input.current)return{final:null,automatic:null,problem:null};
+  const target=find(input.current);
+  if(!target||target.projectId!==input.projectId)return{final:null,automatic:'project',problem:null};
+  if(!target.materialIds.includes(input.itemId))return{final:null,automatic:'material',problem:null};
+  return{final:input.current,automatic:null,problem:null};
+}

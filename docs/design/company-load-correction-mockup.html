@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Correct Company Load - supplier design with Make Receipt features</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --brand:#C84B31; --brandDark:#8E2E1B; --navy:#173F67; --bg:#F5F2EC; --cream:#FFF8ED; --line:#DDD7CC; --muted:#65717D; --ink:#17212B; --ok:#287A55; --warn:#9A6512; --danger:#B3261E; --result:#087F8C; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#E4E1DA; font-family:Roboto, system-ui, "Segoe UI", sans-serif; color:var(--ink); }
+  h1 { font-family:Oswald; font-weight:700; letter-spacing:.06em; color:#0B2A5B; text-align:center; margin:26px 16px 4px; }
+  h2.sec { font-family:Oswald; font-weight:500; letter-spacing:.08em; color:#0B2A5B; text-align:center; margin:24px 16px 6px; font-size:21px; }
+  p.lead { text-align:center; max-width:920px; margin:0 auto 14px; padding:0 16px; line-height:1.5; color:#3b4652; }
+  .row { display:flex; flex-wrap:wrap; gap:26px; justify-content:center; padding:0 16px 22px; }
+  .col { display:flex; flex-direction:column; align-items:center; gap:9px; }
+  .label { font-family:Oswald; font-weight:500; letter-spacing:.05em; color:#0B2A5B; font-size:15px; text-align:center; max-width:360px; }
+  .label small { display:block; font-family:system-ui; letter-spacing:0; color:#5b6670; font-size:12px; margin-top:2px; line-height:1.4; }
+  .nw { display:inline-block; background:var(--brand); color:#fff; border-radius:8px; padding:1px 7px; font-family:system-ui; font-size:10px; font-weight:800; letter-spacing:.4px; margin-left:6px; vertical-align:middle; }
+  .cmp { max-width:1100px; margin:0 auto 14px; background:#fff; border-radius:14px; padding:12px 16px; line-height:1.5; }
+  .cmp table { border-collapse:collapse; width:100%; font-size:13.5px; } .cmp td, .cmp th { border-bottom:1px solid #E6E0D4; padding:7px 9px; text-align:left; vertical-align:top; } .cmp th { color:#173F67; }
+  .flow { max-width:1180px; margin:0 auto 10px; padding:0 16px; display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:stretch; }
+  .fs { background:#fff; border:1px solid var(--line); border-radius:14px; padding:11px 13px; width:208px; font-size:13px; line-height:1.45; } .fs b { display:block; color:var(--navy); font-size:14px; margin-bottom:3px; } .fs span { color:var(--muted); }
+  .fs.red { border-color:#F3C4BF; background:#FFF6F5; } .fs.grn { border-color:#CFE3D6; background:#F4FAF6; } .arrow { align-self:center; color:var(--brand); font-size:22px; font-weight:900; }
+  .phone { width:360px; height:780px; background:#111; border-radius:36px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+  .screen { width:100%; height:100%; background:var(--bg); border-radius:28px; overflow:hidden; position:relative; display:flex; flex-direction:column; }
+  .sb { height:26px; flex:none; display:flex; justify-content:space-between; align-items:center; padding:0 20px; font-size:12px; font-weight:600; color:#222; }
+  .ctx { flex:none; background:var(--navy); border-bottom:3px solid var(--brand); padding:5px 14px 7px; color:#fff; display:flex; justify-content:space-between; align-items:center; }
+  .ctx .k { color:#F2A184; font-size:9px; font-weight:900; letter-spacing:1.4px; } .ctx .v { font-size:15px; font-weight:800; } .ctx .c { font-size:12px; font-weight:800; }
+  .scroll { flex:1; overflow:hidden; padding:14px 18px 10px; display:flex; flex-direction:column; gap:10px; }
+  .hd { display:flex; align-items:center; gap:12px; }
+  .bk { min-height:40px; padding:0 14px; display:flex; align-items:center; background:#fff; border-radius:12px; font-weight:800; font-size:15px; flex:none; }
+  .eyebrow { color:var(--brand); font-weight:800; font-size:11px; letter-spacing:1.6px; } .title { font-size:26px; font-weight:900; color:var(--navy); line-height:1.1; margin-top:1px; }
+  .status { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .chip { color:var(--ok); background:#E5F3EC; border-radius:6px; padding:3px 9px; font-size:11px; font-weight:900; letter-spacing:.7px; } .chip.x { color:var(--danger); background:#FCE8E6; } .stat { color:var(--muted); font-size:13px; font-weight:700; }
+  .help { color:var(--muted); font-size:12.5px; line-height:18px; }
+  .warn { color:#5A4210; background:#FFF3D8; padding:10px 12px; border-radius:10px; font-size:12px; line-height:17px; border-left:4px solid #E3A23A; }
+  .cbox { color:#7A1D17; background:#FCE8E6; padding:10px 12px; border-radius:10px; font-size:12px; line-height:17px; border-left:4px solid var(--danger); font-weight:700; }
+  .okb { color:var(--ok); background:#E5F3EC; padding:11px 12px; border-radius:10px; font-weight:800; font-size:13px; }
+  .info { color:var(--navy); background:#EAF1F6; padding:10px 12px; border-radius:10px; font-size:12px; line-height:17px; font-weight:700; }
+  .err { color:var(--danger); background:#FCE8E6; padding:11px 12px; border-radius:10px; font-weight:700; font-size:13px; line-height:18px; }
+  .ruled { border-top:1px solid var(--line); }
+  .rr { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:11px 2px; min-height:46px; border-bottom:1px solid var(--line); }
+  .rl { color:var(--muted); font-size:13px; width:30%; flex:none; } .rv { flex:1; color:var(--ink); font-size:14px; font-weight:700; text-align:right; } .rv.chg { color:var(--navy); }
+  .was { color:#8A949E; font-weight:500; text-decoration:line-through; } .edit { color:var(--brand); font-size:13px; font-weight:800; } .lock { color:#8A949E; font-size:13px; font-weight:800; }
+  .rr.tot { border-bottom:0; padding-top:12px; align-items:baseline; } .rr.tot .rl { color:var(--ink); font-size:14px; font-weight:800; } .rr.tot .rv { color:var(--navy); font-size:22px; font-weight:900; }
+  .secrow { display:flex; align-items:center; gap:10px; min-height:54px; padding:8px 0; border-top:1px solid var(--line); } .secrow .t { color:var(--navy); font-size:14px; font-weight:900; } .secrow .s { color:var(--muted); font-size:12px; } .secrow .c { margin-left:auto; color:var(--muted); font-size:18px; }
+  .sbody { display:flex; flex-direction:column; gap:8px; padding-bottom:6px; } .plain { display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--muted); } .plain b { color:var(--ink); }
+  .lnk { color:var(--brand); font-weight:800; font-size:13px; min-height:30px; display:flex; align-items:center; }
+  .hist { border-left:3px solid #C9D7E6; padding-left:10px; display:flex; flex-direction:column; gap:2px; margin:4px 0; } .hist .d { color:var(--muted); font-size:11px; } .hist .r { color:var(--ink); font-size:12px; font-weight:700; } .hist .c { color:var(--muted); font-size:12px; line-height:17px; }
+  .danger { border-top:1px solid var(--line); padding-top:12px; margin-top:4px; } .dlink { color:var(--danger); font-size:14px; font-weight:900; min-height:40px; display:flex; align-items:center; }
+  .bar { flex:none; background:var(--navy); padding:10px 16px; display:flex; align-items:center; gap:10px; }
+  .bar .bl { color:#D5E4EF; font-size:10px; font-weight:800; letter-spacing:1px; } .bar .bv { color:var(--cream); font-size:20px; font-weight:900; } .bar .acts { margin-left:auto; display:flex; gap:8px; }
+  .bback { min-height:46px; min-width:76px; padding:0 12px; display:flex; align-items:center; justify-content:center; border:1.5px solid #D5E4EF; border-radius:12px; color:var(--cream); font-weight:800; }
+  .bnext { min-height:46px; min-width:96px; padding:0 14px; display:flex; align-items:center; justify-content:center; background:var(--brand); border-radius:12px; color:#fff; font-weight:900; } .bnext.off { opacity:.45; } .bnext.red { background:var(--danger); }
+  .dim { position:absolute; left:0; right:0; top:0; bottom:0; background:rgba(23,33,43,.5); }
+  .sheet { position:absolute; left:0; right:0; bottom:0; background:var(--bg); border-top-left-radius:22px; border-top-right-radius:22px; padding:10px 18px 14px; display:flex; flex-direction:column; gap:11px; max-height:92%; overflow:hidden; }
+  .grab { width:44px; height:5px; border-radius:3px; background:#C9C3B6; align-self:center; }
+  .stitle { font-size:25px; font-weight:900; line-height:1.15; } .was2 { color:var(--muted); font-size:13px; } .was2 b { color:var(--ink); }
+  .of { display:flex; flex-direction:column; gap:3px; } .fl { font-size:14px; font-weight:800; }
+  .ov { min-height:50px; display:flex; align-items:center; justify-content:space-between; gap:8px; border-bottom:2px solid #C4C9CF; padding:6px 2px; }
+  .ovv { font-size:20px; font-weight:700; } .ovv.ph { color:#9AA3AB; font-weight:400; } .ovd { color:var(--muted); font-size:13px; margin-top:1px; }
+  .ov.area { min-height:96px; align-items:flex-start; } .chev { color:var(--brand); font-weight:900; font-size:18px; }
+  .lockf { min-height:50px; display:flex; align-items:center; border-bottom:2px dashed #B7BDC3; padding:6px 2px; color:#7A838C; font-size:18px; }
+  .two { display:flex; gap:12px; } .two .of { flex:1; }
+  .choices { display:flex; gap:9px; } .choice { flex:1; min-height:46px; display:flex; align-items:center; justify-content:center; border:1.5px solid var(--line); border-radius:13px; background:#fff; font-weight:800; font-size:13px; color:var(--muted); text-align:center; padding:0 4px; white-space:nowrap; }
+  .choice.on { border:2.5px solid var(--navy); background:#EAF1F9; color:var(--navy); } .choice b { display:inline-block; margin-left:5px; font-size:11px; border-radius:999px; padding:1px 7px; background:#EEEAE3; color:var(--muted); } .choice.on b { background:var(--navy); color:#fff; }
+  .pill { display:flex; background:#E8E4DA; border-radius:14px; padding:4px; } .pill div { flex:1; min-height:44px; display:flex; align-items:center; justify-content:center; border-radius:11px; font-weight:800; color:var(--muted); text-align:center; font-size:13px; } .pill .on { background:var(--navy); color:#fff; }
+  .group { border-top:1px solid var(--line); padding-top:11px; display:flex; flex-direction:column; gap:8px; } .gl { color:var(--muted); font-size:12px; font-weight:900; letter-spacing:1.3px; }
+  .result { background:var(--result); border-radius:14px; padding:11px 14px; color:#fff; } .result .n { font-size:28px; font-weight:900; } .result .l { font-size:12.5px; opacity:.92; }
+  .btns { display:flex; gap:12px; margin-top:2px; } .ghost { flex:1; min-height:50px; display:flex; align-items:center; justify-content:center; border:2px solid var(--ink); border-radius:13px; font-weight:800; font-size:16px; } .prim { flex:1.4; min-height:50px; display:flex; align-items:center; justify-content:center; background:var(--brand); border-radius:13px; color:#fff; font-weight:900; font-size:16px; } .prim.off { opacity:.45; }
+  .notsaved { display:flex; align-items:center; gap:8px; } .nschip { color:var(--warn); background:#FFF3D8; border-radius:9px; padding:3px 8px; font-size:10px; font-weight:900; letter-spacing:.6px; }
+  .reason { min-height:76px; border-bottom:2px solid #C4C9CF; padding:6px 2px; color:#17212B; font-size:17px; } .reason.ph { color:#9AA3AB; }
+  .kept { align-self:flex-start; color:var(--ok); background:#E5F3EC; border-radius:9px; padding:3px 8px; font-size:10px; font-weight:900; letter-spacing:.6px; }
+  .sigcard { border:1px solid var(--line); border-radius:12px; padding:11px; background:#FCFBF8; display:flex; flex-direction:column; gap:6px; } .sigcard b { font-size:14px; }
+  .pad { height:190px; border:1.5px dashed #9AA5B1; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#8A949E; font-size:12px; background:#fff; }
+  .sub { color:var(--navy); font-size:11px; font-weight:900; letter-spacing:1px; }
+  .paper { background:#fff; border:1px solid var(--line); border-radius:6px; padding:12px 14px; font-family:"Courier New", monospace; font-size:12px; line-height:1.55; color:#111; }
+  .alertbg { position:absolute; left:0; right:0; top:0; bottom:0; background:rgba(23,33,43,.55); display:flex; align-items:center; justify-content:center; padding:18px; }
+  .abox { background:#fff; border-radius:16px; padding:18px; width:100%; } .abox h4 { margin:0 0 6px; font-size:17px; } .abox p { margin:0 0 6px; color:#3C4854; font-size:13px; line-height:1.45; }
+  .acts2 { display:flex; justify-content:flex-end; gap:18px; margin-top:12px; font-weight:900; font-size:13px; } .acts2 span:last-child { color:var(--brand); } .acts2 .rd { color:var(--danger) !important; }
+  .notes { max-width:960px; margin:6px auto 34px; padding:0 16px; line-height:1.55; color:#2c3640; } .notes h2 { font-family:Oswald; color:#0B2A5B; letter-spacing:.05em; } .notes li { margin:6px 0; }
+</style>
+</head>
+<body>
+<h1>CORRECT COMPANY LOAD — SUPPLIER DESIGN + MAKE RECEIPT FEATURES</h1>
+<p class="lead">The same page, workflow and sheets as the Correct Supplier Load screen you saw, for a confirmed <b>company load</b> (Load History → Correct This Load), plus the features Make Receipt has that the old correction screen is missing. Items marked <span class="nw">NEW FROM MAKE RECEIPT</span> are the additions. No app code has changed yet.</p>
+
+<div class="cmp"><table>
+<tr><th>Make Receipt feature</th><th>In the old correction screen</th><th>In this design</th></tr>
+<tr><td><b>Counts toward target</b> (Quantity Targets choice)</td><td>Not available</td><td>A line and a sheet. Changing the project or the item still removes the link automatically (with a history line), and you can choose a target again.</td></tr>
+<tr><td><b>Fitted, taller driver signature pad</b></td><td>Small pad</td><td>The same bigger pad, with strokes fitted into the printed signature box, so a re-signed load prints like a new one.</td></tr>
+<tr><td><b>Preview documents</b> (Receipt and Delivery Authorization)</td><td>Not available</td><td>A link in the Documents row and on the Review: shows both documents with the corrected values before you save. Nothing is saved by previewing.</td></tr>
+<tr><td><b>Delivered to: Project / Other address</b> switch</td><td>A project list with a "no project" option</td><td>The same switch and hints as Make Receipt; Other address shows the destination address field.</td></tr>
+<tr><td><b>Driver filter chips with counts</b> (All 11 · Drivers 10 · Operators 1)</td><td>Plain text tabs</td><td>The boxed chips with counts, as in Make Receipt.</td></tr>
+<tr><td>Weighbridge, saved or typed driver and truck, conversion, VAT choices, supplier signature</td><td>Present</td><td>Kept, each on its own sheet.</td></tr>
+</table></div>
+
+<h2 class="sec">THE WORKFLOW (THE SAME AS THE SUPPLIER PAGE)</h2>
+<div class="flow">
+  <div class="fs"><b>1 · Open the load</b><span>Load History → open a confirmed load → Correct This Load.</span></div><div class="arrow">›</div>
+  <div class="fs"><b>2 · The page</b><span>A plain list. Each line has Edit. Review is greyed out until something changes.</span></div><div class="arrow">›</div>
+  <div class="fs"><b>3 · Edit one line</b><span>Its own sheet with "Was …". Done keeps it, Cancel drops just that edit.</span></div><div class="arrow">›</div>
+  <div class="fs"><b>4 · See the change</b><span>Old value crossed out beside the new one. The bar says "N CHANGES".</span></div><div class="arrow">›</div>
+  <div class="fs"><b>5 · Review</b><span>Old and new values, the new total, and the required reason. Preview documents is here too.</span></div><div class="arrow">›</div>
+  <div class="fs grn"><b>6 · Saved</b><span>The original stays in the correction history. The load number never changes.</span></div>
+</div>
+<div class="flow">
+  <div class="fs red"><b>Cancel this load</b><span>Red link at the bottom, the same as the supplier page. It opens the existing company-load cancel with its required reason (a load with a payment cannot be cancelled). It stays in Load History.</span></div>
+  <div class="fs"><b>No reactivation</b><span>A cancelled company load is never reactivated and cannot be corrected (DEC-386), unlike a supplier load.</span></div>
+  <div class="fs"><b>Leaving early</b><span>Back with unsaved changes asks "Leave without saving?".</span></div>
+  <div class="fs"><b>Payments lock</b><span>With an active payment, customer, project, conversion, price and VAT show Locked. Everything else can be corrected.</span></div>
+</div>
+
+<h2 class="sec">THE PAGE</h2>
+<div class="row" id="r-page"></div>
+<h2 class="sec">THE EDIT SHEETS — ONE PER LINE</h2>
+<div class="row" id="r-sheets"></div>
+<h2 class="sec">REVIEW, PREVIEW, SAVE AND CANCEL</h2>
+<div class="row" id="r-flow"></div>
+
+<div class="notes">
+  <h2>What stays exactly the same</h2>
+  <ul>
+    <li><b>Every rule, check and lock</b> of today's correction: the same fields, the payment locks, the required reason, the saved original and the load number and transaction number that never change. Saving uses the same correction as today.</li>
+    <li>The quantity method (weighbridge or direct) stays as confirmed. Issued documents keep their own copy; only future PDFs and reprints use the corrected values.</li>
+    <li>No database change for the look. <b>Counts toward target</b> adds the target to the fields a correction can change, recorded in the history like every other field (needs a small repository change, no new table).</li>
+    <li>I would show <b>Preview documents</b> with the same document view Make Receipt uses.</li>
+  </ul>
+</div>
+
+<script>
+const N = '<span class="nw">NEW FROM MAKE RECEIPT</span>';
+const ctxBar = `<div class="ctx"><div><div class="k">ACTIVE PROJECT</div><div class="v">Abed tayyar project 2</div></div><div class="c">Change</div></div>`;
+const sb = `<div class="sb"><span>15:30</span><span>▮▮▮ 95</span></div>`;
+const hd = (eb, title) => `<div class="hd"><div class="bk">Back</div><div><div class="eyebrow">${eb}</div><div class="title">${title}</div></div></div>`;
+const statusRow = (x) => `<div class="status"><span class="chip ${x ? 'x' : ''}">${x ? 'CANCELLED' : 'CONFIRMED'}</span><span class="stat">26 Oct 2026 · 15:18</span></div>`;
+const txn = `<div class="help" style="margin-top:-4px">Transaction TXN-000317</div>`;
+const R = (l, v, s, was) => `<div class="rr"><div class="rl">${l}</div><div class="rv ${was ? 'chg' : ''}">${was ? `<span class="was">${was}</span> ` : ''}${v}${s === 'edit' ? '<span class="edit">  Edit</span>' : s === 'lock' ? '<span class="lock">  Locked</span>' : ''}</div></div>`;
+const rows = (o = {}) => [
+  R('Date', o.date ? o.date[1] : '26 Oct 2026', 'edit', o.date && o.date[0]),
+  R('Customer', 'Abed Al Tayyar', o.lock ? 'lock' : 'edit'),
+  R('Delivered to', 'Project · Abed tayyar project 2', o.lock ? 'lock' : 'edit'),
+  R('Item', 'Asphalt', 'edit'),
+  R('Counts toward target', o.target ? o.target[1] : 'Base course · 1 200 t', 'edit', o.target && o.target[0]),
+  R('Quantity', o.qty ? o.qty[1] : '49745 kg', 'edit', o.qty && o.qty[0]),
+  R('Converted', 'Tons · 49.745 t', o.lock ? 'lock' : 'edit'),
+  R('Driver', o.driver ? o.driver[1] : 'Ali kazem · Driver', 'edit', o.driver && o.driver[0]),
+  R('Truck', o.truck ? o.truck[1] : 'M333299 · Actros', 'edit', o.truck && o.truck[0]),
+  R('Price', o.price ? o.price[1] : (o.lock ? '$24.00 per t · 11% VAT excluded' : 'Unpriced'), o.lock ? 'lock' : 'edit', o.price && o.price[0]),
+  R('Notes', 'None', 'edit'),
+].join('');
+const totalRow = (t, was) => `<div class="rr tot"><div class="rl">Total</div><div class="rv">${was ? `<span class="was" style="font-size:13px">${was}</span>  ` : ''}${t}</div></div>`;
+const sec = (t, s, open) => `<div class="secrow"><div><div class="t">${t}</div><div class="s">${s}</div></div><div class="c">${open ? '⌃' : '⌄'}</div></div>`;
+const bar = (l, v, next, off, red) => `<div class="bar"><div><div class="bl">${l}</div><div class="bv">${v}</div></div><div class="acts"><div class="bback">${red ? 'Keep load' : 'Back'}</div><div class="bnext ${off ? 'off' : ''} ${red ? 'red' : ''}">${next}</div></div></div>`;
+const help0 = 'Tap Edit on a line to correct it. The load number and the time of day never change.';
+const danger = `<div class="danger"><div class="help">Entered by mistake or a duplicate?</div><div class="dlink">Cancel this load</div></div>`;
+
+const of = (label, value, detail, o = {}) => `<div class="of"><div class="fl">${label}</div><div class="ov ${o.area ? 'area' : ''}"><div><div class="ovv ${o.ph ? 'ph' : ''}">${value}</div>${detail ? `<div class="ovd">${detail}</div>` : ''}</div>${o.sel ? '<div class="chev">v</div>' : ''}</div></div>`;
+const choices = (opts, on) => `<div class="choices">${opts.map((x, i) => `<div class="choice ${i === on ? 'on' : ''}">${i === on ? '✓ ' : ''}${x}</div>`).join('')}</div>`;
+const pill = (opts, on) => `<div class="pill">${opts.map((x, i) => `<div class="${i === on ? 'on' : ''}">${x}</div>`).join('')}</div>`;
+const group = (l, inner) => `<div class="group"><div class="gl">${l}</div>${inner}</div>`;
+const help = (t) => `<div class="help">${t}</div>`;
+const btns = (a, b, off) => `<div class="btns"><div class="ghost">${a}</div><div class="prim ${off ? 'off' : ''}">${b}</div></div>`;
+const sheet = (title, was, body, done = 'Done', cancel = 'Cancel') => `<div class="sheet"><div class="grab"></div><div class="stitle">${title}</div>${was ? `<div class="was2">Was <b>${was}</b></div>` : ''}${body}${btns(cancel, done)}</div>`;
+
+const pageInner = (extra) => `${ctxBar}<div class="scroll">${hd('COMPANY LOAD', 'ASP-0042')}${statusRow()}<div class="help">${help0}</div><div class="ruled">${rows()}${totalRow('Unpriced')}</div></div><div class="dim"></div>${extra}`;
+const phone = (label, small, inner) => `<div class="col"><div class="label">${label}<small>${small}</small></div><div class="phone"><div class="screen">${sb}${inner}</div></div></div>`;
+const sheetPhone = (label, small, s) => phone(label, small, pageInner(s));
+
+// ---------------- THE PAGE
+const p1 = phone('1 · THE PAGE, NOTHING CHANGED', 'Same list as the supplier page. "Counts toward target" is a new line. Review is greyed out until something changes.',
+  `${ctxBar}<div class="scroll">${hd('COMPANY LOAD', 'ASP-0042')}${statusRow()}<div class="help">${help0}</div><div class="ruled">${rows()}</div></div>${bar('TOTAL', 'Unpriced', 'Review', true)}`);
+const p2 = phone('2 · THE PAGE, WITH CHANGES', 'Old value crossed out beside the new one. A target, VAT and total appear once the load is priced.',
+  `${ctxBar}<div class="scroll">${hd('COMPANY LOAD', 'ASP-0042')}${statusRow()}<div class="help">${help0}</div><div class="ruled">${rows({ date: ['26 Oct 2026', '25 Oct 2026'], qty: ['49745 kg', '50000 kg'], driver: ['Ali kazem', 'Hassan Nour'], truck: ['M333299', 'M418820'], target: ['Base course · 1 200 t', 'None'], price: ['Unpriced', '$12.00 per t · No VAT'] })}${totalRow('$600.00', 'Unpriced')}</div></div>${bar('6 CHANGES', '$600.00', 'Review')}`);
+const p3 = phone('3 · BELOW THE LIST', 'Collapsed rows and the Cancel link, as on the supplier page. Documents is where Preview documents lives.',
+  `${ctxBar}<div class="scroll"><div class="ruled">${R('Notes', 'None', 'edit')}${totalRow('Unpriced')}</div>
+   ${sec('Documents', 'Receipt and Delivery Authorization')}${sec('Signatures', 'Supplier and driver')}${sec('Correction history', 'None yet')}${danger}</div>${bar('TOTAL', 'Unpriced', 'Review', true)}`);
+const p4 = phone('4 · THE ROWS OPENED ' + N, 'Documents with Preview documents, Signatures and the history.',
+  `${ctxBar}<div class="scroll">${sec('Documents', 'Receipt and Delivery Authorization', true)}
+   <div class="sbody"><div class="info">This load is on 2 issued documents. They keep their own copy and are not rewritten by this correction.</div><div class="lnk">Preview documents · Receipt and Delivery Authorization</div><div class="help">Shows both documents with the corrected values. Nothing is saved.</div></div>
+   ${sec('Signatures', 'Supplier and driver', true)}<div class="sbody"><div class="plain"><span>Supplier</span><b>Ahmad Fakih · Site manager</b></div><div class="plain"><span>Driver</span><b>Signed</b></div><div class="kept">KEPT AS CONFIRMED</div></div>
+   ${sec('Correction history', '1 correction', true)}<div class="sbody"><div class="hist"><div class="d">24 Oct 2026, 09:12 · Admin</div><div class="r">Reason: Wrong truck chosen</div><div class="c">Truck: <span class="was">M333299</span> → <b style="color:var(--ink)">M418820</b></div><div class="d" style="margin-top:3px">ORIGINAL SAVED · VERSION 1</div></div><div class="help">Confirmed 26 Oct 2026, 15:18 · the original record is never changed.</div></div></div>${bar('TOTAL', 'Unpriced', 'Review', true)}`);
+const p5 = phone('5 · A LOAD WITH PAYMENTS', 'Customer, project, conversion, price and VAT show Locked and cannot be opened. Everything else still can.',
+  `${ctxBar}<div class="scroll">${hd('COMPANY LOAD', 'ASP-0042')}${statusRow()}<div class="warn">This load has 1 active payment ($500.00). Customer, project, unit and price are locked. Cancel those payments in Financials to change them. Quantity, date, item, driver, truck, notes and signatures can still be corrected.</div><div class="ruled">${rows({ lock: true })}${totalRow('$1,325.21')}</div></div>${bar('TOTAL', '$1,325.21', 'Review', true)}`);
+document.getElementById('r-page').innerHTML = p1 + p2 + p3 + p4 + p5;
+
+// ---------------- SHEETS
+const sh = [];
+sh.push(sheetPhone('6 · DATE', 'Same rules as a new load.', sheet('Date', '26 Oct 2026', of('Record date *', '25 Oct 2026', '', { sel: true }) + help("The day the load left the plant. Not later than today, and inside the project's dates (12 Oct 2026 to today). The load number does not change, and the load moves to the new day in reports and totals."))));
+sh.push(sheetPhone('7 · CUSTOMER', 'Searchable list. Locked when the load has payments.', sheet('Customer', 'Abed Al Tayyar', of('Customer *', 'Abed Al Tayyar', 'individual', { sel: true }) + help('Changing the customer also clears the project, unless the project belongs to the new customer.'))));
+sh.push(sheetPhone('8 · DELIVERED TO (PROJECT) ' + N, 'The same switch and hints as Make Receipt.', sheet('Delivered to', 'Project · Abed tayyar project 2', `<div class="of"><div class="fl">Delivered to *</div>${pill(['Project', 'Other address'], 0)}</div>${help("The load goes to a saved project and appears in that project's daily report.")}` + of('Select project *', 'Abed tayyar project 2', 'Abed Al Tayyar · Addousieh', { sel: true }))));
+sh.push(sheetPhone('9 · DELIVERED TO (OTHER ADDRESS) ' + N, 'For an outside customer without a saved project. Own company always needs a project.', sheet('Delivered to', 'Project · Abed tayyar project 2', `<div class="of"><div class="fl">Delivered to *</div>${pill(['Project', 'Other address'], 1)}</div>${help('For an outside customer without a saved project.')}` + of('Destination address *', 'Kfar Roummane, near the school'))));
+sh.push(sheetPhone('10 · ITEM', 'Grouped by category, the same list as Make Receipt.', sheet('Item', 'Asphalt', of('Load-enabled item *', 'Asphalt', 'Materials', { sel: true }) + help('The load number stays ASP-0042 even if the item changes.') + `<div class="info">Changing the item removes the target link. Choose it again under Counts toward target if the load still counts.</div>`)));
+sh.push(sheetPhone('11 · COUNTS TOWARD TARGET ' + N, "The Quantity Targets choice from Make Receipt. Optional; it can be cleared.", sheet('Counts toward target', 'Base course · 1 200 t', of('Counts toward target', 'Base course · 1 200 t', '620 t delivered', { sel: true }) + help("Optional. The project's target this load counts toward. Only targets that use this item and unit are listed.") + `<div class="info">Changing the project or the item removes this link automatically, and a line is added to the correction history.</div>`)));
+sh.push(sheetPhone('12 · QUANTITY (DIRECT LOAD)', 'The quantity method stays as confirmed.', sheet('Quantity', '49745 kg', of('Unit *', 'Kilogram', 'kg', { sel: true }) + of('Quantity *', '49745') + help('Pieces, metres, bundles or another unit. The converted quantity and the total are recalculated.'))));
+sh.push(sheetPhone('13 · QUANTITY (WEIGHED LOAD)', 'For a load recorded with empty and full weights.', sheet('Weights', 'Net 24 450 kg', `<div class="two">${of('Empty weight kg *', '14 200')}${of('Full weight kg *', '38 650')}</div><div class="result"><div class="n">24 450 kg</div><div class="l">Net weight</div></div>` + of('Requested quantity (kg, optional)', '25 000') + help('Empty and full kg from the weighbridge.'))));
+sh.push(sheetPhone('14 · CONVERSION', 'Only conversions from the load\'s unit. Locked with payments.', sheet('Conversion', 'Tons · 1000 kg = 1 t', of('Conversion (optional)', 'Tons', '1000 kg = 1 t', { sel: true }) + `<div class="result"><div class="n">49.745 t</div><div class="l">Converted quantity, used for the price</div></div>`)));
+sh.push(sheetPhone('15 · DRIVER / OPERATOR ' + N, 'Saved person or a typed name, with the filter chips and counts from Make Receipt.', sheet('Driver / Operator', 'Ali kazem · Driver', choices(['Saved person', 'Type a name'], 0) + choices(['All <b>11</b>', 'Drivers <b>10</b>', 'Operators <b>1</b>'], 0) + of('Saved driver or operator', 'Hassan Nour', 'Driver', { sel: true }) + `<div class="warn">The load was signed by Ali kazem. Changing the driver removes that signature; draw a new one in Signatures, or leave it unsigned.</div>`)));
+sh.push(sheetPhone('16 · DRIVER, TYPED NAME', 'Used on this load only; not added to People.', sheet('Driver / Operator', 'Ali kazem · Driver', choices(['Saved person', 'Type a name'], 1) + of('Driver name *', 'Hassan Nour') + `<div class="notsaved"><span class="nschip">NOT SAVED</span><span class="help">Used on this load only. It is not added to People.</span></div>`)));
+sh.push(sheetPhone('17 · TRUCK', 'Saved truck or a typed plate.', sheet('Truck', 'M333299 · Actros', choices(['Saved truck', 'Type a plate'], 0) + of('Saved truck', 'M418820', 'Volvo FMX · Nour Transport', { sel: true }))));
+sh.push(sheetPhone('18 · PRICE AND VAT', 'The same PRICE and VAT groups as the supplier Price sheet. Locked with payments.', sheet('Price', 'Unpriced', group('PRICE', of('Price per t (USD, optional)', '12.00')) + group('VAT', `<div class="fl" style="margin-bottom:0">VAT</div>${choices(['No VAT', 'Universal', 'Own %'], 0)}` + help('No VAT is added unless you choose it. Left empty, the load is saved as Unpriced, never as zero.')) + `<div class="ruled">${R('Subtotal', '$596.94')}${totalRow('$596.94').replace('Total</div>', 'Corrected total</div>')}</div>`)));
+sh.push(sheetPhone('19 · NOTES', 'Free text, no "Was" line.', sheet('Notes', '', of('Notes', 'Delivered to the north gate before 7 am.', '', { area: true }))));
+sh.push(sheetPhone('20 · SIGNATURES ' + N, 'The taller driver pad from Make Receipt; strokes are fitted into the printed signature box before saving.', sheet('Signatures', '',
+  `<div class="sub">SUPPLIER</div><div class="sigcard"><b>Ahmad Fakih · Site manager</b><span class="kept">KEPT AS CONFIRMED</span></div><div class="lnk">Re-sign supplier  ·  <span style="color:var(--danger)">Remove</span></div><div class="sub">DRIVER</div><div class="pad">Sign here · bigger box</div>${help('Strokes are fitted into the printed signature box, so it prints the same as on a new load. Page scrolling pauses while you sign.')}`)));
+sh.push(sheetPhone('21 · PREVIEW DOCUMENTS ' + N, 'Both documents with the corrected values. Nothing is saved by previewing.', sheet('Preview documents', '', `${choices(['Receipt', 'Delivery Authorization'], 0)}<div class="paper">DROMEX<br>RECEIPT · ASP-0042<br>26 Oct 2026<br>Abed Al Tayyar<br>Abed tayyar project 2<br>Asphalt · 50000 kg = 50 t<br>Driver Hassan Nour · M418820<br>Total: $600.00</div>${pill(['58 mm', '80 mm'], 0)}${help('Uses the corrected values. The issued documents keep their own copy.')}`, 'Close', 'Delivery Authorization')));
+document.getElementById('r-sheets').innerHTML = sh.join('');
+
+// ---------------- REVIEW / FLOW
+const fl = [];
+fl.push(phone('22 · REVIEW CHANGES', 'Old and new values, the new total and the required reason. Preview documents is one tap away.',
+  `${ctxBar}<div class="scroll" style="opacity:.5">${hd('COMPANY LOAD', 'ASP-0042')}</div><div class="dim"></div>
+   <div class="sheet"><div class="grab"></div><div class="stitle">Review changes</div>${help('The original and the new values are saved permanently in the correction history. The load number and transaction number do not change.')}
+   <div class="ruled">${R('Date', '<br>25 Oct 2026', '', '26 Oct 2026')}${R('Driver', '<br>Hassan Nour', '', 'Ali kazem')}${R('Truck', '<br>M418820', '', 'M333299')}${R('Counts toward target', '<br>None', '', 'Base course')}${totalRow('$600.00', 'Unpriced')}</div>
+   <div class="lnk">Preview documents · Receipt and Delivery Authorization</div>
+   ${group('WHY IS IT BEING CORRECTED?', `<div class="of"><div class="fl">Correction reason *</div><div class="reason ph">Required</div></div>${help('It is saved with the original and new values.')}`)}
+   ${btns('Back', 'Save correction')}</div>`));
+fl.push(phone('23 · REVIEW, REASON MISSING', 'Saving without a reason shows this message and stays on the sheet.',
+  `${ctxBar}<div class="scroll" style="opacity:.5">${hd('COMPANY LOAD', 'ASP-0042')}</div><div class="dim"></div>
+   <div class="sheet"><div class="grab"></div><div class="stitle">Review changes</div>
+   <div class="err">Enter the reason for this correction.</div>
+   <div class="ruled">${R('Quantity', '<br>50000 kg', '', '49745 kg')}${totalRow('Unpriced')}</div>
+   ${group('WHY IS IT BEING CORRECTED?', `<div class="of"><div class="fl">Correction reason *</div><div class="reason ph">Required</div></div>`)}
+   ${btns('Back', 'Save correction')}</div>`));
+fl.push(phone('24 · LEAVING WITH UNSAVED CHANGES', 'Back with changes asks first, the same as the supplier page.',
+  `${ctxBar}<div class="scroll" style="opacity:.5">${hd('COMPANY LOAD', 'ASP-0042')}${statusRow()}<div class="ruled">${rows({ qty: ['49745 kg', '50000 kg'] })}</div></div>${bar('1 CHANGE', 'Unpriced', 'Review')}
+   <div class="alertbg"><div class="abox"><h4>Leave without saving?</h4><p>Your changes on this page will be lost.</p><div class="acts2"><span>Keep editing</span><span class="rd">Leave</span></div></div></div>`));
+fl.push(phone('25 · CANCEL THIS LOAD', 'Its own screen, with the wording of today\'s company cancel. A reason is required.',
+  `${ctxBar}<div class="scroll">${hd('COMPANY LOAD ASP-0042', 'Cancel this load')}<div class="warn">This permanently marks transaction TXN-000317 as Cancelled. The record, its receipt, and its full history are never deleted and remain visible in Load History, but it stops counting as an active delivery.</div>
+   <div class="ruled"><div class="rr"><div class="rl">Item</div><div class="rv">Asphalt</div></div><div class="rr"><div class="rl">Quantity</div><div class="rv">49.745 t</div></div><div class="rr"><div class="rl">Customer</div><div class="rv">Abed Al Tayyar</div></div><div class="rr"><div class="rl">Project</div><div class="rv">Abed tayyar project 2</div></div>${totalRow('Unpriced')}</div>
+   ${group('WHY?', `<div class="of"><div class="fl">Cancellation reason *</div><div class="reason ph"></div></div>`)}</div>${bar('TOTAL', 'Unpriced', 'Cancel load', false, true)}`));
+fl.push(phone('26 · CONFIRM THE CANCEL', 'The same last check as in Load History today. No reactivation.',
+  `${ctxBar}<div class="scroll" style="opacity:.5">${hd('COMPANY LOAD ASP-0042', 'Cancel this load')}</div>${bar('TOTAL', 'Unpriced', 'Cancel load', false, true)}
+   <div class="alertbg"><div class="abox"><h4>Cancel this confirmed load?</h4><p>Transaction TXN-000317 will be permanently marked Cancelled. It is never deleted and stays visible in Load History, but stops counting as an active delivery. This cannot be undone and there is no reactivation.</p><div class="acts2"><span>Keep load active</span><span class="rd">Cancel Load</span></div></div></div>`));
+fl.push(phone('27 · A CANCELLED LOAD', 'Read-only: no Edit lines and no Review. A cancelled load cannot be corrected.',
+  `${ctxBar}<div class="scroll">${hd('COMPANY LOAD', 'ASP-0042')}${statusRow(true)}<div class="okb">This load is now cancelled. It remains fully visible in Load History.</div><div class="cbox">CANCELLED — NOT AN ACTIVE DELIVERY<br>Reason: Entered twice by mistake<br>Cancelled 27 Oct 2026, 10:05</div><div class="help">A cancelled load cannot be corrected.</div>
+   <div class="ruled"><div class="rr"><div class="rl">Date</div><div class="rv">26 Oct 2026</div></div><div class="rr"><div class="rl">Customer</div><div class="rv">Abed Al Tayyar</div></div><div class="rr"><div class="rl">Item</div><div class="rv">Asphalt</div></div><div class="rr"><div class="rl">Quantity</div><div class="rv">49745 kg</div></div>${totalRow('Unpriced')}</div>${sec('Correction history', 'None yet')}</div>${bar('TOTAL', 'Unpriced', 'Choose another load')}`));
+document.getElementById('r-flow').innerHTML = fl.join('');
+</script>
+</body>
+</html>
