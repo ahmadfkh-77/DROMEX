@@ -1,3 +1,4 @@
+import type {ContractDayReport} from './contractQuantities';
 import type {CustomDirectoryOption,CustomResourceSnapshot} from './customDirectories';
 import type {FuelType} from './fuel';
 import type {Supervisor,SupervisorSignoffSnapshot} from './supervisors';
@@ -143,6 +144,18 @@ export type LinkedWallWork = { wallId:string; wallName:string; system:WallSystem
 export type LinkedFoundationActivity = { foundation:Foundation; constructionSectionName:string; foundationEvents:string[]; foundationStatusAsOf:BaseStatus; composition:FoundationComposition|null;
   // DEC-467. The same date-projected lift group for a foundation that has no wall yet.
   lifts:ConstructionLiftReportGroup|null; legacyStage:LegacyCompositeStage|null };
+/**
+ * DEC-537. What the issued Daily Report (PDF and Excel) is asked to include beyond its always-present sections. Every field is optional
+ * and the defaults reproduce the output from before: Wall Construction in, Quantity Targets out unless a progress result is given.
+ */
+export type DailyReportSectionOptions = {
+  /** False leaves Wall Construction (and the wall rows of Lifts) out of the issued output. Default true. */
+  includeWall?: boolean;
+  /** Target progress as of the work date; null or absent leaves Quantity Targets out of the issued output. */
+  contractProgress?: ContractDayReport | null;
+  /** False drops the whole-project completion row from Quantity Targets. Default true. */
+  includeWholeProject?: boolean;
+};
 export type ProjectCompletionLoad =LinkedProjectLoad & { workDate: string };
 export type ProjectCompletionWasteDump = LinkedWasteDump & { workDate: string };
 

@@ -7,6 +7,8 @@
  * Units are never converted: a load in another unit is listed as not counted. Nothing here blocks a load.
  */
 
+import {localDateKey} from './fuel';
+
 export type ContractItemStatus='in_progress'|'complete';
 
 export type ContractItem={
@@ -286,6 +288,40 @@ export function summarizeContractProject(rows:readonly ContractRow[]):ContractPr
     estimatedSavingUsd:roundMoney(live.filter(row=>row.item.status==='in_progress').reduce((sum,row)=>sum+(row.usage.savingUsd??0),0)),
     savings,overruns,
   };
+}
+
+/** Everything the Daily Report needs to know about one target: the item with the loads and adjustments that point at it. */
+export type ContractDayEntry={item:ContractItem;loads:readonly ContractLoad[];adjustments:readonly ContractAdjustment[]};
+/** One target on a Daily Report: `usage` is as of the work date, `usedToday` is what that day added (counted loads plus adjustments dated that day). */
+export type ContractDayProgress={item:ContractItem;usage:ContractUsage;usedToday:number;notCountedToday:number};
+export type ContractDayReport={
+  /** Targets that received a load or an adjustment on the work date, in the order given. */
+  targets:ContractDayProgress[];
+  /** All live targets as of the work date, so the whole-project percent never depends on which targets moved that day. */
+  summary:ContractProjectSummary;
+};
+
+/**
+ * Daily Report progress (DEC-537). Everything is read as of the end of `workDate`: later loads and adjustments are ignored, so an issued
+ * report keeps the percent it had that day. A target finished after that day was still in progress then. Cancelled targets are left out.
+ */
+export function dailyContractProgress(entries:readonly ContractDayEntry[],workDate:string):ContractDayReport{
+  const rows:ContractRow[]=[],targets:ContractDayProgress[]=[];
+  for(const entry of entries){
+    if(entry.item.cancelledAt)continue;
+    const item:ContractItem=entry.item.status==='complete'&&entry.item.completedOn&&entry.item.completedOn>workDate
+      ?{...entry.item,status:'in_progress',completedOn:null}:entry.item;
+    const adjustments=entry.adjustments.filter(value=>localDateKey(new Date(value.createdAt))<=workDate);
+    const usage=computeContractUsage(item,entry.loads.filter(load=>load.date<=workDate),adjustments);
+    rows.push({item,usage});
+    const adjustedToday=adjustments.filter(value=>value.contractItemId===item.id&&localDateKey(new Date(value.createdAt))===workDate);
+    const countedToday=usage.countedLoads.filter(load=>load.date===workDate);
+    const notCountedToday=usage.notCounted.filter(value=>value.load.date===workDate).length;
+    if(!countedToday.length&&!adjustedToday.length&&!notCountedToday)continue;
+    const usedToday=round6(countedToday.reduce((sum,load)=>sum+load.quantity!,0)+adjustedToday.reduce((sum,value)=>sum+value.amount,0));
+    targets.push({item,usage,usedToday,notCountedToday});
+  }
+  return{targets,summary:summarizeContractProject(rows)};
 }
 
 /**

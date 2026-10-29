@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Report Quantity Targets mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--orange:#C84B31;--navy:#173F67;--ink:#17212B;--cream:#FFF8ED;--cream2:#F5F2EC;--line:#DDD7CC;--muted:#5C6773;
+--amber:#8A5300;--amber-bg:#FFF4DC;--amber-line:#EFC979;--red:#A61B12;--red-bg:#FDECEA;--red-line:#F0ABA4;--green:#17693B;--green-bg:#E6F4EA}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:#E9E4DA;color:var(--ink);font-family:"Noto Sans",system-ui,sans-serif;font-size:14px;line-height:1.4}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.top{max-width:1200px;margin:0 auto;padding:22px 16px 6px}.top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}.top p{margin:0;color:var(--muted);max-width:820px}
+.stage{max-width:1200px;margin:0 auto;padding:16px;display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.cap{font-weight:700;color:var(--navy);margin:0 0 8px;font-size:13px}
+.phone{width:375px;max-width:100%;background:var(--cream2);border-radius:28px;border:6px solid #1C2530;padding:14px;display:flex;flex-direction:column;gap:12px;box-shadow:0 10px 30px rgba(20,38,58,.18)}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px}.card h3{margin:0 0 4px;font-size:16px}
+.hint{font-size:12.5px;color:var(--muted);margin:2px 0 0}
+.t{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.t.near{border-color:var(--amber-line)}.t.over{border-color:var(--red-line)}
+.th{display:flex;justify-content:space-between;gap:8px}.th b{font-size:15px}
+.pill{font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.p-prog{background:#E8EDF3;color:var(--navy)}.p-near{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-line)}.p-over{background:var(--red-bg);color:var(--red);border:1px solid var(--red-line)}
+.bar{height:11px;background:#ECE7DD;border-radius:99px;position:relative}.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--navy)}
+.bar.near i{background:#C98A1A}.bar.over i{background:var(--red)}
+.tri{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.tri div{background:var(--cream2);border-radius:10px;padding:7px 4px;text-align:center}
+.tri small{display:block;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.tri b{font-size:15px}
+.tri .pc b{color:var(--navy)}.tri .near b{color:var(--amber)}.tri .over b{color:var(--red)}
+.fact{font-size:12.5px;color:var(--muted)}
+.whole{background:var(--navy);color:#fff;border-radius:12px;padding:12px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.whole b{font-size:22px}.whole small{display:block;font-size:11px;color:#C9D6E6}
+.sw{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #EEE9DF;min-height:48px}
+.sw:first-of-type{border-top:0}.sw b{font-size:14px}.sw span.s{font-size:12px;color:var(--muted);display:block}
+.toggle{width:46px;height:26px;border-radius:99px;background:#C7C2B8;position:relative;flex:none;cursor:pointer;border:0}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s}
+.toggle[aria-pressed="true"]{background:var(--navy)}.toggle[aria-pressed="true"]::after{left:23px}
+.toggle:disabled{opacity:.4;cursor:default}
+.paper{width:760px;max-width:100%;background:#fff;box-shadow:0 8px 26px rgba(20,38,58,.2);padding:26px 28px;font-size:12px}
+.paper h2{margin:0 0 6px;font-size:13px;color:var(--navy);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--navy);padding-bottom:3px}
+table{width:100%;border-collapse:collapse;margin-top:6px}
+th{background:#173F67;color:#fff;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;padding:6px 7px;text-align:left}
+th.num{text-align:right}
+td{padding:6px 7px;border-bottom:1px solid #E4DFD6;font-size:12px;vertical-align:middle}
+td.pct b{font-size:13px}.pct-near{color:var(--amber)}.pct-over{color:var(--red)}
+.mini{height:6px;background:#ECE7DD;border-radius:9px;margin-top:3px;width:90px;position:relative}.mini i{position:absolute;left:0;top:0;bottom:0;border-radius:9px;background:var(--navy)}
+.mini.near i{background:#C98A1A}.mini.over i{background:var(--red)}
+tr.whole-row td{background:#FFF8ED;border-top:2px solid var(--ink);font-weight:800}
+.grid{width:100%;font-size:12px;font-family:Consolas,monospace;margin-top:6px}.grid th{background:#217346;font-family:"Noto Sans"}
+.grid td,.grid th{border:1px solid #CFCFCF}
+.note{background:#EEF2F6;border:1px solid #D3DDE7;border-radius:12px;padding:10px 12px;font-size:13px;max-width:760px}
+</style></head><body>
+<div class="top"><h1>Daily Report · Quantity Targets (mockup)</h1>
+<p>Project Highway Rehabilitation · Daily Report for 28 October 2026. Every figure is invented for illustration. Used and % count loads up to and including the report date. Try the two switches in the export options.</p></div>
+<div class="stage">
+
+<div><p class="cap">1 · Switches inside the sections (phone)</p>
+<div class="phone">
+<div class="card"><h3>06 · Quantity Targets <span class="pill p-prog">3 targets</span></h3><p class="hint">New section, directly below Loads Delivered. Each switch only affects the issued PDF and Excel.</p>
+<div class="sw"><div><b>Include in PDF and Excel exports</b><span class="s">Used today, total used and % complete</span></div><button class="toggle" id="tgT" aria-pressed="true" aria-label="Include Quantity Targets in the PDF and Excel exports"></button></div>
+<div class="sw"><div><b>Include whole-project completion</b><span class="s">The overall % across all targets</span></div><button class="toggle" id="tgW" aria-pressed="true" aria-label="Include whole-project completion"></button></div>
+</div>
+<div class="card"><h3>09 · Wall Construction <span class="pill p-prog">No wall work</span></h3><p class="hint">Same switch the Foundation Construction section already has.</p>
+<div class="sw"><div><b>Include in PDF and Excel exports</b><span class="s" id="wallHint">Wall Construction is included in the PDF and Excel exports.</span></div><button class="toggle" id="tgWall" aria-pressed="true" aria-label="Include Wall Construction in the PDF and Excel exports"></button></div>
+</div></div></div>
+
+<div><p class="cap">2 · Quantity Targets section on the Daily Report screen (phone)</p>
+<div class="phone">
+<div class="card"><h3>Quantity Targets</h3><p class="hint">Targets that received loads on 28 Oct 2026, progress to that date.</p>
+<div class="t"><div class="th"><b>Base Course Type A</b><span class="pill p-prog">In progress</span></div>
+<div class="bar"><i style="width:83.6%"></i></div>
+<div class="tri"><div><small>Used today</small><b class="num">320 m³</b></div><div><small>Total used</small><b class="num">4,180 m³</b></div><div class="pc"><small>% complete</small><b>83.6%</b></div></div>
+<div class="fact">Target 5,000 m³ · 820 m³ remaining</div></div>
+<div class="t near"><div class="th"><b>Asphalt Binder</b><span class="pill p-near">Near target</span></div>
+<div class="bar near"><i style="width:92%"></i></div>
+<div class="tri"><div><small>Used today</small><b class="num">96 t</b></div><div><small>Total used</small><b class="num">1,104 t</b></div><div class="pc near"><small>% complete</small><b>92.0%</b></div></div>
+<div class="fact">Target 1,200 t · 96 t remaining</div></div>
+<div class="t over"><div class="th"><b>Sub-base</b><span class="pill p-over">Over target</span></div>
+<div class="bar over"><i style="width:100%"></i></div>
+<div class="tri"><div><small>Used today</small><b class="num">140 m³</b></div><div><small>Total used</small><b class="num">3,210 m³</b></div><div class="pc over"><small>% complete</small><b>107.0%</b></div></div>
+<div class="fact">Target 3,000 m³ · over by 210 m³</div></div>
+<div class="whole"><div><small>Whole project · all 3 targets</small><span style="font-size:12px">Average of the 3 targets (no prices)</span></div><b>94.2%</b></div>
+</div></div></div>
+
+<div><p class="cap">3 · Project Quantity Targets page, a target row (phone)</p>
+<div class="phone">
+<div class="card"><h3>Whole project</h3><p class="hint">Average of the 3 items, because not every item has a target price.</p>
+<div class="tri" style="margin-top:8px"><div class="pc"><small>Quantity used</small><b>94.2%</b></div><div><small>Items complete</small><b>0 of 3</b></div><div class="over"><small>Over target</small><b>1</b></div></div></div>
+<div class="card"><div class="th"><b>Base Course Type A</b><span class="pill p-prog">In progress</span></div>
+<div class="bar" style="margin:8px 0"><i style="width:83.6%"></i></div>
+<div class="tri"><div><small>Used today</small><b class="num">320 m³</b></div><div><small>Total used</small><b class="num">4,180 m³</b></div><div class="pc"><small>% complete</small><b>83.6%</b></div></div>
+<div class="fact" style="margin-top:6px">Target 5,000 m³ · 820 m³ remaining. Today is the current calendar day.</div></div>
+</div></div>
+
+<div><p class="cap">4 · PDF, Quantity Targets section (page excerpt)</p>
+<div class="paper" id="pdf">
+<h2>Quantity Targets · 28 October 2026</h2>
+<table><thead><tr><th>Target</th><th class="num">Used today</th><th class="num">Total used</th><th class="num">Target</th><th class="num">Remaining</th><th>% complete</th></tr></thead><tbody>
+<tr><td>Base Course Type A</td><td class="num">320 m³</td><td class="num">4,180 m³</td><td class="num">5,000 m³</td><td class="num">820 m³</td><td class="pct"><b>83.6%</b><div class="mini"><i style="width:83.6%"></i></div></td></tr>
+<tr><td>Asphalt Binder</td><td class="num">96 t</td><td class="num">1,104 t</td><td class="num">1,200 t</td><td class="num">96 t</td><td class="pct"><b class="pct-near">92.0%</b><div class="mini near"><i style="width:92%"></i></div></td></tr>
+<tr><td>Sub-base</td><td class="num">140 m³</td><td class="num">3,210 m³</td><td class="num">3,000 m³</td><td class="num">over 210 m³</td><td class="pct"><b class="pct-over">107.0%</b><div class="mini over"><i style="width:100%"></i></div></td></tr>
+<tr class="whole-row" id="wholeRow"><td colspan="5">Whole project · all 3 targets · average of the targets</td><td class="pct"><b>94.2%</b></td></tr>
+</tbody></table>
+<p class="hint">Quantities are never converted between units. A load in another unit is not counted.</p>
+</div></div>
+
+<div><p class="cap">5 · Excel, sheet “Quantity Targets”</p>
+<table class="grid" style="width:760px;max-width:100%"><tr><th></th><th>A Target</th><th>B Unit</th><th>C Used today</th><th>D Total used</th><th>E Target qty</th><th>F Remaining</th><th>G % complete</th></tr>
+<tr><td>1</td><td>Base Course Type A</td><td>m³</td><td>320</td><td>4180</td><td>5000</td><td>820</td><td>83.6</td></tr>
+<tr><td>2</td><td>Asphalt Binder</td><td>t</td><td>96</td><td>1104</td><td>1200</td><td>96</td><td>92.0</td></tr>
+<tr><td>3</td><td>Sub-base</td><td>m³</td><td>140</td><td>3210</td><td>3000</td><td>0</td><td>107.0</td></tr>
+<tr id="xWhole"><td>4</td><td colspan="6"><b>Whole project (average of targets)</b></td><td><b>94.2</b></td></tr></table>
+<p class="hint" style="max-width:760px">Numeric columns, frozen headings, filters and a data-dictionary row, like the other workbooks.</p></div>
+
+<div class="note"><b>When a switch is off:</b> turning off Include Quantity Targets removes the whole section from the PDF and Excel and greys out the whole-project switch. Turning off only whole-project removes the last row. The on-screen card always shows.</div>
+</div>
+<script>
+const t=document.getElementById('tgT'),w=document.getElementById('tgW'),pdf=document.getElementById('pdf'),row=document.getElementById('wholeRow'),xr=document.getElementById('xWhole');
+function sync(){const on=t.getAttribute('aria-pressed')==='true';w.disabled=!on;const wo=on&&w.getAttribute('aria-pressed')==='true';
+pdf.style.opacity=on?1:.25;row.hidden=!wo;xr.hidden=!wo;}
+[t,w].forEach(b=>b.addEventListener('click',()=>{b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true');sync();}));
+const wb=document.getElementById('tgWall'),wh=document.getElementById('wallHint');
+wb.addEventListener('click',()=>{const on=wb.getAttribute('aria-pressed')==='true';wb.setAttribute('aria-pressed',on?'false':'true');wh.textContent=on?'Wall Construction is excluded from the PDF and Excel exports. It is still recorded and still shown here.':'Wall Construction is included in the PDF and Excel exports.';});
+document.querySelectorAll('.toggle:not(#tgT):not(#tgW):not(#tgWall)').forEach(b=>b.addEventListener('click',()=>b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true')));
+sync();
+</script></body></html>

@@ -20,7 +20,8 @@ import {
 import {describeWallConsumptionQuantity,formatCubicMetres,formatVolumeCalculation,supportsVolumeCalculation,wallConsumptionPurposeLabel,wallMaterialLabels,wallSystemLabels} from '../../domain/walls';
 import {baseStatusLabels} from '../../domain/wallBase';
 import {describeFoundationQuantity,hasLegacyMaterialRecord} from '../../domain/foundations';
-import {describeFoundationSectionPreference,parseFoundationSectionPreference,serializeFoundationSectionPreference,FOUNDATION_SECTION_PREFERENCE_KEY} from '../../domain/reportSectionPreferences';
+import {CONTRACT_SECTION_PREFERENCE_KEY,CONTRACT_WHOLE_PROJECT_PREFERENCE_KEY,WALL_SECTION_PREFERENCE_KEY,describeContractSectionPreference,describeContractWholeProjectPreference,describeFoundationSectionPreference,describeWallSectionPreference,parseFoundationSectionPreference,parseSectionPreference,serializeFoundationSectionPreference,serializeSectionPreference,FOUNDATION_SECTION_PREFERENCE_KEY} from '../../domain/reportSectionPreferences';
+import type {ContractDayReport} from '../../domain/contractQuantities';
 import { SearchableSelect } from '../components/SearchableSelect';
 import {CustomResourcePicker} from '../components/CustomResourcePicker';
 import {SupervisorSignoffPicker} from '../components/SupervisorSignoffPicker';
@@ -63,6 +64,12 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
   // DEC-471. A stored app preference, not a per-report column: the Owner can keep foundation data out
   // of issued exports while that workflow is still being finished. Defaults to included.
   const [includeFoundationSection,setIncludeFoundationSection]=useState(true);
+  // DEC-537. Quantity Target progress as of the work date, read live like every other linked section, and three more stored switches
+  // of the same kind (Wall Construction, Quantity Targets, the whole-project row). All default to included.
+  const [contractProgress,setContractProgress]=useState<ContractDayReport|null>(null);
+  const [includeWallSection,setIncludeWallSection]=useState(true);
+  const [includeContractSection,setIncludeContractSection]=useState(true);
+  const [includeContractWholeProject,setIncludeContractWholeProject]=useState(true);
   const [error, setError] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [exporting,setExporting]=useState<BusinessReportKind|null>(null);
@@ -118,6 +125,12 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedWallWork(draft.projectId,draft.workDate).then(setLinkedWallWork);else setLinkedWallWork([]);},[draft?.projectId,draft?.workDate,repository]);
   useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedFoundationActivity(draft.projectId,draft.workDate).then(setLinkedFoundationActivity);else setLinkedFoundationActivity([]);},[draft?.projectId,draft?.workDate,repository]);
   useEffect(()=>{void Storage.getItem(FOUNDATION_SECTION_PREFERENCE_KEY).then(value=>setIncludeFoundationSection(parseFoundationSectionPreference(value))).catch(()=>setIncludeFoundationSection(true));},[]);
+  useEffect(()=>{if(draft?.projectId&&draft.workDate)void repository.listLinkedContractProgress(draft.projectId,draft.workDate).then(setContractProgress).catch(()=>setContractProgress(null));else setContractProgress(null);},[draft?.projectId,draft?.workDate,repository]);
+  useEffect(()=>{
+    void Storage.getItem(WALL_SECTION_PREFERENCE_KEY).then(value=>setIncludeWallSection(parseSectionPreference(value))).catch(()=>setIncludeWallSection(true));
+    void Storage.getItem(CONTRACT_SECTION_PREFERENCE_KEY).then(value=>setIncludeContractSection(parseSectionPreference(value))).catch(()=>setIncludeContractSection(true));
+    void Storage.getItem(CONTRACT_WHOLE_PROJECT_PREFERENCE_KEY).then(value=>setIncludeContractWholeProject(parseSectionPreference(value))).catch(()=>setIncludeContractWholeProject(true));
+  },[]);
   useEffect(() => {
     if (draft?.projectId && draft.workDate) void repository.listLinkedWasteDumps(draft.projectId, draft.workDate).then(setLinkedWasteDumps);
     else setLinkedWasteDumps([]);
@@ -169,15 +182,20 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
     const chosen = await exportHeader.resolve();
     return chosen ? { ...setup!.company, name: chosen.list.companyName, logoUri: chosen.list.logoUri, address: chosen.header.address, phone: chosen.header.phone, email: chosen.header.email } : setup!.company;
   }
+  /** DEC-537. Stores one of the three issued-output switches; the on-screen sections are never hidden by them. */
+  function toggleSectionPreference(kind:SectionPreferenceKind,value:boolean){
+    const [setter,key]=kind==='wall'?[setIncludeWallSection,WALL_SECTION_PREFERENCE_KEY]:kind==='contract'?[setIncludeContractSection,CONTRACT_SECTION_PREFERENCE_KEY]:[setIncludeContractWholeProject,CONTRACT_WHOLE_PROJECT_PREFERENCE_KEY];
+    setter(value);void Storage.setItem(key,serializeSectionPreference(value));
+  }
   async function shareReport(report: DailyProjectReport,includePrices=false) {
     if (!project) return; setBusy(true); setError(null); setMessage(null);
-    try { const [loads,quarry,waste,fuel,wallWork,foundationActivity] = await Promise.all([repository.listLinkedLoads(project.id, report.workDate),repository.listLinkedQuarryLoads(project.id,report.workDate),repository.listLinkedWasteDumps(project.id, report.workDate),repository.listLinkedFuelFills(project.id,report.workDate),repository.listLinkedWallWork(project.id,report.workDate),repository.listLinkedFoundationActivity(project.id,report.workDate)]); await exportAndShareProjectReport(report, project, loads, quarry, waste, fuel, await reportCompany(),includePrices,wallWork,includeFoundationSection?foundationActivity:[]); setMessage(includePrices?'PDF with prices created.':'PDF without prices created.'); setPdfChoiceId(null); }
+    try { const [loads,quarry,waste,fuel,wallWork,foundationActivity,progress] = await Promise.all([repository.listLinkedLoads(project.id, report.workDate),repository.listLinkedQuarryLoads(project.id,report.workDate),repository.listLinkedWasteDumps(project.id, report.workDate),repository.listLinkedFuelFills(project.id,report.workDate),repository.listLinkedWallWork(project.id,report.workDate),repository.listLinkedFoundationActivity(project.id,report.workDate),repository.listLinkedContractProgress(project.id,report.workDate)]); await exportAndShareProjectReport(report, project, loads, quarry, waste, fuel, await reportCompany(),includePrices,wallWork,includeFoundationSection?foundationActivity:[],{includeWall:includeWallSection,contractProgress:includeContractSection?progress:null,includeWholeProject:includeContractWholeProject}); setMessage(includePrices?'PDF with prices created.':'PDF without prices created.'); setPdfChoiceId(null); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not export project report.'); }
     finally { setBusy(false); }
   }
   async function shareReportExcel(report: DailyProjectReport) {
     if (!project || !setup) return;if(dailyExportingId){exportController.current?.abort();setExportProgress(current=>current?{...current,message:'Cancelling and removing incomplete output'}:current);return;}const controller=new AbortController();exportController.current=controller;setDailyExportingId(report.id);setExportProgress({stage:'preparing',completed:0,total:Math.max(1,report.photos.length),percent:1,message:'Preparing daily report'});setBusy(true); setError(null); setMessage(null);
-    try { const [loads,quarry,waste,fuel,wallWork,foundationActivity] = await Promise.all([repository.listLinkedLoads(project.id, report.workDate),repository.listLinkedQuarryLoads(project.id,report.workDate),repository.listLinkedWasteDumps(project.id, report.workDate),repository.listLinkedFuelFills(project.id,report.workDate),repository.listLinkedWallWork(project.id,report.workDate),repository.listLinkedFoundationActivity(project.id,report.workDate)]); await exportAndShareDailyReportWorkbook(report, project, loads, quarry, waste, fuel, setup.company,{locale:workbookLocale,signal:controller.signal,onProgress:setExportProgress},wallWork,includeFoundationSection?foundationActivity:[]); setMessage(`Daily report Excel created in ${workbookLocale==='ar'?'Arabic RTL':'English LTR'}.`); }
+    try { const [loads,quarry,waste,fuel,wallWork,foundationActivity,progress] = await Promise.all([repository.listLinkedLoads(project.id, report.workDate),repository.listLinkedQuarryLoads(project.id,report.workDate),repository.listLinkedWasteDumps(project.id, report.workDate),repository.listLinkedFuelFills(project.id,report.workDate),repository.listLinkedWallWork(project.id,report.workDate),repository.listLinkedFoundationActivity(project.id,report.workDate),repository.listLinkedContractProgress(project.id,report.workDate)]); await exportAndShareDailyReportWorkbook(report, project, loads, quarry, waste, fuel, setup.company,{locale:workbookLocale,signal:controller.signal,onProgress:setExportProgress},wallWork,includeFoundationSection?foundationActivity:[],{includeWall:includeWallSection,contractProgress:includeContractSection?progress:null,includeWholeProject:includeContractWholeProject}); setMessage(`Daily report Excel created in ${workbookLocale==='ar'?'Arabic RTL':'English LTR'}.`); }
     catch (cause) { if(cause instanceof Error&&cause.name==='AbortError')setMessage('Daily report Excel export cancelled. No incomplete workbook was kept.');else setError(cause instanceof Error ? cause.message : 'Could not export the daily report Excel workbook.'); }
     finally { if(exportController.current===controller)exportController.current=null;setDailyExportingId(null);setExportProgress(null);setBusy(false); }
   }
@@ -194,7 +212,7 @@ export function ReportsScreen({ repository,businessReportRepository,onBack,onOpe
 
   if (setupStatus === 'error') return <ScrollView contentContainerStyle={styles.content}><Header eyebrow="OPERATIONS" title="Reports" onBack={onBack}/><View style={styles.errorState}><Text style={styles.errorStateTitle}>Could not load reports</Text><Text style={styles.errorStateText}>{setupError}</Text><TouchableOpacity style={styles.retryButton} onPress={()=>void refreshSetup()} accessibilityRole="button"><Text style={styles.retryButtonText}>Retry</Text></TouchableOpacity></View></ScrollView>;
   if (!setup) return <ScrollView contentContainerStyle={styles.content}><Header eyebrow="OPERATIONS" title="Reports" onBack={onBack}/><View style={styles.centerState}><ActivityIndicator size="large" color={colors.brand}/><Text style={styles.helper}>Loading reports…</Text></View></ScrollView>;
-  if (draft && project) return <DailyReportEditor setup={setup} project={project} draft={draft} onOpenPdfSettings={onOpenPdfSettings} reports={reports} loadLinks={loadLinks} linkedLoads={linkedLoads} linkedQuarryLoads={linkedQuarryLoads} linkedFuelFills={linkedFuelFills} linkedWasteDumps={linkedWasteDumps} linkedWallWork={linkedWallWork} linkedFoundationActivity={linkedFoundationActivity} includeFoundationSection={includeFoundationSection} onToggleFoundationSection={value=>{setIncludeFoundationSection(value);void Storage.setItem(FOUNDATION_SECTION_PREFERENCE_KEY,serializeFoundationSectionPreference(value));}} busy={busy} error={error} reducedMotion={reducedMotion} onChange={setDraft} onSave={() => void save()} onBack={() => setDraft(null)} onOpenReport={editReport}/>;
+  if (draft && project) return <DailyReportEditor setup={setup} project={project} draft={draft} onOpenPdfSettings={onOpenPdfSettings} reports={reports} loadLinks={loadLinks} linkedLoads={linkedLoads} linkedQuarryLoads={linkedQuarryLoads} linkedFuelFills={linkedFuelFills} linkedWasteDumps={linkedWasteDumps} linkedWallWork={linkedWallWork} linkedFoundationActivity={linkedFoundationActivity} includeFoundationSection={includeFoundationSection} onToggleFoundationSection={value=>{setIncludeFoundationSection(value);void Storage.setItem(FOUNDATION_SECTION_PREFERENCE_KEY,serializeFoundationSectionPreference(value));}} contractProgress={contractProgress} includeWallSection={includeWallSection} includeContractSection={includeContractSection} includeContractWholeProject={includeContractWholeProject} onToggleSectionPreference={toggleSectionPreference} busy={busy} error={error} reducedMotion={reducedMotion} onChange={setDraft} onSave={() => void save()} onBack={() => setDraft(null)} onOpenReport={editReport}/>;
   if (project) {
     const visibleReports=reports.slice(0,historyVisible);
     const remaining=reports.length-visibleReports.length;
@@ -307,7 +325,22 @@ function summarizePpe(safetyPeople:{name:string;type:SafetyParticipantType;label
   return {compliant,missing,notChecked,total:safetyPeople.length};
 }
 
-function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linkedLoads, linkedQuarryLoads, linkedFuelFills, linkedWasteDumps, linkedWallWork, linkedFoundationActivity, includeFoundationSection, onToggleFoundationSection, busy, error, reducedMotion, onChange, onSave, onBack, onOpenReport, onOpenPdfSettings }: { loadLinks?:Record<string,DocumentLink[]>; onOpenPdfSettings:()=>void; linkedWallWork:LinkedWallWork[]; linkedFoundationActivity:LinkedFoundationActivity[]; includeFoundationSection:boolean; onToggleFoundationSection:(value:boolean)=>void; setup: ProjectReportSetup; project: ReportProject; draft: DailyProjectReportDraft; reports:DailyProjectReport[]; linkedLoads: LinkedProjectLoad[]; linkedQuarryLoads:LinkedQuarryLoad[]; linkedFuelFills:LinkedFuelFill[]; linkedWasteDumps: LinkedWasteDump[]; busy: boolean; error: string | null; reducedMotion:boolean; onChange: (draft: DailyProjectReportDraft) => void; onSave: () => void; onBack: () => void; onOpenReport:(report:DailyProjectReport)=>void }) {
+type SectionPreferenceKind='wall'|'contract'|'contractWhole';
+const targetQty=(value:number)=>String(Number(value.toFixed(3)));
+
+/** DEC-537. The include checkbox of a Daily Report section, drawn like the Foundation Construction one. */
+function SectionSwitch({value,onChange,label,hint,disabled=false}:{value:boolean;onChange:(value:boolean)=>void;label:string;hint:string;disabled?:boolean}){
+  return <TouchableOpacity style={[styles.foundationToggle,disabled&&{opacity:.5}]} onPress={()=>onChange(!value)} disabled={disabled}
+    accessibilityRole="switch" accessibilityState={{checked:value,disabled}} accessibilityLabel={label}>
+    <View style={[styles.foundationToggleBox,value&&styles.foundationToggleBoxOn]}>{value?<Text style={styles.foundationToggleMark}>✓</Text>:null}</View>
+    <View style={styles.flex}>
+      <Text style={styles.foundationToggleLabel}>{label}</Text>
+      <Text style={styles.foundationToggleHint}>{hint}</Text>
+    </View>
+  </TouchableOpacity>;
+}
+
+function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linkedLoads, linkedQuarryLoads, linkedFuelFills, linkedWasteDumps, linkedWallWork, linkedFoundationActivity, includeFoundationSection, onToggleFoundationSection, contractProgress, includeWallSection, includeContractSection, includeContractWholeProject, onToggleSectionPreference, busy, error, reducedMotion, onChange, onSave, onBack, onOpenReport, onOpenPdfSettings }: { contractProgress:ContractDayReport|null; includeWallSection:boolean; includeContractSection:boolean; includeContractWholeProject:boolean; onToggleSectionPreference:(kind:SectionPreferenceKind,value:boolean)=>void; loadLinks?:Record<string,DocumentLink[]>; onOpenPdfSettings:()=>void; linkedWallWork:LinkedWallWork[]; linkedFoundationActivity:LinkedFoundationActivity[]; includeFoundationSection:boolean; onToggleFoundationSection:(value:boolean)=>void; setup: ProjectReportSetup; project: ReportProject; draft: DailyProjectReportDraft; reports:DailyProjectReport[]; linkedLoads: LinkedProjectLoad[]; linkedQuarryLoads:LinkedQuarryLoad[]; linkedFuelFills:LinkedFuelFill[]; linkedWasteDumps: LinkedWasteDump[]; busy: boolean; error: string | null; reducedMotion:boolean; onChange: (draft: DailyProjectReportDraft) => void; onSave: () => void; onBack: () => void; onOpenReport:(report:DailyProjectReport)=>void }) {
   const [materialItemId, setMaterialItemId] = useState(''); const [materialUnitId, setMaterialUnitId] = useState('');
   const [materialQuantity, setMaterialQuantity] = useState(''); const [materialMovement, setMaterialMovement] = useState<'used' | 'transported'>('used');
   const [mediaError,setMediaError]=useState<string|null>(null);
@@ -331,7 +364,7 @@ function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linke
   const notesFilledCount=[draft.notes,draft.problemsDelaysIncidents,draft.weatherSiteConditions,draft.nextWorkPlanned].filter(value=>value.trim()).length;
   const loadsCount=linkedLoads.length+linkedQuarryLoads.length;
   const wallRecordCount=linkedWallWork.reduce((sum,wall)=>sum+wall.entries.length,0);
-  const sectionsWithEntries=[Boolean(draft.workDescription.trim()),peopleCount>0,ppeSummary.compliant+ppeSummary.missing>0,draft.materials.length>0,loadsCount>0,linkedFuelFills.length>0,linkedWasteDumps.length>0,wallRecordCount>0,linkedFoundationActivity.length>0,notesFilledCount>0,draft.photos.length>0,minutes!=null].filter(Boolean).length;
+  const sectionsWithEntries=[Boolean(draft.workDescription.trim()),peopleCount>0,ppeSummary.compliant+ppeSummary.missing>0,draft.materials.length>0,loadsCount>0,Boolean(contractProgress?.targets.length),linkedFuelFills.length>0,linkedWasteDumps.length>0,wallRecordCount>0,linkedFoundationActivity.length>0,notesFilledCount>0,draft.photos.length>0,minutes!=null].filter(Boolean).length;
   const ppeBadge=ppeSummary.total===0?'No entries':ppeSummary.missing>0?`${ppeSummary.missing} missing PPE`:ppeSummary.notChecked===ppeSummary.total?'Not checked':ppeSummary.compliant===ppeSummary.total?`${ppeSummary.compliant} compliant`:`${ppeSummary.compliant} compliant · ${ppeSummary.notChecked} not checked`;
   const signoffState=useMemo(()=>consultantSignoffState(draft),[draft]);
   const hasConsultantData=Boolean(draft.consultantName.trim())||draft.consultantSignaturePaths.length>0;
@@ -354,7 +387,7 @@ function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linke
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Header eyebrow="DAILY REPORT" title={project.name} onBack={onBack} />
       <IdentityCard project={project} workDate={draft.workDate}/>
-      <View style={styles.progressStrip}><Text style={styles.progressStripText}>Sections with entries: <Text style={styles.progressStripNumber}>{sectionsWithEntries}</Text> of 12</Text></View>
+      <View style={styles.progressStrip}><Text style={styles.progressStripText}>Sections with entries: <Text style={styles.progressStripNumber}>{sectionsWithEntries}</Text> of 13</Text></View>
       {duplicateReport?<View style={styles.duplicateWarning}><Text style={styles.duplicateWarningTitle}>A report already exists for {draft.workDate}</Text><Text style={styles.duplicateWarningText}>Saving will not create a second report for this project and date — the repository keeps one report per day. Open the existing report instead to continue editing it.</Text><TouchableOpacity style={styles.duplicateWarningButton} onPress={()=>onOpenReport(duplicateReport)} accessibilityRole="button"><Text style={styles.duplicateWarningButtonText}>Open Existing Report</Text></TouchableOpacity></View>:null}
       {error ? <View style={styles.errorBox}>{error.split('\n').map((line,index)=><Text key={index} style={styles.errorLine}>{line}</Text>)}</View> : null}
 
@@ -397,21 +430,46 @@ function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linke
         {linkedQuarryLoads.length?linkedQuarryLoads.map(load=><LoadRow key={load.id} status={loadLinks[`supplier_load:${load.id}`]?inclusionLabel(deriveInclusion(loadLinks[`supplier_load:${load.id}`]!)):undefined} source="supplier" name={load.itemName} quantity={load.quantity} unit={load.unitSymbol} reference={`${load.purchaseNumber} · ${load.supplierName}`} deliveryLabel={load.deliveryLabel} truck={load.truckPlate??undefined} time={new Date(load.confirmedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} ticket={load.supplierTicketNumber??undefined} notes={load.notes??undefined} total={load.finalTotalUsd}/>):<Text style={styles.helper}>No active supplier loads linked to this project and date.</Text>}
       </LedgerSection>
 
-      <LedgerSection number="06" title="Fuel Used" badge={linkedFuelFills.length?`${linkedFuelFills.length} fill${linkedFuelFills.length===1?'':'s'}`:'No fills'} open={openSections.has('fuel')} onToggle={()=>toggleSection('fuel')} reducedMotion={reducedMotion}>
+      {/* DEC-537. Quantity Targets: read-only progress as of this work date, with the two stored switches for issued output. */}
+      <LedgerSection number="06" title="Quantity Targets" badge={contractProgress?.summary.itemCount?(contractProgress.targets.length?`${contractProgress.targets.length} target${contractProgress.targets.length===1?'':'s'}`:'No targets today'):'No targets'} open={openSections.has('contracts')} onToggle={()=>toggleSection('contracts')} reducedMotion={reducedMotion}>
+        <Text style={styles.sectionHint}>Automatically calculated from the loads linked to each target, as of this work date. A load in another unit is never converted and is not counted.</Text>
+        <SectionSwitch value={includeContractSection} onChange={value=>onToggleSectionPreference('contract',value)} label="Include in PDF and Excel exports" hint={describeContractSectionPreference(includeContractSection)}/>
+        <SectionSwitch value={includeContractWholeProject} disabled={!includeContractSection} onChange={value=>onToggleSectionPreference('contractWhole',value)} label="Include whole-project completion" hint={describeContractWholeProjectPreference(includeContractWholeProject)}/>
+        {contractProgress?.summary.itemCount?<>
+          {contractProgress.targets.length?contractProgress.targets.map(target=>{
+            const {item,usage}=target;const tone=usage.warning==='over'?colors.danger:usage.warning==='near'?colors.warning:colors.brand;
+            return <View key={item.id} style={styles.recordRow}>
+              <View style={styles.recordTop}><Text style={styles.recordName}>{item.name}</Text><Text style={[styles.recordStrongValue,{color:tone}]}>{usage.percentUsed.toFixed(1)}%</Text></View>
+              <View style={{height:8,borderRadius:4,backgroundColor:'#ECE7DD',overflow:'hidden'}}><View style={{height:8,width:`${Math.min(100,Math.max(0,usage.percentUsed))}%`,backgroundColor:tone}}/></View>
+              <Text style={styles.recordMeta}>Used today {targetQty(target.usedToday)} {item.unitSymbol} · Total used {targetQty(usage.used)} {item.unitSymbol}</Text>
+              <Text style={styles.recordMeta}>Target {targetQty(item.quantity)} {item.unitSymbol} · {usage.overContract?`over by ${targetQty(usage.overBy)} ${item.unitSymbol}`:`${targetQty(usage.remaining)} ${item.unitSymbol} remaining`}</Text>
+              {target.notCountedToday?<Text style={styles.recordMeta}>{target.notCountedToday} load{target.notCountedToday===1?'':'s'} in another unit not counted</Text>:null}
+            </View>;
+          }):<Text style={styles.helper}>No quantity target received a load on this date.</Text>}
+          {contractProgress.summary.overallPercentUsed!==null?<View style={styles.recordRow}>
+            <View style={styles.recordTop}><Text style={styles.recordName}>Whole project · {contractProgress.summary.itemCount} target{contractProgress.summary.itemCount===1?'':'s'}</Text><Text style={styles.recordStrongValue}>{contractProgress.summary.overallPercentUsed.toFixed(1)}%</Text></View>
+            <Text style={styles.recordMeta}>{contractProgress.summary.overallBasis==='value'?'Weighted by target value, because every target has a price.':'Average of the targets, because not every target has a price.'}</Text>
+          </View>:null}
+        </>:<Text style={styles.helper}>No quantity targets recorded for this project.</Text>}
+      </LedgerSection>
+
+      <LedgerSection number="07" title="Fuel Used" badge={linkedFuelFills.length?`${linkedFuelFills.length} fill${linkedFuelFills.length===1?'':'s'}`:'No fills'} open={openSections.has('fuel')} onToggle={()=>toggleSection('fuel')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Automatically linked from active equipment fills for this project and work date. Costs use the immutable price saved on each fill.</Text>
         <View style={styles.totalsCard}><Text style={styles.totalsValue}>{linkedFuelFills.reduce((sum,fill)=>sum+fill.litres,0).toFixed(2)} L</Text><Text style={styles.totalsLabel}>TOTAL FUEL · ${linkedFuelFills.reduce((sum,fill)=>sum+(fill.consumptionCostUsd??0),0).toFixed(2)}</Text></View>
         {linkedFuelFills.some(fill=>fill.consumptionCostUsd==null)?<Text style={styles.notice}>{linkedFuelFills.filter(fill=>fill.consumptionCostUsd==null).reduce((sum,fill)=>sum+fill.litres,0).toFixed(2)} L is unpriced and excluded from the cost total.</Text>:null}
         {linkedFuelFills.length?linkedFuelFills.map(fill=><View key={fill.id} style={styles.recordRow}><View style={styles.recordTop}><Text style={styles.recordName}>{fill.equipmentName}</Text><Text style={styles.recordStrongValue}>{fill.litres.toFixed(2)}{' '}<Text style={styles.materialUnit}>L</Text></Text></View><Text style={styles.recordMeta}>{new Date(fill.confirmedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · {fill.pricePerLitreUsd==null?'Unpriced':`${formatFuelPriceUsd(fill.pricePerLitreUsd)}/L · $${fill.consumptionCostUsd?.toFixed(2)}`}</Text>{fill.odometerReading?<Text style={styles.recordMeta}>Odometer {fill.odometerReading}</Text>:null}{fill.notes?<Text style={styles.recordMeta}>{fill.notes}</Text>:null}</View>):<Text style={styles.helper}>No active fuel fills linked to this project and date.</Text>}
       </LedgerSection>
 
-      <LedgerSection number="07" title="Waste Dumps" badge={linkedWasteDumps.length?`${linkedWasteDumps.length} dump${linkedWasteDumps.length===1?'':'s'}`:'No dumps'} open={openSections.has('waste')} onToggle={()=>toggleSection('waste')} reducedMotion={reducedMotion}>
+      <LedgerSection number="08" title="Waste Dumps" badge={linkedWasteDumps.length?`${linkedWasteDumps.length} dump${linkedWasteDumps.length===1?'':'s'}`:'No dumps'} open={openSections.has('waste')} onToggle={()=>toggleSection('waste')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Automatically linked from active Waste Dump records for this project and work date. Cancelled dumps are excluded.</Text>
         <View style={styles.totalsCard}><Text style={styles.totalsValue}>{linkedWasteDumps.length}</Text><Text style={styles.totalsLabel}>TOTAL DUMPS</Text></View>
         {linkedWasteDumps.length ? linkedWasteDumps.map((dump) => <View key={dump.id} style={styles.recordRow}><Text style={styles.recordName}>{dump.materialType}</Text><Text style={styles.recordMeta}>{dump.dumpLocation} · {new Date(dump.dumpedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</Text><Text style={styles.recordMeta}>{[dump.driverName,dump.truckPlate].filter(Boolean).join(' · ') || 'No driver or truck selected'}</Text></View>) : <Text style={styles.helper}>No completed waste dumps linked to this project and date.</Text>}
       </LedgerSection>
 
-      <LedgerSection number="08" title="Wall Construction" badge={wallRecordCount?`${wallRecordCount} record${wallRecordCount===1?'':'s'} · ${linkedWallWork.length} wall${linkedWallWork.length===1?'':'s'}`:'No wall work'} open={openSections.has('walls')} onToggle={()=>toggleSection('walls')} reducedMotion={reducedMotion}>
+      <LedgerSection number="09" title="Wall Construction" badge={wallRecordCount?`${wallRecordCount} record${wallRecordCount===1?'':'s'} · ${linkedWallWork.length} wall${linkedWallWork.length===1?'':'s'}`:'No wall work'} open={openSections.has('walls')} onToggle={()=>toggleSection('walls')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Automatically linked from Wall Construction records for this project whose used-on date is this work date. Corrections made on the wall appear here and in later exports.</Text>
+        {/* DEC-537. Same stored switch as Foundation Construction: only issued output changes, never the records. */}
+        <SectionSwitch value={includeWallSection} onChange={value=>onToggleSectionPreference('wall',value)} label="Include in PDF and Excel exports" hint={describeWallSectionPreference(includeWallSection)}/>
         {linkedWallWork.length?linkedWallWork.map(wall=><View key={wall.wallId} style={styles.wallGroup}>
           <View style={styles.recordTop}><Text style={styles.recordName}>{wall.wallName}</Text><Text style={styles.recordMeta}>{wallSystemLabels[wall.system]}</Text></View>
           {wall.entries.map(entry=>{const purpose=wallConsumptionPurposeLabel(entry);return <View key={entry.id} style={styles.wallEntry}>
@@ -425,7 +483,7 @@ function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linke
 
       {/* DEC-470. Foundations get their own section rather than riding along inside Wall Construction:
           a foundation exists before any wall does, and one may never have a wall at all. */}
-      <LedgerSection number="09" title="Foundation Construction" badge={linkedFoundationActivity.length?`${linkedFoundationActivity.length} foundation${linkedFoundationActivity.length===1?'':'s'}`:'No foundation work'} open={openSections.has('foundations')} onToggle={()=>toggleSection('foundations')} reducedMotion={reducedMotion}>
+      <LedgerSection number="10" title="Foundation Construction" badge={linkedFoundationActivity.length?`${linkedFoundationActivity.length} foundation${linkedFoundationActivity.length===1?'':'s'}`:'No foundation work'} open={openSections.has('foundations')} onToggle={()=>toggleSection('foundations')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Foundations with activity on this work date that have no wall linked to them yet. The structural envelope is capacity, not consumption: actual Stone and concrete are recorded through Lifts.</Text>
         {/* DEC-471. Excluding the section only affects issued output; the records stay exactly as entered. */}
         <TouchableOpacity style={styles.foundationToggle} onPress={()=>onToggleFoundationSection(!includeFoundationSection)}
@@ -448,26 +506,26 @@ function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linke
         </View>):<Text style={styles.helper}>No foundation activity recorded for this project and date.</Text>}
       </LedgerSection>
 
-      <LedgerSection number="10" title="Site Notes" badge={notesFilledCount?`${notesFilledCount} of 4 added`:'No entries'} open={openSections.has('notes')} onToggle={()=>toggleSection('notes')} reducedMotion={reducedMotion}>
+      <LedgerSection number="11" title="Site Notes" badge={notesFilledCount?`${notesFilledCount} of 4 added`:'No entries'} open={openSections.has('notes')} onToggle={()=>toggleSection('notes')} reducedMotion={reducedMotion}>
         <NoteCard label="General notes" value={draft.notes} onChangeText={(value) => update('notes', value)} />
         <NoteCard label="Problems, delays, or incidents" value={draft.problemsDelaysIncidents} onChangeText={(value) => update('problemsDelaysIncidents', value)} attention/>
         <NoteCard label="Weather and site conditions" value={draft.weatherSiteConditions} onChangeText={(value) => update('weatherSiteConditions', value)} />
         <NoteCard label="Next work planned" value={draft.nextWorkPlanned} onChangeText={(value) => update('nextWorkPlanned', value)} />
       </LedgerSection>
 
-      <LedgerSection number="11" title="Photos" badge={draft.photos.length?`${draft.photos.length} photo${draft.photos.length===1?'':'s'}`:'No photos'} open={openSections.has('photos')} onToggle={()=>toggleSection('photos')} reducedMotion={reducedMotion}>
+      <LedgerSection number="12" title="Photos" badge={draft.photos.length?`${draft.photos.length} photo${draft.photos.length===1?'':'s'}`:'No photos'} open={openSections.has('photos')} onToggle={()=>toggleSection('photos')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Optional camera or library photos. Maximum 20.</Text>
         {mediaError?<Text style={styles.error}>{mediaError}</Text>:null}<View style={styles.photoActions}><TouchableOpacity style={styles.secondary} onPress={()=>void addPhoto('camera')} accessibilityRole="button"><Text style={styles.secondaryText}>Take photo</Text></TouchableOpacity><TouchableOpacity style={styles.secondary} onPress={()=>void addPhoto('library')} accessibilityRole="button"><Text style={styles.secondaryText}>Choose photo</Text></TouchableOpacity></View><View style={styles.photoGrid}>{draft.photos.map((uri,index)=><View key={uri} style={styles.photoItem}><Image source={{uri}} style={styles.photo}/><TouchableOpacity style={styles.removePhotoWrap} onPress={()=>update('photos',draft.photos.filter((_,photoIndex)=>photoIndex!==index))} accessibilityRole="button"><Text style={styles.remove}>Remove</Text></TouchableOpacity></View>)}</View>
       </LedgerSection>
 
-      <LedgerSection number="12" title="Working Time" badge={minutes!=null?`Net ${Math.floor(minutes/60)}h ${minutes%60}m`:'No entries'} open={openSections.has('time')} onToggle={()=>toggleSection('time')} reducedMotion={reducedMotion}>
+      <LedgerSection number="13" title="Working Time" badge={minutes!=null?`Net ${Math.floor(minutes/60)}h ${minutes%60}m`:'No entries'} open={openSections.has('time')} onToggle={()=>toggleSection('time')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Optional times for {draft.workDate}. Every daily report keeps its own start, end, and break. Tap a time to scroll to it.</Text>
         <View style={styles.twoColumns}><View style={styles.flex}><TimePickerField label="Start time" value={draft.workStartTime} onChange={(value) => update('workStartTime', value)} placeholder="For example 07:00" /></View><View style={styles.flex}><TimePickerField label="End time" value={draft.workEndTime} onChange={(value) => update('workEndTime', value)} placeholder="For example 17:00" /></View></View>
         <Field label="Break for this day (minutes)" value={draft.breakMinutes} onChangeText={(value) => update('breakMinutes', value)} keyboardType="number-pad" placeholder="For example 60" />
         <View style={styles.totalsCard}><Text style={styles.totalsValue}>{minutes != null ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : '—'}</Text><Text style={styles.totalsLabel}>NET WORKING TIME</Text></View>
       </LedgerSection>
 
-      <LedgerSection number="13" title="Consultant Sign-off" badge={signoffBadge} badgeTone={signoffState==='incomplete'?'warning':'neutral'} open={openSections.has('consultant')} onToggle={()=>toggleSection('consultant')} reducedMotion={reducedMotion}>
+      <LedgerSection number="14" title="Consultant Sign-off" badge={signoffBadge} badgeTone={signoffState==='incomplete'?'warning':'neutral'} open={openSections.has('consultant')} onToggle={()=>toggleSection('consultant')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Optional. When on, the consultant can add their name and digital signature here, before or after generating the PDF. Turning this off never deletes name or signature data already saved — it only hides it from the next PDF.</Text>
         <View style={styles.chipWrap} accessibilityRole="radiogroup" accessibilityLabel="Consultant sign-off on this report"><Choice label="Off" selected={!draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',false)}/><Choice label="On" selected={draft.consultantSignoffEnabled} onPress={()=>update('consultantSignoffEnabled',true)}/></View>
         {draft.consultantSignoffEnabled?<Text style={styles.sectionHint} accessibilityRole="text">On the PDF, the consultant name and signature appear at the end, just before Photo Evidence. The consulting agency is a separate header controlled in PDF Headers below.{consultingAgency?'':' No consulting agency name is configured, so no agency line is printed — add one in More → Settings → Consulting agency.'}</Text>:null}
@@ -481,7 +539,7 @@ function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linke
 
       {/* DEC-402. One section, three independent controls: three separate numbered sections would
           make the common case, all headers off, longer to scroll past rather than shorter. */}
-      <LedgerSection number="14" title="PDF Headers" badge={headerBadge} badgeTone={headersOnButUnconfigured?'warning':'neutral'} open={openSections.has('headers')} onToggle={()=>toggleSection('headers')} reducedMotion={reducedMotion}>
+      <LedgerSection number="15" title="PDF Headers" badge={headerBadge} badgeTone={headersOnButUnconfigured?'warning':'neutral'} open={openSections.has('headers')} onToggle={()=>toggleSection('headers')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Optional. These print at the top of page one only, never on later pages, and each is off by default so every other report stays unbranded. The values themselves are saved once in PDF Settings and shared by every project.</Text>
         <HeaderControl
           label="Show Ministry"
@@ -514,7 +572,7 @@ function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linke
 
       {/* DEC-479. Saved supervisors who sign off this report, in order. Independent of the Consultant
           Sign-off above and of every PDF header: none of them reads or changes this section. */}
-      <LedgerSection number="15" title="Supervisor Sign-off" badge={(draft.supervisorSignoffs??[]).length?`${(draft.supervisorSignoffs??[]).length} supervisor${(draft.supervisorSignoffs??[]).length===1?'':'s'}`:'None'} open={openSections.has('supervisors')} onToggle={()=>toggleSection('supervisors')} reducedMotion={reducedMotion}>
+      <LedgerSection number="16" title="Supervisor Sign-off" badge={(draft.supervisorSignoffs??[]).length?`${(draft.supervisorSignoffs??[]).length} supervisor${(draft.supervisorSignoffs??[]).length===1?'':'s'}`:'None'} open={openSections.has('supervisors')} onToggle={()=>toggleSection('supervisors')} reducedMotion={reducedMotion}>
         <Text style={styles.sectionHint}>Optional. Prints at the very end of the PDF. Each supervisor signs off by name or with their saved signature, copied into this report now so later profile changes never alter it.</Text>
         <SupervisorSignoffPicker supervisors={setup.supervisors} value={draft.supervisorSignoffs??[]} onChange={(value)=>update('supervisorSignoffs',value)}/>
       </LedgerSection>

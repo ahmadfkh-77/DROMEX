@@ -1,6 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import type { ContractDayReport } from '../../domain/contractQuantities';
 import { fuelPriceFromStored, type FuelType } from '../../domain/fuel';
+import { SqliteContractQuantitiesRepository } from './SqliteContractQuantitiesRepository';
 import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedFoundationActivity, LinkedFuelFill, LinkedProjectLoad, LinkedQuarryLoad, LinkedWallWork, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption, WorkerSafetyEntry } from '../../domain/projectReports';
 import { validateDailyReport } from '../../domain/projectReports';
 import type { PersonRole } from '../../domain/people';
@@ -177,6 +179,10 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
   async listLinkedQuarryLoads(projectId:string,workDate:string):Promise<LinkedQuarryLoad[]> {
     const rows=await this.db.getAllAsync<{id:string;purchase_number:string;confirmed_at:string;supplier_id:string|null;supplier_name:string;item_id:string|null;item_name:string;quantity_cubic_metres:number;unit_id:string|null;unit_symbol:string|null;delivery_method:'company'|'supplier';driver_name:string;truck_plate:string;supplier_ticket_number:string|null;notes:string|null;unit_price_usd_cents:number|null;subtotal_usd_cents:number|null;vat_amount_usd_cents:number|null;final_total_usd_cents:number|null}>(`SELECT id,purchase_number,confirmed_at,supplier_id,supplier_name,item_id,item_name,quantity_cubic_metres,unit_id,unit_symbol,delivery_method,driver_name,truck_plate,supplier_ticket_number,notes,unit_price_usd_cents,subtotal_usd_cents,vat_amount_usd_cents,final_total_usd_cents FROM quarry_purchases WHERE project_id=? AND status='Active' AND date(confirmed_at,'localtime')=? ORDER BY confirmed_at`,projectId,workDate);
     return rows.map(row=>({id:row.id,purchaseNumber:row.purchase_number,confirmedAt:row.confirmed_at,supplierId:row.supplier_id,supplierName:row.supplier_name,itemId:row.item_id,itemName:row.item_name,quantity:row.quantity_cubic_metres,unitId:row.unit_id,unitSymbol:row.unit_symbol??'m³',deliveryMethod:row.delivery_method??'company',deliveryLabel:(row.delivery_method??'company')==='supplier'?'Supplier Delivering':row.driver_name,truckPlate:row.truck_plate.trim()||null,supplierTicketNumber:row.supplier_ticket_number,notes:row.notes,unitPriceUsd:row.unit_price_usd_cents==null?null:row.unit_price_usd_cents/100,subtotalUsd:row.subtotal_usd_cents==null?null:row.subtotal_usd_cents/100,vatAmountUsd:row.vat_amount_usd_cents==null?null:row.vat_amount_usd_cents/100,finalTotalUsd:row.final_total_usd_cents==null?null:row.final_total_usd_cents/100}));
+  }
+
+  async listLinkedContractProgress(projectId:string,workDate:string):Promise<ContractDayReport> {
+    return new SqliteContractQuantitiesRepository(this.db).progressOn(projectId,workDate);
   }
 
   async listLinkedFuelFills(projectId:string,workDate:string):Promise<LinkedFuelFill[]> {

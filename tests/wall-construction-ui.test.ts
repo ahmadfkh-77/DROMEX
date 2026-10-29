@@ -62,12 +62,12 @@ describe('Wall Construction UI contract',()=>{
 
   it('adds a linked Wall Construction section to the Daily Report editor and both exports',()=>{
     const reports=source('src/ui/screens/ReportsScreen.tsx');
-    expect(reports).toMatch(/<LedgerSection number="08" title="Wall Construction"/);
-    // DEC-470 inserted Foundation Construction as its own section 09, shifting the rest up by one.
-    expect(reports).toMatch(/<LedgerSection number="09" title="Foundation Construction"/);
-    expect(reports).toMatch(/<LedgerSection number="10" title="Site Notes"/);
-    expect(reports).toMatch(/<LedgerSection number="14" title="PDF Headers"/);
-    expect(reports).toContain('of 12</Text>');
+    expect(reports).toMatch(/<LedgerSection number="09" title="Wall Construction"/);
+    // DEC-470 inserted Foundation Construction as its own section, shifting the rest up by one; DEC-537 did the same for Quantity Targets (06).
+    expect(reports).toMatch(/<LedgerSection number="10" title="Foundation Construction"/);
+    expect(reports).toMatch(/<LedgerSection number="11" title="Site Notes"/);
+    expect(reports).toMatch(/<LedgerSection number="15" title="PDF Headers"/);
+    expect(reports).toContain('of 13</Text>');
     expect(reports.match(/repository\.listLinkedWallWork\(project\.id,\s*report\.workDate\)/g)).toHaveLength(2);
     // DEC-470 appends the foundation activity so a foundation with no wall linked also reaches both
     // exports; DEC-471 gates it behind the Owner's include switch. The exact gated shape is pinned in

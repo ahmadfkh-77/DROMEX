@@ -2,7 +2,8 @@ import { normalizeCustomResourceSnapshots } from '../domain/customDirectories';
 import {loadNumberLabel} from '../domain/loadNumberSeries';
 import { normalizeSupervisorSignoffs } from '../domain/supervisors';
 import { groupSupplierLoads } from '../domain/supplierLoadGroups';
-import { netWorkMinutes, type DailyProjectReport, type LinkedFoundationActivity, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
+import type { ContractDayReport } from '../domain/contractQuantities';
+import { netWorkMinutes, type DailyProjectReport, type DailyReportSectionOptions, type LinkedFoundationActivity, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
 import { liftHasManualOverride, type ConstructionLiftReportGroup } from '../domain/constructionLiftReport';
 import { liftStatusText } from '../domain/constructionLiftDiagram';
 import { concreteMatrixVariance } from '../domain/wallConstructionLift';
@@ -139,8 +140,34 @@ export function constructionLiftRows(walls: LinkedWallWork[], foundationActivity
   ];
 }
 
-export function dailyReportWorkbookSheets(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], images: EmbeddedWorkbookImage[] = [], locale: WorkbookLocale = 'en', wallWork: LinkedWallWork[] = [], foundationActivity: LinkedFoundationActivity[] = []): SheetSpec[] {
+/**
+ * DEC-537. The Quantity Targets sheet: one row per target that moved on the work date, then an optional whole-project row. Every figure is
+ * a real number in the target's own unit; the headings avoid "Remaining", which the workbook would style as money.
+ */
+export function contractProgressRows(progress: ContractDayReport, includeWholeProject: boolean) {
+  const warningText = { none: 'In progress', near: 'Near target', full: 'At target', over: 'Over target' } as const;
+  const rows: Record<string, string | number | null>[] = progress.targets.map((target) => ({
+    'Target ID': target.item.id, Target: target.item.name, Unit: target.item.unitSymbol,
+    'Used Today': target.usedToday, 'Total Used': target.usage.used, 'Target Quantity': target.item.quantity,
+    'Quantity Left': target.usage.remaining, 'Over Target By': target.usage.overBy,
+    'Percent Complete': target.usage.percentUsed, Status: warningText[target.usage.warning],
+    'Loads Not Counted Today': target.notCountedToday,
+  }));
+  const { summary } = progress;
+  if (includeWholeProject && summary.overallPercentUsed !== null) rows.push({
+    'Target ID': null, Target: `Whole project (${summary.itemCount} target${summary.itemCount === 1 ? '' : 's'}, ${summary.overallBasis === 'value' ? 'weighted by target value' : 'average of the targets'})`, Unit: null,
+    'Used Today': null, 'Total Used': null, 'Target Quantity': null, 'Quantity Left': null, 'Over Target By': null,
+    'Percent Complete': summary.overallPercentUsed, Status: null, 'Loads Not Counted Today': null,
+  });
+  return rows;
+}
+
+export function dailyReportWorkbookSheets(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], images: EmbeddedWorkbookImage[] = [], locale: WorkbookLocale = 'en', wallWork: LinkedWallWork[] = [], foundationActivity: LinkedFoundationActivity[] = [], sections: DailyReportSectionOptions = {}): SheetSpec[] {
   const net = netWorkMinutes(report);
+  // DEC-537. With Wall Construction switched off its three sheets are left out and the Lifts sheet keeps only foundation-only lifts.
+  const includeWall = sections.includeWall !== false;
+  const wallSheet = (sheet: SheetSpec): SheetSpec[] => includeWall ? [sheet] : [];
+  const liftWalls = includeWall ? wallWork : [];
   const sheets: SheetSpec[] = [
     { name: 'Report Overview', rows: [
       { Metric: 'Report title', Value: 'Daily Project Report' }, { Metric: 'Company', Value: company.name },
@@ -165,10 +192,10 @@ export function dailyReportWorkbookSheets(report: DailyProjectReport, project: R
     { name:'Supplier Loads',rows:quarry.map(load=>({'Record ID':load.id,'Supplier Reference':load.purchaseNumber,'Confirmed At':load.confirmedAt,'Supplier ID':load.supplierId??null,Supplier:load.supplierName,'Item ID':load.itemId??null,Item:load.itemName,Quantity:load.quantity,'Unit ID':load.unitId??null,Unit:load.unitSymbol,'Delivery Method':load.deliveryLabel,'Truck Plate':load.truckPlate,'Supplier Ticket':load.supplierTicketNumber,Notes:load.notes}))},
     { name:'Fuel Used',rows:fuel.map(fill=>({'Record ID':fill.id,'Confirmed At':fill.confirmedAt,Equipment:fill.equipmentName,'Litres Filled':fill.litres,'Price per Litre USD':fill.pricePerLitreUsd,'Consumption Cost USD':fill.consumptionCostUsd,'Cost Status':fill.consumptionCostUsd==null?'Unpriced':'Costed','Odometer Reference':fill.odometerReading,Notes:fill.notes}))},
     { name: 'Waste Dumps', rows: waste.map((entry) => ({ 'Record ID': entry.id, 'Dumped At': entry.dumpedAt, Material: entry.materialType, Location: entry.dumpLocation, Driver: entry.driverName, 'Truck Plate': entry.truckPlate, Notes: entry.notes ?? null })) },
-    { name: 'Wall Construction', rows: wallConstructionRows(wallWork) },
-    { name: 'Wall Layers', rows: wallLayerRows(wallWork) },
-    { name: 'Wall Foundations', rows: wallFoundationRows(wallWork) },
-    { name: 'Lifts', rows: constructionLiftRows(wallWork, foundationActivity, project, report.workDate) },
+    ...wallSheet({ name: 'Wall Construction', rows: wallConstructionRows(wallWork) }),
+    ...wallSheet({ name: 'Wall Layers', rows: wallLayerRows(wallWork) }),
+    ...wallSheet({ name: 'Wall Foundations', rows: wallFoundationRows(wallWork) }),
+    { name: 'Lifts', rows: constructionLiftRows(liftWalls, foundationActivity, project, report.workDate) },
     { name: 'Foundations Without a Wall', rows: foundationOnlyRows(foundationActivity) },
     { name: 'Photos', rows: report.photos.map((uri, index) => ({ Photo: index + 1, 'File name': uri.split('/').pop() ?? `photo-${index + 1}.jpg`, 'Work Date': report.workDate })), images },
     // Sheets added after DEC-476 follow Photos so every earlier sheet keeps its position in the file.
@@ -181,10 +208,12 @@ export function dailyReportWorkbookSheets(report: DailyProjectReport, project: R
       ...item.suppliers.flatMap((supplier) => supplier.subtotals.map((value) => ({ Level: 'Supplier subtotal', 'Item ID': item.itemId, Item: item.itemName, 'Supplier ID': supplier.supplierId, Supplier: supplier.supplierName, Unit: value.unitSymbol, 'Total Quantity': value.quantity, Loads: value.loadCount }))),
       ...item.totals.map((value) => ({ Level: 'Item total', 'Item ID': item.itemId, Item: item.itemName, 'Supplier ID': null, Supplier: null, Unit: value.unitSymbol, 'Total Quantity': value.quantity, Loads: value.loadCount })),
     ]) },
+    // DEC-537. Appended last so every earlier sheet keeps its position; absent when Quantity Targets are off or the project has none.
+    ...(sections.contractProgress && sections.contractProgress.summary.itemCount ? [{ name: 'Quantity Targets', rows: contractProgressRows(sections.contractProgress, sections.includeWholeProject !== false) }] : []),
   ];
   return localizeWorkbookSheets(sheets, locale);
 }
 
-export function buildDailyReportWorkbook(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], images: EmbeddedWorkbookImage[] = [], locale: WorkbookLocale = 'en', wallWork: LinkedWallWork[] = [], foundationActivity: LinkedFoundationActivity[] = []) {
-  return buildWorkbookFromSheets(dailyReportWorkbookSheets(report, project, loads, quarry, waste, fuel, company, images, locale, wallWork, foundationActivity));
+export function buildDailyReportWorkbook(report: DailyProjectReport, project: ReportProject, loads: LinkedProjectLoad[], quarry:LinkedQuarryLoad[], waste: LinkedWasteDump[], fuel:LinkedFuelFill[], company: ProjectReportSetup['company'], images: EmbeddedWorkbookImage[] = [], locale: WorkbookLocale = 'en', wallWork: LinkedWallWork[] = [], foundationActivity: LinkedFoundationActivity[] = [], sections: DailyReportSectionOptions = {}) {
+  return buildWorkbookFromSheets(dailyReportWorkbookSheets(report, project, loads, quarry, waste, fuel, company, images, locale, wallWork, foundationActivity, sections));
 }

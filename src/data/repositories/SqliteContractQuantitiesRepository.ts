@@ -1,9 +1,9 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {
-  applyContractItemEdit,cancelContractItem,candidateContractItems,computeContractUsage,finishContractItem,groupContractLoadsByDay,
+  applyContractItemEdit,cancelContractItem,candidateContractItems,computeContractUsage,dailyContractProgress,finishContractItem,groupContractLoadsByDay,
   reopenContractItem,summarizeContractProject,validateContractAdjustment,validateContractItemDraft,validateContractReason,
-  type ContractAdjustment,type ContractHistoryKind,type ContractItem,type ContractItemDraft,type ContractItemValues,
+  type ContractAdjustment,type ContractDayEntry,type ContractDayReport,type ContractHistoryKind,type ContractItem,type ContractItemDraft,type ContractItemValues,
 } from '../../domain/contractQuantities';
 import {localDateKey} from '../../domain/fuel';
 import type {
@@ -101,6 +101,24 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
     const views:ContractRowView[]=[];
     for(const {id} of rows){const {item,usage,materials}=await this.row(await this.item(id));views.push({item,usage,materials});}
     return{rows:views,summary:summarizeContractProject(views)};
+  }
+
+  /**
+   * DEC-537. The Daily Report's target progress for one project and work date. A target is part of it when it existed on that date or
+   * already had a load or adjustment dated on or before it (past-date entry can link older loads to a target created later); a target
+   * with neither would only pull the whole-project percent down. The rules (as-of cut-off, used today, whole-project percent) live in
+   * dailyContractProgress, not here.
+   */
+  async progressOn(projectId:string,workDate:string):Promise<ContractDayReport>{
+    const rows=await this.db.getAllAsync<{id:string;created_at:string}>('SELECT id,created_at FROM contract_items WHERE project_id=? ORDER BY created_at,rowid',projectId);
+    const entries:ContractDayEntry[]=[];
+    for(const {id,created_at} of rows){
+      const loads=await this.linkedLoads(id),adjustments=await this.adjustments(id);
+      const existed=localDateKey(new Date(created_at))<=workDate;
+      if(!existed&&!loads.some(load=>load.date<=workDate)&&!adjustments.some(value=>localDateKey(new Date(value.createdAt))<=workDate))continue;
+      entries.push({item:await this.item(id),loads,adjustments});
+    }
+    return dailyContractProgress(entries,workDate);
   }
 
   private async editNeedsReason(contractItemId:string):Promise<boolean>{

@@ -1,3 +1,4 @@
+import type {ContractDayReport} from '../domain/contractQuantities';
 import {normalizeCustomResourceSnapshots,type CustomResourceSnapshot} from '../domain/customDirectories';
 import type {LinkedQuarryLoad} from '../domain/projectReports';
 import {groupSupplierLoads,type UnitQuantity} from '../domain/supplierLoadGroups';
@@ -60,6 +61,29 @@ export function supplierLoadsHtml(loads:readonly LinkedQuarryLoad[],includePrice
   }<tbody class="item-total">${quantityRows('item-total-row',`Item total delivered · ${item.itemName}`,item.totals,item)}</tbody></table>`).join('');
 }
 
+const percentText=(value:number)=>`${value.toFixed(1)}%`;
+
+/**
+ * DEC-537. Quantity Targets, directly after Loads delivered: one row per target that moved on the work date (used today, total used to
+ * that date, the target, what remains, percent complete) and, when asked, a closing whole-project row. Quantities are printed in the
+ * target's own unit and never converted. Amber and red follow the target screens (near, over); the row words say the same thing, so the
+ * table reads in grayscale. A project with no targets prints nothing.
+ */
+export function contractProgressHtml(progress:ContractDayReport|null|undefined,includeWholeProject:boolean):string{
+  if(!progress||!progress.summary.itemCount)return '';
+  const rows=progress.targets.map(target=>{
+    const {item,usage}=target;
+    const tone=usage.warning==='over'?'over':usage.warning==='near'?'near':'';
+    const remaining=usage.overContract?`over ${fmt(usage.overBy)} ${e(item.unitSymbol)}`:`${fmt(usage.remaining)} ${e(item.unitSymbol)}`;
+    const note=target.notCountedToday?`<div class="target-note">${target.notCountedToday} load${target.notCountedToday===1?'':'s'} in another unit not counted</div>`:'';
+    return `<tr><td dir="auto">${e(item.name)}${note}</td><td class="number">${fmt(target.usedToday)} ${e(item.unitSymbol)}</td><td class="number">${fmt(usage.used)} ${e(item.unitSymbol)}</td><td class="number">${fmt(item.quantity)} ${e(item.unitSymbol)}</td><td class="number">${remaining}</td><td class="number target-percent"><b class="${tone?`pct-${tone}`:''}">${percentText(usage.percentUsed)}</b><div class="target-bar ${tone}"><i style="width:${Math.min(100,Math.max(0,usage.percentUsed))}%"></i></div></td></tr>`;
+  }).join('')||'<tr><td colspan="6" class="empty">No quantity target received a load on this date</td></tr>';
+  const {summary}=progress;
+  const whole=includeWholeProject&&summary.overallPercentUsed!==null
+    ?`<tr class="target-whole"><td colspan="5">Whole project &middot; ${summary.itemCount} target${summary.itemCount===1?'':'s'} &middot; ${summary.overallBasis==='value'?'weighted by target value':'average of the targets'}</td><td class="number">${percentText(summary.overallPercentUsed)}</td></tr>`:'';
+  return `<section class="target-section"><h2>Quantity targets</h2><table class="target-table"><colgroup><col style="width:27%"/><col style="width:14%"/><col style="width:15%"/><col style="width:15%"/><col style="width:15%"/><col style="width:14%"/></colgroup><thead><tr><th>Target</th><th class="number">Used today</th><th class="number">Total used</th><th class="number">Target</th><th class="number">Remaining</th><th class="number">% complete</th></tr></thead><tbody>${rows}${whole}</tbody></table><p class="target-foot">Total used and % complete are as of this report date. Quantities are never converted between units.</p></section>`;
+}
+
 /**
  * DEC-479. Supervisor Sign-off, closing the report. Each supervisor is one block that never splits
  * across a page. A chosen signature is drawn from the report's own stroke copy with
@@ -99,6 +123,16 @@ export const DAILY_REPORT_SECTIONS_CSS=`
     .subtotal-row,.item-total-row{break-inside:avoid;page-break-inside:avoid}
     .subtotal-row td{font-weight:700;font-style:italic;border-top:1px solid #65717d}
     .item-total-row td{font-weight:900;border-top:2px solid #17212b;background:#fff8ed}
+    .target-section{margin-top:3mm}
+    .target-table{table-layout:fixed}.target-table td,.target-table th{overflow-wrap:anywhere}
+    .target-table tr{break-inside:avoid;page-break-inside:avoid}
+    .target-note{font-size:7.5pt;color:#65717d}
+    .target-percent b{font-size:10pt}.pct-near{color:#8a5300}.pct-over{color:#a61b12}
+    .target-bar{height:1.6mm;background:#ece7dd;border-radius:1mm;margin-top:.8mm;position:relative}
+    .target-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:1mm;background:#173f67}
+    .target-bar.near i{background:#c98a1a}.target-bar.over i{background:#a61b12}
+    .target-whole td{font-weight:900;border-top:2px solid #17212b;background:#fff8ed}
+    .target-foot{margin:1.2mm 0 0;font-size:7.5pt;color:#65717d}
     .signoff-section{margin-top:5mm}
     .signoff-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5mm}
     .signoff-block{break-inside:avoid;page-break-inside:avoid;padding:3mm 4mm 3.5mm;border:1px solid #d9d5ce;border-top:3px solid #173f67;background:#fff}

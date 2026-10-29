@@ -69,6 +69,6 @@ describe('the switch is wired into the Daily Report editor and both exports',()=
 
   it('still records and still shows the foundation in the editor when excluded',()=>{
     expect(reports).toContain('describeFoundationSectionPreference');
-    expect(reports).toMatch(/<LedgerSection number="09" title="Foundation Construction"/);
+    expect(reports).toMatch(/<LedgerSection number="10" title="Foundation Construction"/);
   });
 });
