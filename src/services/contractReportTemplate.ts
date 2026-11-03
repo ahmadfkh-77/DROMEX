@@ -71,6 +71,5 @@ export function buildContractReportHtml(report:ContractReport,header:ContractRep
     <div class="head"><div>${header.logo?`<img class="logo" src="${header.logo}" alt=""/>`:''}<b>${t(header.companyName)}</b>${header.contactLine?`<div class="contact">${t(header.contactLine)}</div>`:''}</div>
       <div class="head-right"><h1>${t(report.title)}</h1><div class="subtitle">Project: ${t(report.project.name)}</div><div class="subtitle">Customer: ${t(report.project.customerName)}</div><div class="when">As of ${e(when(report.generatedAt))} · ${prices?'With prices':'Without prices'}</div></div></div>
     ${summary}${items}${overruns}${notCounted}
-    <div class="notes"><h4>Notes</h4><ol>${report.notes.map(note=>`<li>${e(note)}</li>`).join('')}</ol></div>
   </body></html>`;
 }

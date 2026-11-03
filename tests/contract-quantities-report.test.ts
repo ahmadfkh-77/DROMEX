@@ -92,6 +92,15 @@ describe('the PDF',()=>{
     expect(html).toContain('90.4%');
     expect(html).toContain('318.5');
   });
+  it('ends after its last table, with no Notes list, with or without prices (DEC-538)',()=>{
+    const {rows,summary}=sample();
+    for(const includePrices of [true,false]){
+      const html=buildContractReportHtml(buildContractReport(rows,summary,project,{includePrices,generatedAt:'2026-10-23T10:00:00.000Z'}),header);
+      expect(html).not.toContain('<h4>Notes</h4>');
+      expect(html).not.toContain('class="notes"');
+      expect(html).not.toContain('never converted or added together');
+    }
+  });
   it('works without a logo and escapes text',()=>{
     const {rows,summary}=sample();
     const html=buildContractReportHtml(buildContractReport(rows,summary,{...project,name:'<Road & Co>'},{includePrices:false,generatedAt:'2026-10-23T10:00:00.000Z'}),{...header,logo:null});
