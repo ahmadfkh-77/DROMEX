@@ -1,5 +1,6 @@
 import type {CompanyTotalsRecord} from '../data/repositories/CompanyTotalsRepository';
 import {buildMaterialTree,treeTotals,unitDifferences,type CompanyTotalsData,type MaterialNode,type RecordedValue,type UnitMeasures} from '../domain/companyTotals';
+import type {ContractTotalsTarget} from '../domain/contractQuantities';
 import {formatFuelPriceUsd,fuelPriceFromStored,fuelTypeLabels} from '../domain/fuel';
 import {breakAfterHyphens,colgroup,columnWidths,type ColumnSpec} from './pdfColumns';
 import {reportCss} from './pdfTheme';
@@ -30,6 +31,8 @@ export type TotalsPdf={companyName:string;logo:string|null;title:string;scope:'c
   showProject?:boolean;
   /** Project Totals only: the project's equipment fills; omitted means fuel is left out. */
   fuel?:ProjectFuelFill[];
+  /** Project Totals only (DEC-539): the project's targets, shown beside each material they list; omitted means no target tiles. */
+  targets?:ContractTotalsTarget[];
   /** Company Settings address, phone, email and Tax/VAT, joined with a middle dot, under the company name. */
   contactLine?:string|null;
   /** Project Totals top level: the project, its customer box, and every Active load behind the totals (company and supplier kept apart). */
@@ -56,7 +59,25 @@ function headline(units:UnitMeasures[],showUsed:boolean):string{
   return [delivered.length?`<span class="pill delivered">Delivered ${e(delivered.join(' · '))}</span>`:'',used.length?`<span class="pill used">Used ${e(used.join(' · '))}</span>`:''].join('');
 }
 
-function materialBlock(material:MaterialNode,index:number,showUsed:boolean,prices:boolean):string{
+/**
+ * DEC-539. One group of tiles per target that lists this material, beside Records: the target's own quantity, what counts toward it and the
+ * percent complete (the same figures as the Quantity Targets page, so they can be lower than Delivered when some loads are not linked).
+ * Amber for near and red for over, and "Over target by" says so in words. A material with no target prints nothing here.
+ */
+function targetTiles(material:MaterialNode,targets:readonly ContractTotalsTarget[]):string{
+  if(!material.itemKey.startsWith('id:'))return '';
+  const materialId=material.itemKey.slice(3);
+  return targets.filter(target=>target.materialIds.includes(materialId)).map(target=>{
+    const tone=target.warning==='over'?'over':target.warning==='near'?'near':'';
+    return `<div class="figure target"><div class="target-name">Target &middot; ${t(target.name)}</div><div class="target-cells">
+      <div class="figure-cell"><span class="figure-label">Target</span><b>${e(formatTotalQuantity(target.quantity,target.unitSymbol))}</b></div>
+      <div class="figure-cell"><span class="figure-label">Counted</span><b>${e(formatTotalQuantity(target.counted,target.unitSymbol))}</b></div>
+      <div class="figure-cell"><span class="figure-label">% complete</span><b class="${tone?`pct-${tone}`:''}">${target.percentUsed.toFixed(1)}%</b></div></div>
+      <div class="target-bar ${tone}"><i style="width:${Math.min(100,Math.max(0,target.percentUsed))}%"></i></div>${target.overBy>0?`<div class="target-over">Over target by ${e(formatTotalQuantity(target.overBy,target.unitSymbol))}</div>`:''}</div>`;
+  }).join('');
+}
+
+function materialBlock(material:MaterialNode,index:number,showUsed:boolean,prices:boolean,targets:readonly ContractTotalsTarget[]=[]):string{
   const figures=material.units.map(unit=>`<div class="figure">
       <div class="figure-unit">${e(unit.unitSymbol)}</div>
       <div class="figure-cell delivered"><span class="figure-label">Delivered</span><b>${qty(unit.delivered,unit.unitSymbol)}</b></div>
@@ -79,6 +100,7 @@ function materialBlock(material:MaterialNode,index:number,showUsed:boolean,price
     <div class="block-body">
       <div class="figures">${figures}
         <div class="figure side"><span class="figure-label">Records</span><b>${material.inclusion.total}</b>${prices?`<span class="figure-label spaced">Recorded value</span><b>${value(material.value)}</b>`:''}</div>
+        ${targetTiles(material,targets)}
       </div>
       ${deliveredRows?`<h4 class="sub">Delivered — by project and supplier</h4>
       <table class="grid"><colgroup>${(prices?[46,10,18,10,16]:[52,12,22,14]).map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Project · supplier or source</th><th>Unit</th><th class="num">Delivered</th><th class="num">Records</th>${prices?'<th class="num">Recorded value</th>':''}</tr></thead><tbody>${deliveredRows}${deliveredTotals}</tbody></table>`:''}
@@ -249,6 +271,14 @@ export function buildTotalsHtml(input:TotalsPdf):string{
     @media screen{body{max-width:${landscape?'297mm':'210mm'};margin:0 auto;padding:12mm}}
     .grid{table-layout:fixed}
     .history td{font-size:8pt}.history.dense td{font-size:7pt}.history.dense th{font-size:6.5pt}
+    .figure.target{flex-direction:column;border-top:.6mm solid #173F67;background:#FBFCFE;min-width:78mm;break-inside:avoid}
+    .target-name{font-size:6.8pt;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:#173F67;padding:1.2mm 3mm 0;overflow-wrap:anywhere}
+    .target-cells{display:flex}
+    .figure-cell b.pct-near{color:#8A5300}.figure-cell b.pct-over{color:#A61B12}
+    .target-bar{height:1.4mm;background:#ECE7DD;margin:0 3mm 1.6mm;position:relative}
+    .target-bar i{position:absolute;left:0;top:0;bottom:0;background:#173F67}
+    .target-bar.near i{background:#C98A1A}.target-bar.over i{background:#A61B12}
+    .target-over{font-size:7pt;font-weight:700;color:#A61B12;padding:0 3mm 1.4mm}
     .proj{border:.35mm solid #9FB0C2;background:#FFFFFF;padding:2.5mm 3.5mm;margin:0 0 3mm;display:flex;gap:6mm;flex-wrap:wrap}
     .proj .figure-label{margin-bottom:.3mm}.proj b{font-size:10.5pt;color:#173F67}
     .two{display:flex;gap:4mm;margin:0 0 3mm;break-inside:avoid}.box{flex:1;border:.35mm solid #9FB0C2;padding:2.5mm 3.5mm;background:#FFFFFF}
@@ -263,7 +293,7 @@ export function buildTotalsHtml(input:TotalsPdf):string{
     ${input.data.usageHiddenReason&&!history?`<p class="note-plain">${e(input.data.usageHiddenReason)}</p>`:''}
     <div class="tiles">${tiles}</div>
     ${contents?`<nav class="contents"><h3>Contents</h3><ol>${contents}</ol></nav>`:''}
-    ${tree.map((material,index)=>materialBlock(material,index+1,showUsed,prices)).join('')||'<p class="empty">Nothing recorded for these filters.</p>'}
+    ${tree.map((material,index)=>materialBlock(material,index+1,showUsed,prices,input.targets??[])).join('')||'<p class="empty">Nothing recorded for these filters.</p>'}
     ${input.fuel?fuelBlock(input.fuel,fuelIndex,prices):''}
     ${history?historyBlock(history,historyIndex,prices,showProject):''}
     ${summaryLoads.length?loadsDeliveredBlock(summaryLoads,summaryIndex,prices,showProject,byDriver):''}

@@ -15,6 +15,7 @@ import {
   buildMaterialTree,COMPANY_SUPPLIER_KEY,countCompanyFilters,customerFilterLabel,customerFilterWorthShowing,treeTotals,unitDifferences,emptyCompanyTotalsFilters,LEGACY_SERIES_KEY,LEGACY_SERIES_LABEL,NO_PROJECT_KEY,
   type CompanyTotalsData,type CompanyTotalsFilters,type CustomerChoice,type MaterialNode,type ProjectNode,type SupplierNode,type TotalsView,type UnitMeasures,
 } from '../../../domain/companyTotals';
+import type {ContractTotalsTarget} from '../../../domain/contractQuantities';
 import {describeTotalsRange,formatTotalQuantity,validateTotalsFilters,type ProjectFuelFill} from '../../../domain/projectTotals';
 import {companyContactLine,customerBox} from '../../../domain/projectTotalsPdf';
 import {driverChoices,driverNamesLabel,type DriverChoice} from '../../../domain/totalsDrivers';
@@ -50,7 +51,7 @@ const unique=(values:Choice[])=>[...new Map(values.map(value=>[value.id,value]))
  * one summary band and one ruled list; every figure comes from buildMaterialTree. The parent owns the
  * level so its Back button can step up one level at a time.
  */
-export function TotalsExplorer({scope,totals,documents,series,profiles,headers,onOpenCompanySetups,loadFuelFills,level,onLevel,onOpenRecord,onOpenReport,onCreateDocument,onFilters,refreshToken=0}:{
+export function TotalsExplorer({scope,totals,documents,series,profiles,headers,onOpenCompanySetups,loadFuelFills,loadContractTargets,level,onLevel,onOpenRecord,onOpenReport,onCreateDocument,onFilters,refreshToken=0}:{
   scope:ExplorerScope;totals:CompanyTotalsRepository;documents:BusinessDocumentRepository;series:LoadNumberSeriesRepository;
   /** Company name and logo for the Totals PDF; without it the Export PDF action is not offered. */
   profiles?:ProfileRepository;
@@ -58,6 +59,8 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
   headers?:CompanyHeaderRepository;onOpenCompanySetups?:()=>void;
   /** Project Totals only: the project's fuel fills for a date range, offered as an optional PDF section. */
   loadFuelFills?:(range:{fromDate:string;toDate:string})=>Promise<ProjectFuelFill[]>;
+  /** Project Totals only (DEC-539): the project's targets as of a date (the To date) or now, offered as an optional PDF addition. */
+  loadContractTargets?:(asOfDate:string|null)=>Promise<ContractTotalsTarget[]>;
   level:ExplorerLevel;onLevel:(level:ExplorerLevel)=>void;onOpenRecord:(record:RecordSnapshot)=>void;onOpenReport:(usage:UsageRecord)=>void;onCreateDocument:(start:DocumentStart)=>void;
   /** Reports the filters, so a parent can show other sections for the same dates and view. */
   onFilters?:(filters:CompanyTotalsFilters)=>void;refreshToken?:number;
@@ -86,11 +89,14 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
   const[exportPrices,setExportPrices]=useState<'without'|'with'>('without');
   const[exportProject,setExportProject]=useState<'show'|'hide'>('show');
   const[exportFuel,setExportFuel]=useState<'leave'|'include'>('leave');
+  const[exportTargets,setExportTargets]=useState<'leave'|'show'>('leave');
   const[exportDrivers,setExportDrivers]=useState<string[]>([]);
   const[exportDriverTotal,setExportDriverTotal]=useState<DriverTotalChoice>('all');
   const[driverOptions,setDriverOptions]=useState<DriverChoice[]>([]);
   /** Fuel belongs to the whole project, so it is offered on the project's top level only. */
   const fuelChoiceShown=Boolean(loadFuelFills)&&scope.kind==='project'&&!level.material;
+  /** DEC-539. Quantity Targets belong to a project, so the choice is offered on Project Totals only, never on a records level. */
+  const targetsChoiceShown=Boolean(loadContractTargets)&&scope.kind==='project'&&!(level.supplier);
   const[exportMessage,setExportMessage]=useState<{kind:'success'|'error';text:string}|null>(null);
 
   const issues=validateTotalsFilters({fromDate:filters.fromDate,toDate:filters.toDate,itemKey:'',supplierKey:'',unitKey:'',view:'all'});
@@ -175,12 +181,14 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
   if(status==='loading'||!data)return <>{filterBlock}<View style={styles.center}><ActivityIndicator color={colors.brand}/><Text style={styles.helper}>Calculating totals…</Text></View></>;
 
   /** DEC-500. The PDF covers exactly what is on screen: the filters and the level drilled into. */
-  const exportPdf=async(includePrices:boolean,showProject:boolean,includeFuel:boolean)=>{
+  const exportPdf=async(includePrices:boolean,showProject:boolean,includeFuel:boolean,includeTargets:boolean)=>{
     if(!profiles)return;
     setExporting(true);setExportMessage(null);
     try{
       // On the records level the PDF is a Loads History: every load behind these totals, listed.
       const fuel=includeFuel&&fuelChoiceShown?await loadFuelFills!({fromDate:filters.fromDate,toDate:filters.toDate}):undefined;
+      // DEC-539. Targets as of the To date (or now), each with its own figures; none when the option is off.
+      const targets=includeTargets&&targetsChoiceShown?await loadContractTargets!(filters.toDate||null):undefined;
       // Project Totals (not on a records level): the customer and supplier boxes and every Active load behind the totals.
       const projectScope=scope.kind==='project'&&!atRecords;
       // Company Totals (not on a records level): every Active load behind the totals is listed after the materials.
@@ -211,7 +219,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
         ...(filters.inclusion!=='all'?[`Document status: ${inclusionFilterLabels[filters.inclusion]}`]:[])];
       const title=atRecords?'Loads History':scope.kind==='project'?'Project Totals':onlyCustomer?'Totals':'Company Totals';
       const parts=[onlyCustomer,level.material?.name,scope.kind==='project'?scope.projectName:level.project?.name,level.supplier?.key?level.supplier.name:undefined];
-      await exportAndShareTotals({companyName:printed?.companyName||company.companyName,logoUri:printed?printed.logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,fuel,data:current,records:history,loads:summaryScope?projectLoads:undefined,customerName:onlyCustomer,issuedTo:issuedTo(level.supplier,history),contactLine,project,drivers:driverKeys.length?{keys:driverKeys,names:driverNames}:undefined,
+      await exportAndShareTotals({companyName:printed?.companyName||company.companyName,logoUri:printed?printed.logoUri:company.logoUri,title,scope:scope.kind,filters:labels,generatedAt:new Date().toISOString(),includePrices,showProject,fuel,targets,data:current,records:history,loads:summaryScope?projectLoads:undefined,customerName:onlyCustomer,issuedTo:issuedTo(level.supplier,history),contactLine,project,drivers:driverKeys.length?{keys:driverKeys,names:driverNames}:undefined,
         fileName:{scopeName:parts.filter(Boolean).join(' ')||null,fromDate:filters.fromDate,toDate:filters.toDate}});
       setExportMessage({kind:'success',text:`${title} PDF ready to share, ${includePrices?'with recorded prices':'without prices'}.`});
     }catch(cause){setExportMessage({kind:'error',text:cause instanceof Error?cause.message:'The PDF could not be created.'});}
@@ -219,7 +227,7 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
   };
   const askExport=()=>{setExportDrivers([]);setExportDriverTotal('all');setDriverOptions([]);
     if(!atRecords)totals.listRecords(nodeFilters,5000).then(found=>setDriverOptions(driverChoices(found))).catch(()=>setDriverOptions([]));
-    setExportPrices('without');setExportProject('show');setExportFuel('leave');setRememberHeader(false);setExportOpen(true);
+    setExportPrices('without');setExportProject('show');setExportFuel('leave');setExportTargets('leave');setRememberHeader(false);setExportOpen(true);
     if(headers&&scope.kind==='project')headers.getProjectHeaderDefault(scope.projectId).then(setHeaderKind).catch(()=>setHeaderKind('plant'));else setHeaderKind('plant');};
   const createButton=<>
     <QuietButton label="Create document" onPress={()=>openStart()} hint="Choose records, who the document is for, and its type"/>
@@ -299,11 +307,13 @@ export function TotalsExplorer({scope,totals,documents,series,profiles,headers,o
     {body}
     <UsageSheet query={usage} totals={totals} onClose={()=>setUsage(null)} onOpen={report=>{setUsage(null);onOpenReport(report);}}/>
     <FocusedSheet visible={exportOpen} eyebrow="EXPORT PDF" title={atRecords?'Loads History':scope.kind==='project'?'Project Totals':'Company Totals'} onClose={()=>setExportOpen(false)}
-      footer={<SheetActions primaryLabel="Export PDF" onCancel={()=>setExportOpen(false)} onPrimary={()=>{setExportOpen(false);void exportPdf(exportPrices==='with',exportProject==='show',exportFuel==='include');}}/>}>
+      footer={<SheetActions primaryLabel="Export PDF" onCancel={()=>setExportOpen(false)} onPrimary={()=>{setExportOpen(false);void exportPdf(exportPrices==='with',exportProject==='show',exportFuel==='include',exportTargets==='show');}}/>}>
       <Text style={styles.helper}>{atRecords?'Every load listed here, with its totals. It is not an invoice or bill.':'Covers the filters and the level you are looking at.'}</Text>
       <SegmentedChoice label="Prices" options={[{id:'without',label:'Without prices'},{id:'with',label:'With prices'}]} selectedId={exportPrices} onSelect={setExportPrices}/>
       {fuelChoiceShown?<SegmentedChoice label="Fuel" options={[{id:'leave',label:'Leave out'},{id:'include',label:'Include fuel list'}]} selectedId={exportFuel} onSelect={setExportFuel}/>:null}
       {fuelChoiceShown&&exportFuel==='include'?<Text style={styles.helper}>Adds fuel per type and equipment and every fill in the Covering dates. Prices and cost appear only with prices.</Text>:null}
+      {targetsChoiceShown?<SegmentedChoice label="Quantity Targets" options={[{id:'leave',label:'Leave out'},{id:'show',label:'Show target and % complete'}]} selectedId={exportTargets} onSelect={setExportTargets}/>:null}
+      {targetsChoiceShown&&exportTargets==='show'?<Text style={styles.helper}>Adds, beside each material that has a target in this project, the target quantity, what counts toward it and the % complete. Counted can be lower than Delivered when some loads are not linked to the target.</Text>:null}
       {headers?<HeaderCompanyPicker headers={headers} value={headerKind} onChange={setHeaderKind} remember={scope.kind==='project'&&!atRecords?{checked:rememberHeader,onChange:setRememberHeader}:undefined} onOpenSetups={onOpenCompanySetups?()=>{setExportOpen(false);onOpenCompanySetups();}:undefined}/>:null}
       {headers?<HeaderCustomizer value={headerCustom} onChange={setHeaderCustom}/>:null}
       {!atRecords&&driverOptions.length?<DriverPicker choices={driverOptions} selected={exportDrivers} onChange={setExportDrivers} total={exportDriverTotal} onTotal={setExportDriverTotal}/>:null}

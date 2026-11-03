@@ -302,6 +302,33 @@ export type ContractDayReport={
 };
 
 /**
+ * One target as of the end of `asOf` (YYYY-MM-DD), or as it is now when `asOf` is null: later loads and adjustments are ignored and a target
+ * finished after that day was still in progress then. The one place the as-of rule lives, for the Daily Report and the Totals PDF.
+ */
+export function contractUsageAsOf(entry:ContractDayEntry,asOf:string|null):{item:ContractItem;adjustments:ContractAdjustment[];usage:ContractUsage}{
+  if(asOf===null)return{item:entry.item,adjustments:[...entry.adjustments],usage:computeContractUsage(entry.item,entry.loads,entry.adjustments)};
+  const item:ContractItem=entry.item.status==='complete'&&entry.item.completedOn&&entry.item.completedOn>asOf
+    ?{...entry.item,status:'in_progress',completedOn:null}:entry.item;
+  const adjustments=entry.adjustments.filter(value=>localDateKey(new Date(value.createdAt))<=asOf);
+  return{item,adjustments,usage:computeContractUsage(item,entry.loads.filter(load=>load.date<=asOf),adjustments)};
+}
+
+/** A target as the Project Totals PDF prints it (DEC-539): its own figures, as of the To date or today. */
+export type ContractTotalsTarget={
+  id:string;name:string;unitSymbol:string;materialIds:string[];
+  quantity:number;/** What counts toward the target: loads linked to it plus adjustments, never the material's Delivered figure. */counted:number;
+  percentUsed:number;warning:ContractWarning;overBy:number;
+};
+
+/** Live targets for the Totals PDF, each with its own figures; cancelled targets are left out. */
+export function contractTotalsTargets(entries:readonly ContractDayEntry[],asOf:string|null):ContractTotalsTarget[]{
+  return entries.filter(entry=>!entry.item.cancelledAt).map(entry=>{
+    const {item,usage}=contractUsageAsOf(entry,asOf);
+    return{id:item.id,name:item.name,unitSymbol:item.unitSymbol,materialIds:[...item.materialIds],quantity:item.quantity,counted:usage.used,percentUsed:usage.percentUsed,warning:usage.warning,overBy:usage.overBy};
+  });
+}
+
+/**
  * Daily Report progress (DEC-537). Everything is read as of the end of `workDate`: later loads and adjustments are ignored, so an issued
  * report keeps the percent it had that day. A target finished after that day was still in progress then. Cancelled targets are left out.
  */
@@ -309,10 +336,7 @@ export function dailyContractProgress(entries:readonly ContractDayEntry[],workDa
   const rows:ContractRow[]=[],targets:ContractDayProgress[]=[];
   for(const entry of entries){
     if(entry.item.cancelledAt)continue;
-    const item:ContractItem=entry.item.status==='complete'&&entry.item.completedOn&&entry.item.completedOn>workDate
-      ?{...entry.item,status:'in_progress',completedOn:null}:entry.item;
-    const adjustments=entry.adjustments.filter(value=>localDateKey(new Date(value.createdAt))<=workDate);
-    const usage=computeContractUsage(item,entry.loads.filter(load=>load.date<=workDate),adjustments);
+    const {item,adjustments,usage}=contractUsageAsOf(entry,workDate);
     rows.push({item,usage});
     const adjustedToday=adjustments.filter(value=>value.contractItemId===item.id&&localDateKey(new Date(value.createdAt))===workDate);
     const countedToday=usage.countedLoads.filter(load=>load.date===workDate);

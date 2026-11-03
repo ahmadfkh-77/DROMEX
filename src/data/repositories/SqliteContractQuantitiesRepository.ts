@@ -1,9 +1,9 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {
-  applyContractItemEdit,cancelContractItem,candidateContractItems,computeContractUsage,dailyContractProgress,finishContractItem,groupContractLoadsByDay,
+  applyContractItemEdit,cancelContractItem,candidateContractItems,computeContractUsage,contractTotalsTargets,dailyContractProgress,finishContractItem,groupContractLoadsByDay,
   reopenContractItem,summarizeContractProject,validateContractAdjustment,validateContractItemDraft,validateContractReason,
-  type ContractAdjustment,type ContractDayEntry,type ContractDayReport,type ContractHistoryKind,type ContractItem,type ContractItemDraft,type ContractItemValues,
+  type ContractAdjustment,type ContractDayEntry,type ContractDayReport,type ContractHistoryKind,type ContractTotalsTarget,type ContractItem,type ContractItemDraft,type ContractItemValues,
 } from '../../domain/contractQuantities';
 import {localDateKey} from '../../domain/fuel';
 import type {
@@ -110,15 +110,27 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
    * dailyContractProgress, not here.
    */
   async progressOn(projectId:string,workDate:string):Promise<ContractDayReport>{
+    return dailyContractProgress(await this.entriesAsOf(projectId,workDate),workDate);
+  }
+
+  /** DEC-539. The project's live targets with their own figures as of `asOfDate` (the Totals To date), or as they are now when null. */
+  async totalsTargets(projectId:string,asOfDate:string|null):Promise<ContractTotalsTarget[]>{
+    return contractTotalsTargets(await this.entriesAsOf(projectId,asOfDate),asOfDate);
+  }
+
+  /** The project's targets with their loads and adjustments; with a date, only those that existed or already had records on or before it. */
+  private async entriesAsOf(projectId:string,asOf:string|null):Promise<ContractDayEntry[]>{
     const rows=await this.db.getAllAsync<{id:string;created_at:string}>('SELECT id,created_at FROM contract_items WHERE project_id=? ORDER BY created_at,rowid',projectId);
     const entries:ContractDayEntry[]=[];
     for(const {id,created_at} of rows){
       const loads=await this.linkedLoads(id),adjustments=await this.adjustments(id);
-      const existed=localDateKey(new Date(created_at))<=workDate;
-      if(!existed&&!loads.some(load=>load.date<=workDate)&&!adjustments.some(value=>localDateKey(new Date(value.createdAt))<=workDate))continue;
+      if(asOf!==null){
+        const existed=localDateKey(new Date(created_at))<=asOf;
+        if(!existed&&!loads.some(load=>load.date<=asOf)&&!adjustments.some(value=>localDateKey(new Date(value.createdAt))<=asOf))continue;
+      }
       entries.push({item:await this.item(id),loads,adjustments});
     }
-    return dailyContractProgress(entries,workDate);
+    return entries;
   }
 
   private async editNeedsReason(contractItemId:string):Promise<boolean>{

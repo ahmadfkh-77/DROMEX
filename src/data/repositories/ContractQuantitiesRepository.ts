@@ -1,5 +1,5 @@
 import type {
-  ContractHistoryKind,ContractItem,ContractItemDraft,ContractLoad,ContractLoadDay,ContractProjectSummary,ContractUsage,
+  ContractHistoryKind,ContractItem,ContractItemDraft,ContractLoad,ContractLoadDay,ContractProjectSummary,ContractTotalsTarget,ContractUsage,
 } from '../../domain/contractQuantities';
 import type {ContractLoadSource} from './contractLinks';
 
@@ -26,6 +26,8 @@ export interface ContractQuantitiesRepository{
   /** The Company Settings name, logo and contact line: the report header when no Header company is chosen. */
   getCompanyIdentity():Promise<{name:string;logoUri:string|null;contactLine:string|null}>;
   listProject(projectId:string):Promise<{rows:ContractRowView[];summary:ContractProjectSummary}>;
+  /** DEC-539. Live targets with their own figures for the Project Totals PDF, as of a date (the To date) or now when null. */
+  totalsTargets(projectId:string,asOfDate:string|null):Promise<ContractTotalsTarget[]>;
   getItem(contractItemId:string):Promise<ContractItemDetail>;
   createItem(projectId:string,draft:ContractItemDraft):Promise<ContractItem>;
   editItem(contractItemId:string,draft:ContractItemDraft,reason:string):Promise<ContractItem>;

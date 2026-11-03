@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Totals PDF target tiles mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--orange:#C84B31;--navy:#173F67;--ink:#17212B;--cream:#FFF8ED;--cream2:#F5F2EC;--line:#DDD7CC;--muted:#5C6773;--amber:#8A5300;--red:#A61B12;--green:#17693B}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:#E9E4DA;color:var(--ink);font-family:"Noto Sans",Arial,sans-serif;font-size:13px;line-height:1.4}
+.top{max-width:1180px;margin:0 auto;padding:22px 16px 4px}.top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}.top p{margin:0;color:var(--muted);max-width:860px}
+.stage{max-width:1180px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:26px}
+.cap{font-weight:700;color:var(--navy);margin:0 0 8px;font-size:13px}
+.row{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+/* phone export sheet */
+.phone{width:375px;max-width:100%;background:var(--cream2);border-radius:28px;border:6px solid #1C2530;padding:14px;display:flex;flex-direction:column;gap:12px;box-shadow:0 10px 30px rgba(20,38,58,.18)}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px}.card h3{margin:0 0 4px;font-size:16px}
+.hint{font-size:12.5px;color:var(--muted);margin:2px 0 0}
+.lbl{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px}
+.seg{display:flex;gap:8px;flex-wrap:wrap}.seg span{min-height:44px;display:inline-flex;align-items:center;padding:0 14px;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-weight:700;font-size:13px}
+.seg span.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.new{outline:2px dashed var(--orange);outline-offset:4px;border-radius:12px;padding:2px}
+.btn{min-height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;background:var(--orange);color:#fff;margin-top:10px}
+/* PDF page */
+.paper{width:780px;max-width:100%;background:#fff;box-shadow:0 8px 26px rgba(20,38,58,.2);padding:20px 22px;font-family:Arial,sans-serif;font-size:11px}
+.block{border:1px solid #c9d3de;margin-bottom:14px}
+.bar{background:#173f67;color:#fff;display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:3px solid var(--orange)}
+.bar .i{font-weight:800}.bar .n{font-weight:800;font-size:13px;flex:1}.bar .f{font-size:10px;color:#dbe6f1}
+.body{padding:12px}
+.figures{display:flex;gap:0;align-items:stretch;flex-wrap:wrap;row-gap:8px}
+.figure{display:flex;border:1px solid #c9d3de;margin-right:12px}
+.fu{width:44px;display:flex;align-items:center;justify-content:center;font-weight:800;border-right:1px solid #c9d3de;background:#f3f6f9}
+.fc{padding:6px 10px;min-width:96px;border-right:1px solid #c9d3de}.fc:last-child{border-right:0}
+.fl{display:block;font-size:7.5px;letter-spacing:.8px;text-transform:uppercase;font-weight:700;color:#4b5864}.fc b{font-size:15px}
+.fc.missing b{color:#8a949d;font-weight:400}
+/* NEW target group */
+.tgt{border:1px solid var(--navy);border-top:3px solid var(--navy);display:flex;flex-direction:column;background:#fbfcfe;min-width:230px}
+.tgt .tn{font-size:7.5px;letter-spacing:.8px;text-transform:uppercase;font-weight:800;color:var(--navy);padding:4px 10px 0}
+.tgt .cells{display:flex}
+.tgt .fc{border-right:1px solid #d6dde6}.tgt .fc:last-child{border-right:0}
+.pct-near{color:var(--amber)}.pct-over{color:var(--red)}
+.tbar{height:5px;background:#ece7dd;margin:0 10px 6px;border-radius:3px;position:relative}.tbar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--navy)}
+.tbar.near i{background:#c98a1a}.tbar.over i{background:var(--red)}
+.sub{margin:8px 0 0;font-size:8px;color:#65717d}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:10px}th{text-align:left;font-size:8px;text-transform:uppercase;color:#334;border-bottom:1.5px solid #173f67;padding:4px}td{padding:4px;border-bottom:1px solid #e6e1d8}
+.note{background:#EEF2F6;border:1px solid #D3DDE7;border-radius:12px;padding:10px 12px;max-width:780px}
+</style></head><body>
+<div class="top"><h1>Project Totals PDF · target tiles (mockup)</h1>
+<p>All figures are invented. A new Export option, <b>Quantity Targets</b>, off by default, adds the target's own figures to each material that has a target in the project. A material without a target looks exactly as it does today.</p></div>
+<div class="stage">
+
+<div><p class="cap">1 · The Export PDF sheet gets one new choice</p>
+<div class="phone"><div class="card"><h3>Export PDF</h3><p class="hint">Project Totals · Zebdine -Choukine Road</p>
+<div class="lbl">Prices</div><div class="seg"><span class="on">Without prices</span><span>With prices</span></div>
+<div class="lbl">Fuel</div><div class="seg"><span class="on">Leave out fuel</span><span>Include fuel</span></div>
+<div class="lbl">Quantity Targets</div>
+<div class="new"><div class="seg"><span class="on">Leave out</span><span>Show target and % complete</span></div></div>
+<p class="hint">Shows, for each material that has a target in this project, the target quantity, what counts toward it and the % complete.</p>
+<div class="btn">Export PDF</div></div></div></div>
+
+<div><p class="cap">2 · Material block today (no target)</p>
+<div class="paper"><div class="block"><div class="bar"><span class="i">1</span><span class="n">BaseCourse</span><span class="f">Delivered 1650 M³</span></div>
+<div class="body"><div class="figures"><div class="figure"><div class="fu">M³</div><div class="fc"><span class="fl">Delivered</span><b>1650 M³</b></div><div class="fc missing"><span class="fl">Used</span><b>Not recorded</b></div><div class="fc"><span class="fl">Records</span><b>76</b></div></div></div></div></div></div></div>
+
+<div><p class="cap">3 · With the option on: one target group in the empty space (BaseCourse has one target)</p>
+<div class="paper"><div class="block"><div class="bar"><span class="i">1</span><span class="n">BaseCourse</span><span class="f">Delivered 1650 M³</span></div>
+<div class="body"><div class="figures"><div class="figure"><div class="fu">M³</div><div class="fc"><span class="fl">Delivered</span><b>1650 M³</b></div><div class="fc missing"><span class="fl">Used</span><b>Not recorded</b></div><div class="fc"><span class="fl">Records</span><b>76</b></div></div>
+<div class="tgt"><div class="tn">Target · Base Course Type A</div><div class="cells"><div class="fc"><span class="fl">Target</span><b>5000 M³</b></div><div class="fc"><span class="fl">Counted</span><b>1320 M³</b></div><div class="fc"><span class="fl">% complete</span><b>26.4%</b></div></div><div class="tbar"><i style="width:26.4%"></i></div></div></div>
+<p class="sub">Counted = only the loads linked to the target (same figure as the Quantity Targets page). It can be lower than Delivered when some loads are not linked.</p>
+<table><thead><tr><th>Project · supplier or source</th><th>Unit</th><th>Delivered</th><th>Records</th></tr></thead><tbody><tr><td>Choukine supplier</td><td>M³</td><td>1200 M³</td><td>56 records</td></tr></tbody></table></div></div></div></div>
+
+<div><p class="cap">4 · Two targets on one material, one near and one over; the second group wraps under the first</p>
+<div class="paper"><div class="block"><div class="bar"><span class="i">2</span><span class="n">Asphalt</span><span class="f">Delivered 3280 T</span></div>
+<div class="body"><div class="figures"><div class="figure"><div class="fu">T</div><div class="fc"><span class="fl">Delivered</span><b>3280 T</b></div><div class="fc"><span class="fl">Used</span><b>3100 T</b></div><div class="fc"><span class="fl">Records</span><b>120</b></div></div>
+<div class="tgt"><div class="tn">Target · Binder course</div><div class="cells"><div class="fc"><span class="fl">Target</span><b>1200 T</b></div><div class="fc"><span class="fl">Counted</span><b>1104 T</b></div><div class="fc"><span class="fl">% complete</span><b class="pct-near">92.0%</b></div></div><div class="tbar near"><i style="width:92%"></i></div></div>
+<div class="tgt"><div class="tn">Target · Wearing course</div><div class="cells"><div class="fc"><span class="fl">Target</span><b>2000 T</b></div><div class="fc"><span class="fl">Counted</span><b>2140 T</b></div><div class="fc"><span class="fl">% complete</span><b class="pct-over">107.0%</b></div></div><div class="tbar over"><i style="width:100%"></i></div><p class="sub" style="margin:0 10px 6px">Over target by 140 T</p></div></div></div></div></div></div>
+
+<div class="note"><b>Rules shown here:</b> the target's own figures are used, so the % is the same number as on the Quantity Targets page. A target in another unit than the material's tiles is still shown in its own unit. Cancelled targets are left out. Near target is amber, over target is red, and the words "Over target by" say it in black and white. The option is off by default and only adds tiles; nothing else in the PDF changes.</div>
+</div></body></html>
