@@ -1,6 +1,6 @@
 import {formatFuelPriceUsd,localDateKey,type FuelMovement} from './fuel';
 import {batchStatusLabels,type BatchDetail,type DieselBatchOverview} from './fuelBatches';
-import {buildFillRows,fuelDayLabel,groupFillsByDay,type DayFillRow} from './fuelBatchViews';
+import {buildFillRows,fuelDayLabel,groupFillsByDay,machineTotals,type DayFillRow} from './fuelBatchViews';
 import {costSummaryLabel,formatLitres,formatMoney} from './fuelFillForm';
 import {supplierDieselDeliveries} from './supplierDiesel';
 
@@ -32,6 +32,8 @@ export type DieselBatchReport={
   batchTotals:{batchNumber:string;delivered:string;deliveryDetail:string;filled:string;adjustments:string;remaining:string;status:string}[];
   tank:{litres:string;overfill:string};
   destinationTotals:{label:string;litres:string}[];
+  /** Every machine, truck or other equipment filled, largest first, closing with a total row. */
+  machineTotals:{name:string;type:string;fills:string;litres:string;cost?:string;total?:boolean}[];
   adjustments:{label:string;detail:string}[];
   pricesIncluded:boolean;
   empty:boolean;
@@ -110,6 +112,23 @@ export function buildDieselBatchReport({movements,overview,names,filter,exported
   const destinationTotals=sections.flatMap(section=>section.destinations.map(destination=>({label:`${destination.name} (${destination.typeLabel==='PROJECT'?'Project':destination.typeLabel==='SITE'?'Site':'Unassigned'})`,litres:destination.totalText})));
   if(destinationTotals.length)destinationTotals.push({label:'Total filled',litres:formatLitres(filled)});
 
+  const costOf=(row:DayFillRow):number|null=>{
+    if(scoped)return scoped.pricePerLitreUsd==null?null:Math.round(row.litres*scoped.pricePerLitreUsd*100)/100;
+    const batchInfo=overview.fills[row.id];
+    if(batchInfo)return batchInfo.cost.fullyPriced?batchInfo.cost.costUsd:null;
+    return byId.get(row.id)!.consumptionCostUsd??null;
+  };
+  const costText=(list:DayFillRow[])=>{const costs=list.map(costOf);return costs.some(value=>value==null)?'Unpriced':formatMoney(Math.round(costs.reduce<number>((sum,value)=>sum+(value??0),0)*100)/100);};
+  const activeRows=rows.filter(row=>!row.cancelled);
+  const machines:DieselBatchReport['machineTotals']=machineTotals(rows).map(machine=>{
+    const base={name:machine.name,type:machine.type,fills:String(machine.fills),litres:formatLitres(machine.litres)};
+    return filter.includePrices?{...base,cost:costText(activeRows.filter(row=>`${row.equipmentType}:${row.equipmentName}`===machine.key))}:base;
+  });
+  if(machines.length){
+    const base={name:'Total filled',type:'',fills:String(activeRows.length),litres:formatLitres(round(activeRows.reduce((sum,row)=>sum+row.litres,0))),total:true};
+    machines.push(filter.includePrices?{...base,cost:costText(activeRows)}:base);
+  }
+
   return {
     supplier,rangeLabel:dateRange,
     scopeLabel,
@@ -132,7 +151,7 @@ export function buildDieselBatchReport({movements,overview,names,filter,exported
       filled:formatLitres(batch.filledLitres),adjustments:formatLitres(batch.adjustmentLitres),remaining:formatLitres(batch.remainingLitres),status:batchStatusLabels[batch.status],
     })),
     tank:{litres:formatLitres(overview.tankLitres),overfill:overview.overfillAlert?`${formatLitres(overview.outstandingShortfallLitres)} filled with no diesel left in any batch`:'None'},
-    destinationTotals,
+    destinationTotals,machineTotals:machines,
     adjustments:overview.adjustments.filter(adjustment=>batches.some(batch=>batch.id===adjustment.batchId)).map(adjustment=>({
       label:`Dip adjustment · ${fuelDayLabel(localDateKey(adjustment.confirmedAt))} · ${adjustment.batchNumber}`,
       detail:`Calculated remaining ${formatLitres(adjustment.calculatedLitres)} · Dip reading ${formatLitres(adjustment.dipLitres)} · Adjustment ${formatLitres(adjustment.litres)}`,

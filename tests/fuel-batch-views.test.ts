@@ -2,7 +2,7 @@ import {describe,expect,it} from 'vitest';
 
 import type {FuelMovement} from '../src/domain/fuel';
 import type {BatchDetail,DieselBatchOverview,FillBatchInfo} from '../src/domain/fuelBatches';
-import {batchDestinationTotals,buildFillRows,filterBatchList,fuelDayLabel,fuelHomeBadge,fillSourceTag,groupFillsByDay,projectFuelSummary,splitLine,tankCardRows} from '../src/domain/fuelBatchViews';
+import {batchDestinationTotals,buildFillRows,filterBatchList,filterMovementsByBatch,machineTotals,fuelDayLabel,fuelHomeBadge,fillSourceTag,groupFillsByDay,projectFuelSummary,splitLine,tankCardRows} from '../src/domain/fuelBatchViews';
 
 /** DEC-505, Screens A, C, D and E. Day cards, source tags, batch totals and the project fuel view. */
 const STARTED='2026-10-01T06:00:00.000Z';
@@ -166,5 +166,28 @@ describe('the project fuel view (Screen E)',()=>{
       {key:'before',label:'Before batches',litres:200},
       {key:'station:Hasbaya Highway Station',label:'Outside station · Hasbaya Highway Station',litres:45},
     ]);
+  });
+});
+
+describe('Totals by machines and the History batch filter',()=>{
+  const a=fill({id:'m1',litres:100,equipmentName:'Excavator CAT 320'}),b=fill({id:'m2',litres:60,equipmentType:'truck',equipmentName:'Truck 12'}),c=fill({id:'m3',litres:40,equipmentName:'Excavator CAT 320'}),gone=fill({id:'m4',litres:500,status:'Cancelled',cancellationReason:'Wrong'});
+  const delivery=fill({id:'d1',type:'delivery'}),other=fill({id:'m5'});
+  const batches=overview({batches:[batch('x1','DSL-1','in_use',{deliveryMovementId:'d1'}),batch('x2','DSL-2','waiting')],
+    fills:{m1:info([['x1','DSL-1',100]]),m2:info([['x1','DSL-1',30],['x2','DSL-2',30]]),m3:info([['x1','DSL-1',40]]),m5:info([['x2','DSL-2',50]])},
+    adjustments:[{gaugeId:'g1',batchId:'x1',batchNumber:'DSL-1',litres:-5,calculatedLitres:10,dipLitres:5,confirmedAt:'2026-10-03T06:30:00'}]});
+  it('totals each machine once, largest first, ignoring cancelled fills',()=>{
+    const totals=machineTotals(buildFillRows([a,b,c,gone],batches,{includeCancelled:true}));
+    expect(totals.map(total=>[total.name,total.type,total.fills,total.litres])).toEqual([['Excavator CAT 320','Machine',2,140],['Truck 12','Truck',1,60]]);
+  });
+  it('counts only the litres a batch supplied when the rows are scoped to it',()=>{
+    const totals=machineTotals(buildFillRows([a,b,c],batches,{batchId:'x1'}));
+    expect(totals.map(total=>[total.name,total.litres])).toEqual([['Excavator CAT 320',140],['Truck 12',30]]);
+  });
+  it('keeps a batch\'s delivery, the fills that drew from it and its dip readings, and a split fill belongs to both batches',()=>{
+    const dip=fill({id:'g1',type:'gauge'});
+    const all=[delivery,a,b,c,other,dip];
+    expect(filterMovementsByBatch(all,batches,'x1').map(movement=>movement.id)).toEqual(['d1','m1','m2','m3','g1']);
+    expect(filterMovementsByBatch(all,batches,'x2').map(movement=>movement.id)).toEqual(['m2','m5']);
+    expect(filterMovementsByBatch(all,batches,'missing')).toEqual([]);
   });
 });

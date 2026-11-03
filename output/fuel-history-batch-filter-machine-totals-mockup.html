@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fuel History batch filter and Totals by Machines</title>
+<style>
+:root{--orange:#C84B31;--navy:#173F67;--ink:#14263A;--cream:#FFF8ED;--white:#fff;--line:#E4DED3;--muted:#6B7280;--amber:#9A6200;--amber-bg:#FFF4DC}
+*{box-sizing:border-box}body{margin:0;background:#E9E4DA;color:var(--ink);font:14px/1.4 system-ui,"Segoe UI",sans-serif}
+.top{max-width:1100px;margin:0 auto;padding:24px 16px 4px}.top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}.top p{margin:0;color:var(--muted)}
+.stage{max-width:1100px;margin:0 auto;padding:16px;display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start;justify-content:center}
+.col h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);margin:0 0 8px}
+.phone{width:360px;max-width:100%;background:var(--cream);border-radius:22px;padding:14px;box-shadow:0 10px 26px rgba(20,38,58,.18);display:flex;flex-direction:column;gap:10px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px;display:flex;flex-direction:column;gap:9px}
+.title{font-weight:800;font-size:15px}.lbl{font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.sel{border:1px solid var(--line);border-radius:12px;padding:11px 12px;background:#fff;display:flex;justify-content:space-between;min-height:44px;align-items:center}
+.sel.on{border-color:var(--navy);box-shadow:0 0 0 2px #DCE7F3}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{border:1px solid var(--navy);border-radius:999px;padding:7px 12px;font-weight:600;font-size:13px;background:#fff;color:var(--navy)}
+.chip.x{background:var(--navy);color:#fff}
+.opt{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column}.opt:last-child{border:0}.opt b{font-size:14px}.opt small{color:var(--muted)}
+.opt.sel2{background:#EAF1F8}
+.tiles{display:flex;gap:8px;flex-wrap:wrap}.tile{flex:1 1 45%;border:1px solid var(--line);border-radius:14px;padding:10px}
+.tile .v{font-size:19px;font-weight:900}.tile.n{background:var(--navy);color:#fff}.tile.n .lbl{color:#C9D6E6}
+.btn{background:var(--orange);color:#fff;border-radius:14px;padding:13px;text-align:center;font-weight:800}
+.paper{width:560px;max-width:100%;background:#fff;color:#111;padding:28px 30px;box-shadow:0 10px 26px rgba(20,38,58,.18);font-size:12px}
+.paper h3{margin:0;color:var(--navy);font-size:18px}.paper .sub{color:var(--muted);margin-bottom:10px}
+.band{background:var(--navy);color:#fff;font-weight:800;letter-spacing:.08em;padding:6px 10px;margin:16px 0 0;font-size:11px}
+table{width:100%;border-collapse:collapse}th,td{padding:6px 8px;border-bottom:1px solid #E4DED3;text-align:left}th{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;background:#F5F2EC}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.strong td{font-weight:800;background:#FFF4DC;border-top:2px solid var(--navy)}
+.new{outline:2px dashed var(--orange);outline-offset:3px;position:relative}.new::after{content:"NEW";position:absolute;top:-10px;right:-4px;background:var(--orange);color:#fff;font:800 10px system-ui;padding:2px 7px;border-radius:8px}
+.note{color:var(--muted);font-size:11px;margin-top:8px}
+</style></head><body>
+<div class="top"><h1>Fuel History: Batch filter and Totals by Machines</h1><p>Screen 1: the History filters gain a Batch selector. Screen 2: the Diesel Batch Report PDF gains a TOTALS BY MACHINES section. Nothing else changes.</p></div>
+<div class="stage">
+
+<div class="col"><h2>1 · History filters (batch chosen)</h2>
+<div class="phone">
+ <div class="card">
+  <div class="title">Filters</div>
+  <div class="lbl">Project</div><div class="sel"><span>All projects</span><span>▾</span></div>
+  <div class="lbl">Equipment</div><div class="sel"><span>All equipment</span><span>▾</span></div>
+  <div class="lbl new" style="width:max-content;padding:2px 6px">Batch</div>
+  <div class="sel on new"><span><b>Batch 4</b> · Invoice 1182 · Open</span><span>▾</span></div>
+  <div class="card" style="padding:0;gap:0;border-radius:12px">
+   <div class="opt"><b>All batches</b><small>No batch filter</small></div>
+   <div class="opt sel2"><b>Batch 4 ✓</b><small>Invoice 1182 · Al Noor Fuel · 2 Nov · 8,000 L · Open</small></div>
+   <div class="opt"><b>Batch 3</b><small>Invoice 1175 · Al Noor Fuel · 21 Oct · 8,000 L · Closed</small></div>
+   <div class="opt"><b>Batch 2</b><small>Invoice 1160 · 9 Oct · 6,000 L · Closed</small></div>
+   <div class="opt"><b>Opening stock</b><small>Calculated · 1 Oct · 2,350 L · Closed</small></div>
+  </div>
+  <div class="lbl">Type</div><div class="chips"><span class="chip x">All</span><span class="chip">Purchases</span><span class="chip">Equipment fills</span><span class="chip">Gauge</span></div>
+  <div class="lbl">Dates</div><div class="chips"><span class="chip">From</span><span class="chip">To</span></div>
+ </div>
+ <div class="chips"><span class="chip x">Batch: Batch 4 ✕</span></div>
+ <div class="card">
+  <div class="title">Fuel history</div>
+  <div class="tiles"><div class="tile"><div class="lbl">Delivered in</div><div class="v">8,000 L</div></div><div class="tile"><div class="lbl">Filled out</div><div class="v">3,140 L</div></div></div>
+  <div class="note">With a batch chosen, History shows that batch's delivery and only the fills that drew from it. A fill that drew from two batches appears under both, with the litres taken from each.</div>
+ </div>
+ <div class="btn">Export Batch PDF</div>
+</div></div>
+
+<div class="col"><h2>2 · Batch report PDF (new section)</h2>
+<div class="paper">
+ <h3>Diesel Batch Report</h3><div class="sub">Batch 4 · Invoice 1182 · Exported 3 Nov 2026</div>
+ <div class="band">SUMMARY</div>
+ <table><tr><td>Delivered</td><td class="num">8,000.00 L</td><td>Filled</td><td class="num">3,140.00 L</td><td>Remaining</td><td class="num">4,860.00 L</td></tr></table>
+ <div class="note">… existing Projects / Company Sites / Unassigned day tables stay exactly as they are …</div>
+ <div class="band">TOTALS BY DESTINATION</div>
+ <table><tr><td>Airport Road (Project)</td><td class="num">2,100.00 L</td></tr><tr><td>Main Yard (Site)</td><td class="num">1,040.00 L</td></tr><tr class="strong"><td>Total filled</td><td class="num">3,140.00 L</td></tr></table>
+ <div class="new" style="margin-top:6px">
+ <div class="band" style="margin-top:10px">TOTALS BY MACHINES</div>
+ <table>
+  <tr><th>Machine / truck</th><th>Type</th><th class="num">Fills</th><th class="num">Litres</th></tr>
+  <tr><td>Excavator CAT 320</td><td>Machine</td><td class="num">9</td><td class="num">1,020.00 L</td></tr>
+  <tr><td>Truck 12 (Volvo)</td><td>Truck</td><td class="num">7</td><td class="num">810.00 L</td></tr>
+  <tr><td>Roller Bomag</td><td>Machine</td><td class="num">5</td><td class="num">640.00 L</td></tr>
+  <tr><td>Generator 60 kVA</td><td>Other</td><td class="num">4</td><td class="num">420.00 L</td></tr>
+  <tr><td>Loader Komatsu</td><td>Machine</td><td class="num">3</td><td class="num">250.00 L</td></tr>
+  <tr class="strong"><td colspan="2">Total filled</td><td class="num">28</td><td class="num">3,140.00 L</td></tr>
+ </table></div>
+ <div class="note">Largest first. Cancelled fills are not counted. The total equals Total filled above. With prices included, a Cost column is added beside Litres (Unpriced when a price is missing).</div>
+ <div class="band">BATCH TOTALS</div>
+ <div class="note">… existing batch totals, tank and dip adjustments …</div>
+</div></div>
+
+<div class="col"><h2>3 · Batch page (new table)</h2>
+<div class="phone">
+ <div class="card">
+  <div class="title">Batch 4 · Invoice 1182</div>
+  <div class="note" style="margin:0">Al Noor Fuel · Arrived 2 Nov · Open</div>
+  <div class="tiles"><div class="tile"><div class="lbl">Delivered</div><div class="v">8,000 L</div></div><div class="tile"><div class="lbl">Filled</div><div class="v">3,140 L</div></div><div class="tile n"><div class="lbl">Remaining</div><div class="v">4,860 L</div></div></div>
+ </div>
+ <div class="card new">
+  <div class="title">Totals by machines</div>
+  <table>
+   <tr><th>Machine / truck</th><th class="num">Fills</th><th class="num">Litres</th></tr>
+   <tr><td>Excavator CAT 320<br><small style="color:#6B7280">Machine</small></td><td class="num">9</td><td class="num">1,020 L</td></tr>
+   <tr><td>Truck 12 (Volvo)<br><small style="color:#6B7280">Truck</small></td><td class="num">7</td><td class="num">810 L</td></tr>
+   <tr><td>Roller Bomag<br><small style="color:#6B7280">Machine</small></td><td class="num">5</td><td class="num">640 L</td></tr>
+   <tr><td>Generator 60 kVA<br><small style="color:#6B7280">Other</small></td><td class="num">4</td><td class="num">420 L</td></tr>
+   <tr><td>Loader Komatsu<br><small style="color:#6B7280">Machine</small></td><td class="num">3</td><td class="num">250 L</td></tr>
+   <tr class="strong"><td>Total filled</td><td class="num">28</td><td class="num">3,140 L</td></tr>
+  </table>
+  <div class="note" style="margin:0">Largest first. Cancelled fills are not counted.</div>
+ </div>
+ <div class="btn">Export PDF</div>
+</div></div>
+
+</div></body></html>

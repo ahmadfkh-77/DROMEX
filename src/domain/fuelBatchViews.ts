@@ -121,6 +121,31 @@ export function batchDestinationTotals(rows:DayFillRow[]):DestinationTotal[]{
   return [...totals.values()].sort((a,b)=>ORDER[a.type]-ORDER[b.type]||a.name.localeCompare(b.name));
 }
 
+export type MachineTotal={key:string;name:string;type:'Machine'|'Truck';fills:number;litres:number};
+
+/** "Totals by machines": every machine, truck or other equipment filled, largest first. Cancelled fills never count. */
+export function machineTotals(rows:DayFillRow[]):MachineTotal[]{
+  const totals=new Map<string,MachineTotal>();
+  for(const row of rows){
+    if(row.cancelled)continue;
+    const key=`${row.equipmentType}:${row.equipmentName}`;
+    const total=totals.get(key)??{key,name:row.equipmentName,type:row.equipmentType,fills:0,litres:0};
+    total.fills+=1;total.litres=round(total.litres+row.litres);totals.set(key,total);
+  }
+  return [...totals.values()].sort((a,b)=>b.litres-a.litres||a.name.localeCompare(b.name));
+}
+
+/**
+ * The History records that belong to one diesel batch: its delivery, the fills that drew from it and the
+ * dip readings that adjusted it. A fill that drew from two batches belongs to both.
+ */
+export function filterMovementsByBatch(movements:FuelMovement[],overview:DieselBatchOverview,batchId:string):FuelMovement[]{
+  const batch=overview.batches.find(value=>value.id===batchId);
+  if(!batch)return [];
+  const dips=new Set(overview.adjustments.filter(adjustment=>adjustment.batchId===batchId).map(adjustment=>adjustment.gaugeId));
+  return movements.filter(movement=>movement.type==='delivery'?movement.id===batch.deliveryMovementId:movement.type==='fill'?Boolean(overview.fills[movement.id]?.portions.some(portion=>portion.batchId===batchId)):dips.has(movement.id));
+}
+
 const statusWord:Record<BatchDetail['status'],string>={in_use:'In use',waiting:'Waiting',closed:'Closed',cancelled:'Cancelled'};
 
 /** Screen A, the navy tank card: one row per open batch. */

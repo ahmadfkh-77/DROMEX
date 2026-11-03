@@ -3,7 +3,7 @@ import {Alert,ScrollView,StyleSheet,Text,TouchableOpacity,View} from 'react-nati
 
 import {formatFuelPriceUsd,localDateKey,type FuelMovement} from '../../../domain/fuel';
 import type {BatchDetail,DieselBatchOverview} from '../../../domain/fuelBatches';
-import {batchDestinationTotals,buildFillRows,fuelDayLabel,groupFillsByDay} from '../../../domain/fuelBatchViews';
+import {batchDestinationTotals,buildFillRows,fuelDayLabel,groupFillsByDay,machineTotals} from '../../../domain/fuelBatchViews';
 import {formatLitres,formatMoney} from '../../../domain/fuelFillForm';
 import {colors,radius} from '../../theme';
 import {AppButton,AppField,EmptyState,Feedback} from '../AppPrimitives';
@@ -39,6 +39,7 @@ export function DieselBatchPage({batch,overview,movements,onBack,onRecordFill,on
   const rows=useMemo(()=>buildFillRows(movements,overview,{batchId:batch.id}),[batch.id,movements,overview]);
   const days=groupFillsByDay(rows,{byDestination:true});
   const totals=batchDestinationTotals(rows);
+  const machines=machineTotals(rows);
   const adjustments=overview.adjustments.filter(adjustment=>adjustment.batchId===batch.id);
   const open=batch.status==='in_use'||batch.status==='waiting';
   const subtitle=batch.kind==='opening'?`Opening stock · ${batch.openingBasis==='calculated'?'Calculated (no dip reading)':'From a dip reading'}`:`Invoice ${batch.invoiceNumber??'not recorded'}`;
@@ -99,6 +100,17 @@ export function DieselBatchPage({batch,overview,movements,onBack,onRecordFill,on
     <View style={styles.card}>
       <SectionTitle title="Totals by destination"/>
       {totals.length?[group('project','PROJECTS'),group('company_site','COMPANY SITES'),group('unassigned','UNASSIGNED')]:<Text style={styles.sub}>No fills have drawn from this batch yet.</Text>}
+    </View>
+
+    <View style={styles.card}>
+      <SectionTitle title="Totals by machines" detail="largest first"/>
+      {machines.length?<View style={styles.destGroup}>
+        {machines.map(machine=><View key={machine.key} style={styles.destRow}>
+          <View style={styles.destName}><Text style={styles.destNameText}>{machine.name}</Text><Text style={styles.sub}>{machine.type} · {machine.fills} fill{machine.fills===1?'':'s'}</Text></View>
+          <Text style={styles.destValue}>{formatLitres(machine.litres)}</Text>
+        </View>)}
+        <View style={styles.destRow}><Text style={[styles.destName,styles.destValue]}>Total filled</Text><Text style={styles.destValue}>{formatLitres(machines.reduce((sum,machine)=>sum+machine.litres,0))}</Text></View>
+      </View>:<Text style={styles.sub}>No fills have drawn from this batch yet.</Text>}
     </View>
 
     {adjustments.map(adjustment=><View key={`${adjustment.gaugeId}:${adjustment.batchId}`} style={styles.adjustment}>
@@ -166,6 +178,7 @@ const styles=StyleSheet.create({
   destLabel:{color:colors.muted,fontSize:11,fontWeight:'900',letterSpacing:.8,marginTop:4},
   destRow:{flexDirection:'row',justifyContent:'space-between',gap:12,paddingVertical:7,borderTopWidth:1,borderTopColor:'#EFEAE1'},
   destName:{color:colors.ink,fontSize:13,flex:1,minWidth:0},
+  destNameText:{color:colors.ink,fontSize:13,fontWeight:'700'},
   destValue:{color:colors.ink,fontSize:13,fontWeight:'900',fontVariant:['tabular-nums']},
   adjustment:{backgroundColor:'#FFF4DC',borderRadius:radius.md,borderWidth:1,borderColor:'#F1CF83',padding:14,gap:6},
   adjustmentTitle:{color:colors.warning,fontSize:13,fontWeight:'900'},

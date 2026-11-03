@@ -148,7 +148,7 @@ describe('project and site names on the Diesel Batch Report',()=>{
   const base:DieselBatchReport={
     scopeLabel:'All batches',metadata:[{label:'Batch',value:'All batches'}],summary:{deliveredLitres:100,filledLitres:30,adjustmentLitres:0,remainingLitres:70,filteredNote:null},
     sections:[{title:'PROJECTS',destinations:[destination('Zebdine','PROJECT','Project total')]},{title:'COMPANY SITES',destinations:[destination('Yard B','SITE','Site total')]},{title:'UNASSIGNED',destinations:[destination('Unassigned','UNASSIGNED','Unassigned total')]}],
-    batchTotals:[],tank:{litres:'70 L',overfill:'None'},destinationTotals:[],adjustments:[],pricesIncluded:false,empty:false,fileName:'x.pdf',
+    batchTotals:[],tank:{litres:'70 L',overfill:'None'},destinationTotals:[],machineTotals:[],adjustments:[],pricesIncluded:false,empty:false,fileName:'x.pdf',
   } as never;
   const page=buildDieselBatchReportHtml(base,{companyName:'DROMEX',logo:null,contactLine:null});
   it('colours a project name and a site name the same orange and keeps the words PROJECT and SITE',()=>{

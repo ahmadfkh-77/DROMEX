@@ -129,3 +129,19 @@ describe('with prices',()=>{
     expect(row.cost).toBeUndefined();
   });
 });
+
+describe('Totals by machines',()=>{
+  it('lists every machine or truck filled from the batch, largest first, closing with a total that equals Total filled',()=>{
+    const single=report({batchId:'b4',includePrices:false});
+    expect(single.machineTotals.length).toBeGreaterThan(1);
+    const rows=single.machineTotals.slice(0,-1),last=single.machineTotals.at(-1)!;
+    const litres=rows.map(row=>Number(row.litres.replace(/[^\d.]/g,'')));
+    expect([...litres].sort((a,b)=>b-a)).toEqual(litres);
+    expect(last).toMatchObject({name:'Total filled',total:true,litres:single.destinationTotals.at(-1)!.litres});
+    expect(rows.every(row=>row.cost===undefined)).toBe(true);
+  });
+  it('adds a cost per machine with prices, and shows Unpriced when any fill has no price',()=>{
+    const priced=report({batchId:'b4',includePrices:true});
+    expect(priced.machineTotals.every(row=>row.cost!==undefined)).toBe(true);
+  });
+});

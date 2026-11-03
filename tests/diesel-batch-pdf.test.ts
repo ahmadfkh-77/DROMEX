@@ -13,6 +13,7 @@ const report=(extra:Partial<DieselBatchReport>={}):DieselBatchReport=>({
   batchTotals:[{batchNumber:'DSL-2026-00004',delivered:'1,000 L',deliveryDetail:'Invoice 55821 · Al-Nour Fuel · Thu 1 Oct 2026',filled:'640 L',adjustments:'−20 L',remaining:'340 L',status:'Open · In use'}],
   tank:{litres:'340 L',overfill:'None'},
   destinationTotals:[{label:'Main Yard (Site)',litres:'40 L'},{label:'Total filled',litres:'410 L'}],
+  machineTotals:[{name:'Excavator CAT 320',type:'Machine',fills:'2',litres:'370 L'},{name:'Generator',type:'Machine',fills:'1',litres:'40 L'},{name:'Total filled',type:'',fills:'3',litres:'410 L',total:true}],
   adjustments:[{label:'Dip adjustment · Sat 3 Oct 2026 · DSL-2026-00004',detail:'Calculated remaining 560 L · Dip reading 540 L · Adjustment −20 L'}],
   pricesIncluded:false,empty:false,fileName:'Diesel-Batch-Report-DSL-2026-00004.pdf',...extra,
 });
@@ -105,5 +106,18 @@ describe('Diesel Batch Report header layout (Owner, 2026-10-04)',()=>{
     expect(header.indexOf('<img class="logo"')).toBeLessThan(header.indexOf('Diesel Batch Report'));
     expect(page).toContain('.brand{font-size:10.5pt');
     expect(page).toContain('.logo{max-height:20mm;max-width:40mm;display:block');
+  });
+});
+
+describe('Totals by machines section',()=>{
+  it('prints one row per machine and a total row, with a Cost column only when prices are included',()=>{
+    const page=html();
+    expect(page).toContain('TOTALS BY MACHINES');
+    expect(page).toContain('<th>Machine / truck</th>');
+    expect(page).toContain('Excavator CAT 320');
+    expect(page).toContain('<tr class="strong"><td><bdi dir="auto">Total filled</bdi></td>');
+    expect(page).not.toContain('<th class="num">Cost</th>');
+    expect(html({pricesIncluded:true,machineTotals:[{name:'Roller',type:'Machine',fills:'1',litres:'40 L',cost:'$44.00'}]})).toContain('<th class="num">Cost</th>');
+    expect(html({machineTotals:[]})).not.toContain('TOTALS BY MACHINES');
   });
 });
