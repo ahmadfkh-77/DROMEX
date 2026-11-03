@@ -1,4 +1,4 @@
-import type { ContractDayReport } from '../../domain/contractQuantities';
+import type { ContractDayReport, ContractFinalReport } from '../../domain/contractQuantities';
 import type { DailyProjectReport, DailyProjectReportDraft, LinkedFoundationActivity, LinkedFuelFill, LinkedProjectLoad, LinkedQuarryLoad, LinkedWallWork, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup } from '../../domain/projectReports';
 
 export interface ProjectReportRepository {
@@ -10,6 +10,8 @@ export interface ProjectReportRepository {
   listLinkedFuelFills(projectId:string,workDate:string):Promise<LinkedFuelFill[]>;
   /** DEC-537. Quantity Target progress as of the work date: targets that moved that day, and the whole-project percent. */
   listLinkedContractProgress(projectId:string,workDate:string):Promise<ContractDayReport>;
+  /** DEC-540. Final Quantity Target figures of a project, for the Completed Project Report. */
+  listProjectContractFinal(projectId:string):Promise<ContractFinalReport>;
   listLinkedWasteDumps(projectId: string, workDate: string): Promise<LinkedWasteDump[]>;
   listLinkedWallWork(projectId: string, workDate: string): Promise<LinkedWallWork[]>;
   /** DEC-464. Foundations with activity on this work date but no wall linked to them yet. */

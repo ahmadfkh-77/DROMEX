@@ -1,9 +1,9 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {
-  applyContractItemEdit,cancelContractItem,candidateContractItems,computeContractUsage,contractTotalsTargets,dailyContractProgress,finishContractItem,groupContractLoadsByDay,
+  applyContractItemEdit,cancelContractItem,candidateContractItems,computeContractUsage,contractTotalsTargets,dailyContractProgress,finalContractReport,finishContractItem,groupContractLoadsByDay,
   reopenContractItem,summarizeContractProject,validateContractAdjustment,validateContractItemDraft,validateContractReason,
-  type ContractAdjustment,type ContractDayEntry,type ContractDayReport,type ContractHistoryKind,type ContractTotalsTarget,type ContractItem,type ContractItemDraft,type ContractItemValues,
+  type ContractAdjustment,type ContractDayEntry,type ContractDayReport,type ContractFinalReport,type ContractHistoryKind,type ContractTotalsTarget,type ContractItem,type ContractItemDraft,type ContractItemValues,
 } from '../../domain/contractQuantities';
 import {localDateKey} from '../../domain/fuel';
 import type {
@@ -116,6 +116,11 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
   /** DEC-539. The project's live targets with their own figures as of `asOfDate` (the Totals To date), or as they are now when null. */
   async totalsTargets(projectId:string,asOfDate:string|null):Promise<ContractTotalsTarget[]>{
     return contractTotalsTargets(await this.entriesAsOf(projectId,asOfDate),asOfDate);
+  }
+
+  /** DEC-540. Final figures of every live target, for the Completed Project Report. */
+  async finalReport(projectId:string):Promise<ContractFinalReport>{
+    return finalContractReport(await this.entriesAsOf(projectId,null));
   }
 
   /** The project's targets with their loads and adjustments; with a date, only those that existed or already had records on or before it. */

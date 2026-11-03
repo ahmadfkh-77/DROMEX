@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import type { ContractDayReport } from '../../domain/contractQuantities';
+import type { ContractDayReport, ContractFinalReport } from '../../domain/contractQuantities';
 import { fuelPriceFromStored, type FuelType } from '../../domain/fuel';
 import { SqliteContractQuantitiesRepository } from './SqliteContractQuantitiesRepository';
 import type { DailyProjectReport, DailyProjectReportDraft, DailyReportMaterial, LinkedFoundationActivity, LinkedFuelFill, LinkedProjectLoad, LinkedQuarryLoad, LinkedWallWork, LinkedWasteDump, ProjectCompletionLoad, ProjectCompletionWasteDump, ProjectReportSetup, ReportPresenceOption, WorkerSafetyEntry } from '../../domain/projectReports';
@@ -183,6 +183,10 @@ export class SqliteProjectReportRepository implements ProjectReportRepository {
 
   async listLinkedContractProgress(projectId:string,workDate:string):Promise<ContractDayReport> {
     return new SqliteContractQuantitiesRepository(this.db).progressOn(projectId,workDate);
+  }
+
+  async listProjectContractFinal(projectId:string):Promise<ContractFinalReport> {
+    return new SqliteContractQuantitiesRepository(this.db).finalReport(projectId);
   }
 
   async listLinkedFuelFills(projectId:string,workDate:string):Promise<LinkedFuelFill[]> {

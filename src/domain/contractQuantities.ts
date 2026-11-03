@@ -348,6 +348,15 @@ export function dailyContractProgress(entries:readonly ContractDayEntry[],workDa
   return{targets,summary:summarizeContractProject(rows)};
 }
 
+/** DEC-540. Every live target with its final figures, plus the whole-project percent: what the Completed Project Report prints. */
+export type ContractFinalReport={targets:{item:ContractItem;usage:ContractUsage}[];summary:ContractProjectSummary};
+
+/** Final figures as they stand now (the project is completed, so no later load can arrive); cancelled targets are left out. */
+export function finalContractReport(entries:readonly ContractDayEntry[]):ContractFinalReport{
+  const rows:ContractRow[]=entries.filter(entry=>!entry.item.cancelledAt).map(entry=>{const {item,usage}=contractUsageAsOf(entry,null);return{item,usage};});
+  return{targets:rows,summary:summarizeContractProject(rows)};
+}
+
 /**
  * The one check the load flows make (DEC-522 Phase C): with several fitting items the Owner must pick one, or Not linked (''); with one it is
  * preselected and with none the load saves unlinked, so neither asks anything. Returns the message, or null when the load can be saved.

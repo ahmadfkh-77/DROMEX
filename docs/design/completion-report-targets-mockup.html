@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Completed Project Report, Quantity Targets mockup</title>
+<style>
+:root{--orange:#d3542f;--navy:#173f67;--ink:#172a3a;--muted:#637586;--line:#dfe6eb;--amber:#8a5300;--red:#a61b12;--green:#25724a}
+*{box-sizing:border-box}body{margin:0;background:#e9e4da;color:var(--ink);font-family:Arial,sans-serif;font-size:14px;line-height:1.4}
+.top{max-width:1100px;margin:0 auto;padding:20px 16px 4px}.top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}.top p{margin:0;color:var(--muted);max-width:820px}
+.stage{max-width:1100px;margin:0 auto;padding:16px;display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.cap{font-weight:700;color:var(--navy);margin:0 0 8px;font-size:13px}
+.phone{width:375px;max-width:100%;background:#f5f2ec;border-radius:28px;border:6px solid #1c2530;padding:14px;display:flex;flex-direction:column;gap:12px}
+.card{background:#fff;border:1px solid #ddd7cc;border-radius:16px;padding:14px}.card h3{margin:0 0 4px;font-size:16px}.hint{font-size:12.5px;color:var(--muted);margin:2px 0 0}
+.sw{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #eee9df;min-height:48px}.sw:first-of-type{border-top:0}
+.sw b{font-size:14px}.sw .s{font-size:12px;color:var(--muted);display:block}
+.toggle{width:46px;height:26px;border-radius:99px;background:var(--navy);position:relative;flex:none}.toggle::after{content:"";position:absolute;top:3px;left:23px;width:20px;height:20px;border-radius:50%;background:#fff}
+.btn{background:var(--orange);color:#fff;font-weight:800;text-align:center;border-radius:12px;padding:12px}
+.paper{width:760px;max-width:100%;background:#fff;box-shadow:0 8px 26px rgba(20,38,58,.2);padding:26px 28px;font-size:12px}
+.kick{display:block;color:var(--orange);font-size:10px;font-weight:800;letter-spacing:1.2px}
+.sh{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid var(--navy);padding-bottom:6px;margin-bottom:14px}.sh h2{margin:0;font-size:22px;color:var(--navy)}.sh p{margin:0;color:var(--muted);font-size:11px}
+h3{font-size:14px;color:var(--navy);margin:0 0 6px;padding-bottom:3px;border-bottom:1px solid #ccd7df}.sub{margin-bottom:18px}
+table{width:100%;border-collapse:collapse;font-size:11px}th{background:#eaf1f6;color:#274c68;text-transform:uppercase;letter-spacing:.3px;font-size:9.5px;text-align:left}
+th,td{padding:6px;border:1px solid var(--line);vertical-align:top}.n{text-align:right;white-space:nowrap}
+tbody tr:nth-child(even){background:#f8fafb}
+.bar{height:6px;background:#ece7dd;margin-top:4px;position:relative}.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--navy)}.bar.near i{background:#c98a1a}.bar.over i{background:var(--red)}
+.pn{color:var(--amber)}.po{color:var(--red)}.pd{color:var(--green)}
+.st{font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:12px;white-space:nowrap}.st.d{background:#e7f5ed;color:var(--green)}.st.p{background:#e8edf3;color:var(--navy)}.st.o{background:#fdecea;color:var(--red)}
+tr.whole td{background:#fff8ed;border-top:2px solid var(--ink);font-weight:800}
+.note{font-size:10.5px;color:var(--muted);margin-top:6px}
+.nc{font-size:10px;color:var(--muted)}
+.box{background:#eef2f6;border:1px solid #d3dde7;border-radius:12px;padding:10px 12px;font-size:13px;max-width:760px}
+</style></head><body>
+<div class="top"><h1>Completed Project Report &middot; Quantity Targets</h1>
+<p>Mockup only, nothing in the app has changed. A new <b>Quantity Targets</b> table is added to Section 01 (Operational Summary), right after Delivered materials. The same rules as the Daily Report apply: one true figure everywhere, cancelled targets left out, units never converted.</p></div>
+<div class="stage">
+<div>
+<p class="cap">1. Switch in the app (Reports &rarr; Completed Projects &rarr; project)</p>
+<div class="phone"><div class="card"><h3>Completed Project Report</h3><p class="hint">Final record of the project, as a PDF.</p>
+<div class="sw"><div><b>Include Quantity Targets</b><span class="s">Target, total used and % complete for every target. Applies to the PDF only.</span></div><div class="toggle"></div></div>
+<div class="sw"><div><b>Include whole-project completion</b><span class="s">Adds the overall % across all targets.</span></div><div class="toggle"></div></div>
+<div class="btn">Export Completed Project Report</div></div>
+<div class="box">Both switches default <b>on</b>. They reuse the Daily Report's saved preferences (same two keys), so one choice governs both documents. Turning them off hides the section in the PDF only.</div></div>
+</div>
+<div>
+<p class="cap">2. PDF &middot; Section 01, Operational Summary (new table highlighted by position)</p>
+<div class="paper">
+<div class="sh"><div><span class="kick">SECTION 01</span><h2>Operational Summary</h2></div><p>Start-to-finish recorded totals</p></div>
+<div class="sub"><h3>Delivered materials</h3><table><thead><tr><th>Material</th><th>Unit</th><th class="n">Total quantity</th></tr></thead><tbody><tr><td>Base Course</td><td>m³</td><td class="n">4,812.000</td></tr><tr><td>Sand</td><td>m³</td><td class="n">96.000</td></tr></tbody></table></div>
+<div class="sub"><h3>Quantity targets</h3>
+<table><thead><tr><th style="width:27%">Target</th><th class="n">Target qty</th><th class="n">Total used</th><th class="n">Remaining</th><th style="width:19%">% complete</th><th>Status</th></tr></thead><tbody>
+<tr><td>Base Course Type A</td><td class="n">5,000 m³</td><td class="n">4,812 m³</td><td class="n">188 m³</td><td><b class="pn">96.2%</b><div class="bar near"><i style="width:96.2%"></i></div></td><td><span class="st d">Completed</span></td></tr>
+<tr><td>Wearing course<div class="nc">2 loads in another unit not counted</div></td><td class="n">2,000 m³</td><td class="n">2,140 m³</td><td class="n">over 140 m³</td><td><b class="po">107.0%</b><div class="bar over"><i style="width:100%"></i></div></td><td><span class="st o">Over target</span></td></tr>
+<tr><td>Sub-base</td><td class="n">1,200 m³</td><td class="n">1,200 m³</td><td class="n">0 m³</td><td><b class="pd">100.0%</b><div class="bar"><i style="width:100%"></i></div></td><td><span class="st d">Completed</span></td></tr>
+<tr class="whole"><td colspan="4">Whole project &middot; 3 targets &middot; weighted by target value</td><td colspan="2" class="n">99.4%</td></tr>
+</tbody></table>
+<p class="note">Figures are final, as of the recorded completion. Quantities are never converted between units. Cancelled targets are not listed.</p></div>
+</div>
+<div class="box" style="margin-top:12px"><b>If a project has no targets</b>, the table is simply omitted and the report looks exactly as it does today. <b>Status</b> reads Completed (target marked finished), In progress, or Over target.</div>
+</div>
+</div></body></html>
