@@ -7,10 +7,10 @@ import {
   type BitumenBatch,type BitumenCorrectionEntry,type BitumenDeliveryDraft,type BitumenEditDraft,type BitumenGrade,type BitumenOverview,type BitumenPriceBasis,type BitumenSetup,
 } from '../../domain/bitumen';
 import {
-  adjustmentFor,DEFAULT_RULE,mixKgForLoad,planMoveLoad,reconcileBitumenUse,USE_EPSILON,
-  type BitumenAdjustment,type BitumenRule,type BitumenRuleDraft,type BitumenUseRow,type BitumenUseSetup,type SyncResult,type UseBatch,type UseLoad,type UseRowInput,
+  adjustmentFor,DEFAULT_RULE,eligibleBatchRooms,loadUseDetail,mixKgForLoad,planAddToBatch,planAutoPlaceToday,planMoveLoad,reconcileBitumenUse,USE_EPSILON,
+  type LeftOutLoad,type BitumenAdjustment,type BitumenRule,type BitumenRuleDraft,type BitumenUseRow,type BitumenUseSetup,type SyncResult,type UseBatch,type UseLoad,type UseRowInput,
 } from '../../domain/bitumenUse';
-import type {BitumenRepository} from './BitumenRepository';
+import {AUTO_PLACE_TODAY_KEY,type BitumenPreferenceStore,type BitumenRepository} from './BitumenRepository';
 import {insertClosure,loadClosures,reopenClosure} from './batchClosures';
 
 type UseDbRow={id:string;load_id:string;batch_id:string|null;kind:BitumenUseRow['kind'];kg:number;mix_kg:number;rule_aggregate_kg:number;rule_bitumen_kg:number;load_number:string|null;load_confirmed_at:string|null;item_name:string;note:string|null;created_at:string};
@@ -51,7 +51,8 @@ function fromRow(row:Row):Omit<BitumenBatch,'status'|'remainingKg'|'closure'|'cl
 }
 
 export class SqliteBitumenRepository implements BitumenRepository{
-  constructor(private readonly db:SQLiteDatabase){}
+  /** `preferences` holds the Bitumen switch for today's left-out loads (an app preference, so it travels with the backup); without it the switch is off. */
+  constructor(private readonly db:SQLiteDatabase,private readonly preferences?:BitumenPreferenceStore){}
 
   async getSetup():Promise<BitumenSetup>{
     const[suppliers,grades,tax]=await Promise.all([
@@ -117,6 +118,7 @@ export class SqliteBitumenRepository implements BitumenRepository{
         price.priceUsd==null?null:draft.priceBasis,price.priceUsd==null?null:cents(price.priceUsd),vatPercent==null?null:Math.round(vatPercent*100),price.subtotalUsd==null?null:cents(price.subtotalUsd),price.totalUsd==null?null:cents(price.totalUsd),clean(draft.notes),now,now);
       await this.enqueue(id,{id,batchNumber:number.batchNumber,arrivedAt,deliveredKg:kg,supplierId:supplier.id,gradeId:grade.id,status:'Active'});
     });
+    await this.autoPlaceToday();
     return this.batch(id);
   }
 
@@ -213,6 +215,66 @@ export class SqliteBitumenRepository implements BitumenRepository{
   }
 
   async syncUse():Promise<SyncResult>{
+    const first=await this.reconcileUse();
+    if(!await this.autoPlaceToday())return first;
+    const again=await this.reconcileUse();
+    return {added:first.added+again.added,attention:again.attention};
+  }
+
+  private useBatches(overview:BitumenOverview):UseBatch[]{
+    return overview.batches.map(batch=>({id:batch.id,arrivedDay:localDateKey(new Date(batch.arrivedAt)),active:batch.recordStatus==='Active',deliveredKg:batch.deliveredKg,adjustmentKg:batch.adjustmentKg,closedAt:batch.closure?.closedAt??null}));
+  }
+
+  async getAutoPlaceToday():Promise<boolean>{
+    try{return (await this.preferences?.getItem(AUTO_PLACE_TODAY_KEY))==='1';}catch{return false;}
+  }
+
+  async setAutoPlaceToday(on:boolean):Promise<void>{
+    if(!this.preferences)throw new Error('This setting cannot be saved on this device.');
+    await this.preferences.setItem(AUTO_PLACE_TODAY_KEY,on?'1':'0');
+    if(on)await this.syncUse();
+  }
+
+  /** With the switch on, today's left-out loads try again for room. Returns how many rows were added. Loads of earlier days are never placed here. */
+  private async autoPlaceToday():Promise<number>{
+    if(!await this.getAutoPlaceToday())return 0;
+    const overview=await this.getOverview();
+    const rows=planAutoPlaceToday({rows:overview.useRows??[],batches:this.useBatches(overview),usingBatchId:overview.usingBatchId??null,today:localDateKey(new Date())});
+    if(rows.length)await this.insertUseRows(rows);
+    return rows.length;
+  }
+
+  async getLeftOutLoad(loadId:string):Promise<LeftOutLoad|null>{
+    await this.syncUse();
+    const overview=await this.getOverview();
+    const loadRows=(overview.useRows??[]).filter(row=>row.loadId===loadId);
+    const detail=loadUseDetail(loadRows);
+    if(!detail)return null;
+    const rooms=new Map(eligibleBatchRooms(detail.confirmedAt,this.useBatches(overview),overview.useRows??[],overview.usingBatchId??null).map(room=>[room.id,room.remainingKg]));
+    const order=[...rooms.keys()];
+    const batches=overview.batches.filter(batch=>batch.recordStatus==='Active').map(batch=>{
+      const room=rooms.get(batch.id);
+      const state:LeftOutLoad['batches'][number]['state']=room==null?(batch.status==='closed'?'closed':'later'):room<=USE_EPSILON?'full':room+USE_EPSILON>=detail.uncoveredKg?'fits':'partial';
+      return {batchId:batch.id,batchNumber:batch.batchNumber,arrivedAt:batch.arrivedAt,status:batch.status,inUse:batch.id===overview.usingBatchId,remainingKg:room??batch.remainingKg,state};
+    }).sort((a,b)=>{const ia=order.indexOf(a.batchId),ib=order.indexOf(b.batchId);return (ia<0?999:ia)-(ib<0?999:ib)||a.arrivedAt.localeCompare(b.arrivedAt);});
+    return {detail,batches,loadRows:loadRows.length};
+  }
+
+  async addLoadToBatch(loadId:string,toBatchId:string):Promise<{addedKg:number;uncoveredKg:number;overview:BitumenOverview}>{
+    await this.syncUse();
+    const overview=await this.getOverview();
+    const loadRows=(overview.useRows??[]).filter(row=>row.loadId===loadId);
+    if(!loadRows.length)throw new Error('This load has no bitumen use on record.');
+    const room=eligibleBatchRooms(loadRows[0]!.loadConfirmedAt,this.useBatches(overview),overview.useRows??[],overview.usingBatchId??null).find(value=>value.id===toBatchId);
+    if(!room)throw new Error('Choose a batch that is still open and had arrived by the day of this load.');
+    const rows=planAddToBatch(loadRows,toBatchId,room.remainingKg);
+    if(!rows.length)throw new Error(room.remainingKg<=USE_EPSILON?'That batch has nothing left.':'This load has no bitumen left out of a batch.');
+    await this.insertUseRows(rows);
+    const next=await this.getOverview();
+    return {addedKg:rows.find(row=>row.kind==='moved')?.kg??0,uncoveredKg:loadUseDetail((next.useRows??[]).filter(row=>row.loadId===loadId))?.uncoveredKg??0,overview:next};
+  }
+
+  private async reconcileUse():Promise<SyncResult>{
     const overview=await this.getOverview();
     const setup=await this.getUseSetup();
     const loadRows=await this.db.getAllAsync<LoadDbRow>(`SELECT id,item_id,item_name,load_number,transaction_number,confirmed_at,status,is_archived,quantity_method,net_weight_kg,direct_quantity,direct_unit_symbol,billed_quantity,output_unit_symbol FROM loads
@@ -220,8 +282,7 @@ export class SqliteBitumenRepository implements BitumenRepository{
     if(!loadRows.length)return {added:0,attention:[]};
     const loads:UseLoad[]=loadRows.map(row=>({id:row.id,itemId:row.item_id,itemName:row.item_name,loadNumber:row.load_number??row.transaction_number,confirmedAt:row.confirmed_at,active:row.status==='Active'&&(row.is_archived??0)===0,
       mixKg:mixKgForLoad({quantityMethod:row.quantity_method??'weighbridge',netWeightKg:row.net_weight_kg,directQuantity:row.direct_quantity,directUnitSymbol:row.direct_unit_symbol,billedQuantity:row.billed_quantity,outputUnitSymbol:row.output_unit_symbol})}));
-    const batches:UseBatch[]=overview.batches.map(batch=>({id:batch.id,arrivedDay:localDateKey(new Date(batch.arrivedAt)),active:batch.recordStatus==='Active',deliveredKg:batch.deliveredKg,adjustmentKg:batch.adjustmentKg,closedAt:batch.closure?.closedAt??null}));
-    const {rows,attention}=reconcileBitumenUse({rules:setup.rules,loads,existing:overview.useRows??[],batches,usingBatchId:overview.usingBatchId??null});
+    const {rows,attention}=reconcileBitumenUse({rules:setup.rules,loads,existing:overview.useRows??[],batches:this.useBatches(overview),usingBatchId:overview.usingBatchId??null});
     if(rows.length)await this.insertUseRows(rows);
     return {added:rows.length,attention};
   }
@@ -284,6 +345,7 @@ export class SqliteBitumenRepository implements BitumenRepository{
       await insertClosure(this.db,'bitumen',batchId,{closedOn,reason,leftover:batch.remainingKg});
       await this.db.runAsync("UPDATE bitumen_settings SET using_batch_id=NULL WHERE id='bitumen' AND using_batch_id=?",batchId);
     });
+    await this.autoPlaceToday();
     return this.getOverview();
   }
 

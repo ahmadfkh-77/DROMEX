@@ -111,7 +111,7 @@ export function DromexApp(){
   const[contractItemId,setContractItemId]=useState<string|null>(null);
   const financialRepository=useMemo(()=>new SqliteFinancialRepository(db),[db]);
   const fuelRepository=useMemo(()=>new SqliteFuelRepository(db),[db]);
-  const bitumenRepository=useMemo(()=>new SqliteBitumenRepository(db),[db]);
+  const bitumenRepository=useMemo(()=>new SqliteBitumenRepository(db,Storage),[db]);
   const stockRepository=useMemo(()=>new SqliteStockRepository(db),[db]);
   const wasteRepository=useMemo(()=>new SqliteWasteRepository(db),[db]);
   const quickTextRepository=useMemo(()=>new SqliteQuickTextRepository(db),[db]);
@@ -218,7 +218,7 @@ export function DromexApp(){
   else if(screen==='walls')content=<WallConstructionScreen repository={wallRepository} liftRepository={constructionLiftRepository} initialProjectId={wallProjectId} onBack={()=>{setWallProjectId(null);goBack('recordsHub');}}/>;
   else if(screen==='financials')content=<FinancialsScreen repository={financialRepository} initialFromDate={dashboardRange?.fromDate} initialToDate={dashboardRange?.toDate} onBack={()=>goBack('recordsHub')}/>;
   else if(screen==='waste')content=<WasteDumpScreen repository={wasteRepository} initialProjectId={searchTarget?.route==='waste'?searchTarget.projectId:activeProject?.id} initialDumpId={searchTarget?.route==='waste'?searchTarget.id:null} onBack={()=>goBack('recordsHub')}/>;
-  else if(screen==='bitumen')content=<BitumenScreen repository={bitumenRepository} initialBatchId={bitumenBatchId} onBack={()=>{setBitumenBatchId(null);goBack('home');}}/>;
+  else if(screen==='bitumen')content=<BitumenScreen repository={bitumenRepository} initialBatchId={bitumenBatchId} onOpenLoad={item=>{setSearchTarget({id:item.loadId,kind:'Load',title:item.loadNumber??'Load',subtitle:item.itemName,date:item.confirmedAt,route:'loads',projectId:null});navigate('loads');}} onBack={()=>{setBitumenBatchId(null);goBack('home');}}/>;
   else if(screen==='stock')content=<StockScreen repository={stockRepository} initialBatchId={stockBatchId} onOpenSupplierLoad={(id,number)=>{setSearchTarget({id,kind:'Supplier Load',title:number,subtitle:'',date:null,route:'quarry',projectId:null});navigate('quarry');}} fuelBadge={fuelBadge} bitumenBadge={bitumenBadge} onOpenFuel={()=>navigate('fuel')} onOpenBitumen={()=>navigate('bitumen')} onOpenCatalog={()=>navigate('catalog')} onBack={()=>goBack('home')}/>;
   else if(screen==='fuel')content=<FuelTrackingScreen repository={fuelRepository} initialProjectId={fuelProjectId??activeProject?.id} lockedProjectId={fuelProjectId} initialBatchId={fuelBatchId} initialTab={entryIntent==='fuelDelivery'?'delivery':entryIntent==='equipmentFill'?'fill':undefined} onBack={()=>{setFuelProjectId(null);setFuelBatchId(null);goBack('recordsHub');}}/>;
   else if(screen==='quickText')content=<QuickTextScreen repository={quickTextRepository} initialProjectId={activeProject?.id} initialDocumentId={searchTarget?.route==='quickText'?searchTarget.id:null} onBack={()=>goBack('recordsHub')}/>;

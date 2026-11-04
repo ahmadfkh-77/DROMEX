@@ -22,9 +22,12 @@ export type UseRowInput={
 };
 export type BitumenUseRow=UseRowInput&{id:string;createdAt:string};
 
-export type AttentionItem={loadId:string;loadNumber:string|null;itemName:string;kind:'uncovered'|'not_countable';kg:number;note:string};
+export type AttentionItem={loadId:string;loadNumber:string|null;itemName:string;kind:'uncovered'|'not_countable';kg:number;note:string;/** When the load was confirmed; its local day is the day group. */confirmedAt:string};
 
 export const USE_EPSILON=0.0005;
+export const UNCOVERED_NOTE='In no batch yet. Use Add to batch to place it; room that appears later does not place it by itself.';
+export const ADDED_BY_HAND_NOTE='Added by hand from Needs attention';
+export const AUTO_PLACED_NOTE='Counted automatically on the day it was made';
 const round3=(value:number)=>Math.round(value*1000)/1000;
 
 /** Bitumen for a mix: `bitumenKg` for every `aggregateKg` of mix. */
@@ -90,7 +93,7 @@ export function reconcileBitumenUse(input:ReconcileInput):ReconcileResult{
     const existingNet=round3(history.reduce((sum,row)=>sum+row.kg,0));
     const added:UseRowInput[]=[];
     if(load.mixKg==null){
-      if(load.active&&existingNet<=USE_EPSILON)attention.push({loadId:load.id,loadNumber:load.loadNumber,itemName:load.itemName,kind:'not_countable',kg:0,note:'The quantity is not in tons or kg, so the bitumen cannot be calculated.'});
+      if(load.active&&existingNet<=USE_EPSILON)attention.push({loadId:load.id,loadNumber:load.loadNumber,itemName:load.itemName,kind:'not_countable',kg:0,note:'The quantity is not in tons or kg, so the bitumen cannot be calculated.',confirmedAt:load.confirmedAt});
       continue;
     }
     const desired=load.active?bitumenForMix(load.mixKg,rule.aggregateKg,rule.bitumenKg):0;
@@ -131,7 +134,7 @@ export function reconcileBitumenUse(input:ReconcileInput):ReconcileResult{
     rows.push(...added);
     // Whatever stays uncovered for this load is listed for attention.
     const uncovered=round3([...history,...added.map(row=>({...row,id:'',createdAt:''}))].filter(row=>row.batchId==null).reduce((sum,row)=>sum+row.kg,0));
-    if(uncovered>USE_EPSILON)attention.push({loadId:load.id,loadNumber:load.loadNumber,itemName:load.itemName,kind:'uncovered',kg:uncovered,note:'No open bitumen batch had enough left. Record a delivery, or move the load to a batch.'});
+    if(uncovered>USE_EPSILON)attention.push({loadId:load.id,loadNumber:load.loadNumber,itemName:load.itemName,kind:'uncovered',kg:uncovered,note:UNCOVERED_NOTE,confirmedAt:load.confirmedAt});
   }
   return {rows,attention};
 }
@@ -161,6 +164,91 @@ export function planMoveLoad(loadRows:readonly BitumenUseRow[],toBatchId:string)
   return rows;
 }
 
+/** What each active batch has left: what was delivered, adjusted by the real-amount counts, less the net use in the rows. */
+export function remainingByBatch(batches:readonly UseBatch[],rows:readonly Pick<BitumenUseRow,'batchId'|'kg'>[]):Map<string,number>{
+  const remaining=new Map(batches.filter(batch=>batch.active).map(batch=>[batch.id,round3(batch.deliveredKg+batch.adjustmentKg)]));
+  for(const row of rows)if(row.batchId&&remaining.has(row.batchId))remaining.set(row.batchId,round3((remaining.get(row.batchId)??0)-row.kg));
+  return remaining;
+}
+
+export type BatchRoom={id:string;remainingKg:number};
+/**
+ * The batches a left-out load may be added to: active, open now (a closed batch takes no new use, DEC-516) and arrived by the load's day.
+ * Each comes with what it has left. The batch in use is first, then the oldest.
+ */
+export function eligibleBatchRooms(confirmedAt:string,batches:readonly UseBatch[],rows:readonly Pick<BitumenUseRow,'batchId'|'kg'>[],usingBatchId:string|null):BatchRoom[]{
+  const day=localDateKey(new Date(confirmedAt)),remaining=remainingByBatch(batches,rows);
+  const open=[...batches].filter(batch=>batch.active&&!batch.closedAt&&batch.arrivedDay<=day).sort((a,b)=>a.arrivedDay.localeCompare(b.arrivedDay));
+  const ordered=[...open.filter(batch=>batch.id===usingBatchId),...open.filter(batch=>batch.id!==usingBatchId)];
+  return ordered.map(batch=>({id:batch.id,remainingKg:Math.max(0,remaining.get(batch.id)??0)}));
+}
+
+const uncoveredOf=(loadRows:readonly Pick<BitumenUseRow,'batchId'|'kg'>[])=>round3(netByBatch(loadRows).get(null)??0);
+const placementBase=(loadRows:readonly BitumenUseRow[])=>{
+  const first=loadRows[0]!,last=loadRows[loadRows.length-1]!;
+  return {loadId:first.loadId,mixKg:last.mixKg,ruleAggregateKg:first.ruleAggregateKg,ruleBitumenKg:first.ruleBitumenKg,loadNumber:first.loadNumber,loadConfirmedAt:first.loadConfirmedAt,itemName:first.itemName};
+};
+const placementRows=(base:ReturnType<typeof placementBase>,toBatchId:string,kg:number,note:string):UseRowInput[]=>[
+  {...base,batchId:null,kind:'reversal',kg:-kg,note},
+  {...base,batchId:toBatchId,kind:'moved',kg,note},
+];
+
+/**
+ * Adds the uncovered part of a left-out load to a batch: only what fits in `roomKg`, the rest stays uncovered. It adds a reversal of the
+ * uncovered amount and a moved line in the batch; no existing row is edited, so the load's total never changes.
+ */
+export function planAddToBatch(loadRows:readonly BitumenUseRow[],toBatchId:string,roomKg:number,note=ADDED_BY_HAND_NOTE):UseRowInput[]{
+  if(!loadRows.length)return [];
+  const take=round3(Math.min(uncoveredOf(loadRows),Math.max(roomKg,0)));
+  if(take<=USE_EPSILON)return [];
+  return placementRows(placementBase(loadRows),toBatchId,take,note);
+}
+
+/**
+ * Today's left-out loads try again for room, in load order: the batch in use first, then the oldest, only open batches that had arrived
+ * by the load's day. A load of an earlier day is never planned here. Running it again plans nothing new.
+ */
+export function planAutoPlaceToday(input:{rows:readonly BitumenUseRow[];batches:readonly UseBatch[];usingBatchId:string|null;today:string}):UseRowInput[]{
+  const byLoad=new Map<string,BitumenUseRow[]>();
+  for(const row of input.rows)byLoad.set(row.loadId,[...(byLoad.get(row.loadId)??[]),row]);
+  const loads=[...byLoad.values()].filter(rows=>localDateKey(new Date(rows[0]!.loadConfirmedAt))===input.today).sort((a,b)=>a[0]!.loadConfirmedAt.localeCompare(b[0]!.loadConfirmedAt)||a[0]!.loadId.localeCompare(b[0]!.loadId));
+  const remaining=remainingByBatch(input.batches,input.rows),planned:UseRowInput[]=[];
+  for(const rows of loads){
+    let need=uncoveredOf(rows);
+    if(need<=USE_EPSILON)continue;
+    const base=placementBase(rows);
+    for(const room of eligibleBatchRooms(rows[0]!.loadConfirmedAt,input.batches,[],input.usingBatchId)){
+      if(need<=USE_EPSILON)break;
+      const take=round3(Math.min(need,remaining.get(room.id)??0));
+      if(take<=USE_EPSILON)continue;
+      planned.push(...placementRows(base,room.id,take,AUTO_PLACED_NOTE));
+      remaining.set(room.id,round3((remaining.get(room.id)??0)-take));need=round3(need-take);
+    }
+  }
+  return planned;
+}
+
+export type AttentionDay={day:string;isToday:boolean;items:AttentionItem[];count:number;uncoveredKg:number};
+/** One group per local day of the load, newest day first; inside a day the loads are in time order. */
+export function groupAttentionByDay(items:readonly AttentionItem[],today:string):AttentionDay[]{
+  const days=new Map<string,AttentionItem[]>();
+  for(const item of items){const day=localDateKey(new Date(item.confirmedAt));days.set(day,[...(days.get(day)??[]),item]);}
+  return [...days.entries()].sort((a,b)=>b[0].localeCompare(a[0])).map(([day,list])=>{
+    const sorted=[...list].sort((a,b)=>a.confirmedAt.localeCompare(b.confirmedAt)||(a.loadNumber??'').localeCompare(b.loadNumber??''));
+    return {day,isToday:day===today,items:sorted,count:sorted.length,uncoveredKg:round3(sorted.reduce((sum,item)=>sum+item.kg,0))};
+  });
+}
+
+export type LoadUseDetail={loadId:string;loadNumber:string|null;itemName:string;confirmedAt:string;mixKg:number;ruleAggregateKg:number;ruleBitumenKg:number;percent:number;requiredKg:number;byBatch:Array<{batchId:string;kg:number}>;uncoveredKg:number};
+/** What the load's own rows say: its mix, the rule it was counted with, the bitumen it needs, what each batch counts and what is not covered. */
+export function loadUseDetail(loadRows:readonly BitumenUseRow[]):LoadUseDetail|null{
+  if(!loadRows.length)return null;
+  const base=placementBase(loadRows);
+  const byBatch=[...netByBatch(loadRows).entries()].filter((entry):entry is [string,number]=>entry[0]!=null&&entry[1]>USE_EPSILON).map(([batchId,kg])=>({batchId,kg}));
+  return {loadId:base.loadId,loadNumber:base.loadNumber,itemName:base.itemName,confirmedAt:base.loadConfirmedAt,mixKg:base.mixKg,ruleAggregateKg:base.ruleAggregateKg,ruleBitumenKg:base.ruleBitumenKg,
+    percent:rulePercent(base.ruleAggregateKg,base.ruleBitumenKg),requiredKg:bitumenForMix(base.mixKg,base.ruleAggregateKg,base.ruleBitumenKg),byBatch,uncoveredKg:uncoveredOf(loadRows)};
+}
+
 /** One line per load for a batch: its net use there, with the rule it was counted with. A load that nets to zero (cancelled) is not a line. */
 export type BatchLoadUse={loadId:string;loadNumber:string|null;loadConfirmedAt:string;itemName:string;mixKg:number;ruleAggregateKg:number;ruleBitumenKg:number;kg:number;lastAt:string};
 /** DEC-527. The asphalt mix behind a batch's counted loads: its weight (kept in kg, shown as tons) and how many loads. A load that is not counted is not in the lines, so it is not here. */
@@ -187,5 +275,8 @@ export type UseSetupSeries={id:string;prefix:string;name:string;itemIds:string[]
 export type BitumenUseSetup={items:UseSetupItem[];series:UseSetupSeries[];rules:BitumenRule[]};
 /** What the rules form sends. The mix is typed in tons and the bitumen in kg, as the owner thinks of the rule. */
 export type BitumenRuleDraft={itemId:string;enabled:boolean;aggregateTons:string;bitumenKg:string;countFrom:string};
+/** One load for the detail view and the Add to batch picker. `state` says whether a batch fits the whole uncovered part, only part of it, has nothing left, is closed, or had not arrived by the load's day. */
+export type LeftOutBatchOption={batchId:string;batchNumber:string;arrivedAt:string;status:string;inUse:boolean;remainingKg:number;state:'fits'|'partial'|'full'|'closed'|'later'};
+export type LeftOutLoad={detail:LoadUseDetail;batches:LeftOutBatchOption[];loadRows:number};
 export type SyncResult={added:number;attention:AttentionItem[]};
 export const DEFAULT_RULE={aggregateKg:1600,bitumenKg:50} as const;

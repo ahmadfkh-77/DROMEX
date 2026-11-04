@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DROMEX Bitumen: loads left out of a batch (mockup)</title>
+<style>
+:root{--orange:#C84B31;--navy:#173F67;--cream:#FFF8ED;--page:#F5F2EC;--ink:#1F2933;--mute:#5C6773;--line:#D9D2C5;--red:#B3261E;--green:#2E7D4F;--amber:#FFF1D6;--amber-line:#E2B659;}
+*{box-sizing:border-box}
+body{margin:0;background:#E7E2D8;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink)}
+h1{font-size:22px;margin:24px 24px 4px;color:var(--navy)}
+.lead{margin:0 24px 8px;color:var(--mute);max-width:900px;font-size:14px;line-height:1.5}
+.row{display:flex;flex-wrap:wrap;gap:28px;padding:20px 24px 40px;align-items:flex-start}
+.col{width:390px}
+.cap{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--orange);margin:0 0 8px}
+.cap small{display:block;text-transform:none;letter-spacing:0;color:var(--mute);font-weight:400;font-size:12.5px;margin-top:2px}
+.phone{width:390px;background:var(--page);border-radius:22px;border:1px solid var(--line);padding:14px 14px 18px;box-shadow:0 6px 20px rgba(23,63,103,.12)}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.card.ctx{background:var(--navy);color:var(--cream);border-color:var(--navy)}
+.card.ctx .sub{color:#cdd9e6}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--orange)}
+.title{font-size:20px;font-weight:800;color:var(--navy);margin:2px 0 4px}
+.card.ctx .title{color:#fff}
+.hint{font-size:13.5px;color:var(--mute);line-height:1.4;margin:0 0 10px}
+.sub{font-size:13.5px;color:var(--mute);line-height:1.4}
+.strong{font-weight:700;font-size:15px}
+.btn{display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:14px;font-weight:700;font-size:15px;border:1.5px solid var(--navy);background:#fff;color:var(--navy);width:100%;margin-top:8px;cursor:pointer}
+.btn.primary{background:var(--orange);border-color:var(--orange);color:#fff}
+.btn.navy{background:var(--navy);color:#fff}
+.btn.small{min-height:48px;width:auto;padding:0 14px;margin:0}
+.chip{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--amber);border:1px solid var(--amber-line);color:#7A5200}
+.chip.ok{background:#E3F3E9;border-color:#9BD0AF;color:var(--green)}
+.chip.bad{background:#FBE5E3;border-color:#E6A5A0;color:var(--red)}
+details.day{border:1px solid var(--amber-line);background:var(--amber);border-radius:14px;margin-bottom:8px;overflow:hidden}
+details.day>summary{list-style:none;cursor:pointer;min-height:52px;padding:8px 12px;display:flex;align-items:center;gap:8px}
+details.day>summary::-webkit-details-marker{display:none}
+details.day>summary .d{flex:1}
+details.day>summary .d b{display:block;font-size:15px}
+details.day>summary .d span{font-size:12.5px;color:#7A5200}
+details.day>summary .n{background:var(--orange);color:#fff;border-radius:99px;font-weight:800;font-size:13px;min-width:30px;text-align:center;padding:4px 8px}
+details.day>summary .arr{font-weight:800;color:var(--navy);transition:transform .15s}
+details.day[open]>summary .arr{transform:rotate(90deg)}
+.item{background:#fff;border-top:1px solid var(--amber-line);padding:10px 12px;display:flex;align-items:center;gap:10px;min-height:56px}
+.item .t{width:46px;font-size:12.5px;color:var(--mute);font-variant-numeric:tabular-nums}
+.item .m{flex:1;min-width:0}
+.item .m b{font-size:15px;display:block}
+.item .m span{font-size:12.5px;color:var(--mute)}
+.item .kg{font-weight:800;color:var(--red);font-size:15px;white-space:nowrap;text-align:right}
+.item .kg small{display:block;color:var(--mute);font-weight:400;font-size:11.5px}
+.more{width:100%;min-height:48px;border:1.5px dashed var(--navy);border-radius:14px;background:transparent;color:var(--navy);font-weight:700;margin-top:4px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:6px 10px;font-size:14px;margin:6px 0}
+.kv .k{color:var(--mute)}
+.kv .v{font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.kv .v.red{color:var(--red)}.kv .v.green{color:var(--green)}
+.rule{background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.45;margin:8px 0}
+hr{border:0;border-top:1px solid var(--line);margin:10px 0}
+.opt{border:1.5px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px;background:#fff}
+.opt.sel{border-color:var(--orange);background:#FFF3EE}
+.opt.dis{background:#F2EFE9;opacity:.85}
+.opt .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.bar{height:8px;border-radius:99px;background:#E8E2D6;overflow:hidden;margin:8px 0 4px}
+.bar i{display:block;height:100%;background:var(--green)}
+.bar i.short{background:var(--red)}
+.switch{display:flex;gap:12px;align-items:center}
+.tog{width:56px;height:32px;border-radius:99px;background:#BDB6A8;position:relative;flex:none}
+.tog:after{content:"";position:absolute;left:3px;top:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.tog.on{background:var(--green)}
+.tog.on:after{left:27px}
+.note{background:#fff;border:1px dashed var(--navy);border-radius:14px;padding:14px;margin:0 24px 16px;max-width:1000px;font-size:14px;line-height:1.55}
+.note h2{margin:0 0 6px;font-size:16px;color:var(--navy)}
+.note li{margin-bottom:4px}
+</style>
+</head>
+<body>
+<h1>Bitumen: loads left out of a batch</h1>
+<p class="lead">Mockup only, nothing is coded. Every screen is 390 px wide. Figures use batch BIT-2026-00002 from the report: rule "every 1 t of mix needs 50 kg of bitumen = 5%". Today in this mockup is Wed 4 Nov 2026. Tap the day headings to open and close them.</p>
+
+<div class="row">
+
+<!-- 1. Needs attention card -->
+<div class="col">
+<p class="cap">1 · Needs attention, grouped by day<small>Replaces the plain text list. Today open, older days closed.</small></p>
+<div class="phone">
+  <div class="card ctx">
+    <div class="eyebrow" style="color:#F2B8A5">Bitumen</div>
+    <div class="title">BIT-2026-00002</div>
+    <div class="sub">Open · In use · delivered 19,680 kg · est. used 11,451.2 kg · est. left 8,548.8 kg</div>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow">Needs attention</div>
+    <div class="title">5 loads not fully counted</div>
+    <p class="hint">These loads are in no bitumen batch, or only part of them is. Nothing is blocked. Tap a load to see why, then use <b>Add to batch</b> to choose the batch yourself.</p>
+
+    <details class="day" open>
+      <summary><div class="d"><b>Today · Wed 4 Nov 2026</b><span>2 loads · 1,925 kg not counted</span></div><span class="n">2</span><span class="arr">›</span></summary>
+      <div class="item"><span class="t">14:20</span><div class="m"><b>ASP-00059</b><span>Asphalt 0/12 base course</span></div><div class="kg">870 kg<small>not covered</small></div></div>
+      <div class="item"><span class="t">11:05</span><div class="m"><b>ASP-00058</b><span>Asphalt 0/12 base course</span></div><div class="kg">1,055 kg<small>not covered</small></div></div>
+    </details>
+
+    <details class="day">
+      <summary><div class="d"><b>Mon 2 Nov 2026</b><span>1 load · 900 kg not counted</span></div><span class="n">1</span><span class="arr">›</span></summary>
+      <div class="item"><span class="t">16:40</span><div class="m"><b>ASP-00057</b><span>Asphalt 0/12 base course</span></div><div class="kg">900 kg<small>not covered</small></div></div>
+    </details>
+
+    <details class="day">
+      <summary><div class="d"><b>Wed 28 Oct 2026</b><span>2 loads · 1,740 kg not counted · older day</span></div><span class="n">2</span><span class="arr">›</span></summary>
+      <div class="item"><span class="t">13:50</span><div class="m"><b>ASP-00052</b><span>Asphalt 0/12 base course</span></div><div class="kg">960 kg<small>not covered</small></div></div>
+      <div class="item"><span class="t">09:15</span><div class="m"><b>ASP-00051</b><span>Asphalt 0/12 base course</span></div><div class="kg">780 kg<small>not covered</small></div></div>
+    </details>
+
+    <div class="rule" style="margin-top:10px"><b>What happens:</b> a left-out load stays out of every batch until you add it. Older days are never placed by the app, even with the switch on.</div>
+  </div>
+
+  <div class="card">
+    <div class="switch">
+      <div class="tog"></div>
+      <div style="flex:1"><div class="strong">Add today's left-out loads to batches automatically</div><div class="sub">Off. You choose the batch with Add to batch.</div></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- 2. Detail -->
+<div class="col">
+<p class="cap">2 · View one item<small>Opens from any load in the list. Figures come from the load's own records.</small></p>
+<div class="phone">
+  <div class="card">
+    <button class="btn small" style="min-height:40px;margin-bottom:10px">‹ Back</button>
+    <div class="eyebrow">Left-out load</div>
+    <div class="title">ASP-00059</div>
+    <div class="sub">Wed 4 Nov 2026 · 14:20 · Project: Ring Road, Lot 3</div>
+    <div style="margin-top:8px"><span class="chip bad">870 kg not covered</span></div>
+  </div>
+
+  <div class="card">
+    <div class="strong">Asphalt mix</div>
+    <div class="kv"><span class="k">Item</span><span class="v">Asphalt 0/12 base course</span>
+      <span class="k">Mix quantity</span><span class="v">17,400 kg · 17.40 t</span></div>
+    <div class="rule">Counted with the rule: every <b>1 t</b> of mix needs <b>50 kg</b> of bitumen = <b>5%</b>.</div>
+    <hr>
+    <div class="strong">Bitumen</div>
+    <div class="kv"><span class="k">Required for this load</span><span class="v">870 kg</span>
+      <span class="k">Counted in BIT-2026-00001</span><span class="v">0 kg</span>
+      <span class="k">Counted in BIT-2026-00002</span><span class="v">0 kg</span>
+      <span class="k">Counted in BIT-2026-00003</span><span class="v">0 kg</span>
+      <span class="k">Not covered</span><span class="v red">870 kg</span></div>
+    <p class="sub">This load is in no batch. Room in a batch does not place it by itself.</p>
+    <button class="btn primary">Add to batch</button>
+    <button class="btn navy">Open the full load</button>
+  </div>
+
+  <div class="card">
+    <div class="strong">A load that cannot be counted</div>
+    <div class="kv"><span class="k">ASP-00049 · 4 Nov</span><span class="v">Not countable</span></div>
+    <p class="sub">The quantity is not in tons or kg, so the bitumen cannot be calculated. The load is never blocked. Open the full load to fix the unit.</p>
+    <button class="btn navy" style="margin-top:4px">Open the full load</button>
+  </div>
+</div>
+</div>
+
+<!-- 3. Picker -->
+<div class="col">
+<p class="cap">3 · Add to batch<small>Lists batches this load may use, with what each has left.</small></p>
+<div class="phone">
+  <div class="card">
+    <div class="eyebrow">Add to batch</div>
+    <div class="title">ASP-00059 · 870 kg</div>
+    <p class="hint">Choose the batch. Only batches that had arrived by 4 Nov and were not closed before this load are listed.</p>
+
+    <div class="opt sel">
+      <div class="top"><div><b>BIT-2026-00002</b><div class="sub">In use · arrived 20 Oct</div></div><span class="chip ok">Fits</span></div>
+      <div class="bar"><i style="width:84%"></i></div>
+      <div class="kv" style="margin:2px 0"><span class="k">Left now</span><span class="v">8,548.8 kg</span><span class="k">Left after adding</span><span class="v green">7,678.8 kg</span></div>
+    </div>
+
+    <div class="opt">
+      <div class="top"><div><b>BIT-2026-00003</b><div class="sub">Open · arrived 2 Nov</div></div><span class="chip">Not enough</span></div>
+      <div class="bar"><i class="short" style="width:46%"></i></div>
+      <div class="kv" style="margin:2px 0"><span class="k">Left now</span><span class="v">400 kg</span><span class="k">Would stay uncovered</span><span class="v red">470 kg</span></div>
+      <p class="sub" style="margin:4px 0 0">Only 400 kg would be added. The other 470 kg stays in Needs attention.</p>
+    </div>
+
+    <div class="opt dis">
+      <div class="top"><div><b>BIT-2026-00001</b><div class="sub">Closed 30 Oct · before this load</div></div><span class="chip bad">Closed</span></div>
+      <p class="sub" style="margin:4px 0 0">Cannot take new use.</p>
+    </div>
+
+    <button class="btn primary">Add 870 kg to BIT-2026-00002</button>
+    <button class="btn">Cancel</button>
+    <p class="sub" style="margin-top:8px">Adds a new audited row, note "Added by hand from Needs attention". Nothing already recorded is edited or deleted.</p>
+  </div>
+</div>
+</div>
+
+<!-- 4. Result of partial -->
+<div class="col">
+<p class="cap">4 · After choosing a batch with less room<small>Recommended behaviour: add what fits, keep the rest listed.</small></p>
+<div class="phone">
+  <div class="card">
+    <div class="eyebrow">Added to batch</div>
+    <div class="title">400 kg added</div>
+    <div class="sub">ASP-00059 now has 400 kg in BIT-2026-00003. <b>470 kg</b> is still not covered and stays in Needs attention under Today.</div>
+  </div>
+  <div class="card">
+    <div class="eyebrow">Needs attention</div>
+    <details class="day" open style="margin-top:8px">
+      <summary><div class="d"><b>Today · Wed 4 Nov 2026</b><span>2 loads · 1,525 kg not counted</span></div><span class="n">2</span><span class="arr">›</span></summary>
+      <div class="item"><span class="t">14:20</span><div class="m"><b>ASP-00059</b><span>Part counted: 400 of 870 kg</span></div><div class="kg">470 kg<small>not covered</small></div></div>
+      <div class="item"><span class="t">11:05</span><div class="m"><b>ASP-00058</b><span>Asphalt 0/12 base course</span></div><div class="kg">1,055 kg<small>not covered</small></div></div>
+    </details>
+  </div>
+  <div class="card">
+    <div class="strong">Switch ON · what it does</div>
+    <div class="switch" style="margin:8px 0">
+      <div class="tog on"></div>
+      <div style="flex:1"><div class="strong">Add today's left-out loads to batches automatically</div><div class="sub">On. Only loads made today are placed, in load order, when Bitumen opens and after a delivery, a correction or a closure. Earlier days stay for you.</div></div>
+    </div>
+    <div class="rule">Placed automatically: note "Counted automatically on the day it was made". Whatever does not fit stays listed. Turning the switch off keeps what was placed.</div>
+  </div>
+</div>
+</div>
+
+<!-- 5. Long list -->
+<div class="col">
+<p class="cap">5 · A very long list<small>Each day closed; a day shows 10 loads, then "Show more".</small></p>
+<div class="phone">
+  <div class="card">
+    <div class="eyebrow">Needs attention</div>
+    <div class="title">38 loads not fully counted</div>
+    <details class="day" open style="margin-top:8px">
+      <summary><div class="d"><b>Today · Wed 4 Nov 2026</b><span>2 loads · 1,925 kg</span></div><span class="n">2</span><span class="arr">›</span></summary>
+      <div class="item"><span class="t">14:20</span><div class="m"><b>ASP-00059</b></div><div class="kg">870 kg</div></div>
+      <div class="item"><span class="t">11:05</span><div class="m"><b>ASP-00058</b></div><div class="kg">1,055 kg</div></div>
+    </details>
+    <details class="day"><summary><div class="d"><b>Mon 2 Nov 2026</b><span>1 load · 900 kg</span></div><span class="n">1</span><span class="arr">›</span></summary></details>
+    <details class="day"><summary><div class="d"><b>Wed 28 Oct 2026</b><span>14 loads · 11,120 kg</span></div><span class="n">14</span><span class="arr">›</span></summary>
+      <div class="item"><span class="t">16:55</span><div class="m"><b>ASP-00052</b></div><div class="kg">960 kg</div></div>
+      <div class="item"><span class="t">15:30</span><div class="m"><b>ASP-00051</b></div><div class="kg">780 kg</div></div>
+      <button class="more" style="margin:8px 12px;width:calc(100% - 24px)">Show 12 more</button>
+    </details>
+    <details class="day"><summary><div class="d"><b>Tue 27 Oct 2026</b><span>21 loads · 15,640 kg</span></div><span class="n">21</span><span class="arr">›</span></summary></details>
+    <button class="more">Show older days (2 more)</button>
+  </div>
+</div>
+</div>
+
+</div>
+
+<div class="note">
+<h2>Decisions I need from you</h2>
+<ol>
+<li><b>Batch with less room than needed.</b> Recommended: add only what fits and keep the rest listed (screen 3 and 4). The alternative is to allow only batches with enough room for the whole uncovered part.</li>
+<li><b>Day change edge case.</b> A load made yesterday that is still left out when midnight passes becomes an "older day" load and is no longer retried automatically. It moves to its own day group and waits for Add to batch. Please confirm.</li>
+<li><b>Default open state.</b> Today open, every older day closed (matches the closed-by-default rule in the design system). Long days show 10 loads, then "Show more".</li>
+<li><b>Where the switch is saved.</b> I will propose after reading the preferences code. The aim is app preferences, with a check that it is in the backup and restore.</li>
+</ol>
+</div>
+</body>
+</html>

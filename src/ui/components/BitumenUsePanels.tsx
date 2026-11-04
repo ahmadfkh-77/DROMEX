@@ -3,7 +3,7 @@ import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import type {BitumenRepository} from '../../data/repositories/BitumenRepository';
 import {bitumenStatusLabels,formatKg,formatTons,isOpenBatch,type BitumenBatch,type BitumenOverview} from '../../domain/bitumen';
-import {adjustmentFor,DEFAULT_RULE,loadsText,mixMadeForLines,rulePercent,useLinesForBatch,type AttentionItem,type BatchLoadUse,type BitumenRule,type BitumenUseSetup} from '../../domain/bitumenUse';
+import {adjustmentFor,DEFAULT_RULE,loadsText,mixMadeForLines,rulePercent,useLinesForBatch,type BatchLoadUse,type BitumenRule,type BitumenUseSetup} from '../../domain/bitumenUse';
 import {fuelDayLabel} from '../../domain/fuelBatchViews';
 import {localDateKey} from '../../domain/fuel';
 import {AppButton,AppCard,AppField,Feedback} from './AppPrimitives';
@@ -81,13 +81,6 @@ export function AdjustmentsCard({batch,overview}:{batch:BitumenBatch;overview:Bi
   if(!rows.length)return null;
   return <AppCard title="Adjustments" hint="Kept on record. They never change a load.">
     {rows.map(value=><View key={value.id} style={styles.line}><View style={styles.flex}><Text style={styles.strong}>{dayOf(value.createdAt)}</Text><Text style={styles.sub}>{value.reason} · estimate {formatKg(value.estimatedBefore)} → real {formatKg(value.realAfter)}</Text></View><Text style={styles.kg}>{value.kg>0?'+':'−'}{Math.abs(value.kg).toLocaleString('en-US',{maximumFractionDigits:3})} kg</Text></View>)}
-  </AppCard>;
-}
-
-export function AttentionCard({items}:{items:AttentionItem[]}){
-  if(!items.length)return null;
-  return <AppCard title="Needs attention" hint="These loads could not be fully counted.">
-    {items.map(item=><View key={`${item.loadId}-${item.kind}`} style={styles.attention}><Text style={styles.strong}>{item.loadNumber??'Load'} · {item.itemName}</Text><Text style={styles.sub}>{item.kind==='uncovered'?`${formatKg(item.kg)} not covered. `:''}{item.note}</Text></View>)}
   </AppCard>;
 }
 
