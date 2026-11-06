@@ -6,7 +6,7 @@ export type CompanyTotalsRecord = {
   key: string; snapshot: RecordSnapshot; seriesId: string | null; status: 'Active' | 'Cancelled'; cancellationReason: string | null;
   correctionCount: number; links: DocumentLink[]; inclusion: InclusionState;
   /** Read-only list detail (destination, who drove, delivery method); not part of the snapshot. Missing values are null, never blank. */
-  details?: {destination: string | null; driverName: string | null; truckPlate: string | null; deliveredBy: 'company' | 'supplier' | null; customerName?: string | null;
+  details?: {/** The company site a Supplier Load was delivered to, when it went to a site rather than a project. */siteId?: string | null; destination: string | null; driverName: string | null; truckPlate: string | null; deliveredBy: 'company' | 'supplier' | null; customerName?: string | null;
     /** Who issued the material: the Plant Company's real name on a company load, the outside supplier on a Supplier Load. */
     supplierName?: string | null};
 };

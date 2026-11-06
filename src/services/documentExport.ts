@@ -9,6 +9,7 @@ import {buildWasteHistoryHtml,type WasteHistoryPdf} from './wasteHistoryTemplate
 import type {StockReport} from '../domain/stockReport';import {buildStockReportHtml} from './stockReportTemplate';
 import type {BitumenBatchReport} from '../domain/bitumenBatchReport';import {buildBitumenBatchHtml} from './bitumenBatchTemplate';
 import type {SupplierDeliveriesPdf} from '../domain/supplierDeliveriesPdf'; import {buildSupplierDeliveriesHtml} from './supplierDeliveriesTemplate';
+import {buildCompanyDailyReportHtml,type CompanyDailyReportPdf} from './companyDailyReportTemplate';
 type PdfPageSize={width:number;height:number};
 export function loadDocumentPageSize(kind:LoadDocumentKind,paper:PaperWidth):PdfPageSize{return {width:paper==='58'?176:244,height:kind==='receipt'?(paper==='58'?500:450):(paper==='58'?640:560)};}
 async function saveAndShare(html:string,filename:string,title:string,pageSize?:PdfPageSize){const result=await Print.printToFileAsync({html,...pageSize});if(!FileSystem.documentDirectory)throw new Error('Document storage is unavailable.');const directory=`${FileSystem.documentDirectory}exports/`;await FileSystem.makeDirectoryAsync(directory,{intermediates:true});const target=`${directory}${encodeURIComponent(filename)}`;await FileSystem.deleteAsync(target,{idempotent:true});await FileSystem.moveAsync({from:result.uri,to:target});if(!(await Sharing.isAvailableAsync()))throw new Error(`PDF saved at ${target}, but sharing is unavailable.`);await Sharing.shareAsync(target,{mimeType:'application/pdf',UTI:'com.adobe.pdf',dialogTitle:title});return target;}
@@ -49,3 +50,10 @@ export async function exportAndShareBitumenBatchReport(report:BitumenBatchReport
 export async function exportAndShareWasteHistory(input:Omit<WasteHistoryPdf,'logo'>&{logoUri:string|null;fileName:string}){if(!input.history.days.length)throw new Error('No waste dumps match these filters, so there is nothing to export.');const logo=await imageUriToDataUrl(input.logoUri).catch(()=>null);/* A shared file with no .pdf ending is opened by a viewer as an unknown file ("file corrupt"), so the ending is always added. */return saveAndShare(buildWasteHistoryHtml({...input,logo}),/\.pdf$/i.test(input.fileName)?input.fileName:`${input.fileName}.pdf`,'Share Waste Dump History');}
 /** Phase 5. Shares the Load History PDF for the filters on screen. Active loads only, under the chosen Header company. */
 export async function exportAndShareLoadHistory(input:Omit<LoadHistoryPdf,'logo'>&{logoUri:string|null;fileName:string}){const logo=await imageUriToDataUrl(input.logoUri).catch(()=>null);return saveAndShare(buildLoadHistoryHtml({...input,logo}),input.fileName,'Share Load History');}
+
+/** Company Daily Report. Shares the PDF of one day under the chosen Header company's logo. Read-only: it changes no record. */
+export async function exportAndShareCompanyDailyReport(input:Omit<CompanyDailyReportPdf,'logo'>&{logoUri:string|null}){
+  if(input.report.isEmpty)throw new Error('Nothing was recorded on this day, so there is nothing to export.');
+  const logo=await imageUriToDataUrl(input.logoUri).catch(()=>null);
+  return saveAndShare(buildCompanyDailyReportHtml({report:input.report,logo}),`Company-Daily-Report-${input.report.day}.pdf`,'Share Company Daily Report');
+}

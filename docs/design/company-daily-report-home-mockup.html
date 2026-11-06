@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company Daily Report - Home card and preview mockup</title>
+<style>
+:root{--orange:#C84B31;--navy:#173F67;--ink:#17212B;--cream:#FFF8ED;--cream2:#F5F2EC;--line:#DDD7CC;--muted:#5C6773;--green:#17693B}
+*{box-sizing:border-box}body{margin:0;background:#E9E4DA;color:var(--ink);font:13px/1.4 Arial,sans-serif}
+.top{max-width:1240px;margin:0 auto;padding:22px 16px 0}.top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}.top p{margin:0;color:var(--muted);max-width:900px}
+.stage{max-width:1240px;margin:0 auto;padding:16px;display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:8px}.cap{font-weight:700;color:var(--navy)}
+.phone{width:375px;background:var(--cream2);border-radius:28px;border:6px solid #1C2530;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 30px rgba(20,38,58,.18)}
+.ghost{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;color:var(--muted);font-weight:700}
+.ghost.o{background:var(--orange);color:#fff;border:0}
+/* the card */
+.cdr{background:var(--navy);color:#fff;border-radius:16px;overflow:hidden;border-bottom:3px solid var(--orange)}
+.cdr-h{display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 12px;cursor:pointer;width:100%;background:none;border:0;color:#fff;text-align:left;font:inherit}
+.cdr-h .t{flex:1}.cdr-h b{font-size:16px;display:block}.cdr-h small{color:#cfdcea;font-size:12px}
+.tog{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700}
+.cdr-b{padding:0 12px 12px;display:none}.cdr.open .cdr-b{display:block}
+.figs{display:flex;gap:8px;margin-bottom:10px}.fig{flex:1;background:rgba(255,255,255,.1);border-radius:10px;padding:8px;text-align:center}
+.fig b{display:block;font-size:20px}.fig span{font-size:10.5px;color:#cfdcea;text-transform:uppercase;letter-spacing:.05em}
+.go{min-height:48px;border-radius:12px;background:var(--orange);display:flex;align-items:center;justify-content:center;font-weight:800}
+.note{font-size:11.5px;color:#cfdcea;margin-top:6px;text-align:center}
+/* preview */
+.bar{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-weight:700}
+.sw{display:flex;align-items:center;justify-content:space-between;min-height:48px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:0 12px;font-weight:700}
+.sw i{width:44px;height:26px;border-radius:13px;background:#B9B3A7;position:relative}.sw i:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff}
+.sw.on i{background:var(--green)}.sw.on i:after{left:21px}
+.tot{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}.tot h4{margin:0 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tot .g{display:grid;grid-template-columns:1fr 1fr;gap:6px}.tot .g div{background:var(--cream2);border-radius:8px;padding:6px 8px}.tot .g b{font-size:17px;display:block}
+.units{margin-top:6px;font-size:12px;color:var(--ink)}
+.row{display:flex;gap:6px;margin:4px 0}.row button{flex:1;min-height:44px;border-radius:10px;border:1.5px solid var(--navy);background:#fff;color:var(--navy);font-weight:800}
+.pl{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pl>.h{display:flex;align-items:center;gap:8px;min-height:52px;padding:8px 12px;font-weight:800;color:var(--navy);cursor:pointer}.pl>.h small{display:block;color:var(--muted);font-weight:400}
+.pl>.h .tg{margin-left:auto;font-size:22px}.pl .b{display:none;padding:0 10px 10px}.pl.open .b{display:block}
+.sec{border:1px solid var(--line);border-radius:10px;margin-top:6px}.sec>.h{display:flex;min-height:44px;align-items:center;padding:0 10px;font-weight:700;cursor:pointer}.sec>.h span:last-child{margin-left:auto;font-size:20px}
+.sec .b{display:none;padding:4px 10px 8px;font-size:12px}.sec.open .b{display:block}
+.sec table{width:100%;border-collapse:collapse}.sec td,.sec th{padding:4px 3px;border-bottom:1px solid #eee;text-align:left}.sec th{font-size:10.5px;color:var(--muted)}
+.tw{display:flex;align-items:center;justify-content:space-between;background:var(--cream2);border-radius:8px;min-height:44px;padding:0 10px;margin:6px 0;font-weight:700;font-size:12.5px}
+.tw i{width:40px;height:24px;border-radius:12px;background:#B9B3A7;position:relative}.tw i:after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff}
+.tw.on i{background:var(--green)}.tw.on i:after{left:19px}
+.exp{display:flex;gap:8px}.exp div{flex:1;min-height:48px;border-radius:12px;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+.hint{max-width:375px;font-size:12px;color:var(--muted)}
+.pl .b table{width:100%;border-collapse:collapse;font-size:11.5px}.pl .b th,.pl .b td{padding:4px 3px;border-bottom:1px solid #eee;text-align:left}.pl .b th{color:#5C6773;font-size:10px}.pl .b table,.sec .b table{border:1px solid #9fb0c2;border-collapse:collapse;width:100%}
+.pl .b th,.pl .b td,.sec .b th,.sec .b td{border:1px solid #c9d3de;padding:6px 6px;text-align:left}
+.pl .b th,.sec .b th{background:#173F67;color:#fff;font-size:10.5px;letter-spacing:.03em;border-color:#173F67}
+.pl .b tr:nth-child(even) td,.sec .b tr:nth-child(even) td{background:#F5F8FB}
+.pl .b tr:last-child td[colspan]{background:#fff;border-style:dashed}
+.pl .b tr:last-child td[colspan]:after{content:""!important}
+</style></head><body>
+<div class="top"><h1>Company Daily Report - Home card and preview</h1>
+<p>Click the card header, the place cards and the sections: everything folds with + and x, closed by default. Fold state is screen state only; the PDF and Excel always print everything open. Sample figures only. Nothing is built yet.</p></div>
+<div class="stage">
+
+<div class="col"><div class="cap">1. Home - card folded (default)</div>
+<div class="phone"><div class="ghost o">Make Receipt</div><div class="ghost">Needs attention</div>
+<div class="cdr" id="c1"><button class="cdr-h" onclick="tg('c1')"><div class="t"><b>Company Daily Report</b><small>Friday 6 November 2026</small></div><span class="tog">+</span></button></div>
+<div class="ghost">Totals</div><div class="ghost">01 Daily Operations +</div><div class="ghost">02 Stock +</div></div>
+<div class="hint">Folded: one navy bar with the title, today's date and the + toggle. 56-pt tall touch area. It stays folded each time Home opens, like the other Home sections.</div></div>
+
+<div class="col"><div class="cap">2. Home - card unfolded</div>
+<div class="phone"><div class="ghost o">Make Receipt</div><div class="ghost">Needs attention</div>
+<div class="cdr open" id="c2"><button class="cdr-h" onclick="tg('c2')"><div class="t"><b>Company Daily Report</b><small>Friday 6 November 2026</small></div><span class="tog">x</span></button>
+<div class="cdr-b"><div class="figs"><div class="fig"><b>14</b><span>Loads out</span></div><div class="fig"><b>6</b><span>Supplier loads</span></div><div class="fig"><b>820 L</b><span>Fuel given</span></div></div>
+<div class="go">Open today's preview</div><div class="note">Counts only what exists today. Cancelled records are not counted.</div></div></div>
+<div class="ghost">Totals</div><div class="ghost">01 Daily Operations +</div></div>
+<div class="hint">A figure with no records today is not shown (no "0 L"). With nothing recorded the body says "Nothing recorded today" and the button still opens the preview.</div></div>
+
+<div class="col"><div class="cap">3. Preview screen</div>
+<div class="phone">
+<div class="bar"><span>&lsaquo; Friday 6 Nov 2026</span><span style="color:var(--orange)">Change day</span></div>
+<div class="sw on"><span>Attendance sheet</span><i></i></div><div class="sw"><span>Prices</span><i></i></div>
+<div class="tot"><h4>Today in total</h4><div class="g"><div><b>14</b>Loads out</div><div><b>6</b>Supplier loads in</div><div><b>820 L</b>Fuel given</div><div><b>9</b>Waste trips</div></div>
+<div class="units">Asphalt 312 t &middot; Base 84 m&sup3; &middot; Sand 40 t &middot; Diesel 820 L</div></div>
+<div class="row"><button>Open all</button><button>Fold all</button></div>
+
+<div class="pl open"><div class="h" onclick="this.parentNode.classList.toggle('open')"><div>Airport Road<small>8 loads out &middot; 3 supplier loads &middot; fuel</small></div><span class="tg">x</span></div><div class="b">
+<div class="tw"><span>Contract quantity target %</span><i></i></div>
+<div class="sec open"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>Company loads out (8)</span><span>x</span></div><div class="b"><table><tr><th>Time</th><th>No.</th><th>Item</th><th>Qty</th><th>Bitumen</th></tr><tr><td>07:40</td><td>C-1042</td><td>Asphalt</td><td>22 t</td><td>1,100 kg</td></tr><tr><td>08:05</td><td>C-1043</td><td>Base</td><td>14 m&sup3;</td><td>-</td></tr></table></div></div>
+<div class="sec"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>Supplier loads in (3)</span><span>+</span></div><div class="b"><table><tr><th>Time</th><th>No.</th><th>Item</th><th>Supplier</th><th>Qty</th><th>By</th><th>Ticket</th></tr><tr><td>06:50</td><td>S-231</td><td>Sand</td><td>Rami Quarry</td><td>20 t</td><td>Supplier</td><td>T-8841</td></tr><tr><td>09:10</td><td>S-232</td><td>Base</td><td>Rami Quarry</td><td>14 m&sup3;</td><td>Our driver</td><td>T-8852</td></tr></table></div></div>
+<div class="sec"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>Fuel given (4)</span><span>+</span></div><div class="b"><table><tr><th>Time</th><th>Given to</th><th>Type</th><th>Driver</th><th>Litres</th></tr><tr><td>06:30</td><td>Excavator E-3</td><td>Diesel</td><td>Hadi</td><td>120 L</td></tr><tr><td>07:15</td><td>Truck T-12</td><td>Diesel</td><td>Samir</td><td>90 L</td></tr><tr style="font-weight:800;background:#eef2f6"><td></td><td></td><td></td><td>Total</td><td>210 L</td></tr></table></div></div></div></div>
+
+<div class="pl"><div class="h" onclick="this.parentNode.classList.toggle('open')"><div>Main Plant (company site)<small>5 loads out &middot; waste dumps</small></div><span class="tg">+</span></div><div class="b"><div class="sec"><div class="h" onclick="this.parentNode.classList.toggle('open')"><span>Waste dumps (3)</span><span>+</span></div><div class="b"><table><tr><th>Time</th><th>Material</th><th>Area</th><th>Truck</th><th>Driver</th><th>Trips</th></tr><tr><td>08:00-11:30</td><td>Soil</td><td>North pit</td><td>T-07</td><td>Omar</td><td>6</td></tr></table></div></div></div></div>
+<div class="pl"><div class="h" onclick="this.parentNode.classList.toggle('open')"><div>Arrived today<small>stock, diesel, bitumen</small></div><span class="tg">+</span></div><div class="b"><table><tr><th>Time</th><th>What</th><th>Detail</th><th>Qty</th></tr><tr><td>07:00</td><td>Diesel delivery</td><td>Batch D-14</td><td>8,000 L</td></tr><tr><td>10:20</td><td>Bitumen used</td><td>9 asphalt loads</td><td>9,900 kg</td></tr></table></div></div>
+<div class="pl"><div class="h" onclick="this.parentNode.classList.toggle('open')"><div>Attendance sheet<small>12 people &middot; 5 trucks &middot; 3 machines</small></div><span class="tg">+</span></div><div class="b"><table><tr><th>Name</th><th>Role</th><th>Worked at</th></tr><tr><td>Hadi</td><td>Driver</td><td>Airport Road, Main Plant</td></tr><tr><td>Omar</td><td>Driver</td><td>Airport Road</td></tr></table><div style="color:#5C6773;font-size:11px">Phase 4, needs DEC-201 approval.</div></div></div>
+<div class="exp"><div>Export PDF</div><div>Export Excel</div></div>
+</div>
+<div class="hint">A place with nothing recorded does not appear. The first place with records starts open. The Contract target switch sits under each project name, default OFF, remembered per project.</div></div>
+
+<div class="col"><div class="cap">4. Preview - By material (tap a material in "Today in total")</div>
+<div class="phone">
+<div class="bar"><span>&lsaquo; Asphalt - Fri 6 Nov 2026</span><span style="color:var(--orange)">Change day</span></div>
+<div class="tot"><h4>Asphalt, all places</h4><div class="g"><div><b>9</b>Loads out</div><div><b>198 t</b>Quantity out</div><div><b>2</b>Supplier loads in</div><div><b>40 t</b>Quantity in</div></div><div class="units">Bitumen used: 9,900 kg</div></div>
+<div class="pl open"><div class="h" onclick="this.parentNode.classList.toggle('open')"><div>Airport Road<small>5 loads &middot; 110 t</small></div><span class="tg">x</span></div><div class="b"><table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th align=left>Time</th><th align=left>No.</th><th align=left>Qty</th><th align=left>Truck / driver</th></tr><tr><td>07:40</td><td>C-1042</td><td>22 t</td><td>T-12 / Samir</td></tr><tr><td>08:30</td><td>C-1044</td><td>22 t</td><td>T-07 / Omar</td></tr><tr><td colspan=4 style="color:#5C6773">+ 3 more rows (all shown in the real screen)</td></tr></table></div></div>
+<div class="pl"><div class="h" onclick="this.parentNode.classList.toggle('open')"><div>Main Plant (company site)<small>4 loads &middot; 88 t</small></div><span class="tg">+</span></div><div class="b"><table><tr><th>Time</th><th>No.</th><th>Qty</th><th>Truck / driver</th></tr><tr><td>09:00</td><td>C-1050</td><td>22 t</td><td>T-03 / Hadi</td></tr></table></div></div>
+<div class="pl"><div class="h" onclick="this.parentNode.classList.toggle('open')"><div>Supplier loads in<small>2 loads &middot; 40 t</small></div><span class="tg">+</span></div><div class="b"><table><tr><th>Time</th><th>No.</th><th>Supplier</th><th>Qty</th><th>By</th><th>Ticket</th></tr><tr><td>06:50</td><td>S-231</td><td>Rami Quarry</td><td>20 t</td><td>Supplier</td><td>T-8841</td></tr></table></div></div>
+</div><div class="hint">Each row opens the full load record. Units are never added together; a material in two units shows two totals.</div></div>
+
+<div class="col" id="detailcol" style="display:none"><div class="cap">5. Load record (opens from any row)</div>
+<div class="phone">
+<div class="bar"><span style="cursor:pointer" onclick="document.getElementById('detailcol').style.display='none'">&lsaquo; Back to the report</span><span>Load C-1042</span></div>
+<div class="tot"><h4>Company load - confirmed</h4><div class="g"><div><b>22 t</b>Asphalt</div><div><b>07:40</b>Fri 6 Nov</div><div><b>T-12</b>Truck</div><div><b>Samir</b>Driver</div></div><div class="units">Project: Airport Road &middot; Bitumen used: 1,100 kg</div></div>
+<div class="ghost">Receipt and delivery authorization</div><div class="ghost">Payment status</div><div class="ghost">Correction history</div>
+</div><div class="hint">This is the existing load record, the same one Load History opens. Back returns to the same day and the same open cards.</div></div>
+
+</div>
+<style>.sec tr:not(:first-child),.pl table tr:not(:first-child){cursor:pointer}.sec tr:not(:first-child):hover,.pl table tr:not(:first-child):hover{background:#FFF1E8}.sec tr:not(:first-child) td:last-child:after,.pl table tr:not(:first-child) td:last-child:after{content:" \203A";color:var(--orange);font-weight:800}</style>
+<script>document.querySelectorAll('.sec table tr,.pl table tr').forEach(function(r){if(r.rowIndex>0&&!r.querySelector('th')&&r.cells.length>2){r.addEventListener('click',function(){var d=document.getElementById('detailcol');d.style.display='flex';d.scrollIntoView({behavior:'smooth'})})}})</script>
+<script>function tg(id){var e=document.getElementById(id);e.classList.toggle('open');e.querySelector('.tog').textContent=e.classList.contains('open')?'x':'+'}
+document.querySelectorAll('.pl>.h,.sec>.h').forEach(function(h){h.addEventListener('click',function(){var t=h.querySelector('.tg')||h.lastElementChild;t.textContent=h.parentNode.classList.contains('open')?'x':'+'})})</script>
+</body></html>
