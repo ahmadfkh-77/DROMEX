@@ -1,7 +1,7 @@
 import {fuelDayLabel} from './fuelBatchViews';
 import {localDateKey} from './fuel';
 import {bitumenStatusLabels,formatKg,formatTons,formatUsd,priceBasisLabels,type BitumenBatch} from './bitumen';
-import {loadsText,mixMadeForLines,useLinesForBatch,type BitumenAdjustment,type BitumenUseRow} from './bitumenUse';
+import {groupUseByDay,loadsText,mixMadeForLines,useLinesForBatch,type BitumenAdjustment,type BitumenUseRow} from './bitumenUse';
 
 /**
  * The Bitumen Batch Report: one batch, one A4 page. The facts of the batch, its figures in kg with tons beside them, the delivery
@@ -11,7 +11,9 @@ import {loadsText,mixMadeForLines,useLinesForBatch,type BitumenAdjustment,type B
  */
 export type BitumenReportFigure={label:string;kg:string;tons:string;strong:boolean};
 export type BitumenReportHistoryRow={date:string;event:string;kg:string};
-export type BitumenReportUseRow={date:string;load:string;item:string;mix:string;rule:string;kg:string};
+/** DEC-542. One day of the use section: the day's loads, newest first, with the day's own totals. */
+export type BitumenReportUseDay={date:string;count:number;mix:string;kg:string;rows:BitumenReportUseRow[]};
+export type BitumenReportUseRow={date:string;time:string;load:string;item:string;mix:string;rule:string;kg:string};
 export type BitumenReportAdjustmentRow={date:string;reason:string;kg:string};
 export type BitumenBatchReport={
   batchNumber:string;
@@ -22,7 +24,7 @@ export type BitumenBatchReport={
   estimated:boolean;
   figures:BitumenReportFigure[];
   /** The loads that took bitumen from this batch (a cancelled load nets to zero and is not listed); null when there is no use. */
-  use:null|{rows:BitumenReportUseRow[];total:string;/** DEC-527. The tons of asphalt mix behind the counted loads, and how many loads. */mixTotal:string;loadCount:number};
+  use:null|{rows:BitumenReportUseRow[];days:BitumenReportUseDay[];dayCount:number;total:string;/** DEC-527. The tons of asphalt mix behind the counted loads, and how many loads. */mixTotal:string;loadCount:number};
   adjustments:null|{rows:BitumenReportAdjustmentRow[]};
   detail:{headers:string[];values:string[]};
   /** Present only when prices are included. */
@@ -54,8 +56,14 @@ export function buildBitumenBatchReport(batch:BitumenBatch,options:{includePrice
     {label:estimated?'Est. remaining':'Remaining',kg:formatKg(remaining),tons:cancelled?'cancelled':formatTons(remaining),strong:!cancelled},
   ];
   const dayText=(iso:string)=>fuelDayLabel(localDateKey(new Date(iso)));
+  const timeText=(iso:string)=>{const date=new Date(iso);return `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;};
+  const ruleOf=(line:{ruleAggregateKg:number;ruleBitumenKg:number})=>`${line.ruleBitumenKg.toLocaleString('en-US',{maximumFractionDigits:3})} kg per ${(line.ruleAggregateKg/1000).toLocaleString('en-US',{maximumFractionDigits:3})} t`;
+  const useRow=(line:(typeof lines)[number])=>({date:dayText(line.loadConfirmedAt),time:timeText(line.loadConfirmedAt),load:line.loadNumber??'Load',item:line.itemName,mix:formatTons(line.mixKg),rule:ruleOf(line),kg:formatKg(line.kg)});
+  const dayGroups=groupUseByDay(lines,'');
   const use=lines.length?{
-    rows:lines.map(line=>({date:dayText(line.loadConfirmedAt),load:line.loadNumber??'Load',item:line.itemName,mix:formatTons(line.mixKg),rule:`${line.ruleBitumenKg.toLocaleString('en-US',{maximumFractionDigits:3})} kg per ${(line.ruleAggregateKg/1000).toLocaleString('en-US',{maximumFractionDigits:3})} t`,kg:formatKg(line.kg)})),
+    rows:lines.map(useRow),
+    days:dayGroups.map(group=>({date:fuelDayLabel(group.day),count:group.count,mix:formatTons(group.mixKg),kg:formatKg(group.bitumenKg),rows:group.lines.map(useRow)})),
+    dayCount:dayGroups.length,
     total:formatKg(lines.reduce((sum,line)=>sum+line.kg,0)),
     mixTotal:formatTons(mix.mixKg),loadCount:mix.loads,
   }:null;

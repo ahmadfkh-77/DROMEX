@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DROMEX Bitumen Batch Report: Use from asphalt loads by day (PDF mockup)</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#E7E2D8;font-family:Arial,'Noto Naskh Arabic',sans-serif;color:#17212B;font-size:8.5pt;line-height:1.35}
+h2.top{font-family:system-ui,Segoe UI,sans-serif;font-size:22px;color:#173F67;margin:24px 24px 4px}
+p.lead{font-family:system-ui,Segoe UI,sans-serif;font-size:14px;color:#5C6773;margin:0 24px 8px;max-width:900px;line-height:1.5}
+.cap{font-family:system-ui,Segoe UI,sans-serif;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C84B31;margin:18px 24px 6px}
+.cap small{display:block;text-transform:none;letter-spacing:0;color:#5C6773;font-weight:400;font-size:13px;margin-top:2px}
+.sheet{width:210mm;min-height:120mm;background:#fff;margin:0 24px 20px;padding:12mm 11mm 12mm;box-shadow:0 4px 18px rgba(23,63,103,.15)}
+.band{background:#173F67;color:#FFF8ED;font-weight:700;letter-spacing:.6px;padding:1.6mm 3mm;margin:4mm 0 2mm;border-radius:1.6mm;font-size:8.5pt}
+table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid}
+th{text-align:left;color:#173F67;font-size:7pt;border-bottom:1.5px solid #173F67;padding:1.2mm 1.6mm;vertical-align:bottom}
+td{padding:1.4mm 1.6mm;border-bottom:.3mm solid #EAE3D7;vertical-align:top;overflow-wrap:anywhere}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.muted{color:#5A6570;font-size:7pt;font-weight:400}
+tr.tot td{font-weight:700;color:#173F67;border-top:1.5px solid #173F67;border-bottom:none}
+/* day header row (option A) */
+tr.day td{background:#EAF0F7;color:#173F67;font-weight:700;border-top:1px solid #173F67;border-bottom:1px solid #C9D6E6;padding:1.8mm 1.6mm}
+tr.day td.num b{color:#173F67}
+tr.day .sep{color:#5A6570;font-weight:400}
+/* day subtotal row (option B) */
+tr.sub td{font-weight:700;color:#173F67;background:#F6F3EC;border-top:.5mm solid #173F67;border-bottom:.3mm solid #CFC5B3}
+tr.gap td{border:0;padding:1.2mm 0}
+.legend{font-size:7pt;color:#5A6570;margin-top:2mm}
+</style>
+</head>
+<body>
+<h2 class="top">Bitumen Batch Report: Use from asphalt loads by day (PDF mockup)</h2>
+<p class="lead">Only the "Use from asphalt loads" section changes; the rest of the report is as it is today. Loads are grouped by the day they were confirmed (local time), newest day first, matching the batch page (DEC-542). Every day shows its total asphalt mix (t) and its total bitumen (kg). The closing row stays and equals the sum of the days (DEC-527). Same example figures as the screen mockup: rule 40 kg per 1 t.</p>
+
+<div class="cap">Option A (recommended) · a tinted day row with the day's totals above its loads<small>The day's totals sit in the same Mix and Bitumen columns as the loads, so the eye runs down the columns. If a day breaks over a page, the table header repeats and the totals are already at the top of the day. The Date column is replaced by Time because the date is in the day row.</small></div>
+<div class="sheet">
+  <div class="band">USE FROM ASPHALT LOADS</div>
+  <table>
+    <colgroup><col style="width:11%"><col style="width:31%"><col style="width:17%"><col style="width:20%"><col style="width:21%"></colgroup>
+    <thead><tr><th>Time</th><th>Load</th><th class="num">Mix</th><th>Rule</th><th class="num">Bitumen</th></tr></thead>
+    <tbody>
+      <tr class="day"><td colspan="2">Thu 6 Nov 2026 <span class="sep">· 3 loads · day total</span></td><td class="num">125.750 t</td><td></td><td class="num">5,030 kg</td></tr>
+      <tr><td>15:40</td><td>L-0415<div class="muted">Asphalt Base</div></td><td class="num">45.000 t</td><td>40 kg per 1 t</td><td class="num">1,800 kg</td></tr>
+      <tr><td>11:05</td><td>L-0413<div class="muted">Asphalt Wearing</div></td><td class="num">38.250 t</td><td>40 kg per 1 t</td><td class="num">1,530 kg</td></tr>
+      <tr><td>08:20</td><td>L-0412<div class="muted">Asphalt Base</div></td><td class="num">42.500 t</td><td>40 kg per 1 t</td><td class="num">1,700 kg</td></tr>
+
+      <tr class="day"><td colspan="2">Wed 5 Nov 2026 <span class="sep">· 2 loads · day total</span></td><td class="num">81.250 t</td><td></td><td class="num">3,250 kg</td></tr>
+      <tr><td>14:10</td><td>L-0409<div class="muted">Asphalt Base</div></td><td class="num">41.250 t</td><td>40 kg per 1 t</td><td class="num">1,650 kg</td></tr>
+      <tr><td>09:30</td><td>L-0408<div class="muted">Asphalt Base</div></td><td class="num">40.000 t</td><td>40 kg per 1 t</td><td class="num">1,600 kg</td></tr>
+
+      <tr class="day"><td colspan="2">Tue 4 Nov 2026 <span class="sep">· 1 load · day total</span></td><td class="num">36.000 t</td><td></td><td class="num">1,440 kg</td></tr>
+      <tr><td>10:15</td><td>L-0402<div class="muted">Asphalt Wearing</div></td><td class="num">36.000 t</td><td>40 kg per 1 t</td><td class="num">1,440 kg</td></tr>
+
+      <tr class="day"><td colspan="2">Mon 3 Nov 2026 <span class="sep">· 3 loads · day total</span></td><td class="num">130.750 t</td><td></td><td class="num">5,230 kg</td></tr>
+      <tr><td>16:00</td><td>L-0398<div class="muted">Asphalt Base</div></td><td class="num">47.250 t</td><td>40 kg per 1 t</td><td class="num">1,890 kg</td></tr>
+      <tr><td>12:45</td><td>L-0396<div class="muted">Asphalt Wearing</div></td><td class="num">39.500 t</td><td>40 kg per 1 t</td><td class="num">1,580 kg</td></tr>
+      <tr><td>07:50</td><td>L-0395<div class="muted">Asphalt Base</div></td><td class="num">44.000 t</td><td>40 kg per 1 t</td><td class="num">1,760 kg</td></tr>
+
+      <tr class="tot"><td colspan="2">Estimated use · 9 loads · 4 days</td><td class="num">373.750 t</td><td></td><td class="num">14,950 kg</td></tr>
+    </tbody>
+  </table>
+  <div class="legend">The four day totals add up to the closing row: 125.750 + 81.250 + 36.000 + 130.750 = 373.750 t, and 5,030 + 3,250 + 1,440 + 5,230 = 14,950 kg.</div>
+</div>
+
+<div class="cap">Option B · the day's total below its loads<small>Reads like an invoice: loads first, then the day's subtotal. The totals are at the bottom of each day, so a day that breaks over a page shows its total only on the last page.</small></div>
+<div class="sheet">
+  <div class="band">USE FROM ASPHALT LOADS</div>
+  <table>
+    <colgroup><col style="width:11%"><col style="width:31%"><col style="width:17%"><col style="width:20%"><col style="width:21%"></colgroup>
+    <thead><tr><th>Time</th><th>Load</th><th class="num">Mix</th><th>Rule</th><th class="num">Bitumen</th></tr></thead>
+    <tbody>
+      <tr><td colspan="5" style="font-weight:700;color:#173F67;border-bottom:1px solid #173F67">Thu 6 Nov 2026</td></tr>
+      <tr><td>15:40</td><td>L-0415<div class="muted">Asphalt Base</div></td><td class="num">45.000 t</td><td>40 kg per 1 t</td><td class="num">1,800 kg</td></tr>
+      <tr><td>11:05</td><td>L-0413<div class="muted">Asphalt Wearing</div></td><td class="num">38.250 t</td><td>40 kg per 1 t</td><td class="num">1,530 kg</td></tr>
+      <tr><td>08:20</td><td>L-0412<div class="muted">Asphalt Base</div></td><td class="num">42.500 t</td><td>40 kg per 1 t</td><td class="num">1,700 kg</td></tr>
+      <tr class="sub"><td colspan="2">Day total · 3 loads</td><td class="num">125.750 t</td><td></td><td class="num">5,030 kg</td></tr>
+      <tr class="gap"><td colspan="5"></td></tr>
+      <tr><td colspan="5" style="font-weight:700;color:#173F67;border-bottom:1px solid #173F67">Wed 5 Nov 2026</td></tr>
+      <tr><td>14:10</td><td>L-0409<div class="muted">Asphalt Base</div></td><td class="num">41.250 t</td><td>40 kg per 1 t</td><td class="num">1,650 kg</td></tr>
+      <tr><td>09:30</td><td>L-0408<div class="muted">Asphalt Base</div></td><td class="num">40.000 t</td><td>40 kg per 1 t</td><td class="num">1,600 kg</td></tr>
+      <tr class="sub"><td colspan="2">Day total · 2 loads</td><td class="num">81.250 t</td><td></td><td class="num">3,250 kg</td></tr>
+      <tr class="gap"><td colspan="5"></td></tr>
+      <tr class="gap"><td colspan="5" class="muted" style="text-align:center">… Tue 4 Nov and Mon 3 Nov follow the same way (left out of this sketch for space) …</td></tr>
+      <tr class="tot"><td colspan="2">Estimated use · 9 loads · 4 days</td><td class="num">373.750 t</td><td></td><td class="num">14,950 kg</td></tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

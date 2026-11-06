@@ -54,7 +54,7 @@ describe('the Bitumen Batch Report',()=>{
     const {batch,row}=await setup();
     const report=buildBitumenBatchReport(batch,{includePrices:false,useRows:[row('1','049','use',123000,4920),row('2','048','use',49745,1989.8),row('3','047','use',31200,1248)]});
     const page=html(report);
-    expect(page).toContain('<tr class="tot"><td colspan="2">Estimated use · 3 loads</td><td class="num">203.945 t</td><td></td><td class="num">8,157.8 kg</td></tr>');
+    expect(page).toContain('<tr class="tot"><td colspan="2">Estimated use · 3 loads · 1 day</td><td class="num">203.945 t</td><td></td><td class="num">8,157.8 kg</td></tr>');
     expect(page).toContain('from 3 asphalt loads · 203.945 t of mix');
   });
   it('uses the singular for one load',async()=>{
@@ -62,7 +62,7 @@ describe('the Bitumen Batch Report',()=>{
     const report=buildBitumenBatchReport(batch,{includePrices:false,useRows:[row('1','049','use',123000,4920)]});
     expect(report.use).toMatchObject({mixTotal:'123 t',loadCount:1});
     expect(report.figures[1]!.tons).toBe('from 1 asphalt load · 123 t of mix');
-    expect(html(report)).toContain('Estimated use · 1 load</td>');
+    expect(html(report)).toContain('Estimated use · 1 load · 1 day</td>');
   });
   it('leaves a load that was cancelled (counted, then reversed) out of both totals',async()=>{
     const {batch,row}=await setup();
@@ -82,6 +82,55 @@ describe('the Bitumen Batch Report',()=>{
     const {batch,row}=await setup();
     const report=buildBitumenBatchReport(batch,{includePrices:true,useRows:[row('1','049','use',123000,4920)]});
     expect(html(report)).toContain('<td class="num">123 t</td><td></td><td class="num">4,920 kg</td></tr>');
+  });
+});
+
+describe('the Bitumen Batch Report by day (DEC-542)',()=>{
+  const at=(row:BitumenUseRow,confirmedAt:string):BitumenUseRow=>({...row,loadConfirmedAt:confirmedAt});
+  async function rowsAcrossDays(){
+    const {batch,row}=await setup();
+    const rows=[
+      at(row('1','049','use',45000,1800),'2026-10-20T15:40:00'),at(row('2','048','use',38250,1530),'2026-10-20T11:05:00'),
+      at(row('3','047','use',40000,1600),'2026-10-19T09:30:00'),
+      at(row('4','046','use',36000,1440),'2026-10-17T10:15:00'),
+    ];
+    return {batch,rows};
+  }
+  it('groups the loads by the day they were confirmed, newest day first, each day with its mix and bitumen totals',async()=>{
+    const {batch,rows}=await rowsAcrossDays();
+    const report=buildBitumenBatchReport(batch,{includePrices:false,useRows:rows});
+    expect(report.use!.days.map(day=>[day.date,day.count,day.mix,day.kg])).toEqual([
+      ['Tue 20 Oct 2026',2,'83.25 t','3,330 kg'],['Mon 19 Oct 2026',1,'40 t','1,600 kg'],['Sat 17 Oct 2026',1,'36 t','1,440 kg'],
+    ]);
+  });
+  it('lists the loads of a day newest first, with their time, and keeps the flat rows',async()=>{
+    const {batch,rows}=await rowsAcrossDays();
+    const use=buildBitumenBatchReport(batch,{includePrices:false,useRows:rows}).use!;
+    expect(use.days[0]!.rows.map(value=>[value.time,value.load])).toEqual([['15:40','ASP-049'],['11:05','ASP-048']]);
+    expect(use.rows).toHaveLength(4);
+  });
+  it('makes the day totals add up to the closing row',async()=>{
+    const {batch,rows}=await rowsAcrossDays();
+    const use=buildBitumenBatchReport(batch,{includePrices:false,useRows:rows}).use!;
+    expect(use).toMatchObject({loadCount:4,dayCount:3,mixTotal:'159.25 t',total:'6,370 kg'});
+    expect(3330+1600+1440).toBe(6370);
+  });
+  it('prints a tinted day row with the day totals above its loads, and the closing row with the number of days',async()=>{
+    const {batch,rows}=await rowsAcrossDays();
+    const page=html(buildBitumenBatchReport(batch,{includePrices:false,useRows:rows}));
+    expect(page).toContain('<tr class="day"><td colspan="2">Tue 20 Oct 2026 <span class="sep">· 2 loads · day total</span></td><td class="num">83.25 t</td><td></td><td class="num">3,330 kg</td></tr>');
+    expect(page).toContain('<span class="sep">· 1 load · day total</span>');
+    expect(page.indexOf('Tue 20 Oct 2026 <span')).toBeLessThan(page.indexOf('ASP-049'));
+    expect(page.indexOf('ASP-048')).toBeLessThan(page.indexOf('Mon 19 Oct 2026 <span'));
+    expect(page).toContain('<th>Time</th>');
+    expect(page).toContain('Estimated use · 4 loads · 3 days</td><td class="num">159.25 t</td><td></td><td class="num">6,370 kg</td></tr>');
+  });
+  it('shows no day groups when no load is counted, and leaves a day with only reversed loads out',async()=>{
+    const {batch,row}=await setup();
+    const reversed=[at(row('1','050','use',40000,1600),'2026-10-18T10:00:00'),at(row('2','050','reversal',40000,-1600),'2026-10-18T10:00:00'),at(row('3','051','use',30000,1200),'2026-10-19T10:00:00')];
+    const use=buildBitumenBatchReport(batch,{includePrices:false,useRows:reversed}).use!;
+    expect(use.days.map(day=>day.date)).toEqual(['Mon 19 Oct 2026']);
+    expect(buildBitumenBatchReport(batch,{includePrices:false}).use).toBeNull();
   });
 });
 
