@@ -254,6 +254,21 @@ export type BatchLoadUse={loadId:string;loadNumber:string|null;loadConfirmedAt:s
 /** DEC-527. The asphalt mix behind a batch's counted loads: its weight (kept in kg, shown as tons) and how many loads. A load that is not counted is not in the lines, so it is not here. */
 export function mixMadeForLines(lines:readonly Pick<BatchLoadUse,'mixKg'>[]):{mixKg:number;loads:number}{return{mixKg:round3(lines.reduce((sum,line)=>sum+line.mixKg,0)),loads:lines.length};}
 export const loadsText=(count:number)=>`${count} load${count===1?'':'s'}`;
+/** The totals for a set of counted loads: how many, the mix they made (kg, shown as tons) and the bitumen they used (kg). The mix is never added to the bitumen. */
+export function useTotals(lines:readonly Pick<BatchLoadUse,'mixKg'|'kg'>[]):{loads:number;mixKg:number;bitumenKg:number}{
+  return {loads:lines.length,mixKg:round3(lines.reduce((sum,line)=>sum+line.mixKg,0)),bitumenKg:round3(lines.reduce((sum,line)=>sum+line.kg,0))};
+}
+export type UseDay={day:string;isToday:boolean;lines:BatchLoadUse[];count:number;mixKg:number;bitumenKg:number};
+/** The Use from asphalt loads card by day: one group per local day the load was confirmed (a moved load stays under its own day), newest first; inside a day the newest load is first. */
+export function groupUseByDay(lines:readonly BatchLoadUse[],today:string):UseDay[]{
+  const days=new Map<string,BatchLoadUse[]>();
+  for(const line of lines){const day=localDateKey(new Date(line.loadConfirmedAt));days.set(day,[...(days.get(day)??[]),line]);}
+  return [...days.entries()].sort((a,b)=>b[0].localeCompare(a[0])).map(([day,list])=>{
+    const sorted=[...list].sort((a,b)=>b.loadConfirmedAt.localeCompare(a.loadConfirmedAt)||(b.loadNumber??'').localeCompare(a.loadNumber??''));
+    const totals=useTotals(sorted);
+    return {day,isToday:day===today,lines:sorted,count:totals.loads,mixKg:totals.mixKg,bitumenKg:totals.bitumenKg};
+  });
+}
 
 export function useLinesForBatch(rows:readonly BitumenUseRow[],batchId:string):BatchLoadUse[]{
   const lines=new Map<string,BatchLoadUse>();

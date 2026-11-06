@@ -88,10 +88,12 @@ describe('the Bitumen Batch Report',()=>{
 describe('the batch page (static checks)',()=>{
   const panels=readFileSync('src/ui/components/BitumenUsePanels.tsx','utf8');
   const screen=readFileSync('src/ui/screens/BitumenScreen.tsx','utf8');
-  it('adds an Asphalt mix made line under Estimated use, in tons, with the number of loads',()=>{
-    expect(panels).toContain('Asphalt mix made · {loadsText(mix.loads)}');
-    expect(panels).toContain('{formatTons(mix.mixKg)}');
-    expect(panels.indexOf('Estimated use</Text>')).toBeLessThan(panels.indexOf('Asphalt mix made'));
+  it('shows the loads, the asphalt mix in tons and the bitumen in kg in the total strip at the top of the card (DEC-542 replaces the bottom lines)',()=>{
+    expect(panels).toContain('ALL DAYS · ESTIMATE');
+    expect(panels).toContain('{totals.loads}');
+    expect(panels).toContain('{tonText(totals.mixKg)}');
+    expect(panels).toContain('{kgText(totals.bitumenKg)}');
+    expect(panels).toContain('useTotals(lines)');
   });
   it('says the loads and the mix under the Est. used figure, only when use is estimated from loads',()=>{
     expect(screen).toContain("note={estimated&&mix.loads>0?`${loadsText(mix.loads)} · ${formatTons(mix.mixKg)} of mix`:undefined}");

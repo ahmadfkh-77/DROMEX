@@ -3,7 +3,7 @@ import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import type {BitumenRepository} from '../../data/repositories/BitumenRepository';
 import {bitumenStatusLabels,formatKg,formatTons,isOpenBatch,type BitumenBatch,type BitumenOverview} from '../../domain/bitumen';
-import {adjustmentFor,DEFAULT_RULE,loadsText,mixMadeForLines,rulePercent,useLinesForBatch,type BatchLoadUse,type BitumenRule,type BitumenUseSetup} from '../../domain/bitumenUse';
+import {adjustmentFor,DEFAULT_RULE,loadsText,groupUseByDay,rulePercent,useLinesForBatch,useTotals,type BatchLoadUse,type BitumenRule,type BitumenUseSetup} from '../../domain/bitumenUse';
 import {fuelDayLabel} from '../../domain/fuelBatchViews';
 import {localDateKey} from '../../domain/fuel';
 import {AppButton,AppCard,AppField,Feedback} from './AppPrimitives';
@@ -20,23 +20,60 @@ import {colors,radius} from '../theme';
 const dayOf=(iso:string)=>fuelDayLabel(localDateKey(new Date(iso)));
 const ruleText=(aggregateKg:number,bitumenKg:number)=>`${bitumenKg.toLocaleString('en-US',{maximumFractionDigits:3})} kg per ${(aggregateKg/1000).toLocaleString('en-US',{maximumFractionDigits:3})} t`;
 
+const DAY_LOAD_LIMIT=10,FIRST_DAYS=5;
+const timeOf=(iso:string)=>{const date=new Date(iso);return `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;};
+const kgText=(kg:number)=>kg.toLocaleString('en-US',{maximumFractionDigits:3});
+const tonText=(kg:number)=>(kg/1000).toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3});
+
+/** A figure with its caption: the mix is navy and in tons, the bitumen is orange and in kg, so the two are never confused (DEC-527). */
+function Figure({caption,value,unit,bitumen,big}:{caption:string;value:string;unit:string;bitumen?:boolean;big?:boolean}){
+  return <View style={styles.figure}><Text style={styles.caption}>{caption}</Text><Text style={[styles.figureValue,big&&styles.figureBig,bitumen?styles.bitumenColor:styles.mixColor]}>{value}<Text style={styles.unit}> {unit}</Text></Text></View>;
+}
+
 export function UseFromLoadsCard({batch,overview,busy,onMove}:{batch:BitumenBatch;overview:BitumenOverview;busy:boolean;onMove:(line:BatchLoadUse)=>void}){
   const rows=overview.useRows??[];
   const lines=useMemo(()=>useLinesForBatch(rows,batch.id),[rows,batch.id]);
   const events=useMemo(()=>[...rows].filter(row=>row.batchId===batch.id).reverse(),[rows,batch.id]);
-  const mix=useMemo(()=>mixMadeForLines(lines),[lines]);
+  const today=localDateKey(new Date());
+  const days=useMemo(()=>groupUseByDay(lines,today),[lines,today]);
+  const totals=useMemo(()=>useTotals(lines),[lines]);
   const [showHistory,setShowHistory]=useState(false);
+  const [opened,setOpened]=useState<Record<string,boolean>>({}),[more,setMore]=useState<Record<string,boolean>>({}),[olderShown,setOlderShown]=useState(false);
   if(!lines.length&&!events.length)return null;
+  // Today is open at first; with no loads today the newest day is open. Older days start closed.
+  const firstOpen=days.some(day=>day.isToday)?today:days[0]?.day;
+  const isOpen=(day:string)=>opened[day]??(day===firstOpen);
+  const shown=olderShown?days:days.slice(0,FIRST_DAYS);
   return <AppCard title="Use from asphalt loads" hint="An estimate from each load's quantity and its rule. Cancelled loads are reversed automatically.">
-    {lines.map(line=><View key={line.loadId} style={styles.line}>
-      <View style={styles.flex}>
-        <Text style={styles.strong}>{line.loadNumber??'Load'} · {line.itemName}</Text>
-        <Text style={styles.sub}>{dayOf(line.loadConfirmedAt)} · {formatTons(line.mixKg)} × {ruleText(line.ruleAggregateKg,line.ruleBitumenKg)}</Text>
-        {isOpenBatch(batch)?<TouchableOpacity disabled={busy} onPress={()=>onMove(line)} accessibilityRole="button" accessibilityLabel={`Move ${line.loadNumber??'this load'} to another batch`}><Text style={styles.link}>Move to another batch ›</Text></TouchableOpacity>:null}
+    {lines.length?<View style={styles.strip} accessibilityRole="summary" accessibilityLabel={`All days, estimate: ${loadsText(totals.loads)}, ${tonText(totals.mixKg)} tons of asphalt mix, ${kgText(totals.bitumenKg)} kilograms of bitumen`}>
+      <Text style={styles.stripLabel}>ALL DAYS · ESTIMATE</Text>
+      <View style={styles.stripCells}>
+        <View style={styles.stripCell}><Text style={styles.stripCaption}>LOADS</Text><Text style={styles.stripValue}>{totals.loads}</Text></View>
+        <View style={[styles.stripCell,styles.stripDivider]}><Text style={styles.stripCaption}>ASPHALT MIX</Text><Text style={styles.stripValue}>{tonText(totals.mixKg)}<Text style={styles.stripUnit}> t</Text></Text></View>
+        <View style={[styles.stripCell,styles.stripDivider]}><Text style={styles.stripCaption}>BITUMEN USED</Text><Text style={[styles.stripValue,styles.stripBitumen]}>{kgText(totals.bitumenKg)}<Text style={styles.stripUnit}> kg</Text></Text></View>
       </View>
-      <Text style={styles.kg}>{formatKg(line.kg)}</Text>
-    </View>)}
-    {lines.length?<><View style={styles.totalLine}><Text style={styles.strong}>Estimated use</Text><Text style={styles.strong}>{formatKg(lines.reduce((sum,line)=>sum+line.kg,0))}</Text></View><View style={styles.mixLine}><Text style={styles.mixText}>Asphalt mix made · {loadsText(mix.loads)}</Text><Text style={styles.mixValue}>{formatTons(mix.mixKg)}</Text></View></>:<Text style={styles.sub}>No load is counted in this batch now.</Text>}
+    </View>:<Text style={styles.sub}>No load is counted in this batch now.</Text>}
+    {shown.map(group=>{
+      const open=isOpen(group.day),limited=!more[group.day]&&group.lines.length>DAY_LOAD_LIMIT;
+      return <View key={group.day} style={[styles.day,open&&styles.dayOpen]}>
+        <TouchableOpacity style={styles.dayHead} onPress={()=>setOpened(current=>({...current,[group.day]:!open}))} accessibilityRole="button" accessibilityState={{expanded:open}} accessibilityLabel={`${group.isToday?'Today, ':''}${fuelDayLabel(group.day)}, ${loadsText(group.count)}, ${tonText(group.mixKg)} tons of mix, ${kgText(group.bitumenKg)} kilograms of bitumen`}>
+          <View style={styles.flex}><View style={styles.dayTitleRow}><Text style={styles.dayTitle}>{fuelDayLabel(group.day)}</Text>{group.isToday?<Text style={styles.todayTag}>TODAY</Text>:null}</View><Text style={styles.sub}>{loadsText(group.count)}</Text></View>
+          <Text style={[styles.pm,open&&styles.pmOpen]}>{open?'×':'+'}</Text>
+        </TouchableOpacity>
+        <View style={styles.daySum}><Figure caption="ASPHALT MIX" value={tonText(group.mixKg)} unit="t"/><View style={styles.sumDivider}/><Figure caption="BITUMEN USED" value={kgText(group.bitumenKg)} unit="kg" bitumen/></View>
+        {open?<View style={styles.loads}>
+          {(limited?group.lines.slice(0,DAY_LOAD_LIMIT):group.lines).map(line=><View key={line.loadId} style={styles.loadCard}>
+            <View style={styles.loadTop}><Text style={[styles.strong,styles.flex]}>{line.loadNumber??'Load'}<Text style={styles.itemName}> · {line.itemName}</Text></Text><Text style={styles.sub}>{timeOf(line.loadConfirmedAt)}</Text></View>
+            <View style={styles.loadFigures}><Figure caption="MIX WEIGHT" value={tonText(line.mixKg)} unit="t"/><View style={styles.sumDivider}/><Figure caption="BITUMEN USED" value={kgText(line.kg)} unit="kg" bitumen/></View>
+            <View style={styles.loadFoot}><Text style={[styles.sub,styles.flex]}>Rule: {ruleText(line.ruleAggregateKg,line.ruleBitumenKg)}</Text>
+              {isOpenBatch(batch)?<TouchableOpacity style={styles.moveButton} disabled={busy} onPress={()=>onMove(line)} accessibilityRole="button" accessibilityLabel={`Move ${line.loadNumber??'this load'} to another batch`}><Text style={styles.link}>Move to another batch ›</Text></TouchableOpacity>:null}
+            </View>
+          </View>)}
+          {limited?<TouchableOpacity style={styles.more} onPress={()=>setMore(current=>({...current,[group.day]:true}))} accessibilityRole="button"><Text style={styles.moreText}>Show {group.lines.length-DAY_LOAD_LIMIT} more</Text></TouchableOpacity>:null}
+        </View>:null}
+      </View>;
+    })}
+    {!olderShown&&days.length>FIRST_DAYS?<TouchableOpacity style={styles.more} onPress={()=>setOlderShown(true)} accessibilityRole="button"><Text style={styles.moreText}>Show older days ({days.length-FIRST_DAYS} more)</Text></TouchableOpacity>:null}
     {events.length?<TouchableOpacity onPress={()=>setShowHistory(value=>!value)} accessibilityRole="button" accessibilityState={{expanded:showHistory}}><Text style={styles.link}>{showHistory?'Hide history of use':`Show history of use (${events.length})`}</Text></TouchableOpacity>:null}
     {showHistory?events.map(row=><View key={row.id} style={styles.event}>
       <Text style={styles.sub}>{new Date(row.createdAt).toLocaleString()} · {row.loadNumber??'Load'} · {row.kind==='use'?'Counted':row.kind==='reversal'?(row.note??'Reversed'):row.kind==='moved'?'Moved here':(row.note??'Corrected')}</Text>
@@ -128,6 +165,41 @@ const styles=StyleSheet.create({
   strong:{color:colors.ink,fontSize:14,fontWeight:'800'},
   sub:{color:colors.muted,fontSize:12,lineHeight:17},
   link:{color:colors.navy,fontSize:12,fontWeight:'800',marginTop:4},
+  strip:{backgroundColor:colors.navy,borderRadius:radius.md,padding:12,marginBottom:12},
+  stripLabel:{color:'#BFD0E3',fontSize:11,fontWeight:'800',letterSpacing:0.9},
+  stripCells:{flexDirection:'row',marginTop:8},
+  stripCell:{flexShrink:0,paddingRight:12},
+  stripDivider:{flex:1,paddingLeft:12,borderLeftWidth:1,borderLeftColor:'rgba(255,255,255,0.22)'},
+  stripCaption:{color:'#BFD0E3',fontSize:10.5,fontWeight:'800',letterSpacing:0.8},
+  stripValue:{color:'#FFF',fontSize:20,fontWeight:'900'},
+  stripBitumen:{color:'#FFC9B8'},
+  stripUnit:{fontSize:12,fontWeight:'700',color:'#DCE6F1'},
+  day:{borderWidth:1.5,borderColor:colors.line,borderRadius:radius.md,marginBottom:10,overflow:'hidden',backgroundColor:colors.surface},
+  dayOpen:{borderColor:colors.navy},
+  dayHead:{flexDirection:'row',alignItems:'center',gap:10,minHeight:52,paddingHorizontal:12,paddingVertical:8,backgroundColor:'#EAF0F7'},
+  dayTitleRow:{flexDirection:'row',alignItems:'center',gap:6},
+  dayTitle:{color:colors.navy,fontSize:15.5,fontWeight:'800'},
+  todayTag:{backgroundColor:colors.brand,color:'#FFF',fontSize:10.5,fontWeight:'800',borderRadius:99,paddingHorizontal:8,paddingVertical:2,overflow:'hidden'},
+  pm:{width:32,height:32,borderRadius:16,borderWidth:1.5,borderColor:colors.navy,color:colors.navy,fontSize:20,fontWeight:'900',lineHeight:28,textAlign:'center',overflow:'hidden'},
+  pmOpen:{backgroundColor:colors.navy,color:'#FFF'},
+  daySum:{flexDirection:'row',paddingVertical:9,paddingHorizontal:12},
+  sumDivider:{width:1,backgroundColor:colors.line,marginHorizontal:12},
+  figure:{flex:1},
+  caption:{color:colors.muted,fontSize:10.5,fontWeight:'800',letterSpacing:0.8},
+  figureValue:{fontSize:17,fontWeight:'900'},
+  figureBig:{fontSize:20},
+  unit:{fontSize:12,fontWeight:'700',color:colors.muted},
+  mixColor:{color:colors.navy},
+  bitumenColor:{color:'#A83B24'},
+  loads:{borderTopWidth:1,borderTopColor:colors.line,backgroundColor:'#EFEBE2',padding:10,gap:10},
+  loadCard:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.line,borderRadius:radius.sm+2,paddingHorizontal:12,paddingTop:10,paddingBottom:4},
+  loadTop:{flexDirection:'row',alignItems:'baseline',gap:8},
+  itemName:{color:colors.muted,fontWeight:'600'},
+  loadFigures:{flexDirection:'row',marginTop:6},
+  loadFoot:{flexDirection:'row',alignItems:'center',gap:8,marginTop:2},
+  moveButton:{minHeight:44,justifyContent:'center',paddingLeft:8},
+  more:{minHeight:44,alignItems:'center',justifyContent:'center',borderWidth:1.5,borderStyle:'dashed',borderColor:colors.navy,borderRadius:radius.sm+2,marginBottom:10},
+  moreText:{color:colors.navy,fontWeight:'800',fontSize:13},
   line:{flexDirection:'row',gap:10,paddingVertical:10,borderTopWidth:1,borderTopColor:colors.line},
   kg:{color:colors.ink,fontSize:15,fontWeight:'900'},
   totalLine:{flexDirection:'row',justifyContent:'space-between',paddingVertical:10,borderTopWidth:1.5,borderTopColor:colors.navy},

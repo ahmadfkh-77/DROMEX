@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DROMEX Bitumen: Use from asphalt loads by day (mockup v2)</title>
+<style>
+:root{--orange:#C84B31;--orange-d:#A83B24;--navy:#173F67;--cream:#FFF8ED;--page:#F5F2EC;--ink:#1F2933;--mute:#5C6773;--line:#DDD7CC;--tint:#EAF0F7;--warm:#FDF3E7}
+*{box-sizing:border-box}
+body{margin:0;background:#E7E2D8;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink)}
+h1{font-size:22px;margin:24px 24px 4px;color:var(--navy)}
+.lead{margin:0 24px 8px;color:var(--mute);max-width:960px;font-size:14px;line-height:1.5}
+.row{display:flex;flex-wrap:wrap;gap:28px;padding:20px 24px 40px;align-items:flex-start}
+.col{width:390px}
+.cap{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--orange);margin:0 0 8px}
+.cap small{display:block;text-transform:none;letter-spacing:0;color:var(--mute);font-weight:400;font-size:12.5px;margin-top:2px}
+.phone{width:390px;background:var(--page);border-radius:22px;border:1px solid var(--line);padding:14px;box-shadow:0 6px 20px rgba(23,63,103,.12)}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px}
+.title{font-size:18px;font-weight:800;color:var(--navy);margin:0 0 4px}
+.hint{font-size:13px;color:var(--mute);line-height:1.4;margin:0 0 12px}
+
+/* colour key: mix = navy, bitumen = orange, used everywhere */
+.mix{color:var(--navy)} .bit{color:var(--orange-d)}
+.k{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--mute);text-transform:uppercase}
+.v{font-size:17px;font-weight:900;line-height:1.2}
+.v small{font-size:12px;font-weight:700;color:var(--mute);margin-left:2px}
+
+/* total strip */
+.strip{background:var(--navy);color:#fff;border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.strip .lbl{font-size:11px;font-weight:800;letter-spacing:.08em;color:#BFD0E3}
+.strip .cells{display:grid;grid-template-columns:auto 1fr 1fr;gap:0;margin-top:8px}
+.strip .c{padding:0 12px;border-left:1px solid rgba(255,255,255,.22)}
+.strip .c:first-child{padding-left:0;border-left:0}
+.strip .k{color:#BFD0E3}
+.strip .v{font-size:21px;color:#fff}
+.strip .v small{color:#DCE6F1}
+.strip .c.b .v{color:#FFC9B8}
+.strip .eq{font-size:11.5px;color:#BFD0E3;margin-top:8px}
+
+/* day group */
+.day{border:1.5px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden;background:#fff}
+.day.open{border-color:var(--navy)}
+.head{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:8px 12px;background:var(--tint);cursor:pointer}
+.head:focus-visible{outline:3px solid var(--orange);outline-offset:-3px}
+.head .d{flex:1;min-width:0}
+.head .d b{display:flex;align-items:center;gap:6px;font-size:15.5px;color:var(--navy)}
+.head .d span{font-size:12.5px;color:var(--mute)}
+.head .d span.tag{font-size:10.5px;color:#fff}
+.tag{background:var(--orange);color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.04em;border-radius:99px;padding:2px 8px}
+.pm{width:32px;height:32px;border-radius:99px;border:1.5px solid var(--navy);color:var(--navy);font-weight:900;font-size:20px;line-height:28px;text-align:center;flex-shrink:0}
+.day.open .pm{background:var(--navy);color:#fff}
+.sum{display:grid;grid-template-columns:1fr 1fr}
+.sum .cell{padding:9px 12px}
+.sum .cell+.cell{border-left:1px solid var(--line)}
+
+/* load rows */
+.loads{border-top:1px solid var(--line);background:#EFEBE2;padding:10px;display:flex;flex-direction:column;gap:10px}
+.load{padding:10px 12px 4px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 3px rgba(23,63,103,.10)}
+.lt{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.lt b{font-size:14px;color:var(--ink)}
+.lt span{font-size:12.5px;color:var(--mute);flex-shrink:0;font-variant-numeric:tabular-nums}
+.lt i{font-style:normal;font-weight:600;color:var(--mute)}
+.two{display:grid;grid-template-columns:1fr 1fr;margin-top:6px}
+.two .cell+.cell{border-left:1px solid var(--line);padding-left:12px}
+.two .v{font-size:15.5px}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:2px}
+.rule{font-size:12px;color:var(--mute)}
+.move{display:inline-flex;align-items:center;min-height:44px;padding-left:8px;color:var(--navy);font-weight:800;font-size:13px}
+
+.more{display:flex;align-items:center;justify-content:center;min-height:44px;border:1.5px dashed var(--navy);border-radius:12px;color:var(--navy);font-weight:800;font-size:13px;margin-bottom:10px}
+.history{display:flex;align-items:center;min-height:44px;color:var(--navy);font-weight:800;font-size:13px}
+.empty{font-size:13px;color:var(--mute)}
+.badge{display:inline-block;font-size:12px;font-weight:800;border-radius:99px;padding:3px 10px;background:#E9E6DF;color:#4B5560;margin-bottom:10px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin:0 0 10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.note{margin:0 24px 6px;font-size:13px;color:var(--mute);max-width:960px}
+.change{margin:0 24px 6px;font-size:13px;color:var(--ink);max-width:960px;line-height:1.55}
+</style>
+</head>
+<body>
+<h1>Use from asphalt loads, by day (mockup v2)</h1>
+<p class="lead">Rendered at 390 px. Tap a day header to try it. Figures are examples with the rule 40 kg per 1 t.</p>
+<p class="change"><b>What changed from v1:</b> (1) the strip is one line of three figures with dividers, so it reads left to right: loads, mix, bitumen. (2) Colour key used everywhere: <b class="mix">navy = asphalt mix (t)</b>, <b class="bit">orange = bitumen (kg)</b>, so the two never get confused. (3) The old "Estimated use / Asphalt mix made" lines at the bottom are removed because the strip says the same; the strip carries "Estimate" wording. (4) Load rows are tighter: name and time on one line, the two figures under it, the rule and Move on one line. (5) Day header gives the date and load count only; the totals sit directly under it in the same two columns the loads use, so columns line up from day to day.</p>
+<p class="note"><b>Check:</b> 3 + 2 + 1 + 3 = 9 loads · 373.750 t · 14,950 kg, equal to Est. used and "Asphalt mix made" on the batch page (DEC-527).</p>
+<div class="row">
+  <div class="col"><p class="cap">1 · Batch in use<small>Today open, older days closed. Move shown (open batch).</small></p><div class="phone" id="p1"></div></div>
+  <div class="col"><p class="cap">2 · An older day opened<small>Mon 3 Nov opened beside today.</small></p><div class="phone" id="p2"></div></div>
+  <div class="col"><p class="cap">3 · A day with one load<small>Tue 4 Nov opened; "1 load".</small></p><div class="phone" id="p3"></div></div>
+  <div class="col"><p class="cap">4 · Batch with no counted loads<small>Keeps the current empty message.</small></p><div class="phone" id="p4"></div></div>
+  <div class="col"><p class="cap">5 · Closed batch<small>Same days and totals; no Move link.</small></p><div class="phone" id="p5"></div></div>
+  <div class="col"><p class="cap">6 · Long list<small>Older days past the first 5 collapse behind "Show older days"; a day shows 10 loads then "Show more" (same limits as Needs attention).</small></p><div class="phone" id="p6"></div></div>
+</div>
+<script>
+const DAYS=[
+ {key:'2026-11-06',label:'Thu 6 Nov',today:true,loads:[
+  ['L-0415','Asphalt Base','15:40',45.000,1800],['L-0413','Asphalt Wearing','11:05',38.250,1530],['L-0412','Asphalt Base','08:20',42.500,1700]]},
+ {key:'2026-11-05',label:'Wed 5 Nov',loads:[
+  ['L-0409','Asphalt Base','14:10',41.250,1650],['L-0408','Asphalt Base','09:30',40.000,1600]]},
+ {key:'2026-11-04',label:'Tue 4 Nov',loads:[['L-0402','Asphalt Wearing','10:15',36.000,1440]]},
+ {key:'2026-11-03',label:'Mon 3 Nov',loads:[
+  ['L-0398','Asphalt Base','16:00',47.250,1890],['L-0396','Asphalt Wearing','12:45',39.500,1580],['L-0395','Asphalt Base','07:50',44.000,1760]]}
+];
+const t=n=>n.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3});
+const k=n=>n.toLocaleString('en-US',{maximumFractionDigits:3});
+const sum=(a,i)=>a.reduce((s,x)=>s+x[i],0);
+function render(id,{open=[],move=true,empty=false,closed=false,long=false}){
+  const el=document.getElementById(id);
+  const hdr=closed?'<span class="badge">Closed by hand · 2 Nov 2026</span>':'';
+  const intro=`<p class="title">Use from asphalt loads</p><p class="hint">An estimate from each load's quantity and its rule. Cancelled loads are reversed automatically.</p>`;
+  if(empty){el.innerHTML=`<div class="card">${intro}<p class="empty">No load is counted in this batch now.</p></div>`;return;}
+  const all=DAYS.flatMap(d=>d.loads);
+  const strip=`<div class="strip" role="group" aria-label="Totals for all days (estimate)"><div class="lbl">ALL DAYS · ESTIMATE</div><div class="cells"><div class="c"><div class="k">Loads</div><div class="v">${all.length}</div></div><div class="c"><div class="k">Asphalt mix</div><div class="v">${t(sum(all,3))}<small>t</small></div></div><div class="c b"><div class="k">Bitumen used</div><div class="v">${k(sum(all,4))}<small>kg</small></div></div></div></div>`;
+  const state=open.slice();
+  let more=false;
+  function draw(){
+    let list=DAYS;
+    if(long){list=[];for(let i=0;i<5;i++)list.push({...DAYS[i%4],key:'x'+i,label:['Thu 6 Nov','Wed 5 Nov','Tue 4 Nov','Mon 3 Nov','Sun 2 Nov'][i],today:i===0});}
+    const days=list.map(d=>{
+      const o=state.includes(d.key)||(long&&d.today&&!state.includes('-'+d.key));
+      const n=d.loads.length;
+      const body=o?`<div class="loads">${d.loads.map(l=>`<div class="load"><div class="lt"><b>${l[0]} <i>· ${l[1]}</i></b><span>${l[2]}</span></div><div class="two"><div class="cell"><div class="k">Mix weight</div><div class="v mix">${t(l[3])}<small>t</small></div></div><div class="cell"><div class="k">Bitumen used</div><div class="v bit">${k(l[4])}<small>kg</small></div></div></div><div class="foot"><span class="rule">Rule: 40 kg per 1 t</span>${move&&!closed?`<span class="move">Move to another batch ›</span>`:''}</div></div>`).join('')}</div>`:'';
+      return `<div class="day ${o?'open':''}"><button class="head" aria-expanded="${o}" data-k="${d.key}"><div class="d"><b>${d.label}${d.today?'<span class="tag">TODAY</span>':''}</b><span>${n} load${n===1?'':'s'}</span></div><div class="pm" aria-hidden="true">${o?'×':'+'}</div></button><div class="sum"><div class="cell"><div class="k">Asphalt mix</div><div class="v mix">${t(sum(d.loads,3))}<small>t</small></div></div><div class="cell"><div class="k">Bitumen used</div><div class="v bit">${k(sum(d.loads,4))}<small>kg</small></div></div></div>${body}</div>`;
+    }).join('');
+    el.innerHTML=`${hdr}<div class="card">${intro}${strip}${days}${long?'<div class="more">Show older days (14 more)</div>':''}<div class="history">Show history of use (14)</div></div>`;
+    el.querySelectorAll('.head').forEach(b=>b.onclick=()=>{const key=b.dataset.k;const i=state.indexOf(key);i<0?state.push(key):state.splice(i,1);draw();});
+  }
+  draw();
+}
+render('p1',{open:['2026-11-06']});
+render('p2',{open:['2026-11-06','2026-11-03']});
+render('p3',{open:['2026-11-04']});
+render('p4',{empty:true});
+render('p5',{open:['2026-11-06'],closed:true});
+render('p6',{long:true});
+</script>
+</body>
+</html>
