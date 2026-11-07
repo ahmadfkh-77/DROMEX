@@ -348,6 +348,26 @@ export function dailyContractProgress(entries:readonly ContractDayEntry[],workDa
   return{targets,summary:summarizeContractProject(rows)};
 }
 
+/** One live target as the Company Daily Report prints it, as of the end of the work date: the same usage rules as the Daily Report (DEC-537). */
+export type ContractTargetRow={itemId:string;name:string;unitSymbol:string;quantity:number;usedBefore:number;usedToday:number;used:number;percentUsed:number;left:number;overBy:number;warning:ContractWarning};
+
+/**
+ * Every live target of one project as of the end of `workDate`, whether or not it moved that day (the Daily Report lists only the ones that moved).
+ * Used = counted loads plus reasoned adjustments; loads in another unit are not counted and never converted. Nothing is computed here that
+ * the Contract Quantities rules do not already compute: this only splits `used` into before today and today.
+ */
+export function dailyContractTargetTable(entries:readonly ContractDayEntry[],workDate:string):ContractTargetRow[]{
+  const rows:ContractTargetRow[]=[];
+  for(const entry of entries){
+    if(entry.item.cancelledAt)continue;
+    const {item,adjustments,usage}=contractUsageAsOf(entry,workDate);
+    const adjustedToday=adjustments.filter(value=>value.contractItemId===item.id&&localDateKey(new Date(value.createdAt))===workDate);
+    const usedToday=round6(usage.countedLoads.filter(load=>load.date===workDate).reduce((sum,load)=>sum+load.quantity!,0)+adjustedToday.reduce((sum,value)=>sum+value.amount,0));
+    rows.push({itemId:item.id,name:item.name,unitSymbol:item.unitSymbol,quantity:item.quantity,usedBefore:round6(usage.used-usedToday),usedToday,used:usage.used,percentUsed:usage.percentUsed,left:usage.leftover,overBy:usage.overBy,warning:usage.warning});
+  }
+  return rows;
+}
+
 /** DEC-540. Every live target with its final figures, plus the whole-project percent: what the Completed Project Report prints. */
 export type ContractFinalReport={targets:{item:ContractItem;usage:ContractUsage}[];summary:ContractProjectSummary};
 

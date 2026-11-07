@@ -32,6 +32,29 @@ describe('bitumenForLoad (uses the existing bitumen engine rows)',()=>{
   });
 });
 
+describe('loadCompanyDailyReport - contract targets',()=>{
+  const row={itemId:'c1',name:'Asphalt',unitSymbol:'t',quantity:1000,usedBefore:400,usedToday:22,used:422,percentUsed:42.2,left:578,overBy:0,warning:'none' as const};
+  it('attaches the targets of each project with every switch OFF, and never queries sites or no project',async()=>{
+    const asked:string[]=[];
+    const report=await loadCompanyDailyReport(DAY,{...sources({records:[record({})]}),contract:{targetTableOn:async(projectId)=>{asked.push(projectId);return [row];}}});
+    expect(asked).toEqual(['p1']);expect(report.places[0]!.contract).toMatchObject({available:true,included:false,rows:[row]});
+  });
+  it('attaches nothing for a project without targets',async()=>{
+    const report=await loadCompanyDailyReport(DAY,{...sources({records:[record({})]}),contract:{targetTableOn:async()=>[]}});
+    expect(report.places[0]!.contract).toBeUndefined();
+  });
+});
+
+describe('loadCompanyDailyReport - prices',()=>{
+  it('keeps the recorded price of a load and leaves an unpriced one Unpriced (null, never zero)',async()=>{
+    const report=await loadCompanyDailyReport(DAY,sources({records:[record({recordId:'a',unitPriceCents:6200,subtotalCents:136400}),record({recordId:'b'})],movements:[movement({pricePerLitreUsd:0.9,consumptionCostUsd:108} as never)]}));
+    const loads=report.places[0]!.loadsOut;
+    expect(loads.find(l=>l.id==='a')).toMatchObject({unitPriceCents:6200,amountCents:136400,priceBasis:'per_unit'});
+    expect(loads.find(l=>l.id==='b')).toMatchObject({unitPriceCents:null,amountCents:null,priceBasis:null});
+    expect(report.places[0]!.fills[0]).toMatchObject({unitPriceCents:90,amountCents:10800});
+  });
+});
+
 describe('loadCompanyDailyReport',()=>{
   it('collects loads, supplier loads and fills of the day and attaches the bitumen of asphalt loads',async()=>{
     const report=await loadCompanyDailyReport(DAY,sources({

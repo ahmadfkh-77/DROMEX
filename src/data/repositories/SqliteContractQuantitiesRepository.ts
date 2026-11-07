@@ -1,9 +1,9 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {
-  applyContractItemEdit,cancelContractItem,candidateContractItems,computeContractUsage,contractTotalsTargets,dailyContractProgress,finalContractReport,finishContractItem,groupContractLoadsByDay,
+  applyContractItemEdit,cancelContractItem,candidateContractItems,computeContractUsage,contractTotalsTargets,dailyContractProgress,dailyContractTargetTable,finalContractReport,finishContractItem,groupContractLoadsByDay,
   reopenContractItem,summarizeContractProject,validateContractAdjustment,validateContractItemDraft,validateContractReason,
-  type ContractAdjustment,type ContractDayEntry,type ContractDayReport,type ContractFinalReport,type ContractHistoryKind,type ContractTotalsTarget,type ContractItem,type ContractItemDraft,type ContractItemValues,
+  type ContractAdjustment,type ContractDayEntry,type ContractDayReport,type ContractFinalReport,type ContractHistoryKind,type ContractTotalsTarget,type ContractTargetRow,type ContractItem,type ContractItemDraft,type ContractItemValues,
 } from '../../domain/contractQuantities';
 import {localDateKey} from '../../domain/fuel';
 import type {
@@ -111,6 +111,11 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
    */
   async progressOn(projectId:string,workDate:string):Promise<ContractDayReport>{
     return dailyContractProgress(await this.entriesAsOf(projectId,workDate),workDate);
+  }
+
+  /** Company Daily Report: every live target as of the end of `workDate`, split into before today and today. Read-only. */
+  async targetTableOn(projectId:string,workDate:string):Promise<ContractTargetRow[]>{
+    return dailyContractTargetTable(await this.entriesAsOf(projectId,workDate),workDate);
   }
 
   /** DEC-539. The project's live targets with their own figures as of `asOfDate` (the Totals To date), or as they are now when null. */

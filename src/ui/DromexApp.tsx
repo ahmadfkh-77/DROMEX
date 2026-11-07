@@ -12,6 +12,8 @@ import {SqliteCustomDirectoryRepository} from '../data/repositories/SqliteCustom
 import {SqliteSupervisorRepository} from '../data/repositories/SqliteSupervisorRepository';
 import {SqliteProjectTotalsRepository} from '../data/repositories/SqliteProjectTotalsRepository';
 import {SqliteBusinessDocumentRepository} from '../data/repositories/SqliteBusinessDocumentRepository';
+import {SqliteAttendanceRepository} from '../data/repositories/SqliteAttendanceRepository';
+import {AttendanceScreen} from './screens/AttendanceScreen';
 import {SqliteCompanyTotalsRepository} from '../data/repositories/SqliteCompanyTotalsRepository';
 import {SqliteDocumentSignerRepository} from '../data/repositories/SqliteDocumentSignerRepository';
 import {SqliteLoadNumberSeriesRepository} from '../data/repositories/SqliteLoadNumberSeriesRepository';
@@ -94,7 +96,7 @@ import {WallConstructionScreen} from './screens/WallConstructionScreen';
 import {WorkspaceHubScreen} from './screens/WorkspaceHubScreen';
 import {colors} from './theme';
 
-type Screen='home'|'projects'|'recordsHub'|'moreHub'|'projectCommand'|'projectTotals'|'contractQuantities'|'contractItem'|'contractItemForm'|'search'|'drafts'|'attention'|'backup'|'cloud'|'printer'|'makeReceipt'|'loads'|'loadCorrections'|'receiptSetup'|'pdfSettings'|'supervisors'|'directory'|'customDirectories'|'customers'|'catalog'|'schedule'|'pavement'|'walls'|'reports'|'quarry'|'waste'|'fuel'|'bitumen'|'stock'|'quickText'|'financials'|'settings'|'companySetups'|'projectCompany'|'companyTotals'|'companyLoadTotals'|'documents'|'documentReview'|'document'|'documentSettings'|'signers'|'loadSeries'|'appearance'|'companyDailyReport';
+type Screen='home'|'projects'|'recordsHub'|'moreHub'|'projectCommand'|'projectTotals'|'contractQuantities'|'contractItem'|'contractItemForm'|'search'|'drafts'|'attention'|'backup'|'cloud'|'printer'|'makeReceipt'|'loads'|'loadCorrections'|'receiptSetup'|'pdfSettings'|'supervisors'|'directory'|'customDirectories'|'customers'|'catalog'|'schedule'|'pavement'|'walls'|'reports'|'quarry'|'waste'|'fuel'|'bitumen'|'stock'|'quickText'|'financials'|'settings'|'companySetups'|'projectCompany'|'companyTotals'|'companyLoadTotals'|'documents'|'documentReview'|'document'|'documentSettings'|'signers'|'loadSeries'|'appearance'|'companyDailyReport'|'dailyAttendance';
 type EntryIntent=CreateAction|null;
 const activeProjectKey='dromex.active-project.v1';
 
@@ -125,9 +127,10 @@ export function DromexApp(){
   const supervisorRepository=useMemo(()=>new SqliteSupervisorRepository(db),[db]);
   const projectTotalsRepository=useMemo(()=>new SqliteProjectTotalsRepository(db),[db]);
   const companyTotalsRepository=useMemo(()=>new SqliteCompanyTotalsRepository(db),[db]);
+  const attendanceRepository=useMemo(()=>new SqliteAttendanceRepository(db),[db]);
   const[dailyDay,setDailyDay]=useState(todayKey);
   /** Company Daily Report: reads one day from the existing repositories; it never writes. */
-  const loadDailyReport=useCallback((day:string)=>loadCompanyDailyReport(day,{totals:companyTotalsRepository,fuel:fuelRepository,waste:wasteRepository,bitumen:bitumenRepository}),[companyTotalsRepository,fuelRepository,wasteRepository,bitumenRepository]);
+  const loadDailyReport=useCallback((day:string)=>loadCompanyDailyReport(day,{totals:companyTotalsRepository,fuel:fuelRepository,waste:wasteRepository,bitumen:bitumenRepository,contract:contractRepository,attendance:attendanceRepository}),[companyTotalsRepository,fuelRepository,wasteRepository,bitumenRepository,contractRepository,attendanceRepository]);
   const documentRepository=useMemo(()=>new SqliteBusinessDocumentRepository(db),[db]);
   const signerRepository=useMemo(()=>new SqliteDocumentSignerRepository(db),[db]);
   const companyHeaderRepository=useMemo(()=>new SqliteCompanyHeaderRepository(db),[db]);
@@ -201,7 +204,8 @@ export function DromexApp(){
   else if(screen==='contractItemForm'&&commandProject)content=<ContractItemFormScreen key={contractItemId??'new'} project={commandProject} contracts={contractRepository} contractItemId={contractItemId} onBack={()=>goBack('contractQuantities')} onSaved={()=>goBack('contractQuantities')}/>;
   else if(screen==='projectTotals'&&commandProject)content=<ProjectTotalsScreen project={commandProject} repository={projectTotalsRepository} contracts={contractRepository} profiles={profileRepository} totals={companyTotalsRepository} documents={documentRepository} series={seriesRepository} headers={companyHeaderRepository} onOpenCompanySetups={()=>navigate('companySetups')} level={projectLevel} onLevel={setProjectLevel} onBack={()=>{setProjectLevel({});goBack('projectCommand');}} onOpenRecord={openOriginalRecord} onOpenReport={openUsageReport} onCreateDocument={startDocument}/>;
   else if(screen==='companyTotals')content=<CompanyTotalsScreen profiles={profileRepository} totals={companyTotalsRepository} documents={documentRepository} series={seriesRepository} headers={companyHeaderRepository} onOpenCompanySetups={()=>navigate('companySetups')} level={companyLevel} onLevel={setCompanyLevel} onBack={()=>{setCompanyLevel({});goBack('home');}} onOpenRecord={openOriginalRecord} onOpenReport={openUsageReport} onCreateDocument={startDocument} onOpenCompanyLoadTotals={()=>navigate('companyLoadTotals')} onOpenDocuments={()=>openDocuments(null)}/>;
-  else if(screen==='companyDailyReport')content=<CompanyDailyReportScreen profiles={profileRepository} day={dailyDay} onDayChange={setDailyDay} loadDay={loadDailyReport} onBack={()=>goBack('home')} onOpenRecord={openDayRecord}/>;
+  else if(screen==='companyDailyReport')content=<CompanyDailyReportScreen onEditAttendance={()=>navigate('dailyAttendance')} profiles={profileRepository} day={dailyDay} onDayChange={setDailyDay} loadDay={loadDailyReport} onBack={()=>goBack('home')} onOpenRecord={openDayRecord}/>;
+  else if(screen==='dailyAttendance')content=<AttendanceScreen repository={attendanceRepository} day={dailyDay} onDayChange={setDailyDay} onBack={()=>goBack('companyDailyReport')}/>;
   else if(screen==='companyLoadTotals')content=<CompanyLoadTotalsScreen totals={companyTotalsRepository} series={seriesRepository} profiles={profileRepository} onBack={()=>goBack('home')} onOpenRecord={openOriginalRecord}/>;
   else if(screen==='documents')content=<DocumentsScreen documents={documentRepository} totals={companyTotalsRepository} party={documentsParty} onBack={()=>goBack('home')} onOpenDocument={openDocument} onCreate={startDocument} onOpenSettings={()=>navigate('documentSettings')}/>;
   else if(screen==='documentReview'&&documentStart)content=<DocumentReviewScreen documents={documentRepository} start={documentStart} onBack={()=>goBack('home')} onOpenRecord={openOriginalRecord} onCreated={id=>{setDocumentId(id);setDocumentStart(null);replaceWith('document');}}/>;

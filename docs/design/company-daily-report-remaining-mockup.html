@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company Daily Report - Prices, Contract target and Attendance mockups</title>
+<style>
+:root{--navy:#173F67;--orange:#C84B31;--ink:#1F2933;--muted:#52606D;--group:#EAF0F6;--cell:#9FB0C2;--green:#17693B;--cream:#F5F2EC;--line:#DDD7CC}
+*{box-sizing:border-box}body{margin:0;background:#E9E4DA;font:12px/1.4 Arial,sans-serif;color:var(--ink)}
+h2{max-width:1100px;margin:26px auto 4px;padding:0 16px;color:var(--navy);font-size:19px}.note{max-width:1100px;margin:0 auto 8px;padding:0 16px;color:var(--muted)}
+.row{max-width:1100px;margin:0 auto;padding:8px 16px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.phone{width:375px;background:var(--cream);border-radius:28px;border:6px solid #1C2530;padding:12px;display:flex;flex-direction:column;gap:8px}
+.cap{font-weight:700;color:var(--navy);margin-bottom:4px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}
+.sw{display:flex;align-items:center;justify-content:space-between;min-height:48px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:0 12px;font-weight:700}
+.sw i{width:44px;height:26px;border-radius:13px;background:#B9B3A7;position:relative;display:block}.sw i:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff}
+.sw.on i{background:var(--green)}.sw.on i:after{left:21px}
+.fold{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}.fold>.h{display:flex;align-items:center;min-height:52px;padding:6px 12px;font-weight:800;color:var(--navy);cursor:pointer}.fold>.h small{display:block;color:var(--muted);font-weight:400}.fold>.h .t{margin-left:auto;font-size:22px}
+.fold>.b{display:none;padding:0 10px 10px}.fold.open>.b{display:block}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--group);border:1px solid var(--cell);border-radius:999px;padding:6px 10px;margin:3px 4px 3px 0;font-weight:700;color:var(--navy)}.chip b{color:var(--orange)}
+.tick{display:flex;align-items:center;gap:10px;min-height:48px}.box{width:24px;height:24px;border:2px solid var(--navy);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff}.box.on{background:var(--navy)}
+.btn{min-height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;background:var(--orange);color:#fff}.btn.o{background:#fff;color:var(--navy);border:1.5px solid var(--navy)}
+.search{border:1.5px solid var(--cell);border-radius:10px;padding:10px;color:var(--muted);background:#fff}
+.opt{padding:10px 8px;border-bottom:1px solid var(--line);font-weight:700}.opt small{display:block;color:var(--muted);font-weight:400}
+.paper{width:794px;max-width:100%;background:#fff;box-shadow:0 8px 26px rgba(20,38,58,.2);padding:26px 30px;font-size:11px}
+.block{border:1px solid var(--cell);margin-bottom:12px}.bar{background:var(--navy);color:#fff;padding:7px 10px;border-bottom:3px solid var(--orange);display:flex;justify-content:space-between;font-weight:800;font-size:12px}.bar span{font-weight:400;font-size:10px;color:#dbe6f1}
+.mat{border:1px solid var(--cell);margin:10px 8px 0}.mat:last-child{margin-bottom:10px}.mh{display:flex;justify-content:space-between;background:#dbe6f1;color:var(--navy);font-weight:800;padding:5px 8px}.mh span:last-child{font-weight:400}
+table{width:100%;border-collapse:collapse;table-layout:fixed}th{text-align:left;font-size:9.5px;color:var(--navy);border-bottom:2px solid var(--navy);padding:4px 6px}td{padding:4px 6px;border-bottom:1px solid #D5DDE5}tr:nth-child(even) td{background:#F5F7FA}.r{text-align:right}tr.tot td{font-weight:800;background:var(--group);border-top:1px solid var(--navy)}
+.warn{background:#FFF1E8;border:1px solid var(--orange);padding:6px 8px;margin:8px;color:#8E2E1B}
+.tag{display:inline-block;background:var(--orange);color:#fff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:6px}
+</style></head><body>
+<h2>A. Prices switch (PDF with prices ON)</h2>
+<div class="note">Prices stay OFF by default. When ON, the PDF header says "Prices included" instead of "Quantities only, no prices", and Price and Amount columns appear only in tables where at least one price was recorded. Money totals per currency (never mixed). A record without a recorded price shows "Unpriced" (never 0) and is counted in the total row.</div>
+<div class="row"><div><div class="cap">Preview switches (screen)</div><div class="phone"><div class="sw on"><span>Attendance sheet</span><i></i></div><div class="sw on"><span>Prices</span><i></i></div><div class="card">Prices appear in the PDF and Excel only. The screen tables stay as they are.</div></div></div>
+<div class="paper"><div class="block"><div class="bar">1. Airport Road<span>Project &middot; Prices included</span></div>
+<div class="mat"><div class="mh"><span>Asphalt (tons)</span><span>Company loads 44 tons &middot; 2 loads</span></div>
+<table><colgroup><col style="width:8%"><col style="width:11%"><col style="width:20%"><col style="width:11%"><col style="width:9%"><col style="width:12%"><col style="width:11%"><col style="width:9%"><col style="width:9%"></colgroup>
+<tr><th>Time</th><th>Load no.</th><th>Details</th><th class="r">Quantity</th><th>Truck</th><th>Driver</th><th class="r">Bitumen used</th><th class="r">Price</th><th class="r">Amount</th></tr>
+<tr><td>07:40</td><td>ASP-1042</td><td>Company load</td><td class="r">22 tons</td><td>T-12</td><td>Samir</td><td class="r">1,100 kg</td><td class="r">$62.00</td><td class="r">$1,364.00</td></tr>
+<tr><td>08:30</td><td>ASP-1044</td><td>Company load</td><td class="r">22 tons</td><td>T-07</td><td>Omar</td><td class="r">1,100 kg</td><td class="r">Unpriced</td><td class="r">Unpriced</td></tr>
+<tr class="tot"><td colspan="3">Total asphalt, company loads</td><td class="r">44 tons</td><td colspan="2"></td><td class="r">2,200 kg</td><td class="r"></td><td class="r">$1,364.00 <br>1 load unpriced</td></tr></table></div>
+<div class="mat"><div class="mh"><span>Money total of this place</span><span>US dollars</span></div><table><tr class="tot"><td>Total recorded value, US dollars</td><td class="r" style="width:25%">$1,364.00</td></tr><tr><td>Loads without a price (not counted in the total)</td><td class="r">1</td></tr></table></div></div></div></div>
+
+<h2>B. Contract target (per project)</h2>
+<div class="note">Each project card on the preview has its own switch right under the name, OFF by default and remembered per project. ON adds a "Contract target" table for that project from Contract Quantities: contract quantity, used before today, used today, % used, left. Used = company loads plus supplier loads delivered to the project plus reasoned adjustments (the same figures as the Quantity Targets page). OFF: no table, and that project's block says "Contract target not included". A project with no contract quantities shows the switch disabled: "Needs contract quantities for this project".</div>
+<div class="row"><div><div class="cap">Preview (screen)</div><div class="phone">
+<div class="fold open" id="f1"><div class="h" onclick="tg('f1')"><div>Airport Road<small>8 loads out &middot; 2 supplier loads</small></div><span class="t">&times;</span></div><div class="b">
+<div class="sw on"><span>Contract quantity target %</span><i></i></div>
+<div class="card" style="margin-top:6px"><b>Contract target</b><table style="margin-top:6px"><tr><th>Item</th><th class="r">Contract</th><th class="r">Before today</th><th class="r">Today</th><th class="r">% used</th><th class="r">Left</th></tr><tr><td>Asphalt</td><td class="r">1,000 t</td><td class="r">412</td><td class="r">44</td><td class="r">45.6%</td><td class="r">544 t</td></tr><tr><td>Base</td><td class="r">600 m&sup3;</td><td class="r">120</td><td class="r">14</td><td class="r">22.3%</td><td class="r">466 m&sup3;</td></tr></table></div></div></div>
+<div class="fold" id="f2"><div class="h" onclick="tg('f2')"><div>Beirut Wall<small>1 load out</small></div><span class="t">+</span></div><div class="b"><div class="sw" style="opacity:.55"><span>Contract quantity target %</span><i></i></div><div style="color:var(--muted);padding:4px 2px">Needs contract quantities for this project</div></div></div></div></div>
+<div class="paper"><div class="block"><div class="bar">1. Airport Road<span>Project &middot; contract target included</span></div>
+<div class="mat"><div class="mh"><span>Contract target</span><span>as of 6 November 2026</span></div>
+<table><colgroup><col style="width:22%"><col style="width:15%"><col style="width:16%"><col style="width:14%"><col style="width:13%"><col style="width:20%"></colgroup><tr><th>Item</th><th class="r">Contract quantity</th><th class="r">Used before today</th><th class="r">Used today</th><th class="r">% used</th><th class="r">Left</th></tr>
+<tr><td>Asphalt</td><td class="r">1,000 tons</td><td class="r">412 tons</td><td class="r">44 tons</td><td class="r">45.6%</td><td class="r">544 tons</td></tr><tr><td>Base</td><td class="r">600 m&sup3;</td><td class="r">120 m&sup3;</td><td class="r">14 m&sup3;</td><td class="r">22.3%</td><td class="r">466 m&sup3;</td></tr></table></div>
+<div class="warn" style="margin-top:8px">With the switch OFF this block prints no table and its title bar says "contract target not included". Percentages are the real ones from Contract Quantities, never rounded up or shown when they cannot be computed.</div></div></div></div>
+
+<h2>C. Attendance sheet (who worked where, no hours, no pay)</h2>
+<div class="note">A simple daily presence sheet, needs your confirmation that it supersedes DEC-201 only for presence and places (no hours, no wages, no pay). Three lists from your existing records: People (drivers and operators), Trucks, Machines. Per day each has a "worked today" tick and one or more places: a project, a company site, or a typed place for that day only.</div>
+<div class="row"><div><div class="cap">Editor screen</div><div class="phone">
+<div class="card"><b>Attendance - Friday 6 November 2026</b><div style="color:var(--muted)">Tick who worked today and where.</div></div>
+<div class="fold open" id="a1"><div class="h" onclick="tg('a1')"><div>People<small>3 worked today</small></div><span class="t">&times;</span></div><div class="b">
+<div class="tick"><span class="box on">&#10003;</span><b>Samir (driver)</b></div><div><span class="chip">Airport Road <b>&times;</b></span><span class="chip">Main Plant <b>&times;</b></span><span class="chip" style="background:#fff">+ Place</span></div>
+<div class="tick"><span class="box on">&#10003;</span><b>Omar (driver)</b></div><div><span class="chip">Airport Road <b>&times;</b></span><span class="chip" style="background:#fff">+ Place</span></div>
+<div class="tick"><span class="box"></span><b>Hadi (operator)</b></div></div></div>
+<div class="fold" id="a2"><div class="h" onclick="tg('a2')"><div>Trucks<small>2 worked today</small></div><span class="t">+</span></div><div class="b">Same layout: tick, places.</div></div>
+<div class="fold" id="a3"><div class="h" onclick="tg('a3')"><div>Machines<small>1 worked today</small></div><span class="t">+</span></div><div class="b">Same layout: tick, places.</div></div></div></div>
+<div><div class="cap">"+ Place" panel</div><div class="phone"><div class="search">Search projects and sites...</div>
+<div class="opt">Airport Road<small>Active project</small></div><div class="opt">Beirut Wall<small>Active project</small></div><div class="opt">Main Plant<small>Company site</small></div><div class="opt" style="color:var(--orange)">Not in the list? Type a place<small>Free text, for this day only. Creates no project or site.</small></div></div></div></div>
+<div class="row"><div class="paper"><div class="block"><div class="bar">Attendance sheet<span>Only people and equipment ticked as worked today</span></div>
+<div class="mat"><div class="mh"><span>People</span><span>3</span></div><table><colgroup><col style="width:30%"><col style="width:22%"><col style="width:48%"></colgroup><tr><th>Name</th><th>Role</th><th>Worked at</th></tr><tr><td>Samir</td><td>Driver</td><td>Airport Road, Main Plant</td></tr><tr><td>Omar</td><td>Driver</td><td>Airport Road</td></tr><tr><td>Karim</td><td>Operator</td><td>Beirut Wall, Yard (typed)</td></tr></table></div>
+<div class="mat"><div class="mh"><span>Trucks</span><span>2</span></div><table><colgroup><col style="width:30%"><col style="width:22%"><col style="width:48%"></colgroup><tr><th>Truck</th><th>Type</th><th>Worked at</th></tr><tr><td>T-12</td><td>Tipper</td><td>Airport Road</td></tr><tr><td>T-07</td><td>Tipper</td><td>Airport Road, Main Plant</td></tr></table></div>
+<div class="mat"><div class="mh"><span>Machines</span><span>1</span></div><table><colgroup><col style="width:30%"><col style="width:22%"><col style="width:48%"></colgroup><tr><th>Machine</th><th>Type</th><th>Worked at</th></tr><tr><td>Excavator E-3</td><td>Excavator</td><td>Airport Road</td></tr></table></div>
+<div class="warn">Everyone is listed (no "N more"). No hours, no pay. The "Attendance sheet" switch on the preview shows or hides this section in the preview and in the PDF and Excel.</div></div></div></div>
+
+<h2>D. Excel workbook (already built)</h2>
+<div class="note">Sheets: Summary (date, key figures, company loads, supplier loads and fuel by material and unit), one sheet per place with records (Record ID, Record Type, Date, Time, Load No., Material, Unit, Quantity as a number, Details, Truck, Driver, Delivered By, Ticket, Bitumen Used kg), and a Data Dictionary. Later phases add the sheets "Attendance" (when its switch is ON), "Contract target" (projects with the switch ON) and Price columns (only when Prices is ON).</div>
+<script>function tg(id){var e=document.getElementById(id);e.classList.toggle('open');e.querySelector('.t').innerHTML=e.classList.contains('open')?'&times;':'+'}</script>
+</body></html>

@@ -1,5 +1,5 @@
 import type {
-  ContractHistoryKind,ContractItem,ContractItemDraft,ContractLoad,ContractLoadDay,ContractProjectSummary,ContractTotalsTarget,ContractUsage,
+  ContractHistoryKind,ContractItem,ContractTargetRow,ContractItemDraft,ContractLoad,ContractLoadDay,ContractProjectSummary,ContractTotalsTarget,ContractUsage,
 } from '../../domain/contractQuantities';
 import type {ContractLoadSource} from './contractLinks';
 
@@ -28,6 +28,8 @@ export interface ContractQuantitiesRepository{
   listProject(projectId:string):Promise<{rows:ContractRowView[];summary:ContractProjectSummary}>;
   /** DEC-539. Live targets with their own figures for the Project Totals PDF, as of a date (the To date) or now when null. */
   totalsTargets(projectId:string,asOfDate:string|null):Promise<ContractTotalsTarget[]>;
+  /** Company Daily Report. Every live target as of the end of a work date, with used before today, used today, % used and left. Read-only. */
+  targetTableOn(projectId:string,workDate:string):Promise<ContractTargetRow[]>;
   getItem(contractItemId:string):Promise<ContractItemDetail>;
   createItem(projectId:string,draft:ContractItemDraft):Promise<ContractItem>;
   editItem(contractItemId:string,draft:ContractItemDraft,reason:string):Promise<ContractItem>;

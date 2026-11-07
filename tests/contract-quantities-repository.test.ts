@@ -49,8 +49,8 @@ async function setup(){
 describe('migration 67',()=>{
   it('adds the contract tables and an empty contract_item_id on both load tables, and counts the tables in backups',async()=>{
     const {db}=await setup();
-    expect(DATABASE_VERSION).toBe(67);
-    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(67);
+    expect(DATABASE_VERSION).toBeGreaterThanOrEqual(67);
+    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBeGreaterThanOrEqual(67);
     for(const table of NEW_TABLES)expect(db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)).toBeTruthy();
     const columns=(table:string)=>db.raw.prepare(`PRAGMA table_info(${table})`).all().map(row=>(row as {name:string}).name);
     expect(columns('loads')).toContain('contract_item_id');
@@ -69,7 +69,7 @@ describe('migration 67',()=>{
     await migrateDatabase(db as never);
     expect(db.raw.prepare('SELECT * FROM loads WHERE id=?').get(load.id)).toEqual({...before.load as object,contract_item_id:null});
     expect(db.raw.prepare('SELECT * FROM quarry_purchases WHERE id=?').get(purchase.id)).toEqual({...before.purchase as object,contract_item_id:null});
-    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBe(67);
+    expect((db.raw.prepare('PRAGMA user_version').get() as {user_version:number}).user_version).toBeGreaterThanOrEqual(67);
   });
 
   it('keeps the history and the adjustments append-only',async()=>{

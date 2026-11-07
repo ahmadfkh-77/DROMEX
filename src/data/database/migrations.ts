@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 67;
+export const DATABASE_VERSION = 68;
 
 type TableColumn = { name: string };
 
@@ -2502,6 +2502,35 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_quarry_purchases_contract_item ON quarry_purchases(contract_item_id) WHERE contract_item_id IS NOT NULL;
     `);
     currentVersion = 67;
+  }
+
+  if (currentVersion === 67) {
+    // DEC-544. The daily who-worked-where sheet: presence and places only (no hours, no pay). One entry per person, truck or machine per day;
+    // the name and role or type are kept as they were when the entry was saved. A typed place is free text for that day and creates no project or site.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS daily_attendance (
+        id TEXT PRIMARY KEY NOT NULL,
+        work_date TEXT NOT NULL,
+        subject_type TEXT NOT NULL CHECK (subject_type IN ('person', 'truck', 'machine')),
+        subject_id TEXT NOT NULL,
+        subject_name TEXT NOT NULL CHECK (length(trim(subject_name)) > 0),
+        subject_detail TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (work_date, subject_type, subject_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_daily_attendance_day ON daily_attendance(work_date);
+      CREATE TABLE IF NOT EXISTS daily_attendance_places (
+        id TEXT PRIMARY KEY NOT NULL,
+        attendance_id TEXT NOT NULL REFERENCES daily_attendance(id) ON DELETE CASCADE,
+        place_type TEXT NOT NULL CHECK (place_type IN ('project', 'company_site', 'typed')),
+        place_id TEXT,
+        place_name TEXT NOT NULL CHECK (length(trim(place_name)) > 0),
+        position INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_daily_attendance_places_entry ON daily_attendance_places(attendance_id, position);
+    `);
+    currentVersion = 68;
   }
 
 
