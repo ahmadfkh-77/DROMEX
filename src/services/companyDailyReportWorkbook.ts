@@ -47,9 +47,20 @@ export function companyDailyReportSheets(report:CompanyDailyReport,options:{pric
   for(const place of report.places)for(const f of place.fills){const v=fuel.get(f.fuelType)??{litres:0,fills:[]};v.litres+=f.litres;v.fills.push(f);fuel.set(f.fuelType,v);}
   for(const [type,v] of [...fuel.entries()].sort((a,b)=>a[0].localeCompare(b[0])))summary.push(row('Fuel given',type,'litres',v.fills.length,v.litres,null,v.fills));
 
-  const taken=new Set<string>(['summary','data dictionary','contract target','attendance']);
+  const taken=new Set<string>(['summary','data dictionary','contract target','attendance','arrived today','issues and reports']);
   const sheets:SheetSpec[]=[{name:'Summary',rows:summary}];
   for(const place of report.places)sheets.push({name:sheetName(place.name,taken),rows:placeRows(report.day,place,prices)});
+  if(report.arrivals.length){
+    const rows=report.arrivals.flatMap(g=>g.rows).sort((a,b)=>a.time.localeCompare(b.time)||a.id.localeCompare(b.id)).map((a):WorkbookRow=>({'Record Type':a.kind==='fuel'?'Fuel delivery':a.kind==='bitumen'?'Bitumen delivery':'Stock receipt',Date:report.day,Time:localTime(a.time),Material:a.material,Unit:a.unitSymbol,Quantity:round3(a.quantity),Supplier:a.supplierName,'Ticket Or Grade':a.detail,'Record ID':a.id,...(prices?priceColumns(a):{})}));
+    sheets.push({name:'Arrived today',rows});
+  }
+  if(report.issues.length||report.dailyReports.length){
+    const rows:WorkbookRow[]=[
+      ...report.issues.map((i):WorkbookRow=>({'Record Type':'Issue',Date:report.day,Time:localTime(i.time),Project:i.projectName,Title:i.title,Priority:i.priority,Status:i.status,Photos:null,Notes:null,'Record ID':i.id})),
+      ...report.dailyReports.map((r):WorkbookRow=>({'Record Type':'Daily report',Date:report.day,Time:null,Project:r.projectName,Title:null,Priority:null,Status:null,Photos:r.photos,Notes:r.notes,'Record ID':r.id})),
+    ];
+    sheets.push({name:'Issues and Reports',rows});
+  }
   const sheet=options.attendance===true?report.attendance:undefined;
   if(sheet&&sheet.count>0){
     const group=(name:string,rows:typeof sheet.people)=>rows.flatMap(r=>r.places.map((p):WorkbookRow=>({Date:report.day,Group:name,'Record ID':r.id,Name:r.name,Role:r.detail,'Place Type':p.type==='project'?'Project':p.type==='company_site'?'Company site':'Typed place',Place:p.name})));
@@ -68,6 +79,8 @@ export function companyDailyReportSheets(report:CompanyDailyReport,options:{pric
     {Sheet:'Place sheets',Column:'Unit Price USD / Price Basis / Amount USD',Meaning:'Only when Prices was on. As the record kept it, before VAT. Empty means Unpriced, never zero. An as-a-whole price has no unit price.'},
     {Sheet:'Summary',Column:'Value USD / Unpriced Records',Meaning:'Only when Prices was on. Company loads (sales), Supplier loads (purchases) and Fuel given (cost) are separate rows and are never added together; unpriced records are counted, not valued.'},
     {Sheet:'Attendance',Column:'Group / Name / Role / Place',Meaning:'Only when the Attendance sheet switch was on: who worked that day and where, one row per place. Presence and places only: no hours, no pay.'},
+    {Sheet:'Arrived today',Column:'Record Type / Material / Quantity / Unit',Meaning:'Fuel deliveries, bitumen deliveries and stock receipts of the day: what came into company stock, not tied to a project. Cancelled deliveries are not included. Ticket Or Grade is the ticket of a fuel delivery or the grade of a bitumen delivery.'},
+    {Sheet:'Issues and Reports',Column:'Photos / Notes',Meaning:'Issues created on the day, and the daily reports of the day. Photos and notes are counts; their content is never copied here.'},
     {Sheet:'All sheets',Column:'Record ID',Meaning:'The stable identifier of the record in DROMEX.'},
   ];
   sheets.push({name:'Data Dictionary',rows:dictionary});

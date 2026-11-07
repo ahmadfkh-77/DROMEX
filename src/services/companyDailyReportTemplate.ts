@@ -1,5 +1,5 @@
 import type {AttendanceRow,AttendanceSheet} from '../domain/attendance';
-import {placeMaterials,sumAmounts,localTime,type CompanyDailyReport,type DayPlace,type DayTile,type PlaceMaterial} from '../domain/companyDailyReport';
+import {placeMaterials,sumAmounts,localTime,type ArrivalGroup,type CompanyDailyReport,type DayPlace,type DayTile,type PlaceMaterial} from '../domain/companyDailyReport';
 import {reportCss} from './pdfTheme';
 
 /**
@@ -96,6 +96,30 @@ function summaryTable(rows:string[][],valueHeading?:string):string{
   return `<table class="sum"><colgroup>${widths.map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Material</th><th>Unit</th><th class="num">Loads</th><th class="num">Amount</th>${valueHeading?`<th class="num">${e(valueHeading)}</th>`:''}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map((cell,i)=>`<td${i>=2?' class="num"':''}>${i<2?t(cell):e(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 }
 
+/** Arrived today: deliveries into company stock, one table per kind with its own total row. Never tied to a project. */
+const noun=(kind:string,count:number)=>kind==='stock'?(count===1?'receipt':'receipts'):(count===1?'delivery':'deliveries');
+function arrivalsBlock(groups:ArrivalGroup[],index:number,prices:boolean):string{
+  const table=(group:ArrivalGroup)=>{
+    const priced=prices&&anyPriced(group.rows);const third=group.kind==='fuel'?'Ticket':group.kind==='bitumen'?'Grade':'Item';const second=group.kind==='stock'?'Supplier':'Supplier';
+    const widths=priced?[9,25,18,18,15,15]:[10,30,22,38];
+    const head=group.kind==='stock'?['Time','Item','Supplier','Quantity']:['Time',second,third,'Quantity'];
+    const cells=(row:ArrivalGroup['rows'][number])=>group.kind==='stock'?[localTime(row.time),row.material,dash(row.supplierName),amount(row.quantity,row.unitSymbol)]:[localTime(row.time),dash(row.supplierName),dash(row.detail),amount(row.quantity,row.unitSymbol)];
+    const totalRows=group.totals.map(total=>`<tr class="total-row"><td colspan="3">${t(`Total ${total.material.toLowerCase()} ${group.kind==='stock'?'received':'arrived'}${group.totals.length>1?` (${unitWord(total.unitSymbol)})`:''}`)}</td><td class="num nowrap">${e(amount(total.quantity,total.unitSymbol))}</td>${priced?`<td></td><td class="num">${e(totalCell(group.rows.filter(r=>r.material===total.material&&r.unitSymbol===total.unitSymbol)).split(' · ').join('<br/>'))}</td>`:''}</tr>`).join('');
+    const body=group.rows.map(row=>`<tr>${cells(row).map((cell,i)=>`<td${i===3?' class="num nowrap"':''}>${t(cell)}</td>`).join('')}${priced?`<td class="num nowrap">${e(priceCell(row))}</td><td class="num nowrap">${e(amountCell(row))}</td>`:''}</tr>`).join('');
+    const figures=group.totals.map(total=>amount(total.quantity,total.unitSymbol)).join(' · ');
+    return `<div class="mat"><div class="mat-head"><span>${e(group.title)}</span><span class="mat-figures">${t(`${group.rows.length} ${noun(group.kind,group.rows.length)} · ${figures}`)}</span></div><table class="sum"><colgroup>${widths.map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr>${head.map((h,i)=>`<th${i===3?' class="num"':''}>${e(h)}</th>`).join('')}${priced?'<th class="num">Price</th><th class="num">Amount</th>':''}</tr></thead><tbody>${body}${totalRows}</tbody></table></div>`;
+  };
+  return `<section class="block"><div class="block-bar"><span class="block-index">${index}.</span><span class="block-name">Arrived today</span><span class="block-figures">Company stock · not tied to a project</span></div><div class="block-body">${groups.map(table).join('')}</div></section>`;
+}
+
+/** Issues and Daily Reports of the day: a list only, with photos and notes counted, never printed. */
+function issuesBlock(report:CompanyDailyReport,index:number):string{
+  const issues=report.issues.length?`<div class="mat"><div class="mat-head"><span>Issues</span><span class="mat-figures">${t(`${report.issues.length} issue${report.issues.length===1?'':'s'} · ${report.issues.filter(i=>i.status==='Open').length} open`)}</span></div><table class="sum"><colgroup><col style="width:10%"/><col style="width:22%"/><col style="width:44%"/><col style="width:12%"/><col style="width:12%"/></colgroup><thead><tr><th>Time</th><th>Project</th><th>Issue</th><th>Priority</th><th>Status</th></tr></thead><tbody>${report.issues.map(i=>`<tr><td>${e(localTime(i.time))}</td><td>${t(i.projectName)}</td><td>${t(i.title)}</td><td>${t(i.priority)}</td><td>${e(i.status)}</td></tr>`).join('')}</tbody></table></div>`:'';
+  const photos=report.dailyReports.reduce((sum,r)=>sum+r.photos,0);
+  const reports=report.dailyReports.length?`<div class="mat"><div class="mat-head"><span>Daily Reports</span><span class="mat-figures">${t(`${report.dailyReports.length} report${report.dailyReports.length===1?'':'s'} · ${photos} photo${photos===1?'':'s'}`)}</span></div><table class="sum"><colgroup><col style="width:52%"/><col style="width:24%"/><col style="width:24%"/></colgroup><thead><tr><th>Project</th><th class="num">Photos</th><th class="num">Notes</th></tr></thead><tbody>${report.dailyReports.map(r=>`<tr><td>${t(r.projectName)}</td><td class="num">${r.photos}</td><td class="num">${r.notes}</td></tr>`).join('')}</tbody></table></div>`:'';
+  return `<section class="block"><div class="block-bar"><span class="block-index">${index}.</span><span class="block-name">Issues and Daily Reports</span><span class="block-figures">Counts only: photos and long notes are not printed</span></div><div class="block-body">${issues}${reports}</div></section>`;
+}
+
 /** The Attendance sheet (DEC-544): People, Trucks and Machines that worked, each with every place. Presence and places only. */
 function attendanceBlock(sheet:AttendanceSheet,index:number):string{
   const table=(title:string,first:string,second:string,rows:AttendanceRow[])=>rows.length?`<div class="mat"><div class="mat-head"><span>${e(title)}</span><span class="mat-figures">${rows.length}</span></div><table class="sum"><colgroup><col style="width:30%"/><col style="width:22%"/><col style="width:48%"/></colgroup><thead><tr><th>${e(first)}</th><th>${e(second)}</th><th>Worked at</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${t(r.name)}</td><td>${t(dash(r.detail))}</td><td>${t(r.workedAt)}</td></tr>`).join('')}</tbody></table></div>`:'';
@@ -105,7 +129,6 @@ function attendanceBlock(sheet:AttendanceSheet,index:number):string{
 export function buildCompanyDailyReportHtml(input:CompanyDailyReportPdf):string{
   const {report}=input;const prices=input.prices===true;const sheet=input.attendance===true&&report.attendance&&report.attendance.count>0?report.attendance:null;const empty=report.isEmpty&&!sheet;const date=longDay(report.day);const running=`Company Daily Report · ${date}`;
   const tiles=report.tiles.length?`<div class="tiles">${report.tiles.map(tile=>`<div class="tile"><span class="figure-label">${e(tileLabel[tile.key])}</span><b>${e(number(tile.value))}${tile.unit?` ${e(tile.unit)}`:''}</b></div>`).join('')}</div>`:'';
-  const contents=report.places.length?`<div class="contents"><h3>Contents</h3><ol>${report.places.map((place,index)=>`<li><span class="contents-index">${index+1}</span><span class="contents-name">${t(place.name)}</span><span class="contents-figures">${e(placeKind(place))}</span></li>`).join('')}<li><span class="contents-index">${report.places.length+1}</span><span class="contents-name">Totals by material</span><span class="contents-figures"></span></li>${sheet?`<li><span class="contents-index">${report.places.length+2}</span><span class="contents-name">Attendance sheet</span><span class="contents-figures"></span></li>`:''}</ol></div>`:'';
   const blocks=report.places.map((place,index)=>`<section class="block"><div class="block-bar"><span class="block-index">${index+1}.</span><span class="block-name">${t(place.name)}</span><span class="block-figures">${e(placeKind(place))}</span></div><div class="block-body">${placeMaterials(place).map(m=>material(m,prices)).join('')}${fuelBox(place,prices)}${wasteBox(place)}${prices?valueBox(place):''}${contractBox(place,report.day)}</div></section>`).join('');
 
   const allOut=report.places.flatMap(p=>p.loadsOut),allIn=report.places.flatMap(p=>p.supplierLoads),allFills=report.places.flatMap(p=>p.fills);
@@ -115,11 +138,16 @@ export function buildCompanyDailyReportHtml(input:CompanyDailyReportPdf):string{
   const company=report.materials.filter(m=>m.outLoads>0).map(m=>{const mine=allOut.filter(l=>l.itemName===m.itemName&&l.unitSymbol===m.unitSymbol);return [m.itemName,unitWord(m.unitSymbol),String(m.outLoads),number(m.outQuantity),...(prices?[valueOf(mine)!]:[])];});
   const supplier=report.materials.filter(m=>m.inLoads>0).map(m=>{const mine=allIn.filter(l=>l.itemName===m.itemName&&l.unitSymbol===m.unitSymbol);return [m.itemName,unitWord(m.unitSymbol),String(m.inLoads),number(m.inQuantity),...(prices?[valueOf(mine)!]:[])];});
   const fuel=[...fuelByType.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([type,v])=>[type,'litres',String(v.fills.length),number(v.litres),...(prices?[valueOf(v.fills)!]:[])]);
+  const fuelArrivedRows=report.arrivals.filter(g=>g.kind==='fuel').flatMap(g=>g.totals.map(total=>[total.material,'litres',String(total.count),number(total.quantity),...(prices?[valueOf(g.rows.filter(r=>r.material===total.material))!]:[])]));
+  const hasTotals=Boolean(company.length||supplier.length||fuel.length||fuelArrivedRows.length);
+  let next=report.places.length;const totalsIdx=hasTotals?++next:0;const arrivedIdx=report.arrivals.length?++next:0;const issuesIdx=report.issues.length||report.dailyReports.length?++next:0;const attendIdx=sheet?++next:0;
   const box=(title:string,body:string)=>`<div class="mat"><div class="mat-head"><span>${e(title)}</span></div>${body}</div>`;
   const heading2=prices?'Value (USD)':undefined;
-  const totals=report.places.length?`<section class="block"><div class="block-bar"><span class="block-index">${report.places.length+1}.</span><span class="block-name">Totals by material</span><span class="block-figures">All places · different units are never added together</span></div><div class="block-body">${
+  const totals=hasTotals?`<section class="block"><div class="block-bar"><span class="block-index">${totalsIdx}.</span><span class="block-name">Totals by material</span><span class="block-figures">All places · different units are never added together</span></div><div class="block-body">${
     company.length?box('Company loads',summaryTable(company,heading2)+(report.bitumenKg!==null?`<table class="sum"><tbody><tr class="total-row"><td style="width:80%">Bitumen used by asphalt loads (loads that could be counted)</td><td class="num">${e(number(report.bitumenKg))} kg</td></tr></tbody></table>`:'')):''}${
-    supplier.length?box('Supplier loads',summaryTable(supplier,heading2)):''}${fuel.length?box('Fuel given',summaryTable(fuel,heading2)):''}</div></section>`:'';
+    supplier.length?box('Supplier loads',summaryTable(supplier,heading2)):''}${fuel.length?box('Fuel given',summaryTable(fuel,heading2)):''}${fuelArrivedRows.length?box('Fuel arrived',summaryTable(fuelArrivedRows,heading2)):''}</div></section>`:'';
+  const names=[...report.places.map(place=>[place.name,placeKind(place)]),...(hasTotals?[['Totals by material','']]:[]),...(arrivedIdx?[['Arrived today','']]:[]),...(issuesIdx?[['Issues and Daily Reports','']]:[]),...(sheet?[['Attendance sheet','']]:[])] as string[][];
+  const contents=names.length?`<div class="contents"><h3>Contents</h3><ol>${names.map(([name,kind],index)=>`<li><span class="contents-index">${index+1}</span><span class="contents-name">${t(name)}</span><span class="contents-figures">${e(kind)}</span></li>`).join('')}</ol></div>`:'';
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>Company Daily Report</title><style>
     @page{size:A4;margin:12mm 11mm 16mm;@bottom-left{content:"${css(running)}";font-size:7.5pt;color:#5A6570}@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:7.5pt;color:#5A6570}}
@@ -136,6 +164,6 @@ export function buildCompanyDailyReportHtml(input:CompanyDailyReportPdf):string{
     .empty-day{margin:10mm 0;font-size:11pt;color:#52606D}
   </style></head><body>
     <div class="head"><div>${input.logo?`<img class="logo" src="${input.logo}" alt=""/>`:''}<h1 class="title-left">Company Daily Report</h1></div><div class="head-right"><div class="subtitle">${e(date)}</div><div class="when">${prices?'Prices included':'Quantities only, no prices'}</div></div></div>
-    ${empty?'<p class="empty-day">Nothing was recorded on this day.</p>':`${tiles}${contents}${blocks}${totals}${sheet?attendanceBlock(sheet,report.places.length+(totals?2:1)):''}`}
+    ${empty?'<p class="empty-day">Nothing was recorded on this day.</p>':`${tiles}${contents}${blocks}${totals}${arrivedIdx?arrivalsBlock(report.arrivals,arrivedIdx,prices):''}${issuesIdx?issuesBlock(report,issuesIdx):''}${sheet?attendanceBlock(sheet,attendIdx):''}`}
   </body></html>`;
 }

@@ -22,7 +22,13 @@ export type DaySupplierLoad=Base&PriceFields&{number:string|null;itemName:string
 export type DayFill=Base&PriceFields&{givenTo:string;fuelType:string;operatorName:string|null;litres:number};
 export type DayWasteDump=Base&{material:string|null;area:string|null;truckPlate:string|null;driverName:string|null};
 
-export type DayInput={loadsOut:DayLoadOut[];supplierLoads:DaySupplierLoad[];fills:DayFill[];dumps:DayWasteDump[]};
+/** Something that came into company stock that day: a fuel delivery, a bitumen delivery or a stock receipt. Not tied to a project. */
+export type DayArrival=PriceFields&{id:string;status:RecordStatus;time:string;kind:'fuel'|'bitumen'|'stock';/** The fuel type, "Bitumen", or the stock item. */material:string;unitSymbol:string;quantity:number;supplierName:string|null;/** Ticket (fuel), grade (bitumen) or nothing (stock). */detail:string|null};
+export type DayIssue={id:string;/** Local date-time the issue was created. */time:string;projectId:string;projectName:string;title:string;priority:string;status:'Open'|'Resolved'};
+/** A daily report of the day, as counts only: the photos and the text of its notes are never read here. */
+export type DayDailyReport={id:string;projectId:string;projectName:string;photos:number;notes:number};
+
+export type DayInput={loadsOut:DayLoadOut[];supplierLoads:DaySupplierLoad[];fills:DayFill[];dumps:DayWasteDump[];arrivals?:DayArrival[];issues?:DayIssue[];dailyReports?:DayDailyReport[]};
 
 export type DaySection='loadsOut'|'supplierLoads'|'fills'|'dumps';
 /** A project's contract targets for the day. Present only for a project that has targets; `included` is that project's own switch (default OFF). */
@@ -30,7 +36,9 @@ export type PlaceContract={available:true;included:boolean;rows:ContractTargetRo
 export type DayPlace={key:string;name:string;kind:PlaceKind;loadsOut:DayLoadOut[];supplierLoads:DaySupplierLoad[];fills:DayFill[];dumps:DayWasteDump[];sections:DaySection[];contract?:PlaceContract};
 export type DayTile={key:'loadsOut'|'supplierLoads'|'fuel'|'waste';value:number;unit:string|null};
 export type DayMaterial={itemName:string;unitSymbol:string;outLoads:number;outQuantity:number;inLoads:number;inQuantity:number;bitumenKg:number|null};
-export type CompanyDailyReport={day:string;/** True when no place has a record. The attendance sheet (when its switch is on) can still make the day worth printing. */isEmpty:boolean;/** Who worked where that day, when anybody did (DEC-544). Shown only when the Attendance switch is on. */attendance?:AttendanceSheet;tiles:DayTile[];materials:DayMaterial[];bitumenKg:number|null;places:DayPlace[]};
+export type ArrivalTotal={material:string;unitSymbol:string;quantity:number;count:number};
+export type ArrivalGroup={key:string;kind:DayArrival['kind'];title:string;rows:DayArrival[];totals:ArrivalTotal[]};
+export type CompanyDailyReport={day:string;/** Deliveries into company stock, grouped by kind (empty when none). */arrivals:ArrivalGroup[];issues:DayIssue[];dailyReports:DayDailyReport[];/** True when no place has a record. The attendance sheet (when its switch is on) can still make the day worth printing. */isEmpty:boolean;/** Who worked where that day, when anybody did (DEC-544). Shown only when the Attendance switch is on. */attendance?:AttendanceSheet;tiles:DayTile[];materials:DayMaterial[];bitumenKg:number|null;places:DayPlace[]};
 export type MaterialView=DayMaterial&{places:DayPlace[]};
 
 export const NO_PLACE_NAME='No project or site';
@@ -55,6 +63,23 @@ function placeOf(ref:PlaceRef):{key:string;name:string;kind:PlaceKind}{
   return {key:'none',name:NO_PLACE_NAME,kind:'none'};
 }
 const kindRank:Record<PlaceKind,number>={project:0,site:1,none:2};
+
+const capital=(value:string)=>value.charAt(0).toUpperCase()+value.slice(1);
+/** Deliveries by kind (fuel by type, then bitumen, then stock), oldest first, each with a total per material and unit. Cancelled deliveries are left out. */
+export function groupArrivals(list:readonly DayArrival[]):ArrivalGroup[]{
+  const groups=new Map<string,ArrivalGroup>();
+  for(const row of [...list].filter(v=>v.status==='Active').sort((a,b)=>a.time.localeCompare(b.time)||a.id.localeCompare(b.id))){
+    const key=row.kind==='fuel'?`fuel:${row.material}`:row.kind;
+    let group=groups.get(key);
+    if(!group){group={key,kind:row.kind,title:row.kind==='fuel'?`${capital(row.material)} deliveries`:row.kind==='bitumen'?'Bitumen deliveries':'Stock receipts',rows:[],totals:[]};groups.set(key,group);}
+    group.rows.push(row);
+    let total=group.totals.find(t=>t.material===row.material&&t.unitSymbol===row.unitSymbol);
+    if(!total){total={material:row.material,unitSymbol:row.unitSymbol,quantity:0,count:0};group.totals.push(total);}
+    total.quantity=round(total.quantity+row.quantity);total.count+=1;
+  }
+  const rank=(g:ArrivalGroup)=>g.kind==='fuel'?0:g.kind==='bitumen'?1:2;
+  return [...groups.values()].sort((a,b)=>rank(a)-rank(b)||a.title.localeCompare(b.title)).map(g=>({...g,totals:[...g.totals].sort((a,b)=>a.material.localeCompare(b.material)||a.unitSymbol.localeCompare(b.unitSymbol))}));
+}
 
 export function buildCompanyDailyReport(day:string,input:DayInput):CompanyDailyReport{
   const loadsOut=input.loadsOut.filter(v=>v.status==='Active');const supplierLoads=input.supplierLoads.filter(v=>v.status==='Active');
@@ -85,7 +110,10 @@ export function buildCompanyDailyReport(day:string,input:DayInput):CompanyDailyR
   if(fills.length&&litres>0)tiles.push({key:'fuel',value:litres,unit:'L'});
   if(dumps.length)tiles.push({key:'waste',value:dumps.length,unit:null});
 
-  return {day,isEmpty:ordered.length===0,tiles,materials:[...materials.values()].sort((a,b)=>a.itemName.localeCompare(b.itemName)||a.unitSymbol.localeCompare(b.unitSymbol)),bitumenKg,places:ordered};
+  const arrivals=groupArrivals(input.arrivals??[]);
+  const issues=[...(input.issues??[])].sort((a,b)=>a.time.localeCompare(b.time)||a.id.localeCompare(b.id));
+  const dailyReports=[...(input.dailyReports??[])].sort((a,b)=>a.projectName.localeCompare(b.projectName)||a.id.localeCompare(b.id));
+  return {day,arrivals,issues,dailyReports,isEmpty:ordered.length===0&&!arrivals.length&&!issues.length&&!dailyReports.length,tiles,materials:[...materials.values()].sort((a,b)=>a.itemName.localeCompare(b.itemName)||a.unitSymbol.localeCompare(b.unitSymbol)),bitumenKg,places:ordered};
 }
 
 /** Every record of one material and unit, grouped by place, with its load counts and quantities. Null when nobody moved it that day. */

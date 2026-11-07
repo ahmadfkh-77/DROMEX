@@ -2,6 +2,7 @@ import {useEffect,useMemo,useState,type ReactNode} from 'react';
 import {Pressable,StyleSheet,Text,View} from 'react-native';
 
 import type {AttendanceSheet} from '../../domain/attendance';
+import type {ArrivalGroup} from '../../domain/companyDailyReport';
 import {localTime,materialView,setContractSwitches,type CompanyDailyReport,type DayPlace,type DaySection} from '../../domain/companyDailyReport';
 import {formatTotalQuantity} from '../../domain/projectTotals';
 import {AppButton,AppCard,AppPage,EmptyState,Feedback,PageHeader} from '../components/AppPrimitives';
@@ -55,6 +56,33 @@ function Table({columns,rows,total}:{columns:Column[];rows:{key:string;cells:str
   </View>;
 }
 
+/** Arrived today on the preview: deliveries into company stock, one table per kind with its total. */
+function ArrivalsSection({groups,open,toggle}:{groups:ArrivalGroup[];open:(key:string)=>boolean;toggle:(key:string)=>void}){
+  const count=groups.reduce((sum,group)=>sum+group.rows.length,0);
+  return <Fold title="Arrived today" hint={`${count} deliver${count===1?'y':'ies'}`} open={open('arrived')} onToggle={()=>toggle('arrived')}>
+    {groups.map(group=>{
+      const stock=group.kind==='stock';
+      const columns=[{title:'Time',flex:1},{title:stock?'Item':'Supplier',flex:1.5},{title:stock?'Supplier':group.kind==='fuel'?'Ticket':'Grade',flex:1.3},{title:'Quantity',flex:1.4,align:'right' as const}];
+      return <Fold key={group.key} nested title={group.title} hint={`${group.rows.length}`} open={open(`arrived|${group.key}`)} onToggle={()=>toggle(`arrived|${group.key}`)}>
+        <Table columns={columns} rows={[...group.rows.map(row=>({key:row.id,cells:[localTime(row.time),stock?row.material:dash(row.supplierName),stock?dash(row.supplierName):dash(row.detail),formatTotalQuantity(row.quantity,row.unitSymbol==='L'?'litres':row.unitSymbol)]})),...group.totals.map(total=>({key:`total:${total.material}:${total.unitSymbol}`,cells:['',`Total ${total.material.toLowerCase()} ${stock?'received':'arrived'}`,'',formatTotalQuantity(total.quantity,total.unitSymbol==='L'?'litres':total.unitSymbol)]}))]}/>
+      </Fold>;
+    })}
+  </Fold>;
+}
+
+/** Issues and Daily Reports on the preview: a list only. Photos and notes are counted, never shown. A row opens the issue's project or the report. */
+function IssuesSection({report,open,toggle,onOpenIssue,onOpenReport}:{report:CompanyDailyReport;open:(key:string)=>boolean;toggle:(key:string)=>void;onOpenIssue:(projectId:string)=>void;onOpenReport:(ref:{id:string;projectId:string;projectName:string})=>void}){
+  const photos=report.dailyReports.reduce((sum,r)=>sum+r.photos,0);
+  return <Fold title="Issues and Daily Reports" hint={[report.issues.length?`${report.issues.length} issue${report.issues.length===1?'':'s'}`:'',report.dailyReports.length?`${report.dailyReports.length} daily report${report.dailyReports.length===1?'':'s'}`:''].filter(Boolean).join(' · ')} open={open('issues')} onToggle={()=>toggle('issues')}>
+    {report.issues.length?<Fold nested title="Issues" hint={`${report.issues.length}`} open={open('issues|issues')} onToggle={()=>toggle('issues|issues')}>
+      <Table columns={[{title:'Time',flex:1},{title:'Project',flex:1.5},{title:'Issue',flex:2},{title:'Status',flex:1.1}]} rows={report.issues.map(i=>({key:i.id,cells:[localTime(i.time),i.projectName,`${i.title} (${i.priority})`,i.status],onPress:()=>onOpenIssue(i.projectId)}))}/>
+    </Fold>:null}
+    {report.dailyReports.length?<Fold nested title="Daily Reports" hint={`${report.dailyReports.length} · ${photos} photo${photos===1?'':'s'}`} open={open('issues|reports')} onToggle={()=>toggle('issues|reports')}>
+      <Table columns={[{title:'Project',flex:2},{title:'Photos',flex:1,align:'right'},{title:'Notes',flex:1,align:'right'}]} rows={report.dailyReports.map(r=>({key:r.id,cells:[r.projectName,`${r.photos}`,`${r.notes}`],onPress:()=>onOpenReport({id:r.id,projectId:r.projectId,projectName:r.projectName})}))}/>
+    </Fold>:null}
+  </Fold>;
+}
+
 /** The Attendance sheet on the preview: People, Trucks and Machines that worked, with every place. Presence and places only. */
 function AttendanceSection({sheet,open,toggle,onEdit}:{sheet:AttendanceSheet|null;open:(key:string)=>boolean;toggle:(key:string)=>void;onEdit:()=>void}){
   const group=(key:string,title:string,first:string,second:string,rows:AttendanceSheet['people'])=>rows.length?<Fold key={key} nested title={title} hint={`${rows.length}`} open={open(`attendance|${key}`)} onToggle={()=>toggle(`attendance|${key}`)}>
@@ -96,7 +124,7 @@ function PlaceTables({place,open,toggle,keyOf,onOpenRecord,onContract}:{onContra
  * Company Daily Report, phase 1: the preview for one day. Read-only; every place card and section folds with +/×,
  * closed by default except the first place with records. Fold state is screen state only.
  */
-export function CompanyDailyReportScreen({onEditAttendance,profiles,day,onDayChange,loadDay,onBack,onOpenRecord}:{/** Opens the attendance editor for the chosen day. */onEditAttendance:()=>void;/** Kept by the app so Back from a record returns to the same day. */day:string;onDayChange:(day:string)=>void;profiles:Pick<ProfileRepository,'getCompanySettings'>;loadDay:(day:string)=>Promise<CompanyDailyReport>;onBack:()=>void;onOpenRecord:(ref:DayRecordRef)=>void}){
+export function CompanyDailyReportScreen({onOpenIssue,onOpenReport,onEditAttendance,profiles,day,onDayChange,loadDay,onBack,onOpenRecord}:{/** Opens the project of an issue. */onOpenIssue:(projectId:string)=>void;/** Opens a daily report. */onOpenReport:(ref:{id:string;projectId:string;projectName:string})=>void;/** Opens the attendance editor for the chosen day. */onEditAttendance:()=>void;/** Kept by the app so Back from a record returns to the same day. */day:string;onDayChange:(day:string)=>void;profiles:Pick<ProfileRepository,'getCompanySettings'>;loadDay:(day:string)=>Promise<CompanyDailyReport>;onBack:()=>void;onOpenRecord:(ref:DayRecordRef)=>void}){
   const[state,setState]=useState<{status:'loading'|'error'|'ready';report?:CompanyDailyReport}>({status:'loading'});
   const[override,setOverride]=useState<Record<string,boolean>>({});
   const[material,setMaterial]=useState<{itemName:string;unitSymbol:string}|null>(null);
@@ -155,6 +183,8 @@ export function CompanyDailyReportScreen({onEditAttendance,profiles,day,onDayCha
         <PlaceTables place={place} open={isOpen} toggle={toggle} keyOf={s=>`${place.key}|${s}`} onOpenRecord={onOpenRecord} onContract={setContract}/>
       </Fold>)}
     </>:null}
+    {report&&!view&&report.arrivals.length?<ArrivalsSection groups={report.arrivals} open={isOpen} toggle={toggle}/>:null}
+    {report&&!view&&(report.issues.length||report.dailyReports.length)?<IssuesSection report={report} open={isOpen} toggle={toggle} onOpenIssue={onOpenIssue} onOpenReport={onOpenReport}/>:null}
     {report&&!view&&switches.attendance?<AttendanceSection sheet={report.attendance??null} open={isOpen} toggle={toggle} onEdit={onEditAttendance}/>:null}
     {report&&!empty&&!view?<>{exportHeader.picker}{exportError?<Feedback kind="error">{exportError}</Feedback>:null}<AppButton label="Export PDF" onPress={()=>void exportPdf()} busy={exporting} hint={switches.prices?'Every place, material and record of this day, all open. Prices included where recorded.':'Every place, material and record of this day, all open. Quantities only, no prices.'}/><AppButton label="Export Excel" tone="secondary" onPress={()=>void exportExcel()} busy={exporting} hint="The same day as a workbook: a Summary, one sheet per place, real numbers with their unit in their own column."/></>:null}
   </AppPage>;

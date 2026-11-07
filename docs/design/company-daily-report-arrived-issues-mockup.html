@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company Daily Report - Arrived today and Issues and Daily Reports mockups</title>
+<style>
+:root{--navy:#173F67;--orange:#C84B31;--ink:#1F2933;--muted:#52606D;--group:#EAF0F6;--cell:#9FB0C2;--cream:#F5F2EC;--line:#DDD7CC}
+*{box-sizing:border-box}body{margin:0;background:#E9E4DA;font:12px/1.4 Arial,sans-serif;color:var(--ink)}
+h2{max-width:1100px;margin:26px auto 4px;padding:0 16px;color:var(--navy);font-size:19px}.note{max-width:1100px;margin:0 auto 8px;padding:0 16px;color:var(--muted)}
+.row{max-width:1100px;margin:0 auto;padding:8px 16px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.phone{width:375px;background:var(--cream);border-radius:28px;border:6px solid #1C2530;padding:12px;display:flex;flex-direction:column;gap:8px}
+.cap{font-weight:700;color:var(--navy);margin-bottom:4px}
+.fold{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}.fold>.h{display:flex;align-items:center;min-height:52px;padding:6px 12px;font-weight:800;color:var(--navy);cursor:pointer}.fold>.h small{display:block;color:var(--muted);font-weight:400}.fold>.h .t{margin-left:auto;font-size:22px}
+.fold>.b{display:none;padding:0 10px 10px}.fold.open>.b{display:block}
+.sec{border:1px solid var(--line);border-radius:10px;margin-top:8px}.sec>.h{display:flex;min-height:44px;align-items:center;padding:0 10px;font-weight:700;cursor:pointer}.sec>.h span:last-child{margin-left:auto;font-size:20px}.sec>.b{display:none;padding:0 8px 8px}.sec.open>.b{display:block}
+table{width:100%;border-collapse:collapse;table-layout:fixed}th{text-align:left;font-size:9.5px;color:#fff;background:var(--navy);padding:5px;border:1px solid var(--navy)}td{padding:5px;border:1px solid #C9D3DE}tr:nth-child(even) td{background:#F5F8FB}.r{text-align:right}tr.tot td{font-weight:800;background:var(--group)}
+.paper{width:794px;max-width:100%;background:#fff;box-shadow:0 8px 26px rgba(20,38,58,.2);padding:26px 30px;font-size:11px}
+.block{border:1px solid var(--cell);margin-bottom:12px}.bar{background:var(--navy);color:#fff;padding:7px 10px;border-bottom:3px solid var(--orange);display:flex;justify-content:space-between;font-weight:800;font-size:12px}.bar span{font-weight:400;font-size:10px;color:#dbe6f1}
+.mat{border:1px solid var(--cell);margin:10px 8px 0}.mat:last-child{margin-bottom:10px}.mh{display:flex;justify-content:space-between;background:#dbe6f1;color:var(--navy);font-weight:800;padding:5px 8px}.mh span:last-child{font-weight:400}
+.paper th{background:#fff;color:var(--navy);border:0;border-bottom:2px solid var(--navy)}.paper td{border:0;border-bottom:1px solid #D5DDE5}.paper tr.tot td{border-top:1px solid var(--navy)}
+.warn{background:#FFF1E8;border:1px solid var(--orange);padding:6px 8px;margin:8px;color:#8E2E1B}
+.pill{display:inline-block;border:1px solid var(--cell);padding:1px 6px;font-size:10px;font-weight:700}.open{}
+</style></head><body>
+
+<h2>1. Arrived today</h2>
+<div class="note">A company-wide card after the places: what came INTO the company's stock that day, apart from supplier loads (which stay in each project). Three kinds: <b>Stock receipts</b> (batches received in Stock), <b>Diesel deliveries</b> (tank deliveries, litres, supplier, ticket) and <b>Bitumen deliveries</b> (kg, supplier, grade), each its own table. Bitumen used is not repeated here: it stays in the asphalt tables. Cancelled deliveries are excluded; nothing unrecorded is shown; no zero rows; units never added together. Fuel arrived also appears in "Totals by material", next to fuel given.</div>
+<div class="row"><div><div class="cap">Preview (screen)</div><div class="phone">
+<div class="fold open" id="a1"><div class="h" onclick="tg('a1')"><div>Arrived today<small>3 deliveries</small></div><span class="t">&times;</span></div><div class="b">
+<div class="sec open" id="a2"><div class="h" onclick="tg('a2')"><span>Diesel deliveries (1)</span><span>&times;</span></div><div class="b"><table><tr><th>Time</th><th>Supplier</th><th>Ticket</th><th class="r">Litres</th></tr><tr><td>07:00</td><td>Al-Nour Fuel</td><td>D-4411</td><td class="r">8,000 L</td></tr><tr class="tot"><td colspan="3">Total diesel arrived</td><td class="r">8,000 L</td></tr></table></div></div>
+<div class="sec" id="a3"><div class="h" onclick="tg('a3')"><span>Bitumen deliveries (1)</span><span>+</span></div><div class="b"><table><tr><th>Time</th><th>Supplier</th><th>Grade</th><th class="r">Quantity</th></tr><tr><td>09:20</td><td>Petro Co</td><td>60/70</td><td class="r">24,000 kg</td></tr></table></div></div>
+<div class="sec" id="a4"><div class="h" onclick="tg('a4')"><span>Stock receipts (1)</span><span>+</span></div><div class="b"><table><tr><th>Time</th><th>Item</th><th>Supplier</th><th class="r">Quantity</th></tr><tr><td>10:05</td><td>Cement</td><td>BuildCo</td><td class="r">120 bags</td></tr></table></div></div>
+</div></div></div></div>
+<div class="paper"><div class="block"><div class="bar">5. Arrived today<span>Company stock &middot; not tied to a project</span></div>
+<div class="mat"><div class="mh"><span>Diesel deliveries</span><span>1 delivery &middot; 8,000 litres</span></div><table><colgroup><col style="width:10%"><col style="width:30%"><col style="width:22%"><col style="width:38%"></colgroup><tr><th>Time</th><th>Supplier</th><th>Ticket</th><th class="r">Quantity</th></tr><tr><td>07:00</td><td>Al-Nour Fuel</td><td>D-4411</td><td class="r">8,000 litres</td></tr><tr class="tot"><td colspan="3">Total diesel arrived</td><td class="r">8,000 litres</td></tr></table></div>
+<div class="mat"><div class="mh"><span>Bitumen deliveries</span><span>1 delivery &middot; 24,000 kg</span></div><table><colgroup><col style="width:10%"><col style="width:30%"><col style="width:22%"><col style="width:38%"></colgroup><tr><th>Time</th><th>Supplier</th><th>Grade</th><th class="r">Quantity</th></tr><tr><td>09:20</td><td>Petro Co</td><td>60/70</td><td class="r">24,000 kg</td></tr><tr class="tot"><td colspan="3">Total bitumen arrived</td><td class="r">24,000 kg</td></tr></table></div>
+<div class="mat"><div class="mh"><span>Stock receipts</span><span>1 receipt</span></div><table><colgroup><col style="width:10%"><col style="width:30%"><col style="width:22%"><col style="width:38%"></colgroup><tr><th>Time</th><th>Item</th><th>Supplier</th><th class="r">Quantity</th></tr><tr><td>10:05</td><td>Cement</td><td>BuildCo</td><td class="r">120 bags</td></tr><tr class="tot"><td colspan="3">Total cement received</td><td class="r">120 bags</td></tr></table></div>
+</div></div></div>
+
+<h2>2. Issues and Daily Reports</h2>
+<div class="note">A company-wide card for the day's issues and daily reports, as a list only (never opened or changed from here). <b>Issues</b> created that day (title, project, priority, status Open or Resolved) and <b>Daily Reports</b> for that day (project, who prepared it, how many photos and notes). Photos and long notes are <b>counted, not printed</b>. Tapping a row opens the issue or the report. A project without a daily report that day is not listed as missing here (Needs Attention already does that).</div>
+<div class="row"><div><div class="cap">Preview (screen)</div><div class="phone">
+<div class="fold open" id="b1"><div class="h" onclick="tg('b1')"><div>Issues and Daily Reports<small>2 issues &middot; 2 daily reports</small></div><span class="t">&times;</span></div><div class="b">
+<div class="sec open" id="b2"><div class="h" onclick="tg('b2')"><span>Issues (2)</span><span>&times;</span></div><div class="b"><table><tr><th>Time</th><th>Project</th><th>Issue</th><th>Status</th></tr><tr><td>08:10</td><td>Airport Road</td><td>Crusher stopped (High)</td><td>Open &rsaquo;</td></tr><tr><td>11:40</td><td>Beirut Wall</td><td>Missing rebar delivery</td><td>Resolved &rsaquo;</td></tr></table></div></div>
+<div class="sec open" id="b3"><div class="h" onclick="tg('b3')"><span>Daily Reports (2)</span><span>&times;</span></div><div class="b"><table><tr><th>Project</th><th>Photos</th><th>Notes</th><th>Status</th></tr><tr><td>Airport Road</td><td class="r">6</td><td class="r">3</td><td>Issued &rsaquo;</td></tr><tr><td>Beirut Wall</td><td class="r">2</td><td class="r">1</td><td>Draft &rsaquo;</td></tr></table></div></div>
+</div></div></div></div>
+<div class="paper"><div class="block"><div class="bar">6. Issues and Daily Reports<span>Counts only: photos and long notes are not printed</span></div>
+<div class="mat"><div class="mh"><span>Issues</span><span>2 issues &middot; 1 open</span></div><table><colgroup><col style="width:10%"><col style="width:22%"><col style="width:44%"><col style="width:12%"><col style="width:12%"></colgroup><tr><th>Time</th><th>Project</th><th>Issue</th><th>Priority</th><th>Status</th></tr><tr><td>08:10</td><td>Airport Road</td><td>Crusher stopped</td><td>High</td><td>Open</td></tr><tr><td>11:40</td><td>Beirut Wall</td><td>Missing rebar delivery</td><td>Normal</td><td>Resolved</td></tr></table></div>
+<div class="mat"><div class="mh"><span>Daily Reports</span><span>2 reports &middot; 8 photos</span></div><table><colgroup><col style="width:32%"><col style="width:22%"><col style="width:16%"><col style="width:16%"><col style="width:14%"></colgroup><tr><th>Project</th><th>Prepared by</th><th class="r">Photos</th><th class="r">Notes</th><th>Status</th></tr><tr><td>Airport Road</td><td>Samir</td><td class="r">6</td><td class="r">3</td><td>Issued</td></tr><tr><td>Beirut Wall</td><td>Karim</td><td class="r">2</td><td class="r">1</td><td>Draft</td></tr></table></div>
+</div></div></div>
+
+<script>function tg(id){var e=document.getElementById(id);e.classList.toggle('open');var t=e.querySelector(':scope>.h .t')||e.querySelector(':scope>.h span:last-child');t.innerHTML=e.classList.contains('open')?'&times;':'+'}</script>
+</body></html>

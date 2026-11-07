@@ -12,6 +12,7 @@ import {SqliteCustomDirectoryRepository} from '../data/repositories/SqliteCustom
 import {SqliteSupervisorRepository} from '../data/repositories/SqliteSupervisorRepository';
 import {SqliteProjectTotalsRepository} from '../data/repositories/SqliteProjectTotalsRepository';
 import {SqliteBusinessDocumentRepository} from '../data/repositories/SqliteBusinessDocumentRepository';
+import {SqliteDayRecordsRepository} from '../data/repositories/SqliteDayRecordsRepository';
 import {SqliteAttendanceRepository} from '../data/repositories/SqliteAttendanceRepository';
 import {AttendanceScreen} from './screens/AttendanceScreen';
 import {SqliteCompanyTotalsRepository} from '../data/repositories/SqliteCompanyTotalsRepository';
@@ -127,10 +128,11 @@ export function DromexApp(){
   const supervisorRepository=useMemo(()=>new SqliteSupervisorRepository(db),[db]);
   const projectTotalsRepository=useMemo(()=>new SqliteProjectTotalsRepository(db),[db]);
   const companyTotalsRepository=useMemo(()=>new SqliteCompanyTotalsRepository(db),[db]);
+  const dayRecordsRepository=useMemo(()=>new SqliteDayRecordsRepository(db),[db]);
   const attendanceRepository=useMemo(()=>new SqliteAttendanceRepository(db),[db]);
   const[dailyDay,setDailyDay]=useState(todayKey);
   /** Company Daily Report: reads one day from the existing repositories; it never writes. */
-  const loadDailyReport=useCallback((day:string)=>loadCompanyDailyReport(day,{totals:companyTotalsRepository,fuel:fuelRepository,waste:wasteRepository,bitumen:bitumenRepository,contract:contractRepository,attendance:attendanceRepository}),[companyTotalsRepository,fuelRepository,wasteRepository,bitumenRepository,contractRepository,attendanceRepository]);
+  const loadDailyReport=useCallback((day:string)=>loadCompanyDailyReport(day,{totals:companyTotalsRepository,fuel:fuelRepository,waste:wasteRepository,bitumen:bitumenRepository,contract:contractRepository,attendance:attendanceRepository,stock:stockRepository,dayRecords:dayRecordsRepository}),[companyTotalsRepository,fuelRepository,wasteRepository,bitumenRepository,contractRepository,attendanceRepository,stockRepository,dayRecordsRepository]);
   const documentRepository=useMemo(()=>new SqliteBusinessDocumentRepository(db),[db]);
   const signerRepository=useMemo(()=>new SqliteDocumentSignerRepository(db),[db]);
   const companyHeaderRepository=useMemo(()=>new SqliteCompanyHeaderRepository(db),[db]);
@@ -204,7 +206,7 @@ export function DromexApp(){
   else if(screen==='contractItemForm'&&commandProject)content=<ContractItemFormScreen key={contractItemId??'new'} project={commandProject} contracts={contractRepository} contractItemId={contractItemId} onBack={()=>goBack('contractQuantities')} onSaved={()=>goBack('contractQuantities')}/>;
   else if(screen==='projectTotals'&&commandProject)content=<ProjectTotalsScreen project={commandProject} repository={projectTotalsRepository} contracts={contractRepository} profiles={profileRepository} totals={companyTotalsRepository} documents={documentRepository} series={seriesRepository} headers={companyHeaderRepository} onOpenCompanySetups={()=>navigate('companySetups')} level={projectLevel} onLevel={setProjectLevel} onBack={()=>{setProjectLevel({});goBack('projectCommand');}} onOpenRecord={openOriginalRecord} onOpenReport={openUsageReport} onCreateDocument={startDocument}/>;
   else if(screen==='companyTotals')content=<CompanyTotalsScreen profiles={profileRepository} totals={companyTotalsRepository} documents={documentRepository} series={seriesRepository} headers={companyHeaderRepository} onOpenCompanySetups={()=>navigate('companySetups')} level={companyLevel} onLevel={setCompanyLevel} onBack={()=>{setCompanyLevel({});goBack('home');}} onOpenRecord={openOriginalRecord} onOpenReport={openUsageReport} onCreateDocument={startDocument} onOpenCompanyLoadTotals={()=>navigate('companyLoadTotals')} onOpenDocuments={()=>openDocuments(null)}/>;
-  else if(screen==='companyDailyReport')content=<CompanyDailyReportScreen onEditAttendance={()=>navigate('dailyAttendance')} profiles={profileRepository} day={dailyDay} onDayChange={setDailyDay} loadDay={loadDailyReport} onBack={()=>goBack('home')} onOpenRecord={openDayRecord}/>;
+  else if(screen==='companyDailyReport')content=<CompanyDailyReportScreen onOpenIssue={projectId=>void loadRepository.listProjects().then(projects=>{const project=projects.find(value=>value.id===projectId);if(project)openProject(project,'issues');})} onOpenReport={ref=>{setSearchTarget({id:ref.id,kind:'Daily Report',title:ref.projectName,subtitle:'Daily report',date:null,route:'reports',projectId:ref.projectId});navigate('reports');}} onEditAttendance={()=>navigate('dailyAttendance')} profiles={profileRepository} day={dailyDay} onDayChange={setDailyDay} loadDay={loadDailyReport} onBack={()=>goBack('home')} onOpenRecord={openDayRecord}/>;
   else if(screen==='dailyAttendance')content=<AttendanceScreen repository={attendanceRepository} day={dailyDay} onDayChange={setDailyDay} onBack={()=>goBack('companyDailyReport')}/>;
   else if(screen==='companyLoadTotals')content=<CompanyLoadTotalsScreen totals={companyTotalsRepository} series={seriesRepository} profiles={profileRepository} onBack={()=>goBack('home')} onOpenRecord={openOriginalRecord}/>;
   else if(screen==='documents')content=<DocumentsScreen documents={documentRepository} totals={companyTotalsRepository} party={documentsParty} onBack={()=>goBack('home')} onOpenDocument={openDocument} onCreate={startDocument} onOpenSettings={()=>navigate('documentSettings')}/>;

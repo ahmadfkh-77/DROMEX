@@ -1,5 +1,7 @@
 import type {BitumenRepository} from '../data/repositories/BitumenRepository';
 import type {CompanyTotalsRecord,CompanyTotalsRepository} from '../data/repositories/CompanyTotalsRepository';
+import type {DayRecordsRepository} from '../data/repositories/DayRecordsRepository';
+import type {StockRepository} from '../data/repositories/StockRepository';
 import type {AttendanceRepository} from '../data/repositories/AttendanceRepository';
 import {buildAttendanceSheet} from '../domain/attendance';
 import type {ContractQuantitiesRepository} from '../data/repositories/ContractQuantitiesRepository';
@@ -9,7 +11,7 @@ import type {RecordSnapshot} from '../domain/businessDocuments';
 import {loadUseDetail,USE_EPSILON,type BitumenUseRow} from '../domain/bitumenUse';
 import type {ContractTargetRow} from '../domain/contractQuantities';
 import {emptyCompanyTotalsFilters} from '../domain/companyTotals';
-import {applyContractSwitches,buildCompanyDailyReport,withAttendance,localDay,type CompanyDailyReport,type DayFill,type DayLoadOut,type DaySupplierLoad,type DayWasteDump} from '../domain/companyDailyReport';
+import {applyContractSwitches,buildCompanyDailyReport,type DayArrival,withAttendance,localDay,type CompanyDailyReport,type DayFill,type DayLoadOut,type DaySupplierLoad,type DayWasteDump} from '../domain/companyDailyReport';
 
 /** The repositories the report reads. All of them are only read: the report never changes stock, loads, batches or targets. */
 export type CompanyDailyReportSources={
@@ -21,6 +23,10 @@ export type CompanyDailyReportSources={
   contract?:Pick<ContractQuantitiesRepository,'targetTableOn'>;
   /** Optional: the daily who-worked-where sheet (DEC-544). */
   attendance?:Pick<AttendanceRepository,'listDay'>;
+  /** Optional: Stock batches received that day. */
+  stock?:Pick<StockRepository,'getOverview'>;
+  /** Optional: the day's issues and daily reports (counts only). */
+  dayRecords?:Pick<DayRecordsRepository,'listIssues'|'listDailyReports'>;
 };
 
 /**
@@ -69,7 +75,19 @@ export async function loadCompanyDailyReport(day:string,sources:CompanyDailyRepo
     id:d.id,status:d.status,time:d.dumpedAt,material:d.materialType,area:d.dumpLocation,truckPlate:d.truckPlate,driverName:d.driverName,
     projectId:d.projectId,projectName:d.projectName,siteId:d.projectId?null:d.companySiteId??null,siteName:d.projectId?null:d.companySiteName??null}));
 
-  let report=buildCompanyDailyReport(day,{loadsOut,supplierLoads,fills,dumps:wasteDumps});
+  // Deliveries into company stock: diesel and other fuel, bitumen batches and Stock batches. Active only; priced as the record kept them (before VAT).
+  const cents=(usd:number|null|undefined)=>usd==null?null:Math.round(usd*100);
+  const arrivals:DayArrival[]=[
+    ...fuel.movements.filter(m=>m.type==='delivery'&&localDay(m.confirmedAt)===day).map((m):DayArrival=>({id:m.id,status:m.status,time:m.confirmedAt,kind:'fuel',material:m.fuelType,unitSymbol:'L',quantity:m.litres,supplierName:m.supplierName,detail:m.ticketNumber,
+      priceBasis:m.subtotalUsd==null?null:'per_unit',unitPriceCents:cents(m.pricePerLitreUsd),amountCents:cents(m.subtotalUsd)})),
+    ...bitumen.batches.filter(b=>localDay(b.arrivedAt)===day).map((b):DayArrival=>({id:b.id,status:b.recordStatus==='Cancelled'?'Cancelled':'Active',time:b.arrivedAt,kind:'bitumen',material:'Bitumen',unitSymbol:'kg',quantity:b.deliveredKg,supplierName:b.supplierName,detail:b.gradeName,
+      priceBasis:b.subtotalUsd==null?null:'whole',unitPriceCents:null,amountCents:cents(b.subtotalUsd)})),
+    ...(sources.stock?(await sources.stock.getOverview()).items.flatMap(item=>item.batches.filter(b=>localDay(b.arrivedAt)===day).map((b):DayArrival=>({id:b.id,status:b.recordStatus==='Cancelled'?'Cancelled':'Active',time:b.arrivedAt,kind:'stock',material:item.itemName,unitSymbol:item.unitSymbol,quantity:b.quantity,supplierName:b.supplierName,detail:null,
+      priceBasis:b.subtotalUsd==null?null:b.priceBasis==='per_unit'?'per_unit':'whole',unitPriceCents:b.priceBasis==='per_unit'?cents(b.priceUsd):null,amountCents:cents(b.subtotalUsd)}))):[]),
+  ];
+  const issues=sources.dayRecords?await sources.dayRecords.listIssues(day):[];
+  const dailyReports=sources.dayRecords?await sources.dayRecords.listDailyReports(day):[];
+  let report=buildCompanyDailyReport(day,{loadsOut,supplierLoads,fills,dumps:wasteDumps,arrivals,issues,dailyReports});
   if(sources.attendance)report=withAttendance(report,buildAttendanceSheet(await sources.attendance.listDay(day)));
   if(!sources.contract)return report;
   const targets:Record<string,{rows:ContractTargetRow[]}>={};
