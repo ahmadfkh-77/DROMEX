@@ -11,6 +11,7 @@ import { truckCrewRoleLabel, type TruckCrewRole } from '../../domain/people';
 import { calculateLoad, createAnotherItemDraft, directConversionLines, emptyLoadDraft, formatUsd, receiptEntrySteps, receiptIssueStep, receiptStepIssues, type ConfirmedLoad, type LoadDraft, type LoadSetupOptions, validateLoadDraft } from '../../domain/loads';
 import { fitSignatureToBox } from '../../domain/signatureFit';
 import { printLoadBluetooth } from '../../services/bluetoothPrinter';
+import { receiptQrPayloadFor } from '../../services/receiptQrKey';
 import { exportAndShareLoadDocument, type LoadDocumentKind, type PaperWidth } from '../../services/documentExport';
 import type { CompanyHeaderRepository } from '../../data/repositories/CompanyHeaderRepository';
 import { applyHeaderCompany, type HeaderCompany, type HeaderCompanyKind } from '../../domain/companyHeaders';
@@ -406,6 +407,8 @@ function ErrorView({ message, onBack, onRetry }: { message: string | null; onBac
 function ConfirmedView({ record, headers, projectId, canRepeatDelivery, onBack, onOpenCompanySetups, onCreateAnotherItem, onStartAnotherLoad }: { record: ConfirmedLoad; headers?: CompanyHeaderRepository; projectId: string | null; canRepeatDelivery: boolean; onBack: () => void; onOpenCompanySetups?: () => void; onCreateAnotherItem: () => void; onStartAnotherLoad: () => void }) {
   const [kind, setKind] = useState<LoadDocumentKind>('receipt');
   const [paper, setPaper] = useState<PaperWidth>('58');
+  // DEC-541. Off every time: the verification QR is chosen per document, never remembered.
+  const [withQr, setWithQr] = useState(false);
   const [headerKind, setHeaderKind] = useState<HeaderCompanyKind>('plant');
   const [remember, setRemember] = useState(false);
   const [header, setHeader] = useState<HeaderCompany | null>(null);
@@ -433,13 +436,13 @@ function ConfirmedView({ record, headers, projectId, canRepeatDelivery, onBack, 
   async function rememberChoice() { if (headers && remember && projectId && header) await headers.setProjectHeaderDefault(projectId, header.kind); }
   async function print() {
     setBusy('print'); setError(null); setMessage(null); setPrintFailed(false);
-    try { await rememberChoice(); const printer = await printLoadBluetooth(shown, kind, paper); if (mounted.current) setMessage(`${label} sent to ${printer.name}.`); }
+    try { await rememberChoice(); const printer = await printLoadBluetooth(shown, kind, paper, withQr ? await receiptQrPayloadFor(shown) : null); if (mounted.current) setMessage(`${label} sent to ${printer.name}.`); }
     catch (cause) { if (mounted.current) { setPrintFailed(true); setError(`${cause instanceof Error ? cause.message : 'Could not print.'} The confirmed record is still saved.`); } }
     finally { if (mounted.current) setBusy(null); }
   }
   async function share() {
     setBusy('pdf'); setError(null); setMessage(null); setPrintFailed(false);
-    try { await rememberChoice(); await exportAndShareLoadDocument(shown, kind, paper); if (mounted.current) setMessage(`${label} PDF created.`); }
+    try { await rememberChoice(); await exportAndShareLoadDocument(shown, kind, paper, withQr ? await receiptQrPayloadFor(shown) : null); if (mounted.current) setMessage(`${label} PDF created.`); }
     catch (cause) { if (mounted.current) setError(`${cause instanceof Error ? cause.message : 'Could not create the PDF.'} The confirmed record is still saved.`); }
     finally { if (mounted.current) setBusy(null); }
   }
@@ -461,6 +464,8 @@ function ConfirmedView({ record, headers, projectId, canRepeatDelivery, onBack, 
           <MethodChoice title="Delivery Authorization" hint="Driver, truck and both signatures" selected={kind === 'authorization'} onPress={() => setKind('authorization')} />
         </View>
         <OpenSwitch label="Paper" options={[{ id: '58' as const, label: '58 mm' }, { id: '80' as const, label: '80 mm' }]} selectedId={paper} onSelect={setPaper} />
+        <OpenSwitch label="Verification QR code" options={[{ id: 'off' as const, label: 'No QR' }, { id: 'on' as const, label: 'Print QR' }]} selectedId={withQr ? 'on' : 'off'} onSelect={(value) => setWithQr(value === 'on')} />
+        {withQr ? <Text style={styles.openHelp}>Adds a QR with the load number, date, material and quantity. Any phone camera reads it; DROMEX can check it is genuine.</Text> : null}
       </View>
       {headers ? <HeaderCompanyPicker headers={headers} value={headerKind} onChange={setHeaderKind} remember={projectId ? { checked: remember, onChange: setRemember } : undefined} onOpenSetups={onOpenCompanySetups} /> : null}
       <LoadDocuments data={confirmedDocument(shown)} isDraft={false} kind={kind} paper={paper} />

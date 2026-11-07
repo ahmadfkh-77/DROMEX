@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receipt verification QR mockup</title>
+<style>
+:root{--orange:#d3542f;--navy:#173f67;--ink:#172a3a;--muted:#637586;--line:#dfe6eb;--green:#25724a;--red:#a61b12}
+*{box-sizing:border-box}body{margin:0;background:#e9e4da;color:var(--ink);font-family:Arial,sans-serif;font-size:14px;line-height:1.4}
+.top{max-width:1150px;margin:0 auto;padding:20px 16px 4px}.top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}.top p{margin:0;color:var(--muted);max-width:860px}
+.stage{max-width:1150px;margin:0 auto;padding:16px;display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.cap{font-weight:700;color:var(--navy);margin:0 0 8px;font-size:13px}
+.phone{width:375px;max-width:100%;background:#f5f2ec;border-radius:28px;border:6px solid #1c2530;padding:14px;display:flex;flex-direction:column;gap:12px}
+.card{background:#fff;border:1px solid #ddd7cc;border-radius:16px;padding:14px}.card h3{margin:0 0 4px;font-size:16px}.hint{font-size:12.5px;color:var(--muted);margin:2px 0 0}
+.sw{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid #eee9df;min-height:48px}
+.box{width:24px;height:24px;border:2px solid var(--navy);border-radius:6px;flex:none;margin-top:2px}.box.on{background:var(--navy);color:#fff;text-align:center;font-weight:800;line-height:20px}
+.sw b{font-size:14px}.sw .s{font-size:12px;color:var(--muted);display:block}
+.row{display:flex;gap:8px}.btn{flex:1;text-align:center;font-weight:800;border-radius:12px;padding:12px;background:var(--orange);color:#fff}.btn.alt{background:#fff;color:var(--navy);border:2px solid var(--navy)}
+.paper{width:302px;background:#fff;box-shadow:0 8px 26px rgba(20,38,58,.25);padding:18px;font-size:11px}
+.paper h1{text-align:center;font-size:17px;margin:0 0 2px}.paper .c{text-align:center;font-size:9px;margin:1px 0}
+.rule{border-top:1px solid #111;margin:10px 0}.paper h2{text-align:center;font-size:12px;margin:0 0 6px}
+.r{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #ddd}.r b{text-align:right}
+.qr{margin:12px auto 4px;text-align:center}.qr svg{width:38mm;height:38mm;image-rendering:pixelated}
+.qr small{display:block;font-size:8.5px;color:#444;margin-top:3px}
+.ok{border-left:6px solid var(--green)}.bad{border-left:6px solid var(--red)}
+.res b{font-size:15px}.res.okc b{color:var(--green)}.res.badc b{color:var(--red)}
+.facts{background:#f4f7f9;border-radius:10px;padding:8px 10px;font-size:12.5px;margin-top:8px}
+.note{background:#eef2f6;border:1px solid #d3dde7;border-radius:12px;padding:10px 12px;font-size:13px;max-width:360px}
+</style></head><body>
+<div class="top"><h1>Receipt verification QR</h1>
+<p>Mockup only, nothing in the app has changed. The QR is printed only when you tick <b>Print QR code</b> on the screen before printing (off by default). The QR holds the facts in plain text plus a signature, so any phone camera shows the facts and DROMEX can check the signature.</p></div>
+<div class="stage">
+<div>
+<p class="cap">1. The screen before printing</p>
+<div class="phone">
+<div class="card"><h3>Receipt L-0412 confirmed</h3><p class="hint">The permanent record is saved even if printing fails.</p>
+<div class="sw"><div class="box on">✓</div><div><b>Print QR code</b><span class="s">Adds a verification QR with the load number, date, material and quantity. Off by default, asked each time.</span></div></div>
+<div class="row"><div class="btn">Print receipt</div><div class="btn alt">PDF</div></div></div>
+<div class="note">Same switch on the Delivery Authorization. It is not saved, so the next document starts off. A cancelled load never prints a QR.</div>
+</div></div>
+<div>
+<p class="cap">2. Receipt, 80 mm (QR at the foot, after the totals)</p>
+<div class="paper">
+<h1>DROMEX</h1><div class="c">Zebdine, Lebanon</div><div class="c">+961 00 000 000</div>
+<div class="rule"></div><h2>RECEIPT</h2>
+<div class="r"><span>Load No.</span><b>L-0412</b></div><div class="r"><span>Date</span><b>03/11/2026 10:42</b></div>
+<div class="r"><span>Project</span><b>Zebdine Road</b></div><div class="r"><span>Item</span><b>Base Course</b></div>
+<div class="r"><span>Quantity</span><b>18.000 m³</b></div>
+<div class="qr"><svg viewBox="0 0 25 25" shape-rendering="crispEdges"><rect width="25" height="25" fill="#fff"/><path fill="#000" d="M0 0h7v7H0zM18 0h7v7h-7zM0 18h7v7H0zM1 1v5h5V1zM19 1v5h5V1zM1 19v5h5v-5zM2 2h3v3H2zM20 2h3v3h-3zM2 20h3v3H2zM8 1h2v1H8zm3 0h1v2h-1zm2 1h2v1h-2zM9 4h2v2H9zm3 1h3v1h-3zM8 8h2v2H8zm3 1h2v2h-2zm4-1h1v3h-1zm2 1h3v1h-3zM1 9h3v1H1zm4 1h2v2H5zM1 12h2v2H1zm3 0h1v3H4zm3 1h2v1H7zm3 1h2v2h-2zm3-1h2v1h-2zm3 1h3v2h-3zm4-2h2v3h-2zM8 16h2v2H8zm3 1h3v1h-3zm4-1h2v3h-2zm3 2h1v2h-1zm2 1h2v3h-2zM9 20h2v2H9zm3 1h2v3h-2zm3 0h2v1h-2zm0 2h4v1h-4z"/></svg><small>Scan to read the load details · verify in DROMEX</small></div>
+</div></div>
+<div>
+<p class="cap">3. Scanning it</p>
+<div class="phone">
+<div class="card"><h3>With any phone camera</h3><p class="hint">Shows the text in the code, no app needed:</p>
+<div class="facts">DROMEX RECEIPT<br/>Load L-0412 · 03/11/2026<br/>Base Course · 18.000 m³<br/>Zebdine Road<br/>Code: 7F3A-92C1-B04D</div></div>
+<div class="card ok res okc"><h3>In DROMEX → Verify receipt</h3><b>✓ Genuine</b><p class="hint">The code matches this receipt and was issued by this DROMEX. Compare the quantity above with the paper.</p></div>
+<div class="card bad res badc"><b>✗ Not valid</b><p class="hint">The code was altered or did not come from this DROMEX. Do not accept the load on this receipt.</p></div>
+</div></div>
+</div></body></html>

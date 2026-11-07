@@ -55,5 +55,5 @@ async function write(address:string,payload:Buffer){
 
 async function selected(){const printer=await getSavedBluetoothPrinter();if(!printer)throw new Error('No printer is selected. Open More → Setup → Bluetooth Printer first.');return printer;}
 export async function printBluetoothTest(printer:SavedBluetoothPrinter){await write(printer.address,buildTestEscPos(printer.name,printer.paperWidth));}
-export async function printLoadBluetooth(record:ConfirmedLoad,kind:LoadDocumentKind,paper?:PaperWidth){const printer=await selected();await write(printer.address,buildLoadEscPos(record,kind,paper??printer.paperWidth));return printer;}
+export async function printLoadBluetooth(record:ConfirmedLoad,kind:LoadDocumentKind,paper?:PaperWidth,qrPayload:string|null=null){const printer=await selected();await write(printer.address,buildLoadEscPos(record,kind,paper??printer.paperWidth,qrPayload));return printer;}
 export async function printQuickTextBluetooth(record:QuickTextDocument){const printer=await selected();await write(printer.address,buildQuickTextEscPos(record));return printer;}

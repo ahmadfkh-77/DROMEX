@@ -4,6 +4,7 @@ import {truckCrewRoleLabel} from '../domain/people';
 import {directConversionLines,type ConfirmedLoad} from '../domain/loads';
 import type {QuickTextDocument} from '../domain/quickText';
 import type {LoadDocumentKind,PaperWidth} from './documentTemplates';
+import {receiptQrRaster} from './receiptQrCode';
 
 const ESC=0x1b,GS=0x1d;
 const command=(...values:number[])=>Buffer.from(values);
@@ -82,7 +83,7 @@ function companyHeader(doc:EscPosDocument,name:string,address:string|null,phone:
   doc.line('').line(divider(columns));
 }
 
-export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper:PaperWidth):Buffer{
+export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper:PaperWidth,qrPayload:string|null=null):Buffer{
   const doc=new EscPosDocument(paper),columns=paper==='58'?32:48;
   companyHeader(doc,record.companyName,record.companyAddress,record.companyPhone,record.companyEmail,record.companyTaxVatNumber);
   if(record.status==='Cancelled'){
@@ -146,6 +147,11 @@ export function buildLoadEscPos(record:ConfirmedLoad,kind:LoadDocumentKind,paper
       if(role)doc.wrapped(role);
       doc.align(0);
     }
+  }
+  // DEC-541. The verification QR, only when asked for and never on a cancelled load.
+  if(qrPayload&&record.status!=='Cancelled'){
+    const qr=receiptQrRaster(qrPayload,paper);
+    doc.line('').line(divider(columns)).line('').align(1).raster(Buffer.concat([command(GS,0x76,0x30,0x00,qr.widthBytes&0xff,(qr.widthBytes>>8)&0xff,qr.height&0xff,(qr.height>>8)&0xff),Buffer.from(qr.pixels),text('\n')])).wrapped('Scan to read the load details').wrapped('Verify in DROMEX').align(0);
   }
   if(record.companyReceiptFooter)doc.line('').line(divider(columns)).line('').align(1).wrapped(record.companyReceiptFooter).align(0);
   return doc.finish();
