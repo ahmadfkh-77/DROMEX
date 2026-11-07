@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.dromex.management",
-      "versionCode": 49,
+      "versionCode": 50,
       "adaptiveIcon": {
         "foregroundImage": "./assets/dromex-icon-foreground.png",
         "monochromeImage": "./assets/dromex-icon-monochrome.png",
