@@ -1,5 +1,5 @@
 import type {WorkbookRow} from '../domain/businessReports';
-import {localTime,sumAmounts,type CompanyDailyReport,type DayPlace} from '../domain/companyDailyReport';
+import {equipmentTypeLabel,localTime,sumAmounts,type CompanyDailyReport,type DayPlace} from '../domain/companyDailyReport';
 import type {SheetSpec} from './businessWorkbook';
 
 /**
@@ -22,11 +22,11 @@ export function sheetName(wanted:string,taken:Set<string>):string{
 const dollars=(cents:number|null|undefined)=>cents==null?null:Math.round(cents)/100;
 const priceColumns=(r:{priceBasis?:'per_unit'|'whole'|null;unitPriceCents?:number|null;amountCents?:number|null}):WorkbookRow=>({'Unit Price USD':r.amountCents==null||r.priceBasis==='whole'?null:dollars(r.unitPriceCents),'Price Basis':r.amountCents==null?null:r.priceBasis==='whole'?'As a whole':'Per unit','Amount USD':dollars(r.amountCents)});
 const placeRows=(day:string,place:DayPlace,prices:boolean):WorkbookRow[]=>{
-  const base=(id:string,type:string,time:string)=>({'Record ID':id,'Record Type':type,Date:day,Time:localTime(time)});
+  const base=(id:string,type:string,time:string)=>({'Record ID':id,'Record Type':type,Date:day,Time:localTime(time),'Equipment Type':null as string|null});
   return [
     ...place.loadsOut.map((l):WorkbookRow=>({...base(l.id,'Company load',l.time),'Load No.':l.loadNumber,Material:l.itemName,Unit:l.unitSymbol,Quantity:round3(l.quantity),Details:null,Truck:l.truckPlate,Driver:l.driverName,'Delivered By':null,Ticket:null,'Bitumen Used kg':l.bitumenKg,...(prices?priceColumns(l):{})})),
-    ...place.supplierLoads.map((l):WorkbookRow=>({...base(l.id,'Supplier load',l.time),'Load No.':l.number,Material:l.itemName,Unit:l.unitSymbol,Quantity:round3(l.quantity),Details:l.supplierName,Truck:l.truckPlate,Driver:null,'Delivered By':l.deliveredBy==='supplier'?'Supplier delivering':l.deliveredBy==='company'?'Our driver':null,Ticket:l.ticket,'Bitumen Used kg':null,...(prices?priceColumns(l):{})})),
-    ...place.fills.map((f):WorkbookRow=>({...base(f.id,'Fuel given',f.time),'Load No.':null,Material:f.fuelType,Unit:'litres',Quantity:round3(f.litres),Details:f.givenTo,Truck:null,Driver:f.operatorName,'Delivered By':null,Ticket:null,'Bitumen Used kg':null,...(prices?priceColumns(f):{})})),
+    ...place.supplierLoads.map((l):WorkbookRow=>({...base(l.id,'Supplier load',l.time),'Load No.':l.number,Material:l.itemName,Unit:l.unitSymbol,Quantity:round3(l.quantity),Details:l.supplierName,Truck:l.truckPlate,Driver:l.deliveredBy==='supplier'?null:l.driverName??null,'Delivered By':l.deliveredBy==='supplier'?'Supplier delivering':l.deliveredBy==='company'?'Our driver':null,Ticket:l.ticket,'Bitumen Used kg':null,...(prices?priceColumns(l):{})})),
+    ...place.fills.map((f):WorkbookRow=>({...base(f.id,'Fuel given',f.time),'Equipment Type':equipmentTypeLabel(f.equipmentType),'Load No.':null,Material:f.fuelType,Unit:'litres',Quantity:round3(f.litres),Details:f.givenTo,Truck:null,Driver:f.operatorName,'Delivered By':null,Ticket:null,'Bitumen Used kg':null,...(prices?priceColumns(f):{})})),
     ...place.dumps.map((d):WorkbookRow=>({...base(d.id,'Waste dump',d.time),'Load No.':null,Material:d.material,Unit:'trip',Quantity:1,Details:d.area,Truck:d.truckPlate,Driver:d.driverName,'Delivered By':null,Ticket:null,'Bitumen Used kg':null,...(prices?{'Unit Price USD':null,'Price Basis':null,'Amount USD':null}:{})})),
   ];
 };
@@ -75,7 +75,8 @@ export function companyDailyReportSheets(report:CompanyDailyReport,options:{pric
     {Sheet:'Place sheets',Column:'Record Type',Meaning:'Company load, Supplier load, Fuel given or Waste dump. Cancelled records are not included.'},
     {Sheet:'Place sheets',Column:'Quantity / Unit',Meaning:'A real number and its unit (tons, m³, litres, or one trip per waste dump), so the column can be summed per unit.'},
     {Sheet:'Place sheets',Column:'Bitumen Used kg',Meaning:'Only for asphalt company loads, from the bitumen rule. Empty means not applicable, or it could not be worked out or is not fully covered by a batch; it is never zero.'},
-    {Sheet:'Place sheets',Column:'Delivered By',Meaning:'For supplier loads: Supplier delivering, or Our driver.'},
+    {Sheet:'Place sheets',Column:'Equipment Type',Meaning:'For fuel given: whether the fuel went to a Truck or a Machine; Details holds its name.'},
+    {Sheet:'Place sheets',Column:'Delivered By',Meaning:'For supplier loads: Supplier delivering, or Our driver (the driver\'s name is in the Driver column).'},
     {Sheet:'Place sheets',Column:'Unit Price USD / Price Basis / Amount USD',Meaning:'Only when Prices was on. As the record kept it, before VAT. Empty means Unpriced, never zero. An as-a-whole price has no unit price.'},
     {Sheet:'Summary',Column:'Value USD / Unpriced Records',Meaning:'Only when Prices was on. Company loads (sales), Supplier loads (purchases) and Fuel given (cost) are separate rows and are never added together; unpriced records are counted, not valued.'},
     {Sheet:'Attendance',Column:'Group / Name / Role / Place',Meaning:'Only when the Attendance sheet switch was on: who worked that day and where, one row per place. Presence and places only: no hours, no pay.'},

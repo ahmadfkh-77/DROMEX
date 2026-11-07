@@ -64,11 +64,11 @@ export async function loadCompanyDailyReport(day:string,sources:CompanyDailyRepo
   const supplierLoads:DaySupplierLoad[]=records.filter(isSupplier).map(r=>{
     const s=r.snapshot;const siteId=r.details?.siteId??null;
     return {id:s.recordId,status:r.status,time:s.recordedAt,number:s.reference,itemName:s.itemName,unitSymbol:s.unitSymbol,quantity:s.quantity,supplierName:s.partyName||null,
-      deliveredBy:r.details?.deliveredBy??null,projectId:siteId?null:s.projectId,projectName:siteId?null:s.projectName,siteId,siteName:siteId?s.projectName:null,
+      deliveredBy:r.details?.deliveredBy??null,driverName:r.details?.driverName??null,projectId:siteId?null:s.projectId,projectName:siteId?null:s.projectName,siteId,siteName:siteId?s.projectName:null,
       truckPlate:r.details?.truckPlate??null,ticket:s.supplierReference,...pricesOf(s)};
   });
   const fills:DayFill[]=fuel.movements.filter(m=>m.type==='fill'&&localDay(m.confirmedAt)===day).map(m=>({
-    id:m.id,status:m.status,time:m.confirmedAt,givenTo:m.equipmentName??'Unknown equipment',fuelType:m.fuelType,operatorName:null,litres:m.litres,
+    id:m.id,status:m.status,time:m.confirmedAt,givenTo:m.equipmentName??'Unknown equipment',equipmentType:m.equipmentType??null,fuelType:m.fuelType,operatorName:null,litres:m.litres,
     projectId:m.projectId,projectName:m.projectName,siteId:m.projectId?null:m.companySiteId??null,siteName:m.projectId?null:m.companySiteName??null,
     unitPriceCents:m.pricePerLitreUsd==null?null:Math.round(m.pricePerLitreUsd*100),amountCents:m.consumptionCostUsd==null?null:Math.round(m.consumptionCostUsd*100),priceBasis:m.consumptionCostUsd==null?null:'per_unit'}));
   const wasteDumps:DayWasteDump[]=dumps.map(d=>({

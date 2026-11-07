@@ -63,6 +63,7 @@ describe('loadCompanyDailyReport',()=>{
     expect(report.places).toHaveLength(1);
     expect(report.places[0]!.loadsOut[0]!.bitumenKg).toBe(1100);
     expect(report.places[0]!.supplierLoads[0]!.deliveredBy).toBe('supplier');
+    expect(report.places[0]!.supplierLoads[0]).toHaveProperty('driverName');
     expect(report.places[0]!.fills.map(f=>f.id)).toEqual(['f1']);
     expect(report.bitumenKg).toBe(1100);
   });

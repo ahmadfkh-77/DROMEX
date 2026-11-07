@@ -18,8 +18,11 @@ type Base=PlaceRef&{id:string;status:RecordStatus;/** Local date-time of the rec
 export type DayLoadOut=Base&PriceFields&{loadNumber:string|null;itemName:string;unitSymbol:string;quantity:number;truckPlate:string|null;driverName:string|null;
   /** Bitumen used, from the bitumen engine; null when unknown or not covered ("-"). */bitumenKg:number|null;
   /** True for a load the bitumen rule applies to (asphalt). Left out, it is true when a bitumen figure exists. */bitumenApplies?:boolean};
-export type DaySupplierLoad=Base&PriceFields&{number:string|null;itemName:string;unitSymbol:string;quantity:number;supplierName:string|null;deliveredBy:'company'|'supplier'|null;truckPlate:string|null;ticket:string|null};
-export type DayFill=Base&PriceFields&{givenTo:string;fuelType:string;operatorName:string|null;litres:number};
+export type DaySupplierLoad=Base&PriceFields&{number:string|null;itemName:string;unitSymbol:string;quantity:number;supplierName:string|null;deliveredBy:'company'|'supplier'|null;truckPlate:string|null;/** The name of our driver when the company delivered it; null when the supplier delivered or no name was recorded. */driverName?:string|null;ticket:string|null};
+/** Whether a fill went to a truck or a machine, as the fuel record says. */
+export type FillEquipmentType='truck'|'machine';
+export const equipmentTypeLabel=(type:FillEquipmentType|null|undefined)=>type==='truck'?'Truck':type==='machine'?'Machine':'-';
+export type DayFill=Base&PriceFields&{equipmentType?:FillEquipmentType|null;givenTo:string;fuelType:string;operatorName:string|null;litres:number};
 export type DayWasteDump=Base&{material:string|null;area:string|null;truckPlate:string|null;driverName:string|null};
 
 /** Something that came into company stock that day: a fuel delivery, a bitumen delivery or a stock receipt. Not tied to a project. */
@@ -174,6 +177,12 @@ export function sumAmounts(list:readonly {amountCents?:number|null}[]):{cents:nu
 /** Attaches the day's attendance sheet; nobody worked means no sheet at all. */
 export function withAttendance(report:CompanyDailyReport,sheet:AttendanceSheet):CompanyDailyReport{
   return {...report,attendance:sheet.count>0?sheet:undefined};
+}
+
+/** Who delivered a supplier load: "Supplier delivering", or the driver's own name. A company delivery with no recorded name shows a dash, never a vague "our driver". */
+export function supplierLoadDriver(load:Pick<DaySupplierLoad,'deliveredBy'|'driverName'>):string{
+  if(load.deliveredBy==='supplier')return 'Supplier delivering';
+  return load.driverName&&load.driverName.trim()?load.driverName.trim():'-';
 }
 
 /** The figures on the Home card: only what exists today. */

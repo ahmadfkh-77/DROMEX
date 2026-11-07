@@ -3,7 +3,7 @@ import {Pressable,StyleSheet,Text,View} from 'react-native';
 
 import type {AttendanceSheet} from '../../domain/attendance';
 import type {ArrivalGroup} from '../../domain/companyDailyReport';
-import {localTime,materialView,setContractSwitches,type CompanyDailyReport,type DayPlace,type DaySection} from '../../domain/companyDailyReport';
+import {equipmentTypeLabel,localTime,materialView,supplierLoadDriver,setContractSwitches,type CompanyDailyReport,type DayPlace,type DaySection} from '../../domain/companyDailyReport';
 import {formatTotalQuantity} from '../../domain/projectTotals';
 import {AppButton,AppCard,AppPage,EmptyState,Feedback,PageHeader} from '../components/AppPrimitives';
 import type {ProfileRepository} from '../../data/repositories/ProfileRepository';
@@ -108,11 +108,11 @@ function PlaceTables({place,open,toggle,keyOf,onOpenRecord,onContract}:{onContra
         rows={place.loadsOut.map(l=>({key:l.id,cells:[localTime(l.time),dash(l.loadNumber),l.itemName,formatTotalQuantity(l.quantity,l.unitSymbol),kg(l.bitumenKg),`${dash(l.truckPlate)} / ${dash(l.driverName)}`],
           onPress:()=>onOpenRecord({kind:'company_load',id:l.id,title:l.loadNumber??'Load',subtitle:l.itemName,date:l.time,projectId:l.projectId})}))}/>:null}
       {section==='supplierLoads'?<Table columns={[{title:'Time',flex:1},{title:'No.',flex:1.3},{title:'Item',flex:1.3},{title:'Supplier',flex:1.5},{title:'Qty',flex:1.2},{title:'By',flex:1.2},{title:'Ticket',flex:1.2}]}
-        rows={place.supplierLoads.map(l=>({key:l.id,cells:[localTime(l.time),dash(l.number),l.itemName,dash(l.supplierName),formatTotalQuantity(l.quantity,l.unitSymbol),l.deliveredBy==='supplier'?'Supplier':l.deliveredBy==='company'?'Our driver':'-',dash(l.ticket)],
+        rows={place.supplierLoads.map(l=>({key:l.id,cells:[localTime(l.time),dash(l.number),l.itemName,dash(l.supplierName),formatTotalQuantity(l.quantity,l.unitSymbol),supplierLoadDriver(l),dash(l.ticket)],
           onPress:()=>onOpenRecord({kind:'supplier_load',id:l.id,title:l.number??'Supplier Load',subtitle:`${dash(l.supplierName)} · ${l.itemName}`,date:l.time,projectId:l.projectId})}))}/>:null}
-      {section==='fills'?<Table columns={[{title:'Time',flex:1},{title:'Given to',flex:2},{title:'Type',flex:1.2},{title:'Litres',flex:1.2,align:'right'}]}
-        rows={place.fills.map(f=>({key:f.id,cells:[localTime(f.time),f.givenTo,f.fuelType,`${Math.round(f.litres*1000)/1000} L`]}))}
-        total={['','','Total',`${Math.round(place.fills.reduce((sum,f)=>sum+f.litres,0)*1000)/1000} L`]}/>:null}
+      {section==='fills'?<Table columns={[{title:'Time',flex:1},{title:'Equipment',flex:2},{title:'Truck or machine',flex:1.4},{title:'Fuel type',flex:1.1},{title:'Litres',flex:1.2,align:'right'}]}
+        rows={place.fills.map(f=>({key:f.id,cells:[localTime(f.time),f.givenTo,equipmentTypeLabel(f.equipmentType),f.fuelType,`${Math.round(f.litres*1000)/1000} L`]}))}
+        total={['','','','Total',`${Math.round(place.fills.reduce((sum,f)=>sum+f.litres,0)*1000)/1000} L`]}/>:null}
       {section==='dumps'?<Table columns={[{title:'Time',flex:1},{title:'Material',flex:1.4},{title:'Area',flex:1.4},{title:'Truck / driver',flex:1.8}]}
         rows={place.dumps.map(d=>({key:d.id,cells:[localTime(d.time),dash(d.material),dash(d.area),`${dash(d.truckPlate)} / ${dash(d.driverName)}`]}))}
         total={['','','Trips',`${place.dumps.length}`]}/>:null}
