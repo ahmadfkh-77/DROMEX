@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attendance editor - per-row + button and bottom sheet (mockup)</title>
+<style>
+:root{--navy:#173F67;--orange:#C84B31;--ink:#17212B;--muted:#5C6773;--cream:#F5F2EC;--line:#DDD7CC;--soft:#EAF0F6;--typed:#FFF1E8}
+*{box-sizing:border-box}body{margin:0;background:#E9E4DA;font:14px/1.4 Arial,sans-serif;color:var(--ink)}
+.top{max-width:900px;margin:0 auto;padding:20px 16px 0}.top h1{margin:0 0 4px;font-size:21px;color:var(--navy)}.top p{margin:0;color:var(--muted)}
+.stage{max-width:900px;margin:0 auto;padding:16px;display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.cap{font-weight:700;color:var(--navy);margin-bottom:6px}
+.phone{position:relative;width:375px;height:760px;background:var(--cream);border-radius:28px;border:6px solid #1C2530;overflow:hidden;display:flex;flex-direction:column}
+.scroll{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}.card b{color:var(--navy)}.hint{color:var(--muted);font-size:12px}
+.day{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-weight:700}
+.fold{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.fh{display:flex;align-items:center;min-height:52px;padding:6px 12px;cursor:pointer;font-weight:800;color:var(--navy);border:0;background:none;width:100%;text-align:left;font-size:15px}
+.fh small{display:block;color:var(--muted);font-weight:400;font-size:12px}.fh .t{margin-left:auto;font-size:24px}
+.fb{display:none;padding:0 8px 8px}.fold.open .fb{display:block}
+.row{border:1px solid var(--line);border-radius:12px;margin-top:8px;background:#fff}
+.row.on{background:#fff}
+.rt{display:flex;align-items:center;gap:6px;padding:4px 6px}
+.name{flex:1;display:flex;align-items:center;gap:10px;min-height:56px;background:none;border:0;text-align:left;font:inherit;cursor:pointer;padding:0 4px}
+.box{width:28px;height:28px;border:2px solid var(--navy);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;flex:none}
+.on .box{background:var(--navy);border-color:var(--navy)}
+.nm{font-weight:800}.nm small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.state{font-size:12px;font-weight:800;margin-left:auto;padding-right:4px;color:var(--muted);white-space:nowrap}.on .state{color:var(--navy)}
+.plus{width:48px;height:48px;border:0;background:none;color:var(--orange);font-size:26px;font-weight:400;cursor:pointer;flex:none;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}.plus:active{opacity:.5}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 10px 10px 48px}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 12px;border-radius:999px;border:1px solid #9FB0C2;background:#EAF0F6;color:var(--navy);font-weight:700;font-size:13px;cursor:pointer}
+.chip.typed{background:var(--typed);border-color:var(--orange);color:#8E2E1B}.chip b{color:var(--orange)}
+.save{padding:10px 12px;background:#fff;border-top:1px solid var(--line)}
+.btn{width:100%;min-height:52px;border-radius:12px;border:0;background:var(--orange);color:#fff;font-weight:800;font-size:15px;cursor:pointer}
+.btn.sec{background:#fff;color:var(--navy);border:1.5px solid var(--navy)}
+.ok{color:var(--navy);font-weight:700;font-size:12px;text-align:center;min-height:16px;margin-bottom:4px}
+/* bottom sheet */
+.shade{position:absolute;inset:0;background:rgba(20,30,40,.45);display:none}.shade.show{display:block}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:78%;background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.25);display:none;flex-direction:column}
+.sheet.show{display:flex}
+.sh{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}.sh b{flex:1;color:var(--navy);font-size:15px}
+.done{min-height:44px;padding:0 18px;border-radius:12px;border:0;background:var(--navy);color:#fff;font-weight:800;cursor:pointer}
+.sb{overflow:auto;padding:10px 14px 16px}
+.search{width:100%;min-height:48px;border:1.5px solid #9FB0C2;border-radius:10px;padding:0 12px;font-size:14px;margin-bottom:6px}
+.lbl{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px}
+.opt{display:flex;align-items:center;min-height:52px;padding:0 6px;border-bottom:1px solid var(--line);cursor:pointer;gap:8px}
+.opt .o{flex:1;font-weight:700}.opt .o small{display:block;color:var(--muted);font-weight:400;font-size:12px}
+.opt .mark{min-width:76px;text-align:right;font-weight:800;color:var(--navy)}
+.opt.sel{background:var(--soft)}
+.typed-row{display:flex;gap:8px;margin-top:6px}.typed-row input{flex:1;min-height:48px;border:1.5px solid #9FB0C2;border-radius:10px;padding:0 12px;font-size:14px}
+.typed-row button{min-height:48px;padding:0 18px;border-radius:10px;border:0;background:var(--orange);color:#fff;font-weight:800;cursor:pointer}
+.legend{max-width:340px;font-size:13px;color:var(--ink);display:flex;flex-direction:column;gap:6px}
+.legend li{margin-left:16px}
+</style></head><body>
+<div class="top"><h1>Attendance editor - per-row + and bottom sheet</h1>
+<p>Tap the name to mark worked or not. Tap the orange + beside any person, truck or machine to add a place without scrolling: a sheet slides up, you tick one or several places, then Done. Try it: everything on the phone works.</p></div>
+<div class="stage">
+<div><div class="cap">Attendance editor (interactive)</div>
+<div class="phone" id="phone">
+ <div class="scroll" id="scroll">
+  <div class="day"><span>&lsaquo; Friday 6 November 2026</span><span style="color:var(--orange)">Change day</span></div>
+  <div class="card"><b>Who worked where</b><div class="hint">Tap a name to mark worked. Tap + to add a place. Presence and places only: no hours, no pay.</div></div>
+  <div id="groups"></div>
+ </div>
+ <div class="save"><div class="ok" id="ok"></div><button class="btn" id="save">Save attendance</button></div>
+ <div class="shade" id="shade"></div>
+ <div class="sheet" id="sheet" role="dialog" aria-label="Add a place">
+  <div class="sh"><b id="sheetTitle">Add a place for</b><button class="done" id="done">Done</button></div>
+  <div class="sb">
+   <input class="search" id="q" placeholder="Search projects and sites..." aria-label="Search projects and company sites">
+   <div class="lbl">Projects</div><div id="projects"></div>
+   <div class="lbl">Company sites</div><div id="sites"></div>
+   <div class="lbl">Not in the list? Type a place</div>
+   <div class="typed-row"><input id="typed" maxlength="80" placeholder="Name of the place" aria-label="Name of the typed place"><button id="addTyped">Add</button></div>
+   <div class="hint" style="margin-top:6px">A typed place is kept for this day only. It does not create a project or site.</div>
+  </div>
+ </div>
+</div></div>
+<div><div class="cap">What changes</div><ul class="legend">
+<li><b>Clear marking:</b> worked = navy tick box and the word "Worked", on the same white row (no colour band, no side line). Not worked = empty box and "Not today". The tick and the word carry the meaning, not only colour.</li>
+<li><b>A small plain + on every row</b> (people, trucks, machines): just the + sign, no box and no circle. The touch area stays 48 x 48. No "+ Place" button inside the list and no panel at the bottom of the page.</li>
+<li><b>Bottom sheet</b> for that one entry: search, Projects (active only), Company sites, and "Type a place". Tap a place to add it (it shows "Added &#10003;"), tap again to remove it. The sheet stays open so several places go in a row. Done closes it.</li>
+<li><b>Adding a place marks the person as worked</b> automatically.</li>
+<li><b>Chips</b> under the row show the places; tap a chip to remove it. A typed place has an orange tint.</li>
+<li>Each section says "x of N worked".</li>
+<li><b>Save attendance</b> at the bottom saves all changes together.</li>
+</ul></div>
+</div>
+<script>
+var data={people:[['Samir Haddad','Driver'],['Omar Khalil','Driver'],['Hadi Nasser','Driver'],['Karim Daher','Operator']],trucks:[['M333299','Tipper'],['M355965','Tipper'],['M319355','Tipper']],machines:[['Paver P-1','Paver'],['Excavator E-3','Excavator']]};
+var projects=['Ain Qana - Jbaa','Haret Saida road','Toul building'],sites=['Majbal','Main Plant'];
+var titles={people:'People',trucks:'Trucks',machines:'Machines'};
+var state={};var openG={people:true,trucks:false,machines:false};var cur=null;
+for(var g in data)data[g].forEach(function(r){state[g+'|'+r[0]]={worked:false,places:[]}});
+state['people|Samir Haddad']={worked:true,places:[{n:'Haret Saida road',t:0},{n:'Majbal',t:0}]};
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function render(){var h='';for(var g in data){var list=data[g],worked=list.filter(function(r){return state[g+'|'+r[0]].worked}).length;
+ h+='<div class="fold'+(openG[g]?' open':'')+'"><button class="fh" onclick="tg(\''+g+'\')" aria-expanded="'+openG[g]+'"><span>'+titles[g]+'<small>'+worked+' of '+list.length+' worked</small></span><span class="t">'+(openG[g]?'&times;':'+')+'</span></button><div class="fb">';
+ list.forEach(function(r){var k=g+'|'+r[0],s=state[k];
+  h+='<div class="row'+(s.worked?' on':'')+'"><div class="rt"><button class="name" aria-pressed="'+s.worked+'" onclick="mark(\''+k+'\')"><span class="box">'+(s.worked?'&#10003;':'')+'</span><span class="nm">'+esc(r[0])+'<small>'+esc(r[1])+'</small></span><span class="state">'+(s.worked?'Worked':'Not today')+'</span></button><button class="plus" aria-label="Add a place for '+esc(r[0])+'" onclick="openSheet(\''+k+'\')">+</button></div>';
+  if(s.places.length){h+='<div class="chips">'+s.places.map(function(p,i){return '<button class="chip'+(p.t?' typed':'')+'" onclick="rm(\''+k+'\','+i+')" aria-label="Remove '+esc(p.n)+'">'+esc(p.n)+' <b>&times;</b></button>'}).join('')+'</div>'}
+  h+='</div>'});
+ h+='</div></div><div style="height:8px"></div>'}
+ document.getElementById('groups').innerHTML=h}
+function tg(g){openG[g]=!openG[g];render()}
+function mark(k){var s=state[k];s.worked=!s.worked;if(!s.worked)s.places=[];render()}
+function rm(k,i){state[k].places.splice(i,1);if(!state[k].places.length)state[k].worked=false;render();if(cur===k)sheet()}
+function has(k,n){return state[k].places.some(function(p){return p.n===n})}
+function toggle(n,t){var s=state[cur];var i=s.places.findIndex(function(p){return p.n===n});if(i>=0)s.places.splice(i,1);else{s.places.push({n:n,t:t});s.worked=true}if(!s.places.length)s.worked=false;render();sheet()}
+function opts(list,t){var q=document.getElementById('q').value.toLowerCase();return list.filter(function(n){return n.toLowerCase().indexOf(q)>=0}).map(function(n){var sel=has(cur,n);return '<div class="opt'+(sel?' sel':'')+'" role="button" onclick="toggle(\''+n.replace(/'/g,"\\'")+'\','+t+')"><span class="o">'+esc(n)+'<small>'+(t?'':(list===projects?'Active project':'Company site'))+'</small></span><span class="mark">'+(sel?'Added &#10003;':'')+'</span></div>'}).join('')||'<div class="hint">Nothing matches.</div>'}
+function sheet(){document.getElementById('projects').innerHTML=opts(projects,0);document.getElementById('sites').innerHTML=opts(sites,0)}
+function openSheet(k){cur=k;document.getElementById('sheetTitle').textContent='Add a place for '+k.split('|')[1];document.getElementById('q').value='';document.getElementById('typed').value='';sheet();document.getElementById('shade').classList.add('show');document.getElementById('sheet').classList.add('show')}
+function close(){document.getElementById('shade').classList.remove('show');document.getElementById('sheet').classList.remove('show');cur=null}
+document.getElementById('done').onclick=close;document.getElementById('shade').onclick=close;document.getElementById('q').oninput=sheet;
+document.getElementById('addTyped').onclick=function(){var v=document.getElementById('typed').value.trim();if(!v)return;var s=state[cur];if(!s.places.some(function(p){return p.n.toLowerCase()===v.toLowerCase()})){s.places.push({n:v,t:1});s.worked=true}document.getElementById('typed').value='';render();sheet()};
+document.getElementById('save').onclick=function(){var n=0;for(var k in state)if(state[k].worked)n++;document.getElementById('ok').textContent='Saved: '+n+' worked today';};
+render();
+</script></body></html>
