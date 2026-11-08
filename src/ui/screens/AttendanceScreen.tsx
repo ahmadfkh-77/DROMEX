@@ -7,6 +7,7 @@ import {addTypedPlace,countWorked,diffEditor,editorFromEntries,editorKey,missing
 import {AppButton,AppPage,EmptyState,Feedback,PageHeader} from '../components/AppPrimitives';
 import {DatePickerField} from '../components/DatePickerField';
 import {colors} from '../theme';
+import {todayKey} from '../../domain/companyDailyReport';
 import {Fold} from './CompanyDailyReportScreen';
 
 const subjectOf=(choice:AttendanceChoice):AttendanceSubject=>({type:choice.subjectType,id:choice.id});
@@ -83,7 +84,7 @@ export function AttendanceScreen({repository,day,onDayChange,onBack}:{repository
   return <>
     <AppPage keyboard>
       <PageHeader eyebrow="COMPANY DAILY REPORT" title="Attendance" onBack={()=>guard(onBack)}/>
-      <DatePickerField label="Day" value={day} onChange={value=>guard(()=>onDayChange(value))}/>
+      <DatePickerField label="Day" value={day} onChange={value=>guard(()=>onDayChange(value))} maxDate={todayKey()}/>
       <View style={styles.note}><Text style={styles.noteTitle}>Who worked where</Text><Text style={styles.hint}>Tap a name to mark worked. Tap + to add a place. Presence and places only: no hours, no pay.</Text></View>
       {status==='loading'&&!setup?<Feedback kind="warning">Reading the lists…</Feedback>:null}
       {status==='error'?<><Feedback kind="error">The attendance could not be read.</Feedback><AppButton label="Try again" tone="secondary" onPress={()=>void load()}/></>:null}

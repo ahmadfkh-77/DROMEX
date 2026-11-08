@@ -3,7 +3,7 @@ import {Pressable,StyleSheet,Text,View} from 'react-native';
 
 import type {AttendanceSheet} from '../../domain/attendance';
 import type {ArrivalGroup} from '../../domain/companyDailyReport';
-import {equipmentTypeLabel,localTime,materialView,supplierLoadDriver,setContractSwitches,type CompanyDailyReport,type DayPlace,type DaySection} from '../../domain/companyDailyReport';
+import {todayKey,equipmentTypeLabel,localTime,materialView,supplierLoadDriver,setContractSwitches,type CompanyDailyReport,type DayPlace,type DaySection} from '../../domain/companyDailyReport';
 import {formatTotalQuantity} from '../../domain/projectTotals';
 import {AppButton,AppCard,AppPage,EmptyState,Feedback,PageHeader} from '../components/AppPrimitives';
 import type {ProfileRepository} from '../../data/repositories/ProfileRepository';
@@ -18,7 +18,7 @@ import {colors} from '../theme';
 export type DayRecordRef={kind:'company_load'|'supplier_load';id:string;title:string;subtitle:string;date:string;projectId:string|null};
 
 const two=(value:number)=>String(value).padStart(2,'0');
-export const todayKey=(now:Date=new Date())=>`${now.getFullYear()}-${two(now.getMonth()+1)}-${two(now.getDate())}`;
+export {todayKey};
 const dash=(value:string|null|undefined)=>value&&value.trim()?value:'-';
 const kg=(value:number|null)=>value===null?'-':`${Math.round(value*1000)/1000} kg`;
 const sectionTitle:Record<DaySection,string>={loadsOut:'Company loads out',supplierLoads:'Supplier loads in',fills:'Fuel given',dumps:'Waste dumps'};
@@ -154,7 +154,7 @@ export function CompanyDailyReportScreen({onOpenIssue,onOpenReport,onEditAttenda
 
   return <AppPage>
     <PageHeader eyebrow="REPORTS" title={view?`${view.itemName} (${view.unitSymbol})`:'Company Daily Report'} onBack={view?()=>setMaterial(null):onBack}/>
-    <DatePickerField label="Day" value={day} onChange={onDayChange}/>
+    <DatePickerField label="Day" value={day} onChange={onDayChange} maxDate={todayKey()}/>
     {state.status==='loading'?<Feedback kind="warning">Reading the records of this day…</Feedback>:null}
     {state.status==='error'?<><Feedback kind="error">The records of this day could not be read.</Feedback><AppButton label="Try again" onPress={()=>setAttempt(v=>v+1)} tone="secondary"/></>:null}
     {report&&empty?<EmptyState title="Nothing recorded on this day" body="Loads, supplier loads, fuel and waste dumps recorded for this day appear here. Cancelled records are not shown."/>:null}

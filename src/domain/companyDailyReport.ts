@@ -185,5 +185,8 @@ export function supplierLoadDriver(load:Pick<DaySupplierLoad,'deliveredBy'|'driv
   return load.driverName&&load.driverName.trim()?load.driverName.trim():'-';
 }
 
+/** Today as a local calendar day (YYYY-MM-DD). The report's day can never be later than this. */
+export const todayKey=(now:Date=new Date())=>`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
 /** The figures on the Home card: only what exists today. */
 export function homeFigures(report:CompanyDailyReport):DayTile[]{return report.tiles.filter(t=>t.key!=='waste');}

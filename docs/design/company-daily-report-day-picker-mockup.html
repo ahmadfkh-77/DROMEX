@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company Daily Report - day picker stops at today (mockup)</title>
+<style>
+:root{--navy:#173F67;--orange:#C84B31;--ink:#17212B;--muted:#5C6773;--cream:#F5F2EC;--line:#DDD7CC}
+*{box-sizing:border-box}body{margin:0;background:#E9E4DA;font:14px/1.4 Arial,sans-serif;color:var(--ink)}
+.top{max-width:860px;margin:0 auto;padding:20px 16px 0}.top h1{margin:0 0 4px;font-size:21px;color:var(--navy)}.top p{margin:0;color:var(--muted)}
+.stage{max-width:860px;margin:0 auto;padding:16px;display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.cap{font-weight:700;color:var(--navy);margin-bottom:6px}
+.phone{width:375px;background:var(--cream);border-radius:28px;border:6px solid #1C2530;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:560px}
+.lbl{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.field{min-height:52px;background:#fff;border:1.5px solid #9FB0C2;border-radius:12px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;font-weight:700;cursor:pointer}
+.cal{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px}
+.mh{display:flex;align-items:center;justify-content:space-between;font-weight:800;color:var(--navy);padding:4px 4px 8px}
+.nav{width:44px;height:44px;border:0;background:none;font-size:22px;color:var(--navy);cursor:pointer}.nav:disabled{opacity:.3;cursor:default}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.dow{font-size:11px;font-weight:800;color:var(--muted);padding:4px 0}
+.d{height:44px;border:0;border-radius:10px;background:#fff;font:inherit;font-weight:700;color:var(--ink);cursor:pointer}
+.d.today{border:2px solid var(--orange)}.d.sel{background:var(--navy);color:#fff}
+.d.off{color:#C7C2B8;font-weight:400;cursor:default;background:#fff}
+.note{font-size:12px;color:var(--muted);padding:4px 2px}
+.msg{min-height:18px;font-size:12px;color:var(--orange);font-weight:700}
+.legend li{margin-left:16px}.legend{max-width:330px;font-size:13px;display:flex;flex-direction:column;gap:6px}
+</style></head><body>
+<div class="top"><h1>Day picker - stops at today</h1><p>Today is Sunday 8 November 2026 in this sample. Days after today are only greyed out and cannot be tapped. Try tapping the 9th.</p></div>
+<div class="stage">
+<div><div class="cap">Company Daily Report and Attendance (interactive)</div>
+<div class="phone">
+ <div><div class="lbl">Day</div><div class="field" id="field"><span id="val">Sunday 8 November 2026</span><span style="color:var(--orange)">Change</span></div></div>
+ <div class="cal" id="cal"></div>
+ <div class="msg" id="msg"></div>
+ <div class="note">Later months can still be opened to look, but every day in them is greyed.</div>
+</div></div>
+<div><div class="cap">What changes</div><ul class="legend">
+<li>The same picker is used in the Company Daily Report and in the Attendance editor.</li>
+<li>Today is outlined in orange. The selected day is navy.</li>
+<li>Days after today are just greyed out (no line through them) and do nothing when tapped.</li>
+<li>Any earlier day can still be chosen, so you can look at or fill in a past day.</li>
+<li>The month arrows work as they do today; in a later month every day is greyed.</li>
+</ul></div>
+</div>
+<script>
+var T=new Date(2026,10,8),view=new Date(2026,10,1),sel=new Date(2026,10,8);
+var M=['January','February','March','April','May','June','July','August','September','October','November','December'],W=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function key(d){return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate()}
+function render(){var y=view.getFullYear(),m=view.getMonth(),first=new Date(y,m,1).getDay(),n=new Date(y,m+1,0).getDate();
+ var nextOff=false;
+ var h='<div class="mh"><button class="nav" onclick="mv(-1)" aria-label="Previous month">&lsaquo;</button><span>'+M[m]+' '+y+'</span><button class="nav" onclick="mv(1)" aria-label="Next month"'+(nextOff?' disabled':'')+'>&rsaquo;</button></div><div class="grid">';
+ ['S','M','T','W','T','F','S'].forEach(function(x){h+='<div class="dow">'+x+'</div>'});
+ for(var i=0;i<first;i++)h+='<div></div>';
+ for(var d=1;d<=n;d++){var dt=new Date(y,m,d),off=key(dt)>key(T),cls='d'+(off?' off':'')+(key(dt)===key(T)?' today':'')+(key(dt)===key(sel)?' sel':'');
+  h+='<button class="'+cls+'" '+(off?'aria-disabled="true" aria-label="'+d+' '+M[m]+', not available, after today"':'')+' onclick="pick('+y+','+m+','+d+')">'+d+'</button>'}
+ document.getElementById('cal').innerHTML=h+'</div>'}
+function mv(k){view=new Date(view.getFullYear(),view.getMonth()+k,1);render()}
+function pick(y,m,d){var dt=new Date(y,m,d);if(key(dt)>key(T)){document.getElementById('msg').textContent='That day is after today, so it cannot be chosen.';return}
+ document.getElementById('msg').textContent='';sel=dt;document.getElementById('val').textContent=W[dt.getDay()]+' '+d+' '+M[m]+' '+y;render()}
+render();
+</script></body></html>
