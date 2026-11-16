@@ -11,8 +11,21 @@ import {localDateKey} from './fuel';
 
 export type ContractItemStatus='in_progress'|'complete';
 
+/**
+ * How a target's used quantity is tracked, chosen per target and stored on it:
+ * - automatic: calculated from the loads linked to it (the original behaviour);
+ * - linked_manual: materials stay linked for reference, but used is the sum of the site entries (the unit tracked on site differs from the delivered one);
+ * - manual: no material at all, used is the sum of the site entries.
+ */
+export type ContractTrackingMode='automatic'|'linked_manual'|'manual';
+export const CONTRACT_TRACKING_MODES:readonly ContractTrackingMode[]=['automatic','linked_manual','manual'];
+/** A target saved before tracking modes existed (or built without one) is automatic. */
+export const contractTrackingMode=(item:{trackingMode?:ContractTrackingMode}):ContractTrackingMode=>item.trackingMode??'automatic';
+
 export type ContractItem={
   id:string;projectId:string;name:string;
+  /** Absent means automatic. The repository always sets it. */
+  trackingMode?:ContractTrackingMode;
   unitId:string;unitSymbol:string;
   /** The allowed target quantity, above zero. */
   quantity:number;
@@ -42,12 +55,28 @@ export type ContractLoad={
 /** A hand adjustment of the used quantity: its own line, plus or minus, with a reason. It never changes a load. */
 export type ContractAdjustment={id:string;contractItemId:string;amount:number;reason:string;createdAt:string};
 
+/**
+ * One site entry: a dated amount in the target's own unit, logged by hand for a linked manual or manual target. It is its own record, never
+ * edited or deleted; a mistake is fixed by a later negative entry with a reason. An `opening` entry is the calculated value carried over when
+ * a target is switched from automatic, so it stays the starting point instead of resetting to zero.
+ */
+export type ContractSiteEntry={id:string;contractItemId:string;kind:'entry'|'opening';entryDate:string;amount:number;note:string|null;createdAt:string};
+
+/** What the linked loads delivered, per material and unit, in the material's own unit. A reference for a linked manual target; never part of used. */
+export type ContractDeliveredRow={materialId:string;unitId:string;unitSymbol:string;quantity:number;loadCount:number};
+
 export type ContractNotCountedReason='unit_differs'|'no_quantity';
 export type ContractWarning='none'|'near'|'full'|'over';
 
 export type ContractUsage={
+  tracking:ContractTrackingMode;
   allowed:number;
   fromLoads:number;
+  /** The site entries of a linked manual or manual target, oldest first, and their total. Empty and zero for an automatic target. */
+  siteEntries:ContractSiteEntry[];
+  siteEntriesTotal:number;
+  /** Linked manual only: what the linked loads delivered in each material's own unit. Shown beside used, never added to it. */
+  deliveredFromLoads:ContractDeliveredRow[];
   adjustments:ContractAdjustment[];
   adjustmentsTotal:number;
   used:number;
@@ -87,17 +116,41 @@ export function notCountedReason(item:Pick<ContractItem,'unitId'>,load:ContractL
   return null;
 }
 
-export function computeContractUsage(item:ContractItem,loads:readonly ContractLoad[],adjustments:readonly ContractAdjustment[]):ContractUsage{
-  const countedLoads:ContractLoad[]=[],notCounted:ContractUsage['notCounted']=[];
+/** The active loads linked to a target, grouped by material and unit, in the material's own unit. Loads without a quantity are left out. */
+export function deliveredFromLoads(item:Pick<ContractItem,'id'>,loads:readonly ContractLoad[]):ContractDeliveredRow[]{
+  const rows=new Map<string,ContractDeliveredRow>();
   for(const load of loads){
     if(load.contractItemId!==item.id||load.status!=='Active')continue;
-    const reason=notCountedReason(item,load);
-    if(reason)notCounted.push({load,reason});else countedLoads.push(load);
+    if(load.quantity===null||!Number.isFinite(load.quantity)||load.quantity<=0)continue;
+    const key=`${load.materialId}\u0000${load.unitId}`;
+    const row=rows.get(key)??{materialId:load.materialId,unitId:load.unitId,unitSymbol:load.unitSymbol,quantity:0,loadCount:0};
+    row.quantity=round6(row.quantity+load.quantity);row.loadCount+=1;
+    rows.set(key,row);
+  }
+  return [...rows.values()];
+}
+
+/**
+ * Used depends on how the target is tracked. Automatic: the linked loads that count, plus adjustments (unchanged). Linked manual and manual:
+ * the site entries, plus adjustments; their linked loads are never counted and are not listed as "not counted", because counting them is not
+ * what that mode does. Everything after used (percent, warning, value, leftover) is the same for every mode.
+ */
+export function computeContractUsage(item:ContractItem,loads:readonly ContractLoad[],adjustments:readonly ContractAdjustment[],siteEntries:readonly ContractSiteEntry[]=[]):ContractUsage{
+  const tracking=contractTrackingMode(item);
+  const countedLoads:ContractLoad[]=[],notCounted:ContractUsage['notCounted']=[];
+  if(tracking==='automatic'){
+    for(const load of loads){
+      if(load.contractItemId!==item.id||load.status!=='Active')continue;
+      const reason=notCountedReason(item,load);
+      if(reason)notCounted.push({load,reason});else countedLoads.push(load);
+    }
   }
   const own=adjustments.filter(value=>value.contractItemId===item.id);
+  const entries=tracking==='automatic'?[]:siteEntries.filter(value=>value.contractItemId===item.id);
   const fromLoads=round6(countedLoads.reduce((sum,load)=>sum+load.quantity!,0));
+  const siteEntriesTotal=round6(entries.reduce((sum,value)=>sum+value.amount,0));
   const adjustmentsTotal=round6(own.reduce((sum,value)=>sum+value.amount,0));
-  const used=round6(fromLoads+adjustmentsTotal);
+  const used=round6(fromLoads+siteEntriesTotal+adjustmentsTotal);
   const ratio=used/item.quantity;
   const overContract=used>item.quantity+EPSILON;
   const warning:ContractWarning=overContract?'over':Math.abs(used-item.quantity)<=EPSILON?'full':ratio>=CONTRACT_NEAR_RATIO-EPSILON?'near':'none';
@@ -106,6 +159,7 @@ export function computeContractUsage(item:ContractItem,loads:readonly ContractLo
   const price=item.unitPriceUsd;
   const complete=item.status==='complete';
   return{
+    tracking,siteEntries:[...entries],siteEntriesTotal,deliveredFromLoads:tracking==='linked_manual'?deliveredFromLoads(item,loads):[],
     allowed:item.quantity,fromLoads,adjustments:[...own],adjustmentsTotal,used,remaining,percentUsed:round1(ratio),
     overContract,overBy:overContract?round6(used-item.quantity):0,warning,
     valueUsedUsd:price===null?null:roundMoney(used*price),valueRemainingUsd:price===null?null:roundMoney(remaining*price),
@@ -125,8 +179,9 @@ export function validateContractReason(reason:string,what:string):string{
 
 const typedNumber=(value:string):number|null=>{const text=value.trim().replace(',','.');if(!/^[+-]?(\d+\.?\d*|\.\d+)$/.test(text))return null;const parsed=Number(text);return Number.isFinite(parsed)?parsed:null;};
 
-export type ContractItemDraft={name:string;unitId:string;quantity:string;unitPriceUsd:string;materialIds:string[]};
-export type ContractItemValues={name:string;unitId:string;quantity:number;unitPriceUsd:number|null;materialIds:string[]};
+/** `trackingMode` is optional so every existing caller keeps meaning automatic. */
+export type ContractItemDraft={name:string;unitId:string;quantity:string;unitPriceUsd:string;materialIds:string[];trackingMode?:ContractTrackingMode};
+export type ContractItemValues={name:string;unitId:string;quantity:number;unitPriceUsd:number|null;materialIds:string[];trackingMode:ContractTrackingMode};
 
 export function validateContractItemDraft(draft:ContractItemDraft):{ok:true;value:ContractItemValues}|{ok:false;errors:string[]}{
   const errors:string[]=[];
@@ -138,8 +193,32 @@ export function validateContractItemDraft(draft:ContractItemDraft):{ok:true;valu
   let unitPriceUsd:number|null=null;
   if(draft.unitPriceUsd.trim()){const price=typedNumber(draft.unitPriceUsd);if(price===null||price<0)errors.push('Enter the target price as a number, zero or more.');else unitPriceUsd=price;}
   const materialIds=[...new Set(draft.materialIds)];
-  if(!materialIds.length)errors.push('Link at least one material.');
-  return errors.length?{ok:false,errors}:{ok:true,value:{name,unitId:draft.unitId,quantity:quantity!,unitPriceUsd,materialIds}};
+  const trackingMode=contractTrackingMode(draft);
+  if(!CONTRACT_TRACKING_MODES.includes(trackingMode))errors.push('Choose how used is tracked.');
+  // Automatic needs a material to count from; linked manual may have none; manual has none by definition.
+  if(trackingMode==='automatic'&&!materialIds.length)errors.push('Link at least one material.');
+  if(trackingMode==='manual'&&materialIds.length)errors.push('A Manual target has no material. Choose Linked manual to keep one for reference.');
+  return errors.length?{ok:false,errors}:{ok:true,value:{name,unitId:draft.unitId,quantity:quantity!,unitPriceUsd,materialIds,trackingMode}};
+}
+
+/**
+ * A site entry: a dated amount in the target's own unit with an optional note. A negative amount is a correction and needs a reason (the note),
+ * like an adjustment; it can never take the used quantity below zero. The day is today or a past day and not before the project began.
+ * Nothing here blocks on the target quantity: going over is allowed and shown.
+ */
+export function validateSiteEntry(input:{date:string;amount:string;note:string},context:{today:string;earliest:string|null;used:number}):{date:string;amount:number;note:string|null}{
+  const date=input.date.trim();
+  if(!validDay(date))throw new Error('Choose a valid day.');
+  if(date>context.today)throw new Error('Choose today or a past day.');
+  if(context.earliest&&date<context.earliest)throw new Error(`The day is before the project began (${context.earliest}).`);
+  const amount=typedNumber(input.amount);
+  if(amount===null||amount===0)throw new Error('Enter an amount other than zero (plus or minus).');
+  const note=input.note.trim().replace(/\s+/g,' ')||null;
+  if(amount<0){
+    validateContractReason(note??'','correcting');
+    if(round6(context.used+amount)<0)throw new Error('A site entry cannot take the used quantity below zero.');
+  }
+  return{date,amount:round6(amount),note};
 }
 
 /** A plus or minus amount with a reason. The used quantity can never be taken below zero: that would state a false number. */
@@ -202,7 +281,7 @@ export function applyContractItemEdit(item:ContractItem,changes:ContractItemChan
   for(const key of EDITABLE){if(changes[key]!==undefined&&!sameValue(changes[key],item[key]))diff[key]={from:item[key],to:changes[key]};}
   if(!Object.keys(diff).length)throw new Error('There is nothing to change.');
   const next={...item,...Object.fromEntries(Object.entries(diff).map(([key,value])=>[key,value.to]))} as ContractItem;
-  const check=validateContractItemDraft({name:next.name,unitId:next.unitId,quantity:String(next.quantity),unitPriceUsd:next.unitPriceUsd===null?'':String(next.unitPriceUsd),materialIds:next.materialIds});
+  const check=validateContractItemDraft({name:next.name,unitId:next.unitId,quantity:String(next.quantity),unitPriceUsd:next.unitPriceUsd===null?'':String(next.unitPriceUsd),materialIds:next.materialIds,trackingMode:contractTrackingMode(next)});
   if(!check.ok)throw new Error(check.errors[0]);
   const reason=context.hasHistory?validateContractReason(context.reason,'changing'):context.reason.trim().replace(/\s+/g,' ')||null;
   return{item:{...next,name:check.value.name},entry:{kind:'edited',contractItemId:item.id,reason,createdAt:now.toISOString(),details:{changes:diff}}};
@@ -291,7 +370,7 @@ export function summarizeContractProject(rows:readonly ContractRow[]):ContractPr
 }
 
 /** Everything the Daily Report needs to know about one target: the item with the loads and adjustments that point at it. */
-export type ContractDayEntry={item:ContractItem;loads:readonly ContractLoad[];adjustments:readonly ContractAdjustment[]};
+export type ContractDayEntry={item:ContractItem;loads:readonly ContractLoad[];adjustments:readonly ContractAdjustment[];/** The live site entries of a linked manual or manual target. Absent means none. */siteEntries?:readonly ContractSiteEntry[]};
 /** One target on a Daily Report: `usage` is as of the work date, `usedToday` is what that day added (counted loads plus adjustments dated that day). */
 export type ContractDayProgress={item:ContractItem;usage:ContractUsage;usedToday:number;notCountedToday:number};
 export type ContractDayReport={
@@ -305,13 +384,19 @@ export type ContractDayReport={
  * One target as of the end of `asOf` (YYYY-MM-DD), or as it is now when `asOf` is null: later loads and adjustments are ignored and a target
  * finished after that day was still in progress then. The one place the as-of rule lives, for the Daily Report and the Totals PDF.
  */
-export function contractUsageAsOf(entry:ContractDayEntry,asOf:string|null):{item:ContractItem;adjustments:ContractAdjustment[];usage:ContractUsage}{
-  if(asOf===null)return{item:entry.item,adjustments:[...entry.adjustments],usage:computeContractUsage(entry.item,entry.loads,entry.adjustments)};
+export function contractUsageAsOf(entry:ContractDayEntry,asOf:string|null):{item:ContractItem;adjustments:ContractAdjustment[];siteEntries:ContractSiteEntry[];usage:ContractUsage}{
+  const entries=entry.siteEntries??[];
+  // A site entry counts on its own day (the day the work was done), not the day it was typed.
+  if(asOf===null)return{item:entry.item,adjustments:[...entry.adjustments],siteEntries:[...entries],usage:computeContractUsage(entry.item,entry.loads,entry.adjustments,entries)};
   const item:ContractItem=entry.item.status==='complete'&&entry.item.completedOn&&entry.item.completedOn>asOf
     ?{...entry.item,status:'in_progress',completedOn:null}:entry.item;
   const adjustments=entry.adjustments.filter(value=>localDateKey(new Date(value.createdAt))<=asOf);
-  return{item,adjustments,usage:computeContractUsage(item,entry.loads.filter(load=>load.date<=asOf),adjustments)};
+  const siteEntries=entries.filter(value=>value.entryDate<=asOf);
+  return{item,adjustments,siteEntries,usage:computeContractUsage(item,entry.loads.filter(load=>load.date<=asOf),adjustments,siteEntries)};
 }
+
+/** What a day added through site entries: the entries dated that day. An opening entry is a carried value, never "used today". */
+const siteEntriesOn=(entries:readonly ContractSiteEntry[],day:string)=>entries.filter(value=>value.kind==='entry'&&value.entryDate===day);
 
 /** A target as the Project Totals PDF prints it (DEC-539): its own figures, as of the To date or today. */
 export type ContractTotalsTarget={
@@ -336,13 +421,14 @@ export function dailyContractProgress(entries:readonly ContractDayEntry[],workDa
   const rows:ContractRow[]=[],targets:ContractDayProgress[]=[];
   for(const entry of entries){
     if(entry.item.cancelledAt)continue;
-    const {item,adjustments,usage}=contractUsageAsOf(entry,workDate);
+    const {item,adjustments,siteEntries,usage}=contractUsageAsOf(entry,workDate);
     rows.push({item,usage});
     const adjustedToday=adjustments.filter(value=>value.contractItemId===item.id&&localDateKey(new Date(value.createdAt))===workDate);
     const countedToday=usage.countedLoads.filter(load=>load.date===workDate);
     const notCountedToday=usage.notCounted.filter(value=>value.load.date===workDate).length;
-    if(!countedToday.length&&!adjustedToday.length&&!notCountedToday)continue;
-    const usedToday=round6(countedToday.reduce((sum,load)=>sum+load.quantity!,0)+adjustedToday.reduce((sum,value)=>sum+value.amount,0));
+    const enteredToday=siteEntriesOn(siteEntries.filter(value=>value.contractItemId===item.id),workDate);
+    if(!countedToday.length&&!adjustedToday.length&&!notCountedToday&&!enteredToday.length)continue;
+    const usedToday=round6(countedToday.reduce((sum,load)=>sum+load.quantity!,0)+adjustedToday.reduce((sum,value)=>sum+value.amount,0)+enteredToday.reduce((sum,value)=>sum+value.amount,0));
     targets.push({item,usage,usedToday,notCountedToday});
   }
   return{targets,summary:summarizeContractProject(rows)};
@@ -360,9 +446,10 @@ export function dailyContractTargetTable(entries:readonly ContractDayEntry[],wor
   const rows:ContractTargetRow[]=[];
   for(const entry of entries){
     if(entry.item.cancelledAt)continue;
-    const {item,adjustments,usage}=contractUsageAsOf(entry,workDate);
+    const {item,adjustments,siteEntries,usage}=contractUsageAsOf(entry,workDate);
     const adjustedToday=adjustments.filter(value=>value.contractItemId===item.id&&localDateKey(new Date(value.createdAt))===workDate);
-    const usedToday=round6(usage.countedLoads.filter(load=>load.date===workDate).reduce((sum,load)=>sum+load.quantity!,0)+adjustedToday.reduce((sum,value)=>sum+value.amount,0));
+    const enteredToday=siteEntriesOn(siteEntries.filter(value=>value.contractItemId===item.id),workDate);
+    const usedToday=round6(usage.countedLoads.filter(load=>load.date===workDate).reduce((sum,load)=>sum+load.quantity!,0)+adjustedToday.reduce((sum,value)=>sum+value.amount,0)+enteredToday.reduce((sum,value)=>sum+value.amount,0));
     rows.push({itemId:item.id,name:item.name,unitSymbol:item.unitSymbol,quantity:item.quantity,usedBefore:round6(usage.used-usedToday),usedToday,used:usage.used,percentUsed:usage.percentUsed,left:usage.leftover,overBy:usage.overBy,warning:usage.warning});
   }
   return rows;

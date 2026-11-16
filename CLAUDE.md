@@ -19,6 +19,11 @@ application and the rules for future work. Read it together with every file in
 8. Do not create duplicate requirements or design documents. Extend existing ones.
 9. Run typecheck and the relevant tests after every implementation phase.
 10. Do not build or release an APK without explicit approval.
+11. Mockups come before acceptance. For any phase that adds or changes a screen,
+    PDF, receipt, or other visible output, build a mockup (HTML in `output/`, or a
+    design file in `docs/design/`) and show it to the Owner first. Do not mark the
+    phase accepted, merge it, or build an APK until the Owner has seen and approved
+    the mockup. This applies to every project and phase, Android and web.
 
 ## Product identity and current release
 
@@ -27,22 +32,30 @@ application. It records outgoing company loads, incoming supplier loads, project
 daily reports, equipment, fuel, waste, walls, pavement calculations, finances,
 documents, and backups.
 
-Current source release metadata is version `0.20.0`, Android version code `28`,
-package/bundle identifier `com.dromex.management`, and Expo SDK 54. The accepted
-internal Android artifact is `output/DROMEX-0.20.0-build28.apk` when present,
-installed in place and accepted by the Owner on 2026-10-04. Build 28 carries the
-0.20.0 work: Company Totals, Invoices & Bills, authorized signers and Company
-Load Number Series (migration 48, DEC-500), Totals and Loads History PDFs
-(DEC-501), Project Totals fuel and block-layout PDFs (DEC-502), the Delivery
-Authorization Supplier signature (migration 49, DEC-503), the receipt Load No.
-and centred contact details (DEC-504), and diesel batches, outside station
-fills, the History and Usage day cards, per-destination PDFs and the Company
-Settings header on the Diesel Batch Report (migration 50, DEC-505 and its two
-amendments). It is built from `feature/android-receipts-diesel-batches`, which
-is not yet merged into `main`. `output/DROMEX-0.19.0-build22.apk` (migration 47,
-DEC-482 to DEC-486) is retained unchanged as the previous accepted installer.
-Builds 23 to 27 were previews of the same work, superseded by build 28; build 21
-was a preview superseded by build 22.
+Current source release metadata is version `0.30.0`, Android version code `50`,
+SQLite database version `69` (`DATABASE_VERSION` in
+`src/data/database/migrations.ts`), package/bundle identifier
+`com.dromex.management`, and Expo SDK 54. The source is on
+`feature/android-receipts-history-pdfs`, which is not yet merged into `main`: it
+is 109 commits ahead of `origin/main` (and 135 ahead of the older local `main`,
+which is 26 commits behind `origin/main`), checked from git on 2026-11-14. Signed installers up to
+`output/DROMEX-0.30.0-build50.apk` exist on the build machine only. The latest
+installer the Owner has recorded as installed in place and accepted is
+`output/DROMEX-0.20.0-build28.apk` (accepted 2026-10-04); no later build is
+recorded as accepted in `requirements/` or `docs/claude-context.md`, so builds 30
+onward are previews pending physical-device review. Per-release history
+(features, migrations, artifact hashes, acceptance state) is in
+`docs/claude-context.md` and the decision log in `requirements/decisions.md`;
+treat those and the code, not this paragraph, as authoritative when they differ.
+Build 28 carries the 0.20.0 work: Company Totals, Invoices & Bills, authorized
+signers and Company Load Number Series (migration 48, DEC-500), Totals and Loads
+History PDFs (DEC-501), Project Totals fuel and block-layout PDFs (DEC-502), the
+Delivery Authorization Supplier signature (migration 49, DEC-503), the receipt
+Load No. and centred contact details (DEC-504), and diesel batches, outside
+station fills, the History and Usage day cards, per-destination PDFs and the
+Company Settings header on the Diesel Batch Report (migration 50, DEC-505 and its
+two amendments). `output/DROMEX-0.19.0-build22.apk` (migration 47, DEC-482 to
+DEC-486) is retained unchanged as the earlier accepted installer.
 
 Release APKs are no longer committed to Git from build 14 onward (DEC-396):
 `output/*.apk` is ignored, so the signed artifact lives in `output/` on the
@@ -248,6 +261,14 @@ pack. Its implementation phases are:
 
 Each phase must be independently testable and must integrate with existing daily
 records rather than create a second disconnected data-entry system.
+
+Phase 1 scope is recorded in DEC-547 to DEC-553 and OQ-171 to OQ-178 (extend
+`schedule_tasks` in place, migration 70 (69 is taken by the Quantity Target site entries, DEC-556), WBS depth 4, Mon to Sat workday
+calendars). DEC-554 records that Phase 5 derives progress from the linked
+Quantity Target (open: OQ-179), and DEC-555 that diagrams are activity-on-node,
+Gantt first, in Phase 3. Phase 1's four mockups are
+`output/epm-phase1-*-mockup.html`; no Phase 1 code is written until the Owner
+approves them.
 
 ## Web platform (approved, in progress)
 

@@ -1,5 +1,5 @@
 import type {
-  ContractHistoryKind,ContractItem,ContractTargetRow,ContractItemDraft,ContractLoad,ContractLoadDay,ContractProjectSummary,ContractTotalsTarget,ContractUsage,
+  ContractHistoryKind,ContractSiteEntry,ContractItem,ContractTargetRow,ContractItemDraft,ContractLoad,ContractLoadDay,ContractProjectSummary,ContractTotalsTarget,ContractUsage,
 } from '../../domain/contractQuantities';
 import type {ContractLoadSource} from './contractLinks';
 
@@ -37,6 +37,10 @@ export interface ContractQuantitiesRepository{
   finishItem(contractItemId:string,completedOn:string):Promise<ContractItem>;
   reopenItem(contractItemId:string,reason:string):Promise<ContractItem>;
   addAdjustment(contractItemId:string,input:{amount:string;reason:string}):Promise<void>;
+  /** A linked manual or manual target only: one dated entry in the target's unit; a negative amount is a correction and needs a note. Never edited or deleted. */
+  addSiteEntry(contractItemId:string,input:{date:string;amount:string;note:string}):Promise<void>;
+  /** The target's site entries that count now, newest first. */
+  listSiteEntries(contractItemId:string):Promise<ContractSiteEntry[]>;
   /** Links a load recorded earlier (or saved unlinked). A reason is required and kept in the history. */
   linkLoad(contractItemId:string,load:ContractLoadRef,reason:string):Promise<void>;
   /** Several loads with one reason, all or none. */

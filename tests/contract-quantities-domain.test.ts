@@ -109,7 +109,7 @@ describe('finishing with leftover',()=>{
 describe('target rules',()=>{
   const draft={name:'Base course',unitId:'u_m3',quantity:'50',unitPriceUsd:'20',materialIds:['m_base']};
   it('accepts a valid draft and normalises it',()=>{
-    expect(validateContractItemDraft({...draft,name:'  Base   course '})).toEqual({ok:true,value:{name:'Base course',unitId:'u_m3',quantity:50,unitPriceUsd:20,materialIds:['m_base']}});
+    expect(validateContractItemDraft({...draft,name:'  Base   course '})).toEqual({ok:true,value:{name:'Base course',unitId:'u_m3',quantity:50,unitPriceUsd:20,materialIds:['m_base'],trackingMode:'automatic'}});
     expect(validateContractItemDraft({...draft,unitPriceUsd:''})).toMatchObject({ok:true,value:{unitPriceUsd:null}});
   });
   it('rejects a missing name, unit, quantity of zero or less, a bad price and no material',()=>{

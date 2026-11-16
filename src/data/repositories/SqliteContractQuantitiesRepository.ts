@@ -1,9 +1,9 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {
-  applyContractItemEdit,cancelContractItem,candidateContractItems,computeContractUsage,contractTotalsTargets,dailyContractProgress,dailyContractTargetTable,finalContractReport,finishContractItem,groupContractLoadsByDay,
+  applyContractItemEdit,cancelContractItem,contractTrackingMode,validateSiteEntry,candidateContractItems,computeContractUsage,contractTotalsTargets,dailyContractProgress,dailyContractTargetTable,finalContractReport,finishContractItem,groupContractLoadsByDay,
   reopenContractItem,summarizeContractProject,validateContractAdjustment,validateContractItemDraft,validateContractReason,
-  type ContractAdjustment,type ContractDayEntry,type ContractDayReport,type ContractFinalReport,type ContractHistoryKind,type ContractTotalsTarget,type ContractTargetRow,type ContractItem,type ContractItemDraft,type ContractItemValues,
+  type ContractAdjustment,type ContractSiteEntry,type ContractDayEntry,type ContractDayReport,type ContractFinalReport,type ContractHistoryKind,type ContractTotalsTarget,type ContractTargetRow,type ContractItem,type ContractItemDraft,type ContractItemValues,
 } from '../../domain/contractQuantities';
 import {localDateKey} from '../../domain/fuel';
 import type {
@@ -11,7 +11,7 @@ import type {
 } from './ContractQuantitiesRepository';
 import {contractLoadTable,insertContractHistory} from './contractLinks';
 
-type ItemRow={id:string;project_id:string;name:string;unit_id:string;unit_symbol:string;quantity:number;unit_price_usd_cents:number|null;status:'in_progress'|'complete';completed_on:string|null;cancelled_at:string|null};
+type ItemRow={tracking_mode:ContractItem['trackingMode'];entries_segment:number;id:string;project_id:string;name:string;unit_id:string;unit_symbol:string;quantity:number;unit_price_usd_cents:number|null;status:'in_progress'|'complete';completed_on:string|null;cancelled_at:string|null};
 type LoadRow={id:string;source:'company'|'supplier';reference:string;confirmed_at:string;item_id:string;item_name:string;unit_id:string|null;unit_symbol:string|null;quantity:number|null;status:string|null;contract_item_id:string|null;truck_plate:string|null;driver_name:string|null;party_name:string|null;ticket:string|null};
 
 const makeId=(prefix:string)=>`${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
@@ -26,7 +26,7 @@ const SUPPLIER_LOADS=`SELECT q.id,'supplier' source,q.purchase_number reference,
   FROM quarry_purchases q`;
 
 const itemFromRow=(row:ItemRow,materialIds:string[]):ContractItem=>({
-  id:row.id,projectId:row.project_id,name:row.name,unitId:row.unit_id,unitSymbol:row.unit_symbol,quantity:row.quantity,
+  trackingMode:row.tracking_mode??'automatic',id:row.id,projectId:row.project_id,name:row.name,unitId:row.unit_id,unitSymbol:row.unit_symbol,quantity:row.quantity,
   unitPriceUsd:row.unit_price_usd_cents==null?null:row.unit_price_usd_cents/100,materialIds,status:row.status,completedOn:row.completed_on,cancelledAt:row.cancelled_at,
 });
 const loadFromRow=(row:LoadRow):ContractLoadDetail=>({
@@ -59,7 +59,7 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
     return{name:row?.company_name?.trim()||'DROMEX',logoUri:row?.logo_uri?.trim()||null,contactLine:contact||null};
   }
 
-  private async enqueue(entityType:'contractItem'|'contractAdjustment'|'contractLink',entityId:string,payload:unknown,now:string){
+  private async enqueue(entityType:'contractItem'|'contractAdjustment'|'contractLink'|'contractSiteEntry',entityId:string,payload:unknown,now:string){
     await this.db.runAsync("INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES (?,?,'upsert',?,?)",entityType,entityId,JSON.stringify(payload),now);
   }
 
@@ -91,9 +91,40 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
     return rows.map(row=>({id:row.id,contractItemId:itemId,amount:row.amount,reason:row.reason,createdAt:row.created_at}));
   }
 
+  /** The site entries that count now: those of the target's current segment, oldest first. Earlier segments stay in the table as history. */
+  private async siteEntries(itemId:string):Promise<ContractSiteEntry[]>{
+    const rows=await this.db.getAllAsync<{id:string;kind:'entry'|'opening';entry_date:string;amount:number;note:string|null;created_at:string}>(
+      'SELECT id,kind,entry_date,amount,note,created_at FROM contract_item_site_entries WHERE contract_item_id=? AND entries_segment=(SELECT entries_segment FROM contract_items WHERE id=?) ORDER BY entry_date,created_at,rowid',itemId,itemId);
+    return rows.map(row=>({id:row.id,contractItemId:itemId,kind:row.kind,entryDate:row.entry_date,amount:row.amount,note:row.note,createdAt:row.created_at}));
+  }
+
   private async row(item:ContractItem):Promise<ContractRowView&{loads:ContractLoadDetail[]}>{
-    const[loads,adjustments,materials]=await Promise.all([this.linkedLoads(item.id),this.adjustments(item.id),this.materials(item.id)]);
-    return{item,usage:computeContractUsage(item,loads,adjustments),materials,loads};
+    const[loads,adjustments,materials,siteEntries]=await Promise.all([this.linkedLoads(item.id),this.adjustments(item.id),this.materials(item.id),this.siteEntries(item.id)]);
+    return{item,usage:computeContractUsage(item,loads,adjustments,siteEntries),materials,loads};
+  }
+
+  /** The site entries of a target, newest first, for the Site entries list. */
+  async listSiteEntries(contractItemId:string):Promise<ContractSiteEntry[]>{
+    await this.item(contractItemId);
+    return (await this.siteEntries(contractItemId)).reverse();
+  }
+
+  /**
+   * Adds one dated site entry to a linked manual or manual target. The entry is its own record (never edited or deleted); a mistake is fixed by
+   * a later negative entry with a reason. It never changes a load, stock or a batch, and it never blocks on the target quantity.
+   */
+  async addSiteEntry(contractItemId:string,input:{date:string;amount:string;note:string}):Promise<void>{
+    const {item,usage}=await this.row(await this.item(contractItemId));
+    if(item.cancelledAt)throw new Error('A cancelled target cannot take site entries.');
+    if(contractTrackingMode(item)==='automatic')throw new Error('This target is calculated from loads. Change how used is tracked to enter it by hand.');
+    const project=await this.db.getFirstAsync<{start_date:string|null}>('SELECT start_date FROM projects WHERE id=?',item.projectId);
+    const entry=validateSiteEntry(input,{today:localDateKey(new Date()),earliest:project?.start_date??null,used:usage.used});
+    const id=makeId('contract_site_entry'),now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync("INSERT INTO contract_item_site_entries (id,contract_item_id,entries_segment,kind,entry_date,amount,note,created_at) VALUES (?,?,(SELECT entries_segment FROM contract_items WHERE id=?),'entry',?,?,?,?)",
+        id,contractItemId,contractItemId,entry.date,entry.amount,entry.note,now);
+      await this.enqueue('contractSiteEntry',id,{id,contractItemId,entryDate:entry.date,amount:entry.amount,note:entry.note},now);
+    });
   }
 
   async listProject(projectId:string){
@@ -133,18 +164,18 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
     const rows=await this.db.getAllAsync<{id:string;created_at:string}>('SELECT id,created_at FROM contract_items WHERE project_id=? ORDER BY created_at,rowid',projectId);
     const entries:ContractDayEntry[]=[];
     for(const {id,created_at} of rows){
-      const loads=await this.linkedLoads(id),adjustments=await this.adjustments(id);
+      const loads=await this.linkedLoads(id),adjustments=await this.adjustments(id),siteEntries=await this.siteEntries(id);
       if(asOf!==null){
         const existed=localDateKey(new Date(created_at))<=asOf;
-        if(!existed&&!loads.some(load=>load.date<=asOf)&&!adjustments.some(value=>localDateKey(new Date(value.createdAt))<=asOf))continue;
+        if(!existed&&!loads.some(load=>load.date<=asOf)&&!adjustments.some(value=>localDateKey(new Date(value.createdAt))<=asOf)&&!siteEntries.some(value=>value.entryDate<=asOf))continue;
       }
-      entries.push({item:await this.item(id),loads,adjustments});
+      entries.push({item:await this.item(id),loads,adjustments,siteEntries});
     }
     return entries;
   }
 
   private async editNeedsReason(contractItemId:string):Promise<boolean>{
-    const counted=await this.db.getFirstAsync<{n:number}>('SELECT (SELECT COUNT(*) FROM loads WHERE contract_item_id=?)+(SELECT COUNT(*) FROM quarry_purchases WHERE contract_item_id=?)+(SELECT COUNT(*) FROM contract_item_adjustments WHERE contract_item_id=?) n',contractItemId,contractItemId,contractItemId);
+    const counted=await this.db.getFirstAsync<{n:number}>('SELECT (SELECT COUNT(*) FROM loads WHERE contract_item_id=?)+(SELECT COUNT(*) FROM quarry_purchases WHERE contract_item_id=?)+(SELECT COUNT(*) FROM contract_item_adjustments WHERE contract_item_id=?)+(SELECT COUNT(*) FROM contract_item_site_entries WHERE contract_item_id=?) n',contractItemId,contractItemId,contractItemId,contractItemId);
     return (counted?.n??0)>0;
   }
 
@@ -174,10 +205,10 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
     const values=await this.checkedValues(draft);
     const id=makeId('contract_item'),now=new Date().toISOString();
     await this.db.withTransactionAsync(async()=>{
-      await this.db.runAsync('INSERT INTO contract_items (id,project_id,name,unit_id,unit_symbol,quantity,unit_price_usd_cents,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-        id,projectId,values.name,values.unitId,values.unitSymbol,values.quantity,values.unitPriceUsd==null?null:Math.round(values.unitPriceUsd*100),'in_progress',now,now);
+      await this.db.runAsync('INSERT INTO contract_items (id,project_id,name,unit_id,unit_symbol,quantity,unit_price_usd_cents,status,tracking_mode,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        id,projectId,values.name,values.unitId,values.unitSymbol,values.quantity,values.unitPriceUsd==null?null:Math.round(values.unitPriceUsd*100),'in_progress',values.trackingMode,now,now);
       for(const materialId of values.materialIds)await this.db.runAsync('INSERT INTO contract_item_materials (contract_item_id,item_id,item_name,added_at) VALUES (?,?,?,?)',id,materialId,values.materialNames.get(materialId)!,now);
-      const details={name:values.name,quantity:values.quantity,unitSymbol:values.unitSymbol,unitPriceUsd:values.unitPriceUsd,materialIds:values.materialIds};
+      const details={name:values.name,quantity:values.quantity,unitSymbol:values.unitSymbol,unitPriceUsd:values.unitPriceUsd,materialIds:values.materialIds,trackingMode:values.trackingMode};
       await insertContractHistory(this.db,{contractItemId:id,kind:'created',reason:null,details,createdAt:now});
       await this.enqueue('contractItem',id,{id,projectId,...details,change:'created'},now);
     });
@@ -187,7 +218,10 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
   async editItem(contractItemId:string,draft:ContractItemDraft,reason:string):Promise<ContractItem>{
     const current=await this.item(contractItemId);
     if(current.cancelledAt)throw new Error('A cancelled target cannot be edited.');
-    const values=await this.checkedValues(draft);
+    // Changing how used is tracked (freeze / warn-and-confirm) is a later phase; until then the mode is kept as it is.
+    const mode=contractTrackingMode(current);
+    if(draft.trackingMode!==undefined&&draft.trackingMode!==mode)throw new Error('Changing how used is tracked comes in a later phase.');
+    const values=await this.checkedValues({...draft,trackingMode:mode});
     const removed=current.materialIds.filter(id=>!values.materialIds.includes(id));
     for(const materialId of removed){
       const used=await this.db.getFirstAsync<{name:string}>(`SELECT item_name name FROM (${COMPANY_LOADS} WHERE l.contract_item_id=? AND l.item_id=? UNION ALL ${SUPPLIER_LOADS} WHERE q.contract_item_id=? AND q.item_id=?) LIMIT 1`,contractItemId,materialId,contractItemId,materialId);

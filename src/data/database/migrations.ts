@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 68;
+export const DATABASE_VERSION = 69;
 
 type TableColumn = { name: string };
 
@@ -2531,6 +2531,34 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_daily_attendance_places_entry ON daily_attendance_places(attendance_id, position);
     `);
     currentVersion = 68;
+  }
+
+  if (currentVersion === 68) {
+    // Site entries (how a target's used quantity is tracked). Additive only: a tracking mode on the target (every existing target stays
+    // 'automatic', exactly as before), an entries_segment counter, and an append-only table of dated site entries. A segment is one stretch of
+    // manual tracking: switching a target back to automatic starts a new segment, so the old entries stay in the database (never deleted) but stop
+    // counting. Used is read from the entries each time and never stored.
+    await addColumnIfMissing(db, 'contract_items', 'tracking_mode', "TEXT NOT NULL DEFAULT 'automatic' CHECK (tracking_mode IN ('automatic','linked_manual','manual'))");
+    await addColumnIfMissing(db, 'contract_items', 'entries_segment', 'INTEGER NOT NULL DEFAULT 1');
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS contract_item_site_entries (
+        id TEXT PRIMARY KEY NOT NULL,
+        contract_item_id TEXT NOT NULL REFERENCES contract_items(id),
+        entries_segment INTEGER NOT NULL DEFAULT 1,
+        kind TEXT NOT NULL DEFAULT 'entry' CHECK (kind IN ('entry','opening')),
+        entry_date TEXT NOT NULL,
+        amount REAL NOT NULL CHECK (amount <> 0),
+        note TEXT,
+        created_at TEXT NOT NULL,
+        CHECK (amount > 0 OR length(trim(COALESCE(note, ''))) > 0)
+      );
+      CREATE INDEX IF NOT EXISTS idx_contract_item_site_entries_item ON contract_item_site_entries(contract_item_id, entries_segment, entry_date);
+      CREATE TRIGGER IF NOT EXISTS trg_contract_item_site_entries_no_update BEFORE UPDATE ON contract_item_site_entries
+        BEGIN SELECT RAISE(ABORT, 'A site entry cannot change; add a correcting entry instead.'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_contract_item_site_entries_no_delete BEFORE DELETE ON contract_item_site_entries
+        BEGIN SELECT RAISE(ABORT, 'A site entry cannot be deleted; add a correcting entry instead.'); END;
+    `);
+    currentVersion = 69;
   }
 
 
