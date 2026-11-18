@@ -827,6 +827,14 @@ values on its next save.
 - **Not done**: the + Create sheet project dropdown and the draft-conflict fix for Make Receipt (the Owner dropped it; the cause is that a saved receipt draft's project wins over the one just chosen, `MakeReceiptScreen.tsx` line 85); the open-form look for steps 2 to 4; a Company Totals PDF redesign (the Owner chose to keep it as it is).
 - **Not yet accepted.** Physical-device review is pending. Mockups for this work are in `output/` and are untracked.
 
+## Build 53 — DROMEX 0.30.0, Android version code 53 (built 2026-11-18, not yet accepted)
+
+- **Artifact**: `output/DROMEX-0.30.0-build53.apk` (84,584,455 bytes, SHA-256 `90d437c98e0d38f54d2052e79fd9aac05c02c827600d0c5ce93cbd21e96358fc`), package `com.dromex.management`, versionName 0.30.0. EAS build `fd020723-fd3f-438d-ac48-95e1eb96ddfd` (profile `preview`, account drofk12), built from commit `f97dd73` with the existing EAS signing credentials. Checked only as a structurally valid ZIP; not installed on a device.
+- **Why 53 and not 52**: `output/DROMEX-0.30.0-build52.apk` (made 2026-11-14) predates the Bitumen Record Fill work and was left untouched. The version code was raised to 53 in `app.json` and `src/appVersion.ts`.
+- **New since build 52**: Bitumen Record Fill (DEC-557, migration 70, database version 70): fills from a batch into a truck, in kg, oldest open batch first and split across batches, cancelled with a reason (never edited or deleted), with the fills section on the Bitumen Batch Report PDF; Quantity Target tracking modes and site entries (DEC-556, migration 69); bitumen fills data and rules (commit `701b90b`); Company Daily Report with Customer and Supplier columns and a box for loads to a customer with no project (`3054862`).
+- **Open**: OQ-180 (backdating a fill against batch closure, batch edit and cancel rules, project reports). Two cost assumptions await the Owner: a whole-batch price is spread over the delivered kg, and VAT is left out of a fill's cost. EPM Phase 1 will take migration 71 (DEC-548 amended); no EPM code exists.
+- **Status**: awaiting the Owner's phone testing of the Record Fill screens and the Bitumen Batch Report PDF. `output/*.apk` is git-ignored; the accepted installer remains `output/DROMEX-0.20.0-build28.apk`. Nothing is merged into `main`.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:
