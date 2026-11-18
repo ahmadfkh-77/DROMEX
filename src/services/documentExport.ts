@@ -57,5 +57,5 @@ export async function exportAndShareLoadHistory(input:Omit<LoadHistoryPdf,'logo'
 export async function exportAndShareCompanyDailyReport(input:Omit<CompanyDailyReportPdf,'logo'>&{logoUri:string|null}){
   if(input.report.isEmpty&&!(input.attendance&&input.report.attendance))throw new Error('Nothing was recorded on this day, so there is nothing to export.');
   const logo=await imageUriToDataUrl(input.logoUri).catch(()=>null);
-  return saveAndShare(buildCompanyDailyReportHtml({report:input.report,logo,prices:input.prices,attendance:input.attendance}),`Company-Daily-Report-${input.report.day}.pdf`,'Share Company Daily Report');
+  return saveAndShare(buildCompanyDailyReportHtml({report:input.report,logo,prices:input.prices,attendance:input.attendance,companyName:input.companyName}),`Company-Daily-Report-${input.report.day}.pdf`,'Share Company Daily Report');
 }

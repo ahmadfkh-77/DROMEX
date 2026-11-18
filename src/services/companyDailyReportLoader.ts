@@ -59,11 +59,11 @@ export async function loadCompanyDailyReport(day:string,sources:CompanyDailyRepo
   const loadsOut:DayLoadOut[]=records.filter(r=>!isSupplier(r)).map(r=>{
     const s=r.snapshot;const use=bitumenForLoad(useByLoad.get(s.recordId)??[]);
     return {id:s.recordId,status:r.status,time:s.recordedAt,loadNumber:s.loadNumber??s.reference,itemName:s.itemName,unitSymbol:s.unitSymbol,quantity:s.quantity,
-      projectId:s.projectId,projectName:s.projectName,siteId:null,siteName:null,truckPlate:r.details?.truckPlate??null,driverName:r.details?.driverName??null,bitumenKg:use.kg,bitumenApplies:use.applies,...pricesOf(s)};
+      projectId:s.projectId,projectName:s.projectName,siteId:null,siteName:null,customerId:s.partyId||null,customerName:s.partyName||null,truckPlate:r.details?.truckPlate??null,driverName:r.details?.driverName??null,bitumenKg:use.kg,bitumenApplies:use.applies,...pricesOf(s)};
   });
   const supplierLoads:DaySupplierLoad[]=records.filter(isSupplier).map(r=>{
     const s=r.snapshot;const siteId=r.details?.siteId??null;
-    return {id:s.recordId,status:r.status,time:s.recordedAt,number:s.reference,itemName:s.itemName,unitSymbol:s.unitSymbol,quantity:s.quantity,supplierName:s.partyName||null,
+    return {id:s.recordId,status:r.status,time:s.recordedAt,number:s.reference,projectCustomerName:siteId?null:r.details?.customerName??null,itemName:s.itemName,unitSymbol:s.unitSymbol,quantity:s.quantity,supplierName:s.partyName||null,
       deliveredBy:r.details?.deliveredBy??null,driverName:r.details?.driverName??null,projectId:siteId?null:s.projectId,projectName:siteId?null:s.projectName,siteId,siteName:siteId?s.projectName:null,
       truckPlate:r.details?.truckPlate??null,ticket:s.supplierReference,...pricesOf(s)};
   });

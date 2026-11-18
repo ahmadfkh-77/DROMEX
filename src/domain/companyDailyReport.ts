@@ -8,17 +8,17 @@ import type {AttendanceSheet} from './attendance';
 import type {ContractTargetRow} from './contractQuantities';
 
 export type RecordStatus='Active'|'Cancelled';
-export type PlaceKind='project'|'site'|'none';
+export type PlaceKind='project'|'customer'|'site'|'none';
 
 /** A recorded price, as the record itself kept it (US dollars, in cents). Missing means Unpriced, never zero. */
 export type PriceFields={priceBasis?:'per_unit'|'whole'|null;/** Price per unit (per litre for fuel), in cents. */unitPriceCents?:number|null;/** The record's amount before VAT, in cents. */amountCents?:number|null};
-type PlaceRef={projectId:string|null;projectName:string|null;siteId:string|null;siteName:string|null};
+type PlaceRef={projectId:string|null;projectName:string|null;siteId:string|null;siteName:string|null;/** The customer of a company load; a load with no project and no site is shown in a box of its own under this customer. */customerId?:string|null;customerName?:string|null};
 type Base=PlaceRef&{id:string;status:RecordStatus;/** Local date-time of the record, e.g. 2026-11-06T07:40:00. */time:string};
 
 export type DayLoadOut=Base&PriceFields&{loadNumber:string|null;itemName:string;unitSymbol:string;quantity:number;truckPlate:string|null;driverName:string|null;
   /** Bitumen used, from the bitumen engine; null when unknown or not covered ("-"). */bitumenKg:number|null;
   /** True for a load the bitumen rule applies to (asphalt). Left out, it is true when a bitumen figure exists. */bitumenApplies?:boolean};
-export type DaySupplierLoad=Base&PriceFields&{number:string|null;itemName:string;unitSymbol:string;quantity:number;supplierName:string|null;deliveredBy:'company'|'supplier'|null;truckPlate:string|null;/** The name of our driver when the company delivered it; null when the supplier delivered or no name was recorded. */driverName?:string|null;ticket:string|null};
+export type DaySupplierLoad=Base&PriceFields&{/** The customer of the project the load was delivered to; null when it went to a site or the project has none. */projectCustomerName?:string|null;number:string|null;itemName:string;unitSymbol:string;quantity:number;supplierName:string|null;deliveredBy:'company'|'supplier'|null;truckPlate:string|null;/** The name of our driver when the company delivered it; null when the supplier delivered or no name was recorded. */driverName?:string|null;ticket:string|null};
 /** Whether a fill went to a truck or a machine, as the fuel record says. */
 export type FillEquipmentType='truck'|'machine';
 export const equipmentTypeLabel=(type:FillEquipmentType|null|undefined)=>type==='truck'?'Truck':type==='machine'?'Machine':'-';
@@ -63,9 +63,10 @@ export function localTime(iso:string):string{
 function placeOf(ref:PlaceRef):{key:string;name:string;kind:PlaceKind}{
   if(ref.projectId)return {key:`project:${ref.projectId}`,name:ref.projectName??'Project',kind:'project'};
   if(ref.siteId)return {key:`site:${ref.siteId}`,name:ref.siteName??'Company site',kind:'site'};
+  if(ref.customerId)return {key:`customer:${ref.customerId}`,name:ref.customerName||'Customer',kind:'customer'};
   return {key:'none',name:NO_PLACE_NAME,kind:'none'};
 }
-const kindRank:Record<PlaceKind,number>={project:0,site:1,none:2};
+const kindRank:Record<PlaceKind,number>={project:0,customer:1,site:2,none:3};
 
 const capital=(value:string)=>value.charAt(0).toUpperCase()+value.slice(1);
 /** Deliveries by kind (fuel by type, then bitumen, then stock), oldest first, each with a total per material and unit. Cancelled deliveries are left out. */

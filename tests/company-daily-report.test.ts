@@ -94,3 +94,18 @@ describe('Company Daily Report - dates and Home figures',()=>{
     expect(homeFigures(buildCompanyDailyReport(DAY,{...empty,fills:[fill({litres:820})]}))).toEqual([{key:'fuel',value:820,unit:'L'}]);
   });
 });
+
+describe('Company Daily Report - loads to a customer with no project',()=>{
+  const noProject=(over:Partial<DayLoadOut>={})=>out({projectId:null,projectName:null,customerId:'c1',customerName:'Hamdan Trading',...over});
+  it('gives them a box of their own named after the customer, after the projects',()=>{
+    const report=buildCompanyDailyReport(DAY,{...empty,loadsOut:[noProject({id:'a'}),out({id:'b'})]});
+    expect(report.places.map(p=>[p.kind,p.name])).toEqual([['project','Airport Road'],['customer','Hamdan Trading']]);
+    expect(report.places[1]!.loadsOut).toHaveLength(1);
+  });
+  it('shows the Customer and Supplier columns, with the company name as the Supplier of a company load',async()=>{
+    const {buildCompanyDailyReportHtml}=await import('../src/services/companyDailyReportTemplate');
+    const html=buildCompanyDailyReportHtml({logo:null,companyName:'DROMEX Contracting',report:buildCompanyDailyReport(DAY,{...empty,loadsOut:[noProject()]})});
+    expect(html).toContain('<th>Customer</th><th>Supplier</th>');expect(html).toContain('Customer · no project');
+    expect(html).toContain('Hamdan Trading');expect(html).toContain('DROMEX Contracting');expect(html).not.toContain('>Company load<');
+  });
+});

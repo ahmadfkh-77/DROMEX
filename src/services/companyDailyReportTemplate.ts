@@ -11,7 +11,7 @@ import {reportCss} from './pdfTheme';
  * loads (purchases) and fuel (cost) are never added into one total. Anything not recorded is not printed, and fold state on screen never
  * changes it. It only lists records: it changes none.
  */
-export type CompanyDailyReportPdf={logo:string|null;report:CompanyDailyReport;/** Off unless the Prices switch is on. */prices?:boolean;/** The Attendance sheet switch: off unless true here (the screen default is on). */attendance?:boolean};
+export type CompanyDailyReportPdf={logo:string|null;report:CompanyDailyReport;/** Off unless the Prices switch is on. */prices?:boolean;/** The Attendance sheet switch: off unless true here (the screen default is on). */attendance?:boolean;/** The company name from Company Settings: shown as the Supplier of every company load. */companyName?:string};
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]??character));
 const t=(value:unknown)=>`<span dir="auto">${e(value)}</span>`;
@@ -40,28 +40,28 @@ const totalCell=(list:readonly Priced[])=>{const s=sumAmounts(list);return `${s.
 // Record tables: Time, Load no., Details, Quantity, Truck, Driver (+ Bitumen used only for asphalt, + Price and Amount only where a price was recorded).
 // The first five columns have the same widths in every table (so Time, Load no., Details, Quantity and Truck line up from table to table); the Driver column
 // takes whatever width is left, so every table fills the whole width of its box. The extra columns (Bitumen used, Price, Amount) are taken from Driver's share.
-const FIRST_FIVE=[9,12,26,13,12];const FIRST_FIVE_PRICES=[8,12,17,11,9];const BITUMEN=12;const BITUMEN_PRICED=10;const PRICE=10;
-type TableOptions={bitumen:boolean;priced:boolean;/** True when the whole document shows prices, so every table uses the narrower first columns and they still line up. */prices?:boolean};
+const FIRST_FIVE=[8,11,16,16,11,11];const FIRST_FIVE_PRICES=[7,10,12,12,9,8];const BITUMEN=12;const BITUMEN_PRICED=10;const PRICE=10;
+type TableOptions={bitumen:boolean;priced:boolean;/** True when the whole document shows prices, so every table uses the narrower first columns and they still line up. */prices?:boolean;/** Names of the two columns after Load no. Customer and Supplier unless a table says otherwise. */heads?:[string,string]};
 const widthsFor=({bitumen,priced,prices}:TableOptions)=>{
   const first=prices||priced?FIRST_FIVE_PRICES:FIRST_FIVE;const extras=[...(bitumen?[prices||priced?BITUMEN_PRICED:BITUMEN]:[]),...(priced?[PRICE,PRICE]:[])];
   return [...first,100-first.reduce((a,b)=>a+b,0)-extras.reduce((a,b)=>a+b,0),...extras];
 };
-const heading=({bitumen,priced}:TableOptions)=>`<thead><tr><th>Time</th><th>Load no.</th><th>Details</th><th class="num">Quantity</th><th>Truck</th><th>Driver</th>${bitumen?'<th class="num">Bitumen used</th>':''}${priced?'<th class="num">Price</th><th class="num">Amount</th>':''}</tr></thead>`;
+const heading=({bitumen,priced,heads}:TableOptions)=>`<thead><tr><th>Time</th><th>Load no.</th><th>${e((heads??['Customer','Supplier'])[0])}</th><th>${e((heads??['Customer','Supplier'])[1])}</th><th class="num">Quantity</th><th>Truck</th><th>Driver</th>${bitumen?'<th class="num">Bitumen used</th>':''}${priced?'<th class="num">Price</th><th class="num">Amount</th>':''}</tr></thead>`;
 /** `rows` are the cells of the six shared columns, then Bitumen used (asphalt only), then Price and Amount (priced tables only). */
 const recordTable=(rows:string[][],total:{label:string;quantity:string;bitumen?:string;amount?:string}|null,options:TableOptions)=>{
-  const widths=widthsFor(options);const numeric=new Set([3,...(options.bitumen?[6]:[]),...(options.priced?[widths.length-2,widths.length-1]:[])]);
-  return `<table class="rec"><colgroup>${widths.map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup>${heading(options)}<tbody>${rows.map(cells=>`<tr>${cells.map((cell,index)=>`<td${numeric.has(index)?' class="num nowrap"':''}>${t(cell)}</td>`).join('')}</tr>`).join('')}${total?`<tr class="total-row"><td colspan="3">${t(total.label)}</td><td class="num nowrap">${e(total.quantity)}</td><td colspan="2"></td>${options.bitumen?`<td class="num nowrap">${e(total.bitumen??'')}</td>`:''}${options.priced?`<td></td><td class="num">${e(total.amount??'').split(' · ').join('<br/>')}</td>`:''}</tr>`:''}</tbody></table>`;
+  const widths=widthsFor(options);const numeric=new Set([4,...(options.bitumen?[7]:[]),...(options.priced?[widths.length-2,widths.length-1]:[])]);
+  return `<table class="rec"><colgroup>${widths.map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup>${heading(options)}<tbody>${rows.map(cells=>`<tr>${cells.map((cell,index)=>`<td${numeric.has(index)?' class="num nowrap"':''}>${t(cell)}</td>`).join('')}</tr>`).join('')}${total?`<tr class="total-row"><td colspan="4">${t(total.label)}</td><td class="num nowrap">${e(total.quantity)}</td><td colspan="2"></td>${options.bitumen?`<td class="num nowrap">${e(total.bitumen??'')}</td>`:''}${options.priced?`<td></td><td class="num">${e(total.amount??'').split(' · ').join('<br/>')}</td>`:''}</tr>`:''}</tbody></table>`;
 };
 
 const subHeading=(title:string)=>`<div class="sub-head">${t(title)}</div>`;
-const material=(m:PlaceMaterial,prices:boolean):string=>{
+const material=(m:PlaceMaterial,prices:boolean,companyName:string):string=>{
   const figures=[m.loadsOut.length?`Company loads ${amount(m.outQuantity,m.unitSymbol)} · ${loadsWord(m.loadsOut.length)}`:'',m.supplierLoads.length?`Supplier loads ${amount(m.inQuantity,m.unitSymbol)} · ${loadsWord(m.supplierLoads.length)}`:'',
     m.bitumenApplies?(m.bitumenKg!==null?`Bitumen used ${number(m.bitumenKg)} kg`:'Bitumen not counted'):''].filter(Boolean).join(' · ');
   const name=m.itemName.toLowerCase();
   const outPriced=prices&&anyPriced(m.loadsOut),inPriced=prices&&anyPriced(m.supplierLoads);
-  const out=m.loadsOut.length?recordTable(m.loadsOut.map(l=>[localTime(l.time),dash(l.loadNumber),'Company load',amount(l.quantity,l.unitSymbol),dash(l.truckPlate),dash(l.driverName),...(m.bitumenApplies?[l.bitumenKg!==null?`${number(l.bitumenKg)} kg`:'not counted']:[]),...(outPriced?[priceCell(l),amountCell(l)]:[])]),
+  const out=m.loadsOut.length?recordTable(m.loadsOut.map(l=>[localTime(l.time),dash(l.loadNumber),dash(l.customerName),dash(companyName),amount(l.quantity,l.unitSymbol),dash(l.truckPlate),dash(l.driverName),...(m.bitumenApplies?[l.bitumenKg!==null?`${number(l.bitumenKg)} kg`:'not counted']:[]),...(outPriced?[priceCell(l),amountCell(l)]:[])]),
     {label:`Total ${name}, company loads`,quantity:amount(m.outQuantity,m.unitSymbol),bitumen:m.bitumenApplies?(m.bitumenKg!==null?`${number(m.bitumenKg)} kg`:'not counted'):undefined,amount:outPriced?totalCell(m.loadsOut):undefined},{bitumen:m.bitumenApplies,priced:outPriced,prices}):'';
-  const incoming=m.supplierLoads.length?recordTable(m.supplierLoads.map(l=>[localTime(l.time),dash(l.number),`${dash(l.supplierName)}${l.ticket?`, ticket ${l.ticket}`:''}`,amount(l.quantity,l.unitSymbol),dash(l.truckPlate),supplierLoadDriver(l),...(inPriced?[priceCell(l),amountCell(l)]:[])]),
+  const incoming=m.supplierLoads.length?recordTable(m.supplierLoads.map(l=>[localTime(l.time),dash(l.number),dash(l.projectCustomerName),`${dash(l.supplierName)}${l.ticket?`, ticket ${l.ticket}`:''}`,amount(l.quantity,l.unitSymbol),dash(l.truckPlate),supplierLoadDriver(l),...(inPriced?[priceCell(l),amountCell(l)]:[])]),
     {label:`Total ${name}, supplier loads`,quantity:amount(m.inQuantity,m.unitSymbol),amount:inPriced?totalCell(m.supplierLoads):undefined},{bitumen:false,priced:inPriced,prices}):'';
   const both=m.loadsOut.length>0&&m.supplierLoads.length>0;
   return `<div class="mat"><div class="mat-head"><span>${t(`${m.itemName} (${m.unitSymbol})`)}</span><span class="mat-figures">${t(figures)}</span></div>${both?subHeading('Company loads'):''}${out}${both?subHeading('Supplier loads'):''}${incoming}</div>`;
@@ -89,8 +89,8 @@ function wasteBox(place:DayPlace,prices:boolean):string{
   const groups=new Map<string,DayPlace['dumps']>();
   for(const d of place.dumps){const key=[d.material,d.area,d.truckPlate,d.driverName].join('\u001f');const list=groups.get(key);if(list)list.push(d);else groups.set(key,[d]);}
   const rows=[...groups.values()].map(list=>{const first=localTime(list[0]!.time),last=localTime(list[list.length-1]!.time);const d=list[0]!;
-    return [first===last?first:`${first}-${last}`,'-',[d.material,d.area].filter(Boolean).map(String).join(', ')||'-',`${list.length} trip${list.length===1?'':'s'}`,dash(d.truckPlate),dash(d.driverName)];});
-  return `<div class="mat"><div class="mat-head"><span>Waste dumps</span><span class="mat-figures">${t(`${place.dumps.length} trip${place.dumps.length===1?'':'s'}`)}</span></div>${recordTable(rows,{label:'Total waste trips',quantity:`${place.dumps.length} trip${place.dumps.length===1?'':'s'}`},{bitumen:false,priced:false,prices})}</div>`;
+    return [first===last?first:`${first}-${last}`,'-',dash(d.material),dash(d.area),`${list.length} trip${list.length===1?'':'s'}`,dash(d.truckPlate),dash(d.driverName)];});
+  return `<div class="mat"><div class="mat-head"><span>Waste dumps</span><span class="mat-figures">${t(`${place.dumps.length} trip${place.dumps.length===1?'':'s'}`)}</span></div>${recordTable(rows,{label:'Total waste trips',quantity:`${place.dumps.length} trip${place.dumps.length===1?'':'s'}`},{bitumen:false,priced:false,prices,heads:['Material','Area']})}</div>`;
 }
 /** Prices on: the recorded value of the place, one line per kind. Sales, purchases and fuel cost are never added into one number. */
 function valueBox(place:DayPlace):string{
@@ -100,11 +100,11 @@ function valueBox(place:DayPlace):string{
   return `<div class="mat"><div class="mat-head"><span>Recorded value of this place</span><span class="mat-figures">US dollars · kinds are never added together</span></div><table class="sum"><colgroup><col style="width:70%"/><col style="width:30%"/></colgroup><tbody>${shown.map(([label,list])=>`<tr><td>${e(label)}</td><td class="num">${e(totalCell(list))}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
-const placeKind=(place:DayPlace)=>place.kind==='project'?(place.contract?`Project · contract target ${place.contract.included?'included':'not included'}`:'Project'):place.kind==='site'?'Company site':'Records without a project or site';
+const placeKind=(place:DayPlace)=>place.kind==='customer'?'Customer · no project':place.kind==='project'?(place.contract?`Project · contract target ${place.contract.included?'included':'not included'}`:'Project'):place.kind==='site'?'Company site':'Records without a project or site';
 
 function summaryTable(rows:string[][],valueHeading?:string):string{
   const widths=valueHeading?[34,14,12,18,22]:[46,18,16,20];
-  return `<table class="sum"><colgroup>${widths.map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Material</th><th>Unit</th><th class="num">Loads</th><th class="num">Amount</th>${valueHeading?`<th class="num">${e(valueHeading)}</th>`:''}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map((cell,i)=>`<td${i>=2?' class="num"':''}>${i<2?t(cell):e(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  return `<table class="sum"><colgroup>${widths.map(width=>`<col style="width:${width}%"/>`).join('')}</colgroup><thead><tr><th>Material</th><th class="num">Amount</th><th class="num">Loads</th><th>Unit</th>${valueHeading?`<th class="num">${e(valueHeading)}</th>`:''}</tr></thead><tbody>${rows.map(r=>`<tr><td>${t(r[0])}</td><td class="num">${e(r[3])}</td><td class="num">${e(r[2])}</td><td>${t(r[1])}</td>${r.length>4?`<td class="num">${e(r[4])}</td>`:''}</tr>`).join('')}</tbody></table>`;
 }
 
 /** Arrived today: deliveries into company stock, one table per kind with its own total row. Never tied to a project. */
@@ -138,9 +138,9 @@ function attendanceBlock(sheet:AttendanceSheet,index:number):string{
 }
 
 export function buildCompanyDailyReportHtml(input:CompanyDailyReportPdf):string{
-  const {report}=input;const prices=input.prices===true;const sheet=input.attendance===true&&report.attendance&&report.attendance.count>0?report.attendance:null;const empty=report.isEmpty&&!sheet;const date=longDay(report.day);const running=`Company Daily Report · ${date}`;
+  const {report}=input;const companyName=input.companyName??'';const prices=input.prices===true;const sheet=input.attendance===true&&report.attendance&&report.attendance.count>0?report.attendance:null;const empty=report.isEmpty&&!sheet;const date=longDay(report.day);const running=`Company Daily Report · ${date}`;
   const tiles=report.tiles.length?`<div class="tiles">${report.tiles.map(tile=>`<div class="tile"><span class="figure-label">${e(tileLabel[tile.key])}</span><b>${e(number(tile.value))}${tile.unit?` ${e(tile.unit)}`:''}</b></div>`).join('')}</div>`:'';
-  const blocks=report.places.map((place,index)=>`<section class="block"><div class="block-bar"><span class="block-index">${index+1}.</span><span class="block-name">${t(place.name)}</span><span class="block-figures">${e(placeKind(place))}</span></div><div class="block-body">${placeMaterials(place).map(m=>material(m,prices)).join('')}${fuelBox(place,prices)}${wasteBox(place,prices)}${prices?valueBox(place):''}${contractBox(place,report.day)}</div></section>`).join('');
+  const blocks=report.places.map((place,index)=>`<section class="block"><div class="block-bar"><span class="block-index">${index+1}.</span><span class="block-name">${t(place.name)}</span><span class="block-figures">${e(placeKind(place))}</span></div><div class="block-body">${placeMaterials(place).map(m=>material(m,prices,companyName)).join('')}${fuelBox(place,prices)}${wasteBox(place,prices)}${prices?valueBox(place):''}${contractBox(place,report.day)}</div></section>`).join('');
 
   const allOut=report.places.flatMap(p=>p.loadsOut),allIn=report.places.flatMap(p=>p.supplierLoads),allFills=report.places.flatMap(p=>p.fills);
   const fuelByType=new Map<string,{litres:number;fills:typeof allFills}>();
