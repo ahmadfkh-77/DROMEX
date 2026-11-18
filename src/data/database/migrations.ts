@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export const DATABASE_VERSION = 69;
+export const DATABASE_VERSION = 70;
 
 type TableColumn = { name: string };
 
@@ -2561,6 +2561,56 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     currentVersion = 69;
   }
 
+
+  if (currentVersion === 69) {
+    // Bitumen fills (DEC-557): bitumen taken from a batch straight into a truck, in kg. Purely additive: two new tables, so no batch, use row,
+    // closure or adjustment is touched. A fill keeps the truck, destination and batch prices as they were when it was saved. Rows are append-only:
+    // nothing is deleted, the quantity and portions never change, and a fill is cancelled once (with a reason) by stamping it.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS bitumen_fills (
+        id TEXT PRIMARY KEY NOT NULL,
+        fill_date TEXT NOT NULL,
+        confirmed_at TEXT NOT NULL,
+        truck_id TEXT REFERENCES truck_profiles(id),
+        truck_name TEXT NOT NULL CHECK (length(trim(truck_name)) > 0),
+        destination_type TEXT NOT NULL CHECK (destination_type IN ('project', 'company_site', 'unassigned')),
+        project_id TEXT REFERENCES projects(id),
+        project_name TEXT,
+        company_site_id TEXT,
+        company_site_name TEXT,
+        layer_note TEXT,
+        ticket_number TEXT,
+        notes TEXT,
+        total_kg REAL NOT NULL CHECK (total_kg > 0),
+        status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Cancelled')),
+        cancellation_reason TEXT,
+        cancelled_at TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_bitumen_fills_date ON bitumen_fills(fill_date);
+      CREATE TABLE IF NOT EXISTS bitumen_fill_portions (
+        id TEXT PRIMARY KEY NOT NULL,
+        fill_id TEXT NOT NULL REFERENCES bitumen_fills(id),
+        batch_id TEXT NOT NULL REFERENCES bitumen_batches(id),
+        kg REAL NOT NULL CHECK (kg > 0),
+        price_per_kg_usd REAL,
+        position INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_bitumen_fill_portions_fill ON bitumen_fill_portions(fill_id);
+      CREATE INDEX IF NOT EXISTS idx_bitumen_fill_portions_batch ON bitumen_fill_portions(batch_id);
+      CREATE TRIGGER IF NOT EXISTS trg_bitumen_fills_no_delete BEFORE DELETE ON bitumen_fills
+        BEGIN SELECT RAISE(ABORT, 'A fill cannot be deleted; cancel it with a reason instead.'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_bitumen_fill_portions_no_delete BEFORE DELETE ON bitumen_fill_portions
+        BEGIN SELECT RAISE(ABORT, 'A fill cannot be deleted; cancel it with a reason instead.'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_bitumen_fill_portions_no_update BEFORE UPDATE ON bitumen_fill_portions
+        BEGIN SELECT RAISE(ABORT, 'A fill cannot change; cancel it and record a new one.'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_bitumen_fills_no_rewrite BEFORE UPDATE ON bitumen_fills
+        WHEN OLD.status = 'Cancelled' OR NEW.total_kg <> OLD.total_kg OR NEW.fill_date <> OLD.fill_date OR NEW.confirmed_at <> OLD.confirmed_at
+          OR NEW.truck_name <> OLD.truck_name OR NEW.destination_type <> OLD.destination_type OR NEW.created_at <> OLD.created_at
+        BEGIN SELECT RAISE(ABORT, 'A fill cannot change; cancel it and record a new one.'); END;
+    `);
+    currentVersion = 70;
+  }
 
   await db.execAsync(`PRAGMA user_version = ${currentVersion}`);
 }

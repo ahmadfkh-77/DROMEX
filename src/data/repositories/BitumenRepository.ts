@@ -3,6 +3,7 @@ import type {BitumenRule,BitumenRuleDraft,BitumenUseSetup,LeftOutLoad,SyncResult
 /** The app preference store (the same key-value store the backup already carries, keys starting with `dromex.`). */
 export type BitumenPreferenceStore={getItem(key:string):Promise<string|null>;setItem(key:string,value:string):Promise<void>};
 export const AUTO_PLACE_TODAY_KEY='dromex.bitumen.autoPlaceToday';
+import type {BitumenFill,BitumenFillDraft,BitumenFillSetup,FillPlan} from '../../domain/bitumenFills';
 import type {BitumenBatch,BitumenDeliveryDraft,BitumenEditDraft,BitumenGrade,BitumenOverview,BitumenSetup} from '../../domain/bitumen';
 
 /** Bitumen batches (Phase B): deliveries in kg, the batch in use, correction and cancellation. UI calls this; SQLite persists it. */
@@ -41,6 +42,14 @@ export interface BitumenRepository{
   addLoadToBatch(loadId:string,toBatchId:string):Promise<{addedKg:number;uncoveredKg:number;overview:BitumenOverview}>;
   /** Records the real amount left in a batch, as an adjustment with a reason. */
   adjustBatch(batchId:string,realRemainingKg:string,reason:string):Promise<BitumenOverview>;
+  /** DEC-557. The active trucks, projects and company sites a fill can be given to. */
+  getFillSetup():Promise<BitumenFillSetup>;
+  /** What a fill would do, without saving: the batches it takes from, the cost, or what is over the limit. */
+  previewFill(draft:BitumenFillDraft):Promise<FillPlan>;
+  /** Records a fill from the open batches, split across batches when needed. Refused when the open batches cannot hold it. */
+  recordFill(draft:BitumenFillDraft):Promise<BitumenFill>;
+  /** Cancels a fill with a reason. It stays on record and its kg returns to the batch. */
+  cancelFill(fillId:string,reason:string):Promise<BitumenOverview>;
   addGrade(name:string):Promise<BitumenGrade>;
   setGradeActive(id:string,isActive:boolean):Promise<void>;
 }

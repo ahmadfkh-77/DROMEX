@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DROMEX Bitumen: Record Fill (mockup v1)</title>
+<style>
+  :root{--orange:#C84B31;--navy:#173F67;--ink:#14263A;--cream:#FFF8ED;--cream2:#F5F2EC;--white:#fff;--line:#E4DED3;--muted:#6B7280;--grey:#8A8F98;
+    --amber:#9A6200;--amber-bg:#FFF4DC;--amber-line:#F1CF83;--red:#B42318;--red-bg:#FDECEA;--red-line:#F3B4AE;--green:#1E7B45}
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:#E9E4DA;color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.4}
+  .num{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+  .top{max-width:1500px;margin:0 auto;padding:24px 16px 4px}
+  .top h1{margin:0 0 4px;font-size:22px;color:var(--navy)}
+  .top p{margin:0 0 8px;color:var(--muted);max-width:900px}
+  .top p b{color:var(--ink)}
+  .stage{max-width:1500px;margin:0 auto;padding:16px;display:flex;gap:30px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+  .caption{font:700 12px system-ui;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;max-width:390px}
+  .caption small{display:block;text-transform:none;letter-spacing:0;font-weight:500;font-size:12.5px;margin-top:2px}
+  .phone{width:390px;max-width:100%;height:860px;background:var(--cream);border-radius:36px;border:10px solid #1B1B1B;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(20,38,58,.18)}
+  .phone-scroll{overflow-y:auto;flex:1}
+  .ph-head{padding:18px 20px 12px}
+  .back{display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:999px;background:var(--white);border:1px solid var(--line);font-weight:600;color:var(--navy);font-size:13px}
+  .eyebrow{margin:14px 0 2px;color:var(--orange);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .title{margin:0;font-size:26px;font-weight:700;color:var(--ink)}
+  .sub{margin:4px 0 0;color:var(--muted);font-size:13px}
+  .badge{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+  .b-inuse{background:var(--navy);color:#fff}.b-wait{border:1.5px solid var(--navy);color:var(--navy)}.b-closed{border:1.5px solid var(--grey);color:var(--grey)}
+  .summary{position:sticky;top:0;z-index:2;background:var(--cream);padding:6px 20px 12px;border-bottom:1px solid var(--line)}
+  .sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .metric{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+  .metric .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .metric .v{font-size:20px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .metric .v small{font-size:12px;color:var(--muted);font-weight:700}
+  .metric.fillm{border-color:var(--orange)}.metric.fillm .v{color:var(--orange)}
+  .metric.adj{background:var(--amber-bg);border-color:var(--amber-line)}.metric.adj .v{color:var(--amber)}
+  .metric.rem{background:var(--navy);border-color:var(--navy)}.metric.rem .k{color:#C9D6E6}.metric.rem .v,.metric.rem .v small{color:#fff}
+  .metric.wide{grid-column:span 2}
+  .body{padding:14px 20px 42px;display:flex;flex-direction:column;gap:16px}
+  .card{background:#fff;border-radius:16px;padding:16px 17px;border:1px solid var(--line)}
+  .card h3{margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px;margin:0}
+  .kv dt{color:var(--muted)}.kv dd{margin:0;font-weight:600;text-align:right}
+  .section-title{margin:6px 0 -4px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--navy)}
+  .section-title span{color:var(--muted);font-weight:600;letter-spacing:0;text-transform:none}
+  .day{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .day-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:12px 17px;background:var(--cream2);border-bottom:1px solid var(--line)}
+  .day-head .date{font-weight:700;font-size:15px}.day-head .tot{font-size:13px;color:var(--muted)}.day-head .tot b{color:var(--ink);font-size:15px}
+  .grp{padding:10px 17px 12px;border-top:1px solid var(--line)}.grp:first-of-type{border-top:0}
+  .grp-type{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .grp-name{font-weight:700;margin:2px 0 6px;overflow-wrap:anywhere}
+  .fill{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px dashed var(--line)}.fill:first-of-type{border-top:0}
+  .fill .who{min-width:0}.fill .eq{font-weight:600;overflow-wrap:anywhere}
+  .fill .meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .fill .l{font-weight:700;font-size:15px}
+  .tag{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border-radius:6px;font-size:11px;font-weight:700}
+  .tag-b{border:1px solid var(--navy);color:var(--navy)}
+  .grp-sub{display:flex;justify-content:space-between;padding-top:8px;margin-top:4px;border-top:1px solid var(--line);font-size:13px;font-weight:700}
+  .btn{display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:14px;font-weight:700;font-size:15px}
+  .btn-primary{background:var(--orange);color:#fff}.btn-secondary{background:#fff;border:1.5px solid var(--navy);color:var(--navy)}.btn-danger{background:#fff;border:1.5px solid var(--red);color:var(--red)}
+  .btn.off{opacity:.4}
+  .panel-amber{background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:14px;padding:12px 14px;font-size:13px}
+  .panel-amber .h{font-weight:700;color:var(--amber);margin-bottom:4px}
+  .panel-red{background:var(--red-bg);border:1px solid var(--red-line);border-radius:14px;padding:12px 14px;font-size:13px;color:var(--red)}
+  .panel-red b{display:block;margin-bottom:2px}
+  .panel-red span{color:var(--ink)}
+  .fcard{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 17px;display:flex;flex-direction:column}
+  .step{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);margin-bottom:10px}
+  .sn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--navy);color:#fff;font-size:12px;letter-spacing:0}
+  .flabel{font-size:13px;font-weight:600;margin:10px 0 5px}.step+.flabel{margin-top:0}
+  .opt{font-weight:500;color:var(--muted);font-size:12px}
+  .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--cream2);border-radius:12px;padding:4px;gap:4px}
+  .seg.three{grid-template-columns:1fr 1fr 1fr}
+  .seg span{display:flex;align-items:center;justify-content:center;min-height:40px;border-radius:9px;font-weight:600;font-size:13px;color:var(--muted);text-align:center;padding:0 4px}
+  .seg span.on{background:var(--navy);color:#fff}
+  .select,.input{min-height:46px;border:1px solid #D6D0C4;border-radius:11px;background:#FFFDF9;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;overflow-wrap:anywhere}
+  .select b{font-weight:700}.sel-sub{font-size:12px;color:var(--muted);margin-top:1px}.chev{color:var(--navy);font-size:14px}
+  .input.ph{color:var(--muted)}.num-in{font-weight:700;font-size:17px;font-variant-numeric:tabular-nums}
+  .input.bad{border-color:var(--red);background:#FFF8F7}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.two .flabel{margin-top:0}
+  .preview{background:#EEF2F7;border:1px solid #C7D3E2;border-radius:16px;padding:14px 16px}
+  .pv-h{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);margin-bottom:6px}
+  .pv-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:7px 0;border-top:1px solid rgba(23,63,103,.12);font-size:13px}
+  .pv-row:first-of-type{border-top:0}.pv-row small{color:var(--muted);font-size:12px}.pv-row b{text-align:right}
+  .pv-row.total{font-weight:700;border-top:1.5px solid var(--navy)}
+  .filter-head{display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 16px;border-radius:14px;font-weight:700;font-size:14px;background:var(--navy);color:#fff}
+  .batch{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+  .batch-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .batch-no{font-size:17px;font-weight:700}.batch-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .batch-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+  .batch-figs div{display:flex;flex-direction:column;gap:2px}
+  .batch-figs span{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .batch-figs b{font-size:16px}.batch-figs div:last-child b{color:var(--navy)}
+  .bar{height:8px;background:var(--cream2);border-radius:99px;margin-top:10px;overflow:hidden;display:flex}
+  .bar i{display:block;height:100%}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:7px}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+  .batch-note{font-size:12px;color:var(--muted);margin-top:8px}
+  .rule{font-size:12px;color:var(--muted)}
+  .link{font-size:13px;font-weight:700;color:var(--navy);margin-top:8px}
+  .notes{max-width:1500px;margin:0 auto;padding:8px 16px 40px}
+  .notes .card{max-width:960px}
+  .notes li{margin-bottom:6px}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>Bitumen: Record Fill (mockup v1)</h1>
+  <p><b>The idea:</b> a truck is filled with bitumen straight from a batch to be used on the road (not through an asphalt load). You record the fill and the batch page shows how much has been taken, by day, next to the amounts the asphalt loads use. Drawn with the existing diesel Record Fill and batch page design (0.20.0), the bitumen batch screen, and the colours from the bitumen use-by-day mockup. Figures are invented.</p>
+</div>
+
+<div class="stage">
+
+  <!-- 1. BATCH PAGE -->
+  <div>
+    <p class="caption">1 · Batch page, with fills<small>New: "Record Fill" button, "Taken by fills" figure, and a "Fills by day" list. The existing "Use from asphalt loads" section stays as it is.</small></p>
+    <div class="phone"><div class="phone-scroll">
+      <div class="ph-head">
+        <span class="back">‹ Back</span>
+        <p class="eyebrow">Bitumen</p>
+        <div class="title-row"><h2 class="title">BIT-2026-00007</h2><span class="badge b-inuse">Open · In use</span></div>
+        <p class="sub">Invoice 55821 · Arrived Mon 3 Nov 2026</p>
+      </div>
+      <div class="summary">
+        <div class="sum-grid">
+          <div class="metric"><div class="k">Delivered</div><div class="v">30,000 <small>kg</small></div></div>
+          <div class="metric fillm"><div class="k">Taken by fills</div><div class="v">8,400 <small>kg</small></div></div>
+          <div class="metric"><div class="k">Est. used by asphalt loads</div><div class="v">14,950 <small>kg</small></div></div>
+          <div class="metric adj"><div class="k">Adjustments</div><div class="v">−150 <small>kg</small></div></div>
+          <div class="metric rem wide"><div class="k">Remaining</div><div class="v">6,500 <small>kg</small></div></div>
+        </div>
+        <div class="bar" aria-hidden="true"><i style="width:28%;background:var(--orange)"></i><i style="width:49.8%;background:var(--navy)"></i><i style="width:.5%;background:var(--amber)"></i></div>
+        <div class="legend"><span><i style="background:var(--orange)"></i>Fills</span><span><i style="background:var(--navy)"></i>Asphalt loads</span><span><i style="background:#E4DED3"></i>Remaining</span></div>
+      </div>
+      <div class="body">
+        <div class="btn btn-primary">Record Fill</div>
+
+        <div class="card">
+          <h3>Batch details</h3>
+          <dl class="kv"><dt>Supplier</dt><dd>Al-Nour Bitumen Co.</dd><dt>Grade</dt><dd>MC-70</dd><dt>Invoice</dt><dd>55821</dd><dt>Arrived</dt><dd>Mon 3 Nov 2026</dd><dt>Price</dt><dd>$610.00 / t</dd></dl>
+        </div>
+
+        <div class="card">
+          <h3>Taken by fills · by destination</h3>
+          <div class="fill"><div class="who"><div class="eq">Hasbaya – Marjayoun Road, Phase 2</div></div><div class="l num">6,000 kg</div></div>
+          <div class="fill"><div class="who"><div class="eq">Marjayoun Water Tank Foundations</div></div><div class="l num">1,800 kg</div></div>
+          <div class="fill"><div class="who"><div class="eq">Unassigned</div></div><div class="l num">600 kg</div></div>
+          <div class="grp-sub"><span>Total taken by fills</span><span class="num">8,400 kg</span></div>
+        </div>
+
+        <p class="section-title">Fills by day <span>· newest first · one card per day</span></p>
+
+        <div class="day">
+          <div class="day-head"><span class="date">Thu 6 Nov 2026</span><span class="tot">Day total <b class="num">4,000 kg</b></span></div>
+          <div class="grp">
+            <div class="grp-type">Project</div><div class="grp-name">Hasbaya – Marjayoun Road, Phase 2</div>
+            <div class="fill"><div class="who"><div class="eq">Truck 72-118 · Tanker</div><div class="meta"><span class="tag tag-b">BIT-2026-00007</span><span>07:30</span><span>Tack coat, km 4 to 6</span></div></div><div class="l num">2,500 kg</div></div>
+            <div class="fill"><div class="who"><div class="eq">Truck 41-903 · Tanker</div><div class="meta"><span class="tag tag-b">BIT-2026-00007</span><span>13:10</span></div></div><div class="l num">1,500 kg</div></div>
+            <div class="grp-sub"><span>Project total</span><span class="num">4,000 kg</span></div>
+          </div>
+        </div>
+
+        <div class="day">
+          <div class="day-head"><span class="date">Wed 5 Nov 2026</span><span class="tot">Day total <b class="num">3,200 kg</b></span></div>
+          <div class="grp">
+            <div class="grp-type">Project</div><div class="grp-name">Hasbaya – Marjayoun Road, Phase 2</div>
+            <div class="fill"><div class="who"><div class="eq">Truck 72-118 · Tanker</div><div class="meta"><span class="tag tag-b">BIT-2026-00007</span><span>08:05</span></div></div><div class="l num">2,000 kg</div></div>
+            <div class="grp-sub"><span>Project total</span><span class="num">2,000 kg</span></div>
+          </div>
+          <div class="grp">
+            <div class="grp-type">Project</div><div class="grp-name">Marjayoun Water Tank Foundations</div>
+            <div class="fill"><div class="who"><div class="eq">Truck 41-903 · Tanker</div><div class="meta"><span class="tag tag-b">BIT-2026-00007</span><span>11:40</span></div></div><div class="l num">1,200 kg</div></div>
+            <div class="grp-sub"><span>Project total</span><span class="num">1,200 kg</span></div>
+          </div>
+        </div>
+
+        <div class="day">
+          <div class="day-head"><span class="date">Tue 4 Nov 2026</span><span class="tot">Day total <b class="num">1,200 kg</b></span></div>
+          <div class="grp">
+            <div class="grp-type">Project</div><div class="grp-name">Marjayoun Water Tank Foundations</div>
+            <div class="fill"><div class="who"><div class="eq">Truck 41-903 · Tanker</div><div class="meta"><span class="tag tag-b">BIT-2026-00007</span><span>09:20</span></div></div><div class="l num">600 kg</div></div>
+            <div class="grp-sub"><span>Project total</span><span class="num">600 kg</span></div>
+          </div>
+          <div class="grp">
+            <div class="grp-type">Unassigned</div>
+            <div class="fill"><div class="who"><div class="eq">Truck 72-118 · Tanker</div><div class="meta"><span class="tag tag-b">BIT-2026-00007</span><span>15:45</span></div></div><div class="l num">600 kg</div></div>
+            <div class="grp-sub"><span>Unassigned total</span><span class="num">600 kg</span></div>
+          </div>
+        </div>
+
+        <div class="btn btn-secondary">Use this batch first</div>
+        <div class="btn btn-secondary">Adjust the real amount left</div>
+        <div class="btn btn-secondary">Export PDF</div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 2. RECORD FILL FORM -->
+  <div>
+    <p class="caption">2 · Record Fill form<small>Same five steps as the diesel Record Fill. Batch is pre-selected (oldest open batch first). Kilograms, like the rest of Bitumen.</small></p>
+    <div class="phone"><div class="phone-scroll">
+      <div class="ph-head">
+        <span class="back">‹ Back</span>
+        <p class="eyebrow">Bitumen</p>
+        <h2 class="title">Record Fill</h2>
+        <p class="sub">Bitumen put into a truck from a batch. It is taken from the oldest batch first.</p>
+      </div>
+      <div class="body" style="padding-top:4px">
+        <div class="fcard">
+          <div class="step"><span class="sn">1</span>Batch</div>
+          <label class="flabel">Batch *</label>
+          <div class="select"><div><b>BIT-2026-00007</b> · Invoice 55821<div class="sel-sub">Oldest open batch · 6,500 kg remaining</div></div><span class="chev">▾</span></div>
+          <div class="hint">Pre-selected automatically. You can change it to another open batch.</div>
+        </div>
+        <div class="fcard">
+          <div class="step"><span class="sn">2</span>Truck</div>
+          <label class="flabel">Truck *</label>
+          <div class="select"><div><b>Truck 72-118</b><div class="sel-sub">Tanker · saved truck profile</div></div><span class="chev">▾</span></div>
+        </div>
+        <div class="fcard">
+          <div class="step"><span class="sn">3</span>Destination</div>
+          <label class="flabel">Where will it be used *</label>
+          <div class="seg three"><span class="on">Project</span><span>Company Site</span><span>Unassigned</span></div>
+          <label class="flabel">Project *</label>
+          <div class="select"><div>Hasbaya – Marjayoun Road, Phase 2</div><span class="chev">▾</span></div>
+          <label class="flabel">Layer or use <span class="opt">optional</span></label>
+          <div class="input ph">For example tack coat, prime coat</div>
+        </div>
+        <div class="fcard">
+          <div class="step"><span class="sn">4</span>Quantity and date</div>
+          <div class="two">
+            <div><label class="flabel">Bitumen (kg) *</label><div class="input num-in">7,200</div></div>
+            <div><label class="flabel">Date *</label><div class="input">Thu 6 Nov 2026</div></div>
+          </div>
+          <div class="hint">From the weighbridge ticket or the truck's gauge.</div>
+          <label class="flabel">Ticket no. <span class="opt">optional</span></label>
+          <div class="input ph">Not recorded</div>
+          <label class="flabel">Note <span class="opt">optional</span></label>
+          <div class="input ph">Add a note</div>
+        </div>
+        <div class="preview">
+          <div class="pv-h">Before you save</div>
+          <div class="pv-row"><span>From <b>BIT-2026-00007</b><br><small>uses the last 6,500 kg · batch closes</small></span><b class="num">6,500 kg</b></div>
+          <div class="pv-row"><span>From <b>BIT-2026-00008</b><br><small>becomes the batch in use</small></span><b class="num">700 kg</b></div>
+          <div class="pv-row total"><span>Total fill · shown as one fill, split</span><b class="num">7,200 kg</b></div>
+          <div class="pv-row"><span>Cost</span><b class="num">$3,965.00 + 700 kg Unpriced</b></div>
+        </div>
+        <div class="btn btn-primary">Save Fill</div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 3. TOO MUCH -->
+  <div>
+    <p class="caption">3 · More than all open batches hold<small>Save is blocked, the field stays editable. Nothing is hidden or guessed.</small></p>
+    <div class="phone"><div class="phone-scroll">
+      <div class="ph-head">
+        <span class="back">‹ Back</span>
+        <p class="eyebrow">Bitumen</p>
+        <h2 class="title">Record Fill</h2>
+        <p class="sub">Bitumen put into a truck from a batch. It is taken from the oldest batch first.</p>
+      </div>
+      <div class="body" style="padding-top:4px">
+        <div class="panel-red"><b>This fill is more than what is left</b><span>The open batches hold 9,100 kg in total. Lower the amount, or record the new delivery first.</span></div>
+        <div class="fcard">
+          <div class="step"><span class="sn">1</span>Batch</div>
+          <div class="select"><div><b>BIT-2026-00007</b> · Invoice 55821<div class="sel-sub">Oldest open batch · 6,500 kg remaining</div></div><span class="chev">▾</span></div>
+        </div>
+        <div class="fcard">
+          <div class="step"><span class="sn">4</span>Quantity and date</div>
+          <div class="two">
+            <div><label class="flabel">Bitumen (kg) *</label><div class="input num-in bad">12,000</div></div>
+            <div><label class="flabel">Date *</label><div class="input">Thu 6 Nov 2026</div></div>
+          </div>
+        </div>
+        <div class="preview">
+          <div class="pv-h">Before you save</div>
+          <div class="pv-row"><span>Open batches hold</span><b class="num">9,100 kg</b></div>
+          <div class="pv-row total"><span>Over by</span><b class="num" style="color:var(--red)">2,900 kg</b></div>
+        </div>
+        <div class="btn btn-primary off">Save Fill</div>
+        <div class="btn btn-secondary">Record bitumen delivery</div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 4. BATCH LIST -->
+  <div>
+    <p class="caption">4 · Bitumen batches list<small>The remaining figure and bar now include fills. The line under each batch says how much came from fills and how much from asphalt loads.</small></p>
+    <div class="phone"><div class="phone-scroll">
+      <div class="ph-head">
+        <span class="back">‹ Back</span>
+        <p class="eyebrow">Bitumen</p>
+        <h2 class="title">Bitumen batches</h2>
+      </div>
+      <div class="body" style="padding-top:4px">
+        <div class="metric rem"><div class="k">Total remaining</div><div class="v">15,600 <small>kg</small></div></div>
+        <div class="btn btn-primary">Record bitumen delivery</div>
+        <div class="btn btn-secondary">Record Fill</div>
+        <div class="btn btn-secondary">Asphalt items and rules</div>
+
+        <div class="batch">
+          <div class="batch-top"><div><div class="batch-no">BIT-2026-00007</div><div class="batch-sub">Al-Nour Bitumen Co. · MC-70 · Arrived Mon 3 Nov</div></div><span class="badge b-inuse">In use</span></div>
+          <div class="batch-figs"><div><span>Delivered</span><b class="num" style="text-align:left">30,000 kg</b></div><div><span>Used</span><b class="num" style="text-align:left">23,350 kg</b></div><div><span>Remaining</span><b class="num" style="text-align:left">6,500 kg</b></div></div>
+          <div class="bar"><i style="width:28%;background:var(--orange)"></i><i style="width:49.8%;background:var(--navy)"></i></div>
+          <div class="batch-note">Fills 8,400 kg · Asphalt loads (est.) 14,950 kg · Adjustment −150 kg</div>
+        </div>
+
+        <div class="batch">
+          <div class="batch-top"><div><div class="batch-no">BIT-2026-00008</div><div class="batch-sub">Al-Nour Bitumen Co. · MC-70 · Arrived Wed 5 Nov</div></div><span class="badge b-wait">Waiting</span></div>
+          <div class="batch-figs"><div><span>Delivered</span><b class="num" style="text-align:left">20,000 kg</b></div><div><span>Used</span><b class="num" style="text-align:left">10,900 kg</b></div><div><span>Remaining</span><b class="num" style="text-align:left">9,100 kg</b></div></div>
+          <div class="bar"><i style="width:20%;background:var(--orange)"></i><i style="width:34.5%;background:var(--navy)"></i></div>
+          <div class="batch-note">Fills 4,000 kg · Asphalt loads (est.) 6,900 kg</div>
+        </div>
+
+        <div class="filter-head"><span>Closed and cancelled batches</span><span>+</span></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 5. CLOSED BATCH -->
+  <div>
+    <p class="caption">5 · A closed batch<small>Fills stay visible as history. There is no Record Fill button, same as the diesel rule for a closed batch.</small></p>
+    <div class="phone"><div class="phone-scroll">
+      <div class="ph-head">
+        <span class="back">‹ Back</span>
+        <p class="eyebrow">Bitumen</p>
+        <div class="title-row"><h2 class="title">BIT-2026-00005</h2><span class="badge b-closed">Closed</span></div>
+        <p class="sub">Invoice 55310 · Arrived Mon 6 Oct 2026</p>
+      </div>
+      <div class="summary">
+        <div class="sum-grid">
+          <div class="metric"><div class="k">Delivered</div><div class="v">25,000 <small>kg</small></div></div>
+          <div class="metric fillm"><div class="k">Taken by fills</div><div class="v">11,800 <small>kg</small></div></div>
+          <div class="metric"><div class="k">Est. used by asphalt loads</div><div class="v">13,200 <small>kg</small></div></div>
+          <div class="metric rem"><div class="k">Remaining</div><div class="v">0 <small>kg</small></div></div>
+        </div>
+      </div>
+      <div class="body">
+        <p class="section-title">Fills by day <span>· newest first · one card per day</span></p>
+        <div class="day">
+          <div class="day-head"><span class="date">Fri 24 Oct 2026</span><span class="tot">Day total <b class="num">2,800 kg</b></span></div>
+          <div class="grp">
+            <div class="grp-type">Project</div><div class="grp-name">Hasbaya – Marjayoun Road, Phase 2</div>
+            <div class="fill"><div class="who"><div class="eq">Truck 72-118 · Tanker</div><div class="meta"><span class="tag tag-b">BIT-2026-00005</span><span>08:15</span></div></div><div class="l num">2,800 kg</div></div>
+            <div class="grp-sub"><span>Project total</span><span class="num">2,800 kg</span></div>
+          </div>
+        </div>
+        <div class="btn btn-secondary">Show earlier days (6 more)</div>
+        <div class="btn btn-secondary">Export PDF</div>
+      </div>
+    </div></div>
+  </div>
+
+</div>
+
+<div class="notes"><div class="card">
+  <h3>What I assumed (tell me what to change)</h3>
+  <ol>
+    <li><b>Remaining</b> = delivered + adjustments − fills − estimated use from asphalt loads. Both come out of the same batch.</li>
+    <li>A fill is in <b>kg</b>, picks the <b>oldest open batch first</b>, and splits across two batches when the first runs out (same as diesel).</li>
+    <li>You choose a <b>truck</b> (saved trucks, as for diesel) and a <b>destination</b> (project, company site or unassigned).</li>
+    <li>A fill is never edited or deleted silently. Wrong fills are cancelled with a reason and stay on record, like diesel.</li>
+    <li>Fills appear in the batch PDF as their own section, next to the asphalt use by day.</li>
+  </ol>
+</div></div>
+</body>
+</html>

@@ -229,7 +229,7 @@ describe('the database',()=>{
   it('keeps Bitumen and the other tables untouched',async()=>{
     const {db}=await setup();
     const tables=(db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'bitumen_%'").all() as {name:string}[]).map(row=>row.name).sort();
-    expect(tables).toEqual(['bitumen_adjustments','bitumen_batch_counters','bitumen_batches','bitumen_grades','bitumen_item_rules','bitumen_settings','bitumen_use']);
+    expect(tables).toEqual(['bitumen_adjustments','bitumen_batch_counters','bitumen_batches','bitumen_fill_portions','bitumen_fills','bitumen_grades','bitumen_item_rules','bitumen_settings','bitumen_use']);
   });
 });
 

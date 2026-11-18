@@ -152,7 +152,7 @@ export function FuelFillForm({setup,batchOverview,draft,onChange,lockedProjectId
   </View>;
 }
 
-function Step({number,title,children}:{number:number;title:string;children:ReactNode}){
+export function Step({number,title,children}:{number:number;title:string;children:ReactNode}){
   return <View style={styles.step} accessibilityRole="summary" accessibilityLabel={`Step ${number}, ${title}`}>
     <View style={styles.stepHead}><View style={styles.stepNumber}><Text style={styles.stepNumberText}>{number}</Text></View><Text style={styles.stepTitle}>{title.toUpperCase()}</Text></View>
     {children}
@@ -160,7 +160,7 @@ function Step({number,title,children}:{number:number;title:string;children:React
 }
 
 /** The "Before you save" panel. The tint says nothing by itself: every line is written out in words. */
-function Preview({lines,tone}:{lines:PreviewLine[];tone:'batch'|'neutral'}){
+export function Preview({lines,tone}:{lines:PreviewLine[];tone:'batch'|'neutral'}){
   return <View style={[styles.preview,tone==='neutral'&&styles.previewNeutral]}>
     <Text style={styles.previewTitle}>BEFORE YOU SAVE</Text>
     {lines.map((line,index)=><View key={`${line.label}-${index}`} style={[styles.previewRow,line.kind==='total'&&styles.previewTotal]}>

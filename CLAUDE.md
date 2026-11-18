@@ -263,7 +263,7 @@ Each phase must be independently testable and must integrate with existing daily
 records rather than create a second disconnected data-entry system.
 
 Phase 1 scope is recorded in DEC-547 to DEC-553 and OQ-171 to OQ-178 (extend
-`schedule_tasks` in place, migration 70 (69 is taken by the Quantity Target site entries, DEC-556), WBS depth 4, Mon to Sat workday
+`schedule_tasks` in place, migration 71 (69 is taken by the Quantity Target site entries, DEC-556, and 70 by bitumen fills, DEC-557), WBS depth 4, Mon to Sat workday
 calendars). DEC-554 records that Phase 5 derives progress from the linked
 Quantity Target (open: OQ-179), and DEC-555 that diagrams are activity-on-node,
 Gantt first, in Phase 3. Phase 1's four mockups are

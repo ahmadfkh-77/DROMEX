@@ -10,12 +10,14 @@ import {
   adjustmentFor,DEFAULT_RULE,eligibleBatchRooms,loadUseDetail,mixKgForLoad,planAddToBatch,planAutoPlaceToday,planMoveLoad,reconcileBitumenUse,USE_EPSILON,
   type LeftOutLoad,type BitumenAdjustment,type BitumenRule,type BitumenRuleDraft,type BitumenUseRow,type BitumenUseSetup,type SyncResult,type UseBatch,type UseLoad,type UseRowInput,
 } from '../../domain/bitumenUse';
+import {batchPricePerKg,fillCost,fillIssueMessages,planFill,validateFillCancellation,type BitumenFill,type BitumenFillDraft,type BitumenFillSetup,type FillBatch,type FillPlan} from '../../domain/bitumenFills';
 import {AUTO_PLACE_TODAY_KEY,type BitumenPreferenceStore,type BitumenRepository} from './BitumenRepository';
 import {insertClosure,loadClosures,reopenClosure} from './batchClosures';
 
 type UseDbRow={id:string;load_id:string;batch_id:string|null;kind:BitumenUseRow['kind'];kg:number;mix_kg:number;rule_aggregate_kg:number;rule_bitumen_kg:number;load_number:string|null;load_confirmed_at:string|null;item_name:string;note:string|null;created_at:string};
 const useFromRow=(row:UseDbRow):BitumenUseRow=>({id:row.id,loadId:row.load_id,batchId:row.batch_id,kind:row.kind,kg:row.kg,mixKg:row.mix_kg,ruleAggregateKg:row.rule_aggregate_kg,ruleBitumenKg:row.rule_bitumen_kg,loadNumber:row.load_number,loadConfirmedAt:row.load_confirmed_at??row.created_at,itemName:row.item_name,note:row.note,createdAt:row.created_at});
 type LoadDbRow={id:string;item_id:string;item_name:string;load_number:string|null;transaction_number:string;confirmed_at:string;status:'Active'|'Cancelled';is_archived:number|null;quantity_method:'weighbridge'|'direct'|null;net_weight_kg:number|null;direct_quantity:number|null;direct_unit_symbol:string|null;billed_quantity:number|null;output_unit_symbol:string|null};
+type FillDbRow={id:string;fill_date:string;confirmed_at:string;truck_id:string|null;truck_name:string;destination_type:BitumenFill['destinationType'];project_id:string|null;project_name:string|null;company_site_id:string|null;company_site_name:string|null;layer_note:string|null;ticket_number:string|null;notes:string|null;total_kg:number;status:BitumenFill['status'];cancellation_reason:string|null;cancelled_at:string|null;created_at:string};
 const round3=(value:number)=>Math.round(value*1000)/1000;
 const positive=(value:string,what:string)=>{const parsed=Number(value.trim().replace(',','.'));if(!/^\d+([.,]\d+)?$/.test(value.trim())||!Number.isFinite(parsed)||parsed<=0)throw new Error(`${what} must be a number greater than zero.`);return parsed;};
 
@@ -73,8 +75,11 @@ export class SqliteBitumenRepository implements BitumenRepository{
     for(const row of useRows)if(row.batchId)used.set(row.batchId,round3((used.get(row.batchId)??0)+row.kg));
     for(const adjustment of adjustments)adjusted.set(adjustment.batchId,round3((adjusted.get(adjustment.batchId)??0)+adjustment.kg));
     const closures=await loadClosures(this.db,'bitumen');
-    const overview=buildBitumenOverview(rows.map(fromRow).map(batch=>({...batch,usedKg:used.get(batch.id)??0,adjustmentKg:adjusted.get(batch.id)??0})),settings?.using_batch_id??null,closures);
-    return {...overview,useRows,adjustments,rulesEnabled:enabled?.count??0};
+    const fills=await this.loadFills();
+    const filled=new Map<string,number>();
+    for(const fill of fills)if(fill.status==='Active')for(const portion of fill.portions)filled.set(portion.batchId,round3((filled.get(portion.batchId)??0)+portion.kg));
+    const overview=buildBitumenOverview(rows.map(fromRow).map(batch=>({...batch,usedKg:used.get(batch.id)??0,filledKg:filled.get(batch.id)??0,adjustmentKg:adjusted.get(batch.id)??0})),settings?.using_batch_id??null,closures);
+    return {...overview,useRows,adjustments,fills,rulesEnabled:enabled?.count??0};
   }
 
   private async batch(id:string):Promise<BitumenBatch>{
@@ -133,6 +138,8 @@ export class SqliteBitumenRepository implements BitumenRepository{
     const reason=draft.reason.trim();
     if((dateChanged||kgChanged)&&!reason)throw new Error('Enter the reason for changing the quantity or the date.');
     if(kg<before.usedKg)throw new Error('The quantity cannot be less than the bitumen already used from this batch.');
+    const current=await this.batch(id);
+    if(current.filledKg&&kg+current.adjustmentKg<current.usedKg+current.filledKg)throw new Error('The quantity cannot be less than the bitumen already used and filled from this batch. Cancel fills first if they were a mistake.');
     const priceBasis=price.priceUsd==null?null:draft.priceBasis;
     const changes:BitumenCorrectionEntry['changes']=[];
     const note=(field:string,from:string|null,to:string|null)=>{if((from??'')!==(to??''))changes.push({field,before:from??'—',after:to??'—'});};
@@ -159,6 +166,7 @@ export class SqliteBitumenRepository implements BitumenRepository{
     const row=await this.db.getFirstAsync<Row>('SELECT * FROM bitumen_batches WHERE id=?',id);
     if(!row)throw new Error('The bitumen batch was not found.');
     if(row.status==='Cancelled')throw new Error('This batch is already cancelled.');
+    if((await this.batch(id)).filledKg)throw new Error('Cancel the fills taken from this batch first, then cancel the batch.');
     const now=new Date().toISOString();
     await this.db.withTransactionAsync(async()=>{
       await this.db.runAsync("UPDATE bitumen_batches SET status='Cancelled',cancellation_reason=?,cancelled_at=?,updated_at=? WHERE id=?",value,now,now,id);
@@ -222,7 +230,7 @@ export class SqliteBitumenRepository implements BitumenRepository{
   }
 
   private useBatches(overview:BitumenOverview):UseBatch[]{
-    return overview.batches.map(batch=>({id:batch.id,arrivedDay:localDateKey(new Date(batch.arrivedAt)),active:batch.recordStatus==='Active',deliveredKg:batch.deliveredKg,adjustmentKg:batch.adjustmentKg,closedAt:batch.closure?.closedAt??null}));
+    return overview.batches.map(batch=>({id:batch.id,arrivedDay:localDateKey(new Date(batch.arrivedAt)),active:batch.recordStatus==='Active',deliveredKg:batch.deliveredKg,adjustmentKg:batch.adjustmentKg,fillKg:batch.filledKg??0,closedAt:batch.closure?.closedAt??null}));
   }
 
   async getAutoPlaceToday():Promise<boolean>{
@@ -361,6 +369,95 @@ export class SqliteBitumenRepository implements BitumenRepository{
     const row=await this.db.getFirstAsync<{company_name:string|null;logo_uri:string|null;address:string|null;phone:string|null;email:string|null}>("SELECT company_name,logo_uri,address,phone,email FROM company_settings WHERE id='company'");
     const contact=[row?.address,row?.phone,row?.email].map(value=>value?.trim()).filter(Boolean).join(' · ');
     return {name:row?.company_name?.trim()||'DROMEX',logoUri:row?.logo_uri?.trim()||null,contactLine:contact||null};
+  }
+
+  // ---- DEC-557: fills
+  private async loadFills():Promise<BitumenFill[]>{
+    const rows=await this.db.getAllAsync<FillDbRow>('SELECT * FROM bitumen_fills ORDER BY confirmed_at,created_at,rowid');
+    if(!rows.length)return [];
+    const portions=await this.db.getAllAsync<{fill_id:string;batch_id:string;batch_number:string;kg:number;price_per_kg_usd:number|null}>('SELECT p.fill_id,p.batch_id,b.batch_number,p.kg,p.price_per_kg_usd FROM bitumen_fill_portions p JOIN bitumen_batches b ON b.id=p.batch_id ORDER BY p.fill_id,p.position');
+    return rows.map((row):BitumenFill=>{
+      const own=portions.filter(value=>value.fill_id===row.id).map(value=>({batchId:value.batch_id,batchNumber:value.batch_number,kg:value.kg,pricePerKgUsd:value.price_per_kg_usd}));
+      return {id:row.id,recordDate:row.fill_date,confirmedAt:row.confirmed_at,enteredAt:row.created_at,truckId:row.truck_id,truckName:row.truck_name,destinationType:row.destination_type,projectId:row.project_id,projectName:row.project_name,companySiteId:row.company_site_id,companySiteName:row.company_site_name,layerNote:row.layer_note,ticketNumber:row.ticket_number,notes:row.notes,totalKg:row.total_kg,portions:own,cost:fillCost(own),status:row.status,cancellationReason:row.cancellation_reason,cancelledAt:row.cancelled_at};
+    });
+  }
+
+  async getFillSetup():Promise<BitumenFillSetup>{
+    const [trucks,projects,sites]=await Promise.all([
+      this.db.getAllAsync<{id:string;plate:string;make_model:string|null;owner_name:string|null}>('SELECT id,plate,make_model,owner_name FROM truck_profiles WHERE is_active=1 ORDER BY plate COLLATE NOCASE'),
+      this.db.getAllAsync<{id:string;name:string;location:string|null;start_date:string|null;end_date:string|null}>("SELECT id,name,location,start_date,end_date FROM projects WHERE status='active' AND is_archived=0 ORDER BY name COLLATE NOCASE"),
+      this.db.getAllAsync<{id:string;name:string}>('SELECT id,name FROM company_sites WHERE is_active=1 ORDER BY name COLLATE NOCASE'),
+    ]);
+    return {
+      trucks:trucks.map(row=>({id:row.id,name:row.plate,detail:[row.make_model,row.owner_name].filter(Boolean).join(' · ')||undefined})),
+      projects:projects.map(row=>({id:row.id,name:row.name,detail:row.location??undefined,startDate:row.start_date,endDate:row.end_date})),
+      companySites:sites.map(row=>({id:row.id,name:row.name})),
+    };
+  }
+
+  /** The open batches as a fill sees them, and the batch the fill starts from: the one picked on the form, else the one chosen to use first. */
+  private async fillContext(draft:BitumenFillDraft){
+    const overview=await this.getOverview();
+    const batches:FillBatch[]=overview.batches.map(batch=>({id:batch.id,batchNumber:batch.batchNumber,arrivedDay:localDateKey(new Date(batch.arrivedAt)),active:batch.recordStatus==='Active',closed:!isOpenBatch(batch),remainingKg:batch.remainingKg,pricePerKgUsd:batchPricePerKg(batch)}));
+    return {batches,usingBatchId:draft.batchId.trim()||overview.usingBatchId||null};
+  }
+
+  async previewFill(draft:BitumenFillDraft):Promise<FillPlan>{
+    await this.syncUse();
+    const {batches,usingBatchId}=await this.fillContext(draft);
+    let kg=Number.NaN;
+    try{kg=validatePositiveKg(draft.kg);}catch{/* the form shows the quantity message; the plan stays empty */}
+    return planFill({batches,usingBatchId,kg,day:draft.recordDate,today:localDateKey(new Date())});
+  }
+
+  async recordFill(draft:BitumenFillDraft):Promise<BitumenFill>{
+    const kg=validatePositiveKg(draft.kg);
+    const setup=await this.getFillSetup();
+    const truck=setup.trucks.find(value=>value.id===draft.truckId);
+    if(!truck)throw new Error('Select an active truck.');
+    const type=draft.destinationType;
+    if(type!=='project'&&type!=='company_site'&&type!=='unassigned')throw new Error('Choose a valid destination.');
+    const project=type==='project'?setup.projects.find(value=>value.id===draft.projectId)??null:null;
+    if(type==='project'){
+      if(!project)throw new Error('Select an active project for this fill.');
+      if(draft.recordDate<(project.startDate??'')||(project.endDate&&draft.recordDate>project.endDate))throw new Error('The fill date must be within the selected project dates.');
+    }
+    const site=type==='company_site'?setup.companySites.find(value=>value.id===draft.companySiteId)??null:null;
+    if(type==='company_site'&&!site)throw new Error('Select an active company site for this fill.');
+    // Loads confirmed so far are counted first, so a fill sees what asphalt loads really took.
+    await this.syncUse();
+    const {batches,usingBatchId}=await this.fillContext(draft);
+    const plan=planFill({batches,usingBatchId,kg,day:draft.recordDate,today:localDateKey(new Date())});
+    if(plan.issue==='over_limit')throw new Error(`${fillIssueMessages.over_limit} Over by ${formatKg(plan.overByKg)}.`);
+    if(plan.issue)throw new Error(fillIssueMessages[plan.issue]);
+    const confirmedAt=timestampForDate(draft.recordDate),id=`bitumen_fill_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`,now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync('INSERT INTO bitumen_fills (id,fill_date,confirmed_at,truck_id,truck_name,destination_type,project_id,project_name,company_site_id,company_site_name,layer_note,ticket_number,notes,total_kg,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        id,draft.recordDate,confirmedAt,truck.id,truck.name,type,project?.id??null,project?.name??null,site?.id??null,site?.name??null,clean(draft.layerNote),clean(draft.ticketNumber),clean(draft.notes),kg,'Active',now);
+      let position=0;
+      for(const portion of plan.portions){
+        await this.db.runAsync('INSERT INTO bitumen_fill_portions (id,fill_id,batch_id,kg,price_per_kg_usd,position) VALUES (?,?,?,?,?,?)',`${id}_${position}`,id,portion.batchId,portion.kg,portion.pricePerKgUsd,position++);
+      }
+      await this.enqueueFill(id,{id,status:'Active',recordDate:draft.recordDate,truckName:truck.name,destinationType:type,projectName:project?.name??null,companySiteName:site?.name??null,totalKg:kg,portions:plan.portions.map(portion=>({batchId:portion.batchId,kg:portion.kg}))});
+    });
+    return (await this.loadFills()).find(value=>value.id===id)!;
+  }
+
+  async cancelFill(fillId:string,reason:string):Promise<BitumenOverview>{
+    const row=await this.db.getFirstAsync<FillDbRow>('SELECT * FROM bitumen_fills WHERE id=?',fillId);
+    if(!row)throw new Error('The fill was not found.');
+    const problem=validateFillCancellation(reason,row.status);
+    if(problem)throw new Error(problem);
+    const value=reason.trim(),now=new Date().toISOString();
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync("UPDATE bitumen_fills SET status='Cancelled',cancellation_reason=?,cancelled_at=? WHERE id=?",value,now,fillId);
+      await this.enqueueFill(fillId,{id:fillId,status:'Cancelled',cancellationReason:value,cancelledAt:now});
+    });
+    return this.getOverview();
+  }
+
+  private async enqueueFill(id:string,payload:unknown){
+    await this.db.runAsync('INSERT INTO sync_outbox (entity_type,entity_id,operation,payload_json,created_at) VALUES (?,?,?,?,?)','bitumenFill',id,'upsert',JSON.stringify(payload),new Date().toISOString());
   }
 
   async addGrade(name:string):Promise<BitumenGrade>{

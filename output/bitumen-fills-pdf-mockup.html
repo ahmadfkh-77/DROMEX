@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DROMEX Bitumen Batch Report: Fills (PDF mockup)</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#E7E2D8;font-family:Arial,'Noto Naskh Arabic',sans-serif;color:#17212B;font-size:8.5pt;line-height:1.35}
+h2.top{font-family:system-ui,Segoe UI,sans-serif;font-size:22px;color:#173F67;margin:24px 24px 4px}
+p.lead{font-family:system-ui,Segoe UI,sans-serif;font-size:14px;color:#5C6773;margin:0 24px 8px;max-width:900px;line-height:1.5}
+.cap{font-family:system-ui,Segoe UI,sans-serif;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C84B31;margin:22px 24px 6px}
+.cap small{display:block;text-transform:none;letter-spacing:0;color:#5C6773;font-weight:400;font-size:13px;margin-top:2px;max-width:900px}
+.sheet{width:210mm;background:#fff;margin:0 24px 20px;padding:12mm 11mm 14mm;box-shadow:0 4px 18px rgba(23,63,103,.15)}
+.new{outline:2px dashed #C84B31;outline-offset:3px;border-radius:2mm}
+.tag{font-family:system-ui,Segoe UI,sans-serif;font-size:11px;font-weight:700;color:#C84B31;margin:6px 0 2px}
+/* the report as it is today */
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:6mm;border-bottom:2px solid #C84B31;padding-bottom:4mm;margin-bottom:3mm}
+.brand{font-size:11pt;font-weight:700;color:#173F67}.contact{font-size:8pt;color:#444;margin-top:.5mm}
+h1{font-size:18pt;color:#173F67;margin:0;text-align:right}.head-right{text-align:right}.when{color:#5A6570;font-size:8.5pt;margin-top:1mm}
+.summary{display:flex;gap:2.5mm;margin:0 0 3mm}.summary div{flex:1;min-width:0;border:1px solid #E3DBCD;border-radius:2mm;background:#FBF9F4;padding:2mm 3mm}
+.summary .label,.figs .label{display:block;color:#5A6570;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.summary b{font-size:9pt}
+.band{background:#173F67;color:#FFF8ED;font-weight:700;letter-spacing:.6px;padding:1.6mm 3mm;margin:4mm 0 2mm;border-radius:1.6mm;font-size:8.5pt}
+.figs{display:flex;gap:2.5mm}.figs div{flex:1;min-width:0;border:1px solid #CFC5B3;border-radius:2mm;padding:2mm 3mm;text-align:right}.figs .label{text-align:left}
+.figs b{font-size:12pt;font-variant-numeric:tabular-nums;white-space:nowrap}.figs small{display:block;color:#5A6570;font-size:7pt}.figs .strong{background:#FBF1EC;border-color:#C84B31}.figs .fillfig b{color:#A83B24}
+table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid}
+th{text-align:left;color:#173F67;font-size:7pt;border-bottom:1.5px solid #173F67;padding:1.2mm 1.6mm;vertical-align:bottom}
+td{padding:1.4mm 1.6mm;border-bottom:.3mm solid #EAE3D7;vertical-align:top;overflow-wrap:anywhere}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.muted{color:#5A6570;font-size:7pt;font-weight:400}
+tr.day td{background:#EAF0F7;color:#173F67;font-weight:700;border-top:1px solid #173F67;border-bottom:1px solid #C9D6E6;padding:1.8mm 1.6mm}tr.day .sep{color:#5A6570;font-weight:400}
+tr.tot td{font-weight:700;color:#173F67;border-top:1.5px solid #173F67;border-bottom:none}
+tr.cx td{color:#8A4A44;background:#FBF3F1}tr.cx .strike{text-decoration:line-through}
+.fk{color:#A83B24;font-weight:700}
+.legend{font-size:7pt;color:#5A6570;margin-top:2mm}
+.two{display:flex;gap:6mm;align-items:flex-start}.two>*{flex:1}
+.page{font-family:system-ui,Segoe UI,sans-serif;font-size:11px;color:#5C6773;text-align:right;margin-top:8px}
+</style>
+</head>
+<body>
+<h2 class="top">Bitumen Batch Report: Fills (PDF mockup v1)</h2>
+<p class="lead">A batch that has fills gets one new section, <b>FILLS INTO TRUCKS</b>, placed directly before <b>USE FROM ASPHALT LOADS</b>, plus a new <b>Taken by fills</b> figure. Everything else keeps today's look (DEC-520 family, same bands, same strip, same footer). Fills are grouped by the day chosen on the fill (newest first), like the asphalt use, with the day total in a tinted row. Cancelled fills are listed, struck through and never counted. A batch with no fills prints exactly as it does today. Figures are invented and match the screen mockup (30,000 delivered, 8,400 by fills, 14,950 by asphalt, −150 adjustment, 6,500 left).</p>
+
+<div class="cap">1 · Default: without prices<small>The new parts are outlined in orange here only to show you what changed; they are not printed.</small></div>
+<div class="sheet">
+  <div class="head"><div><div class="brand">DROMEX</div><div class="contact">Beirut · +961 00 000 000 · office@dromex.example</div></div>
+    <div class="head-right"><h1>Bitumen Batch Report</h1><div class="when">18 Nov 2026, 09:40</div></div></div>
+  <div class="summary"><div><span class="label">Batch</span><b>BIT-2026-00007</b></div><div><span class="label">Status</span><b>Open · In use</b></div><div><span class="label">Supplier</span><b>Al-Nour Bitumen Co.</b></div><div><span class="label">Grade</span><b>MC-70</b></div></div>
+
+  <div class="band">BATCH FIGURES (ESTIMATED USE)</div>
+  <div class="figs">
+    <div><span class="label">Delivered</span><b>30,000 kg</b><small>30 t</small></div>
+    <div class="new fillfig"><span class="label">Taken by fills</span><b>8,400 kg</b><small>8.4 t</small></div>
+    <div><span class="label">Est. used by asphalt loads</span><b>14,950 kg</b><small>14.95 t</small></div>
+    <div><span class="label">Adjustments</span><b>−150 kg</b><small>−0.15 t</small></div>
+    <div class="strong"><span class="label">Est. remaining</span><b>6,500 kg</b><small>6.5 t</small></div>
+  </div>
+  <p class="legend">Taken by fills is measured (recorded by hand). Asphalt use is an estimate from the asphalt rules.</p>
+
+  <div class="band">DELIVERY DETAIL</div>
+  <table><colgroup><col style="width:22%"><col style="width:26%"><col style="width:26%"><col style="width:26%"></colgroup>
+    <thead><tr><th>Arrived</th><th>Supplier</th><th>Invoice</th><th>Ticket</th></tr></thead>
+    <tbody><tr><td>3 Nov 2026</td><td>Al-Nour Bitumen Co.</td><td>55821</td><td>Not recorded</td></tr></tbody></table>
+
+  <div class="new" style="padding:1px 0 3mm;margin-top:4mm">
+  <div class="band" style="margin-top:0">FILLS INTO TRUCKS</div>
+  <div class="tag" style="font-size:9pt;margin:0 0 1mm;color:#173F67">By destination</div>
+  <table><colgroup><col style="width:70%"><col style="width:12%"><col style="width:18%"></colgroup>
+    <thead><tr><th>Destination</th><th class="num">Fills</th><th class="num">Bitumen</th></tr></thead>
+    <tbody>
+      <tr><td>Project · Hasbaya – Marjayoun Road, Phase 2</td><td class="num">3</td><td class="num">6,000 kg</td></tr>
+      <tr><td>Project · Marjayoun Water Tank Foundations</td><td class="num">2</td><td class="num">1,800 kg</td></tr>
+      <tr><td>Unassigned</td><td class="num">1</td><td class="num">600 kg</td></tr>
+      <tr class="tot"><td>Total taken by fills</td><td class="num">6</td><td class="num">8,400 kg</td></tr>
+    </tbody></table>
+  <div class="tag" style="font-size:9pt;margin:4mm 0 1mm;color:#173F67">By day</div>
+  <table><colgroup><col style="width:10%"><col style="width:14%"><col style="width:36%"><col style="width:14%"><col style="width:26%"></colgroup>
+    <thead><tr><th>Time</th><th>Truck</th><th>Destination and layer</th><th>Ticket</th><th class="num">Bitumen</th></tr></thead>
+    <tbody>
+      <tr class="day"><td colspan="4">Thu 6 Nov 2026 <span class="sep">· 2 fills · day total</span></td><td class="num">4,000 kg</td></tr>
+      <tr><td>13:10</td><td>41-903</td><td>Hasbaya – Marjayoun Road, Phase 2</td><td>T-5521</td><td class="num fk">1,500 kg</td></tr>
+      <tr><td>07:30</td><td>72-118</td><td>Hasbaya – Marjayoun Road, Phase 2<div class="muted">Tack coat, km 4 to 6</div></td><td>T-5519</td><td class="num fk">2,500 kg</td></tr>
+
+      <tr class="day"><td colspan="4">Wed 5 Nov 2026 <span class="sep">· 2 fills · day total</span></td><td class="num">3,200 kg</td></tr>
+      <tr><td>11:40</td><td>41-903</td><td>Marjayoun Water Tank Foundations</td><td>Not recorded</td><td class="num fk">1,200 kg</td></tr>
+      <tr><td>08:05</td><td>72-118</td><td>Hasbaya – Marjayoun Road, Phase 2</td><td>T-5502</td><td class="num fk">2,000 kg</td></tr>
+
+      <tr class="day"><td colspan="4">Tue 4 Nov 2026 <span class="sep">· 2 fills · day total</span></td><td class="num">1,200 kg</td></tr>
+      <tr><td>15:45</td><td>72-118</td><td>Unassigned</td><td>Not recorded</td><td class="num fk">600 kg</td></tr>
+      <tr class="cx"><td>11:20</td><td>72-118</td><td><span class="strike">Hasbaya – Marjayoun Road, Phase 2</span><div class="muted">Cancelled · Wrong truck · not counted</div></td><td>T-5490</td><td class="num"><span class="strike">900 kg</span></td></tr>
+      <tr><td>09:20</td><td>41-903</td><td>Marjayoun Water Tank Foundations</td><td>T-5488</td><td class="num fk">600 kg</td></tr>
+
+      <tr class="tot"><td colspan="4">Taken by fills · 6 fills · 3 days</td><td class="num">8,400 kg</td></tr>
+    </tbody></table>
+  <p class="legend">The three day totals add up to the closing row: 4,000 + 3,200 + 1,200 = 8,400 kg. The cancelled fill (900 kg) is shown but is not in any total.</p>
+  </div>
+
+  <div class="band">USE FROM ASPHALT LOADS</div>
+  <p class="legend" style="margin:0">… unchanged: the by-day table of DEC-542, estimated use 9 loads · 4 days · 14,950 kg …</p>
+
+  <div class="band">ADJUSTMENTS</div>
+  <p class="legend" style="margin:0">… unchanged …</p>
+
+  <div class="band">HISTORY</div>
+  <table><colgroup><col style="width:16%"><col style="width:64%"><col style="width:20%"></colgroup>
+    <thead><tr><th>Date</th><th>Event</th><th class="num">Kg</th></tr></thead>
+    <tbody>
+      <tr><td>3 Nov 2026</td><td>Delivered</td><td class="num">+30,000 kg</td></tr>
+      <tr class="new"><td>4 Nov 2026</td><td>Fill · Truck 41-903 · Marjayoun Water Tank Foundations</td><td class="num">−600 kg</td></tr>
+      <tr class="new"><td>4 Nov 2026</td><td>Fill · Truck 72-118 · Unassigned</td><td class="num">−600 kg</td></tr>
+      <tr><td colspan="3" class="muted" style="text-align:center">… the other fills and the asphalt loads follow in date order; a cancelled fill shows its fill and then "Fill cancelled · Wrong truck" with the kg coming back …</td></tr>
+      <tr><td>6 Nov 2026</td><td>Adjustment · Weighed the tank</td><td class="num">−150 kg</td></tr>
+      <tr class="tot"><td colspan="2">Remaining</td><td class="num">6,500 kg</td></tr>
+    </tbody></table>
+  <div class="page">Beirut · DROMEX · Bitumen Batch Report · BIT-2026-00007 &nbsp;&nbsp;·&nbsp;&nbsp; Page 1 of 2</div>
+</div>
+
+<div class="cap">2 · With prices (the existing "With prices" choice)<small>Only the fills section gains a Cost column, using the batch's own price ($610.00 per t = $0.61 per kg). A fill that split across two batches costs each part at its own batch's price; a part from an unpriced batch says Unpriced and is never zero.</small></div>
+<div class="sheet">
+  <div class="band" style="margin-top:0">FILLS INTO TRUCKS</div>
+  <table><colgroup><col style="width:9%"><col style="width:12%"><col style="width:32%"><col style="width:12%"><col style="width:17%"><col style="width:18%"></colgroup>
+    <thead><tr><th>Time</th><th>Truck</th><th>Destination and layer</th><th>Ticket</th><th class="num">Bitumen</th><th class="num">Cost</th></tr></thead>
+    <tbody>
+      <tr class="day"><td colspan="4">Thu 6 Nov 2026 <span class="sep">· 2 fills · day total</span></td><td class="num">4,000 kg</td><td class="num">$2,440.00</td></tr>
+      <tr><td>13:10</td><td>41-903</td><td>Hasbaya – Marjayoun Road, Phase 2</td><td>T-5521</td><td class="num">1,500 kg</td><td class="num">$915.00</td></tr>
+      <tr><td>07:30</td><td>72-118</td><td>Hasbaya – Marjayoun Road, Phase 2<div class="muted">Tack coat, km 4 to 6</div></td><td>T-5519</td><td class="num">2,500 kg</td><td class="num">$1,525.00</td></tr>
+      <tr class="day"><td colspan="4">Wed 5 Nov 2026 <span class="sep">· 2 fills · day total</span></td><td class="num">3,200 kg</td><td class="num">$1,952.00</td></tr>
+      <tr><td>11:40</td><td>41-903</td><td>Marjayoun Water Tank Foundations</td><td>Not recorded</td><td class="num">1,200 kg</td><td class="num">$732.00</td></tr>
+      <tr><td>08:05</td><td>72-118</td><td>Hasbaya – Marjayoun Road, Phase 2</td><td>T-5502</td><td class="num">2,000 kg</td><td class="num">$1,220.00</td></tr>
+      <tr class="day"><td colspan="4">Tue 4 Nov 2026 <span class="sep">· 2 fills · day total</span></td><td class="num">1,200 kg</td><td class="num">$732.00</td></tr>
+      <tr><td>15:45</td><td>72-118</td><td>Unassigned</td><td>Not recorded</td><td class="num">600 kg</td><td class="num">$366.00</td></tr>
+      <tr><td>09:20</td><td>41-903</td><td>Marjayoun Water Tank Foundations</td><td>T-5488</td><td class="num">600 kg</td><td class="num">$366.00</td></tr>
+      <tr class="tot"><td colspan="4">Taken by fills · 6 fills · 3 days</td><td class="num">8,400 kg</td><td class="num">$5,124.00</td></tr>
+    </tbody></table>
+  <p class="legend">Cost is the bitumen price without VAT. A split fill, for example 7,200 kg taken as 6,500 kg from BIT-2026-00007 and 700 kg from the next batch, is one row whose Destination cell says "split across 2 batches" and whose cost adds both parts; an unpriced part prints "$3,965.00 + 700 kg Unpriced".</p>
+  <div class="page">Page 2 of 2</div>
+</div>
+
+<div class="cap">3 · A batch with no fills<small>Nothing changes: no Taken by fills figure, no FILLS INTO TRUCKS section, the figures strip keeps its four boxes, and the PDF is the same as today's.</small></div>
+
+<div class="cap">What I assumed (tell me what to change)<small>
+1. The section sits before USE FROM ASPHALT LOADS and prints only when the batch has at least one fill (active or cancelled).<br>
+2. A by-destination table comes first, then the by-day table; the day total uses the tinted row exactly like the asphalt use.<br>
+3. For a split fill, each batch's report lists that batch's part and says "part of a 7,200 kg fill"; the screen does the same.<br>
+4. Cost uses the batch price without VAT (a whole-batch price is spread over the delivered kg). Please confirm VAT should stay out.<br>
+5. The History table lists every fill as its own event with the kg leaving the batch, and a cancelled fill adds a returning event.<br>
+6. The Excel workbook and the Company Daily Report do not change in this phase.</small></div>
+</body>
+</html>

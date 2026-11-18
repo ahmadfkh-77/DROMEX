@@ -2,6 +2,7 @@ import {noVatChoice,resolveVatRate,type AccountVat,type VatChoice} from './accou
 import {localDateKey} from './fuel';
 import type {BitumenAdjustment,BitumenUseRow} from './bitumenUse';
 import {activeClosure,type BatchClosure} from './batchClosure';
+import type {BitumenFill} from './bitumenFills';
 
 /**
  * Bitumen batches (Phase B). A batch is one delivery of bitumen, tracked in kilograms. Phase B records deliveries, lists the batches,
@@ -29,7 +30,7 @@ export type BitumenBatch={
   id:string;batchNumber:string;arrivedAt:string;
   supplierId:string|null;supplierName:string|null;gradeId:string|null;gradeName:string;
   invoiceNumber:string|null;ticketNumber:string|null;notes:string|null;
-  deliveredKg:number;usedKg:number;adjustmentKg:number;remainingKg:number;
+  deliveredKg:number;usedKg:number;/** DEC-557. Kg taken by active fills into trucks; absent (zero) until fills exist. */filledKg?:number;adjustmentKg:number;remainingKg:number;
   priceBasis:BitumenPriceBasis|null;priceUsd:number|null;vatRatePercent:number|null;subtotalUsd:number|null;totalUsd:number|null;
   /** The recorded price expressed per ton whatever basis it was entered in; null for a whole-batch price or Unpriced. */
   pricePerTonUsd:number|null;
@@ -49,6 +50,8 @@ export type BitumenOverview={
   /** Every use row (uses, reversals, corrections and moves) and the owner's adjustments; empty until asphalt rules are used. */
   useRows?:BitumenUseRow[];
   adjustments?:BitumenAdjustment[];
+  /** DEC-557. Every fill, active and cancelled, oldest first. */
+  fills?:BitumenFill[];
   /** How many asphalt items are ticked. When it is above zero the figures are estimates and are labelled so. */
   rulesEnabled?:number;
 };
@@ -100,7 +103,7 @@ export function previewBitumenPrice(draft:Pick<BitumenDeliveryDraft,'kg'|'priceB
  */
 export function buildBitumenOverview(batches:Omit<BitumenBatch,'status'|'remainingKg'|'closure'|'closureHistory'>[],usingBatchId:string|null,closures:readonly BatchClosure[]=[]):BitumenOverview{
   const sorted=[...batches].sort((a,b)=>a.arrivedAt.localeCompare(b.arrivedAt)||a.batchNumber.localeCompare(b.batchNumber));
-  const withRemaining=sorted.map(batch=>({...batch,remainingKg:round3(batch.deliveredKg+batch.adjustmentKg-batch.usedKg),closure:activeClosure(closures,batch.id),closureHistory:closures.filter(closure=>closure.batchId===batch.id)}));
+  const withRemaining=sorted.map(batch=>({...batch,remainingKg:round3(batch.deliveredKg+batch.adjustmentKg-(batch.filledKg??0)-batch.usedKg),closure:activeClosure(closures,batch.id),closureHistory:closures.filter(closure=>closure.batchId===batch.id)}));
   const isOpen=(batch:{recordStatus:BitumenRecordStatus;remainingKg:number;closure:BatchClosure|null})=>batch.recordStatus==='Active'&&batch.remainingKg>BIT_EPSILON&&!batch.closure;
   const first=withRemaining.find(isOpen);
   let list:BitumenBatch[]=withRemaining.map(batch=>({...batch,status:batch.recordStatus==='Cancelled'?'cancelled':!isOpen(batch)?'closed':batch===first?'in_use':'waiting'}));

@@ -14,7 +14,7 @@ export type BitumenRule={itemId:string;itemName:string;enabled:boolean;aggregate
 
 /** A load as the counting sees it. `mixKg` is the weight of the mix, or null when it cannot be known. */
 export type UseLoad={id:string;itemId:string;itemName:string;loadNumber:string|null;confirmedAt:string;active:boolean;mixKg:number|null};
-export type UseBatch={id:string;arrivedDay:string;active:boolean;deliveredKg:number;adjustmentKg:number;/** When the Owner closed this batch by hand. A load confirmed after it is never taken from this batch. */closedAt?:string|null};
+export type UseBatch={id:string;arrivedDay:string;active:boolean;deliveredKg:number;adjustmentKg:number;/** DEC-557. Kg taken out of this batch by active fills. Fills are never rows here: reconcile only reads this so asphalt loads cannot overdraw what fills emptied. */fillKg?:number;/** When the Owner closed this batch by hand. A load confirmed after it is never taken from this batch. */closedAt?:string|null};
 
 export type UseRowInput={
   loadId:string;batchId:string|null;kind:BitumenUseKind;kg:number;mixKg:number;ruleAggregateKg:number;ruleBitumenKg:number;
@@ -71,7 +71,7 @@ export type ReconcileResult={rows:UseRowInput[];attention:AttentionItem[]};
 export function reconcileBitumenUse(input:ReconcileInput):ReconcileResult{
   const rules=new Map(input.rules.filter(rule=>rule.enabled).map(rule=>[rule.itemId,rule]));
   const batches=[...input.batches].filter(batch=>batch.active).sort((a,b)=>a.arrivedDay.localeCompare(b.arrivedDay));
-  const remaining=new Map(batches.map(batch=>[batch.id,round3(batch.deliveredKg+batch.adjustmentKg)]));
+  const remaining=new Map(batches.map(batch=>[batch.id,round3(batch.deliveredKg+batch.adjustmentKg-(batch.fillKg??0))]));
   const byLoad=new Map<string,BitumenUseRow[]>();
   for(const row of input.existing){
     if(row.batchId&&remaining.has(row.batchId))remaining.set(row.batchId,round3((remaining.get(row.batchId)??0)-row.kg));
@@ -164,9 +164,9 @@ export function planMoveLoad(loadRows:readonly BitumenUseRow[],toBatchId:string)
   return rows;
 }
 
-/** What each active batch has left: what was delivered, adjusted by the real-amount counts, less the net use in the rows. */
+/** What each active batch has left: what was delivered, adjusted by the real-amount counts, less active fills, less the net use in the rows. */
 export function remainingByBatch(batches:readonly UseBatch[],rows:readonly Pick<BitumenUseRow,'batchId'|'kg'>[]):Map<string,number>{
-  const remaining=new Map(batches.filter(batch=>batch.active).map(batch=>[batch.id,round3(batch.deliveredKg+batch.adjustmentKg)]));
+  const remaining=new Map(batches.filter(batch=>batch.active).map(batch=>[batch.id,round3(batch.deliveredKg+batch.adjustmentKg-(batch.fillKg??0))]));
   for(const row of rows)if(row.batchId&&remaining.has(row.batchId))remaining.set(row.batchId,round3((remaining.get(row.batchId)??0)-row.kg));
   return remaining;
 }
