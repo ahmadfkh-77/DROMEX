@@ -1,6 +1,6 @@
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
-import type {ContractItem,ContractUsage} from '../../../domain/contractQuantities';
+import {contractTrackingLabel,contractTrackingMode,type ContractItem,type ContractTrackingMode,type ContractUsage} from '../../../domain/contractQuantities';
 import {colors} from '../../theme';
 
 /** Display only: every figure comes from the domain usage (DEC-522); these helpers format, they never calculate. */
@@ -26,6 +26,11 @@ export function contractPillText(item:ContractItem,usage:ContractUsage):string{
   if(usage.warning==='full')return `${contractPercent(usage)} · at the limit`;
   if(tone==='near')return `${contractPercent(usage)} · near limit`;
   return contractPercent(usage);
+}
+
+/** AUTOMATIC / LINKED MANUAL / MANUAL (DEC-556). Shown beside every target so how "used" is tracked is never a guess. */
+export function ContractModeBadge({mode}:{mode:ContractTrackingMode}){
+  return <Text style={[styles.mode,mode==='manual'?styles.modeManual:mode==='linked_manual'?styles.modeLinked:styles.modeAuto]}>{contractTrackingLabel(mode)}</Text>;
 }
 
 export function ContractPill({item,usage}:{item:ContractItem;usage:ContractUsage}){
@@ -66,10 +71,11 @@ export function ContractWorkAndUse({item,usage}:{item:ContractItem;usage:Contrac
   </View>;
 }
 
-export function ContractItemCard({item,usage,materialLine,onPress}:{item:ContractItem;usage:ContractUsage;materialLine:string;onPress:()=>void}){
+export function ContractItemCard({item,usage,materialLine,deliveredLines=[],onPress}:{item:ContractItem;usage:ContractUsage;materialLine:string;deliveredLines?:string[];onPress:()=>void}){
   const tone=contractTone(item,usage);
   return <TouchableOpacity style={[styles.card,cardTone[tone]]} onPress={onPress} accessibilityRole="button" accessibilityLabel={`${item.name}, ${contractPillText(item,usage)}, ${contractAmount(usage.used)} of ${contractAmount(usage.allowed)} ${item.unitSymbol} used`}>
-    <View style={styles.head}><View style={styles.flex}><Text style={styles.name}>{item.name}</Text><Text style={styles.materials} numberOfLines={2}>{materialLine}</Text></View><ContractPill item={item} usage={usage}/></View>
+    <View style={styles.head}><View style={styles.flex}><View style={styles.nameRow}><Text style={styles.name}>{item.name}</Text><ContractModeBadge mode={contractTrackingMode(item)}/></View><Text style={styles.materials} numberOfLines={2}>{materialLine}</Text></View><ContractPill item={item} usage={usage}/></View>
+    {deliveredLines.length?<View style={styles.delivered}><Text style={styles.deliveredLabel}>FROM LOADS</Text>{deliveredLines.map(line=><Text key={line} style={styles.deliveredText}>{line}</Text>)}</View>:null}
     <ContractBar item={item} usage={usage}/>
     {item.status==='complete'?<ContractWorkAndUse item={item} usage={usage}/>:<ContractFigures item={item} usage={usage}/>}
     {usage.lateLoads.length?<Text style={styles.flag}>A load was added after this item was finished.</Text>:null}
@@ -83,8 +89,14 @@ const styles=StyleSheet.create({
   flex:{flex:1,minWidth:0},
   card:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.line,borderRadius:16,padding:14,gap:10},
   head:{flexDirection:'row',alignItems:'flex-start',gap:10},
-  name:{color:colors.ink,fontSize:16,fontWeight:'800'},
+  name:{color:colors.ink,fontSize:16,fontWeight:'800',flexShrink:1},
+  nameRow:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:6},
+  mode:{fontSize:10,fontWeight:'900',letterSpacing:.5,color:'#FFF',borderRadius:7,paddingHorizontal:7,paddingVertical:2,overflow:'hidden'},
+  modeAuto:{backgroundColor:'#1E7B4B'},modeLinked:{backgroundColor:'#B7791F'},modeManual:{backgroundColor:'#D9571F'},
   materials:{color:colors.muted,fontSize:12,marginTop:2},
+  delivered:{backgroundColor:'#FFFBF0',borderColor:'#EFC979',borderWidth:1,borderStyle:'dashed',borderRadius:10,paddingHorizontal:10,paddingVertical:6,gap:2},
+  deliveredLabel:{color:'#8A5300',fontSize:10,fontWeight:'900',letterSpacing:.5},
+  deliveredText:{color:colors.navy,fontSize:13,fontWeight:'800'},
   pill:{fontSize:11,fontWeight:'800',paddingHorizontal:9,paddingVertical:4,borderRadius:999,overflow:'hidden'},
   bar:{height:12,borderRadius:99,backgroundColor:'#ECE7DD',overflow:'hidden',position:'relative'},
   barFill:{position:'absolute',left:0,top:0,bottom:0,borderRadius:99},

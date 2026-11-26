@@ -530,3 +530,27 @@ export function plannedContractLink(input:{current:string|null;requested:string|
   if(!target.materialIds.includes(input.itemId))return{final:null,automatic:'material',problem:null};
   return{final:input.current,automatic:null,problem:null};
 }
+
+/* ── Screens for the tracking modes (DEC-556, Phase 2) ───────────────────────────────────────────────────────────────────────── */
+
+export const contractTrackingLabel=(mode:ContractTrackingMode):string=>mode==='linked_manual'?'LINKED MANUAL':mode==='manual'?'MANUAL':'AUTOMATIC';
+
+/** The one line under a target's name: how its used quantity is tracked. */
+export function contractTrackingLine(mode:ContractTrackingMode,materialNames:readonly string[]):string{
+  if(mode==='manual')return 'Site entries · no material linked';
+  if(mode==='linked_manual')return `Site entries · ${materialNames.length?`${materialNames.join(', ')} linked`:'no material linked'}`;
+  return `Calculated from linked loads · ${materialNames.join(', ')}`;
+}
+
+/** The Log used quantity preview: used and percent after a signed amount, or null while the amount is not a number other than zero. */
+export function siteEntryPreview(usage:Pick<ContractUsage,'used'|'allowed'>,amountText:string):{usedAfter:number;percentAfter:number}|null{
+  const value=typedNumber(amountText);
+  if(value===null||value===0)return null;
+  const usedAfter=round6(usage.used+value);
+  return{usedAfter,percentAfter:round1(usedAfter/usage.allowed)};
+}
+
+/** "340 m³ · Concrete C25 · 42 loads", one line per material and unit, for the From loads box of a Linked manual target. Never added to used. */
+export function contractDeliveredLines(usage:Pick<ContractUsage,'deliveredFromLoads'>,materialName:(id:string)=>string):string[]{
+  return usage.deliveredFromLoads.map(row=>`${String(Number(row.quantity.toFixed(3)))} ${row.unitSymbol} · ${materialName(row.materialId)} · ${row.loadCount} load${row.loadCount===1?'':'s'}`);
+}

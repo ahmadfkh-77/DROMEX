@@ -2,16 +2,16 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import {ActivityIndicator,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import type {ContractItemDetail,ContractLoadDetail,ContractQuantitiesRepository} from '../../data/repositories/ContractQuantitiesRepository';
-import {contractHistoryLabel,groupContractLoadsByDay} from '../../domain/contractQuantities';
+import {contractDeliveredLines,contractHistoryLabel,contractTrackingMode,groupContractLoadsByDay} from '../../domain/contractQuantities';
 import {localDateKey} from '../../domain/fuel';
 import type {Project} from '../../domain/loads';
 import {AppButton,AppCard,AppPage,Feedback,PageHeader} from '../components/AppPrimitives';
 import {SegmentedChoice} from '../components/SegmentedChoice';
-import {AdjustSheet,FinishSheet,LinkLoadsSheet,LoadSheet,MoveOrRemoveSheet,ReopenSheet,loadTime} from '../components/contracts/ContractItemSheets';
-import {ContractBar,ContractFigures,ContractPill,ContractWorkAndUse,contractAmount,contractDay,contractPercent,contractUsd} from '../components/contracts/ContractParts';
+import {AdjustSheet,FinishSheet,LinkLoadsSheet,LoadSheet,MoveOrRemoveSheet,ReopenSheet,SiteEntrySheet,loadTime} from '../components/contracts/ContractItemSheets';
+import {ContractBar,ContractFigures,ContractModeBadge,ContractPill,ContractWorkAndUse,contractAmount,contractDay,contractPercent,contractUsd} from '../components/contracts/ContractParts';
 import {colors} from '../theme';
 
-type Sheet=null|'adjust'|'finish'|'reopen'|'link'|'load'|'move'|'remove';
+type Sheet=null|'entry'|'adjust'|'finish'|'reopen'|'link'|'load'|'move'|'remove';
 type SourceFilter='all'|'company'|'supplier';
 const whenText=(at:string)=>`${contractDay(localDateKey(new Date(at)))} · ${new Date(at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
 
@@ -50,6 +50,8 @@ export function ContractItemScreen({project,contracts,contractItemId,onBack,onEd
   if(error)return <AppPage><PageHeader eyebrow="Target" title="Target" onBack={onBack}/><Feedback kind="error">{error}</Feedback><AppButton label="Try again" tone="secondary" onPress={load}/></AppPage>;
   if(!detail||!grouped)return <AppPage><PageHeader eyebrow="Target" title="Target" onBack={onBack}/><View style={styles.center}><ActivityIndicator size="large" color={colors.brand}/></View></AppPage>;
   const {item,usage}=detail,unit=item.unitSymbol,cancelled=Boolean(item.cancelledAt),complete=item.status==='complete';
+  const mode=contractTrackingMode(item),byHand=mode!=='automatic';
+  const materialName=(id:string)=>detail.materials.find(material=>material.id===id)?.name??'Material';
 
   return <AppPage>
     <PageHeader eyebrow="Target" title={item.name} onBack={onBack}/>
@@ -58,7 +60,7 @@ export function ContractItemScreen({project,contracts,contractItemId,onBack,onEd
 
     <View style={[styles.card,usage.warning==='over'&&!complete?styles.cardOver:usage.warning!=='none'&&!complete?styles.cardNear:complete?styles.cardDone:null]}>
       <View style={styles.head}>
-        <View style={styles.flex}><Text style={styles.allowed}>{contractAmount(usage.allowed)} {unit} allowed</Text><Text style={styles.helper}>{item.unitPriceUsd!==null?`${contractUsd(item.unitPriceUsd)} / ${unit} · target value ${contractUsd(usage.contractValueUsd!)}`:'No target price'}</Text></View>
+        <View style={styles.flex}><View style={styles.titleRow}><Text style={styles.allowed}>{contractAmount(usage.allowed)} {unit} allowed</Text><ContractModeBadge mode={mode}/></View><Text style={styles.helper}>{item.unitPriceUsd!==null?`${contractUsd(item.unitPriceUsd)} / ${unit} · target value ${contractUsd(usage.contractValueUsd!)}`:'No target price'}</Text></View>
         <ContractPill item={item} usage={usage}/>
       </View>
       <ContractBar item={item} usage={usage}/>
@@ -70,11 +72,17 @@ export function ContractItemScreen({project,contracts,contractItemId,onBack,onEd
       {complete&&usage.lateLoads.length?<Text style={styles.amber}><Text style={styles.bold}>A load was added after this item was finished.</Text> {usage.lateLoads.map(value=>`${value.reference} · ${contractDay(value.date)} · ${contractAmount(value.quantity!)} ${unit}`).join('; ')} {usage.lateLoads.length===1?'is':'are'} counted. Reopen the item if the work continued.</Text>:null}
       {complete&&!usage.overContract?<Text style={styles.green}><Text style={styles.bold}>{usage.savingUsd!==null?`Saving: ${contractAmount(usage.leftover)} ${unit} · ${contractUsd(usage.savingUsd)}`:`Leftover: ${contractAmount(usage.leftover)} ${unit}`}</Text>{usage.savingUsd!==null?` (${contractAmount(usage.leftover)} ${unit} × ${contractUsd(item.unitPriceUsd!)}).`:'.'}{item.completedOn?` Finished on ${contractDay(item.completedOn)}.`:''}</Text>:null}
       <View style={styles.facts}>
-        <Fact label={`From loads (${usage.countedLoads.length})`} value={`${contractAmount(usage.fromLoads)} ${unit}`}/>
+        {byHand?<Fact label={`Site entries (${usage.siteEntries.length})`} value={`${usage.siteEntriesTotal<0?'− ':''}${contractAmount(Math.abs(usage.siteEntriesTotal))} ${unit}`}/>:<Fact label={`From loads (${usage.countedLoads.length})`} value={`${contractAmount(usage.fromLoads)} ${unit}`}/>}
         <Fact label={`Adjustments (${usage.adjustments.length})`} value={usage.adjustments.length?`${usage.adjustmentsTotal<0?'− ':'+ '}${contractAmount(Math.abs(usage.adjustmentsTotal))} ${unit}`:'none'}/>
         <Fact label="Used" value={`${contractAmount(usage.used)} ${unit}`} strong/>
         {usage.valueUsedUsd!==null&&usage.valueRemainingUsd!==null?<Fact label="Value used · remaining" value={`${contractUsd(usage.valueUsedUsd)} · ${contractUsd(usage.valueRemainingUsd)}`}/>:null}
       </View>
+      {mode==='linked_manual'&&usage.deliveredFromLoads.length?<View style={styles.delivered}>
+        <Text style={styles.deliveredLabel}>FROM LOADS</Text>
+        {contractDeliveredLines(usage,materialName).map(line=><Text key={line} style={styles.deliveredText}>{line}</Text>)}
+        <Text style={styles.helper}>Two units. Nothing is converted. Used is what you log below, in {unit}.</Text>
+      </View>:null}
+      {byHand&&!cancelled?<AppButton label="+ Log used quantity" onPress={()=>setSheet('entry')}/>:null}
       {!cancelled?<View style={styles.actions}>
         <View style={styles.flex}><AppButton label="Adjust" tone="secondary" onPress={()=>setSheet('adjust')}/></View>
         <View style={styles.flex}>{complete?<AppButton label="Reopen" tone="secondary" onPress={()=>setSheet('reopen')}/>:<AppButton label="Finish" tone="navy" onPress={()=>setSheet('finish')}/>}</View>
@@ -82,11 +90,18 @@ export function ContractItemScreen({project,contracts,contractItemId,onBack,onEd
       <AppButton label={cancelled?'Open item details':'Edit item'} tone="secondary" onPress={onEdit}/>
     </View>
 
-    {usage.notCounted.length?<AppCard title={`Not counted (${usage.notCounted.length})`} hint="Linked to this item but left out of Used. Never converted or guessed.">
+    {byHand?<AppCard title={`Site entries (${usage.siteEntries.length})`} hint="Dated amounts in this target's unit. Never edited or deleted; a mistake is fixed by a later minus entry with a note.">
+      {usage.siteEntries.length?[...usage.siteEntries].reverse().map(entry=><View key={entry.id} style={styles.history}>
+        <View style={styles.row}><Text style={styles.historyTitle}>{contractDay(entry.entryDate)}{entry.kind==='opening'?' · Opening value':''}</Text><Text style={[styles.amount,entry.amount<0&&styles.negative]}>{entry.amount<0?'− ':'+ '}{contractAmount(Math.abs(entry.amount))} {unit}</Text></View>
+        {entry.note?<Text style={styles.helper}>{entry.note}</Text>:null}
+      </View>):<Text style={styles.helper}>No entries yet. Tap + Log used quantity to record what was done.</Text>}
+    </AppCard>:null}
+
+    {!byHand&&usage.notCounted.length?<AppCard title={`Not counted (${usage.notCounted.length})`} hint="Linked to this item but left out of Used. Never converted or guessed.">
       {usage.notCounted.map(entry=><View key={entry.load.id} style={styles.row}><Text style={styles.rowText}>{entry.load.reference} · {contractDay(entry.load.date)} · {entry.load.quantity===null?'no quantity':`${contractAmount(entry.load.quantity)} ${entry.load.unitSymbol}`}</Text><Text style={[styles.unit,styles.unitBad]}>{entry.reason==='unit_differs'?`unit differs: ${entry.load.unitSymbol} ≠ ${unit}`:'no quantity'}</Text></View>)}
     </AppCard>:null}
 
-    <AppCard title="Loads counted" hint={`${usage.countedLoads.length} load${usage.countedLoads.length===1?'':'s'} · ${contractAmount(usage.fromLoads)} ${unit} from loads. Adjustments are listed below.`}>
+    {!byHand?<AppCard title="Loads counted" hint={`${usage.countedLoads.length} load${usage.countedLoads.length===1?'':'s'} · ${contractAmount(usage.fromLoads)} ${unit} from loads. Adjustments are listed below.`}>
       <SegmentedChoice mode="tabs" options={[{id:'all' as const,label:'All'},{id:'company' as const,label:'Company'},{id:'supplier' as const,label:'Supplier'}]} selectedId={filter} onSelect={setFilter}/>
       {!grouped.days.length?<Text style={styles.helper}>{filter==='all'?'No loads count toward this item yet.':`No ${filter} loads count toward this item.`}</Text>:null}
       {grouped.days.map(day=>{const open=isOpen(day.day);return <View key={day.day} style={styles.day}>
@@ -103,7 +118,7 @@ export function ContractItemScreen({project,contracts,contractItemId,onBack,onEd
         {showCancelled?grouped.cancelled.map(value=><LoadRow key={value.id} load={value} notCounted itemUnit={unit} onOpen={()=>{setSelected(value);setSheet('load');}} onEdit={()=>onEditLoad(value)} onMove={()=>{setSelected(value);setSheet('move');}}/>):null}
       </View>:null}
       {!cancelled?<AppButton label="Link older loads" tone="secondary" onPress={()=>setSheet('link')}/>:null}
-    </AppCard>
+    </AppCard>:null}
 
     <AppCard title="Adjustments">
       {usage.adjustments.length?usage.adjustments.map(value=><View key={value.id} style={styles.history}>
@@ -117,6 +132,7 @@ export function ContractItemScreen({project,contracts,contractItemId,onBack,onEd
     </AppCard>
     <Text style={styles.helper}>{project.name}</Text>
 
+    <SiteEntrySheet detail={detail} contracts={contracts} visible={sheet==='entry'} onClose={()=>setSheet(null)} onDone={()=>done('Entry saved. It is listed below and counts on its own date.')}/>
     <AdjustSheet detail={detail} contracts={contracts} visible={sheet==='adjust'} onClose={()=>setSheet(null)} onDone={()=>done('Adjustment saved. It is listed below with its reason.')}/>
     <FinishSheet detail={detail} contracts={contracts} visible={sheet==='finish'} onClose={()=>setSheet(null)} onDone={()=>done('Item finished. The quantity used did not change.')}/>
     <ReopenSheet detail={detail} contracts={contracts} visible={sheet==='reopen'} onClose={()=>setSheet(null)} onDone={()=>done('Item reopened. The finish stays in the history.')}/>
@@ -190,4 +206,9 @@ const styles=StyleSheet.create({
   history:{paddingVertical:8,borderTopWidth:1,borderTopColor:'#EEE9DF',gap:2},
   historyTitle:{color:colors.ink,fontSize:14,fontWeight:'800'},
   amount:{color:colors.navy,fontSize:14,fontWeight:'800'},
+  negative:{color:colors.danger},
+  titleRow:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:8},
+  delivered:{backgroundColor:'#FFF4DC',borderColor:'#EFC979',borderWidth:1,borderRadius:12,padding:10,gap:3},
+  deliveredLabel:{color:'#8A5300',fontSize:10.5,fontWeight:'900',letterSpacing:.5},
+  deliveredText:{color:'#5E3A00',fontSize:14,fontWeight:'800'},
 });

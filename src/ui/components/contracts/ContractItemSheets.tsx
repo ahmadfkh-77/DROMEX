@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import {StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import type {ContractItemDetail,ContractLoadDetail,ContractQuantitiesRepository} from '../../../data/repositories/ContractQuantitiesRepository';
-import {adjustmentPreview,validateContractAdjustment,type ContractItem} from '../../../domain/contractQuantities';
+import {adjustmentPreview,siteEntryPreview,validateContractAdjustment,type ContractItem} from '../../../domain/contractQuantities';
 import {AppField,Feedback} from '../AppPrimitives';
 import {DatePickerField,todayIso} from '../DatePickerField';
 import {FocusedSheet,SheetActions} from '../FocusedSheet';
@@ -171,3 +171,25 @@ const styles=StyleSheet.create({
   unit:{color:colors.navy,backgroundColor:'#E8EDF3',fontSize:12,fontWeight:'800',borderRadius:8,paddingHorizontal:8,paddingVertical:3,overflow:'hidden'},
   unitBad:{color:colors.danger,backgroundColor:'#FDECEA'},
 });
+
+/** DEC-556 mockup tab 4. One dated entry in the target's own unit; a minus is a correction and needs a note. Entries are never edited or deleted. */
+export function SiteEntrySheet({detail,contracts,visible,onClose,onDone}:{detail:ContractItemDetail;contracts:ContractQuantitiesRepository;visible:boolean;onClose:()=>void;onDone:()=>void}){
+  const[day,setDay]=useState(todayIso());const[amount,setAmount]=useState('');const[note,setNote]=useState('');
+  const[error,setError]=useState<string|null>(null);const[busy,setBusy]=useState(false);
+  useEffect(()=>{if(visible){setDay(todayIso());setAmount('');setNote('');setError(null);}},[visible]);
+  const {item,usage}=detail,unit=item.unitSymbol;
+  const preview=siteEntryPreview(usage,amount);
+  const minus=preview!==null&&preview.usedAfter<usage.used;
+  async function save(){
+    setBusy(true);setError(null);
+    try{await contracts.addSiteEntry(item.id,{date:day,amount,note});onDone();}catch(cause){setError(message(cause,'Could not save the entry.'));}finally{setBusy(false);}
+  }
+  return <FocusedSheet visible={visible} eyebrow={item.name.toUpperCase()} title="Log used quantity" onClose={onClose} footer={<SheetActions primaryLabel="Add entry" onPrimary={()=>void save()} onCancel={onClose} busy={busy} disabled={!preview||!day||(minus&&!note.trim())}/>}>
+    <Text style={styles.helper}>Entries are never edited or deleted. Fix a mistake with a correcting entry (a minus amount and a note).</Text>
+    {error?<Feedback kind="error">{error}</Feedback>:null}
+    <DatePickerField label="Date *" value={day} onChange={setDay} maxDate={todayIso()}/>
+    <AppField label={`Amount in ${unit} (minus for a correction) *`} value={amount} onChangeText={setAmount} keyboardType="numbers-and-punctuation" placeholder="For example 120 or -10"/>
+    <AppField label={minus?'Note (required for a minus) *':'Note (optional)'} value={note} onChangeText={setNote} placeholder="For example Block 4 east"/>
+    {preview?<Preview label="After this entry" value={`${contractAmount(preview.usedAfter)} ${unit} · ${preview.percentAfter.toFixed(1)}%`}/>:null}
+  </FocusedSheet>;
+}

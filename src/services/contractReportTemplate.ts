@@ -26,15 +26,16 @@ function saving(row:ContractReportRow):string{
 
 function itemsTable(report:ContractReport):string{
   const prices=report.includePrices;
-  const groups=`<tr class="grp"><th colspan="2">Item</th><th class="g">Target</th><th class="g" colspan="3">Use</th><th class="g" colspan="3">Balance</th>${prices?'<th class="g" colspan="2">Saving</th>':''}</tr>`;
-  const heads=`<tr><th>Item · materials</th><th>Unit</th><th class="num g">Target</th><th class="num g">From loads</th><th class="num">Adjust.</th><th class="num">Used</th><th class="num g">Remaining</th><th class="num">% used</th><th>Status</th>${prices?'<th class="num g">Leftover</th><th class="num">Saving</th>':''}</tr>`;
+  const groups=`<tr class="grp"><th colspan="2">Item</th><th class="g">Target</th><th class="g" colspan="4">Use</th><th class="g" colspan="3">Balance</th>${prices?'<th class="g" colspan="2">Saving</th>':''}</tr>`;
+  const heads=`<tr><th>Item · materials</th><th>Unit</th><th class="num g">Target</th><th class="num g">From loads</th><th class="num">Site entries</th><th class="num">Adjust.</th><th class="num">Used</th><th class="num g">Remaining</th><th class="num">% used</th><th>Status</th>${prices?'<th class="num g">Leftover</th><th class="num">Saving</th>':''}</tr>`;
   const body=report.rows.map(row=>`<tr>
-    <td><b>${t(row.name)}</b>${row.materials?`<br/><span class="muted">${t(row.materials)}</span>`:''}</td><td>${t(row.unit)}</td>
-    <td class="num g">${n(row.contract)}</td><td class="num g">${n(row.fromLoads)}</td><td class="num">${signed(row.adjustments)}</td><td class="num"><b>${n(row.used)}</b></td>
+    <td><b>${t(row.name)}</b> <span class="mode ${row.tracking==='MANUAL'?'m':row.tracking==='LINKED MANUAL'?'lm':'a'}">${e(row.tracking)}</span>${row.materials?`<br/><span class="muted">${t(row.materials)}</span>`:row.manual?'<br/><span class="muted">No material linked</span>':''}</td><td>${t(row.unit)}</td>
+    <td class="num g">${n(row.contract)}</td><td class="num g">${row.tracking==='LINKED MANUAL'?(row.delivered?row.delivered.split('; ').map(value=>t(value)).join('<br/>'):'—'):row.manual?'—':n(row.fromLoads)}</td><td class="num">${row.siteEntries===null?'—':n(row.siteEntries)}</td><td class="num">${signed(row.adjustments)}</td><td class="num"><b>${n(row.used)}</b></td>
     <td class="num g">${n(row.remaining)}</td><td class="num">${pct(row.percentUsed)}</td><td class="status ${row.tone}">${t(row.status)}</td>
     ${prices?`<td class="num g">${row.leftover===null?'':n(row.leftover)}</td><td class="num">${saving(row)}</td>`:''}
   </tr>`).join('');
-  return `<table class="cq"><thead>${groups}${heads}</thead><tbody>${body}</tbody></table>`;
+  const subtitle=report.trackedBySiteEntries?`<p class="note-plain" style="padding:2mm 3.5mm 0;margin:0 0 2mm"><b>Site entries</b> track LINKED MANUAL and MANUAL targets. AUTOMATIC targets are calculated from loads.</p>`:'';
+  return `${subtitle}<table class="cq"><thead>${groups}${heads}</thead><tbody>${body}</tbody></table>`;
 }
 
 function smallTable(headers:string[],numeric:boolean[],rows:string[][],widths:number[]):string{
@@ -48,6 +49,7 @@ export function buildContractReportHtml(report:ContractReport,header:ContractRep
   const tiles=[
     [`Quantity used (${report.summary.basis==='value'?'weighted by target value':'average of items'})`,percent],
     ['Items complete',report.summary.itemsComplete],
+    ...(report.trackedBySiteEntries?[['Tracked automatically',String(report.rows.length-report.trackedBySiteEntries)],['Tracked by site entries',String(report.trackedBySiteEntries)]]:[]),
     ...(prices?[['Saving, finished items',usd(report.summary.totalSavingUsd??0)],['Estimated, items in progress',usd(report.summary.estimatedSavingUsd??0)]]:[]),
   ].map(([label,value])=>`<div class="tile"><span class="figure-label">${e(label)}</span><b>${e(value)}</b></div>`).join('');
   let index=1;
@@ -58,6 +60,7 @@ export function buildContractReportHtml(report:ContractReport,header:ContractRep
     +smallTable(['Largest overrun first','Over by','% used'],[false,true,true],report.overruns.length?report.overruns.map(value=>[t(value.name),e(value.overBy),pct(value.percentUsed)]):[['<span class="missing">No item is over target.</span>','','']],[60,20,20]);
   const overruns=block(prices?'Savings and overruns':'Overruns',savingsBody);
   const notCounted=report.notCounted.length?block('Not counted',smallTable(['Load','Item','Quantity','Why'],[false,false,true,false],report.notCounted.map(value=>[t(value.load),t(value.item),e(value.quantity),e(value.why)]),[28,24,13,35])):'';
+  const entries=report.siteEntries.some(value=>value.entries.length)?block('Site entries',report.siteEntries.filter(value=>value.entries.length).map(value=>`<div class="sub">${t(value.name)} · ${e(value.tracking)} · ${value.entries.length} entr${value.entries.length===1?'y':'ies'} · total ${n(value.total)} ${t(value.unit)}</div>`+smallTable(['Date','Amount','Entries total after','Note / reason'],[false,true,true,false],[...value.entries].reverse().map(entry=>[e(new Date(entry.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})),`${signed(entry.amount)} ${e(value.unit)}`,n(entry.totalAfter),t(entry.note)]),[20,20,20,40])).join('')):'';
   return `<!doctype html><html><head><meta charset="utf-8"/><style>${reportCss()}
     @page{size:A4 landscape;margin:12mm 11mm 16mm;@bottom-left{content:"${css(running)}";font-size:7.5pt;color:#5A6570}@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:7.5pt;color:#5A6570}}
     .tiles.flat{margin:0;border:none}
@@ -66,10 +69,12 @@ export function buildContractReportHtml(report:ContractReport,header:ContractRep
     table.cq th:last-child,table.cq td:last-child{border-right:none}
     table.cq .g{border-left:.5mm solid ${c.navy}}
     table.cq tr.grp th{background:${c.group};text-align:center;font-size:6.8pt;letter-spacing:.7px;text-transform:uppercase;border-bottom:.2mm solid ${c.cell}}
+    .mode{display:inline-block;font-size:6pt;font-weight:700;letter-spacing:.4px;color:#fff;border-radius:1mm;padding:.3mm 1.4mm;vertical-align:1px}.mode.a{background:#1E7B4B}.mode.lm{background:#B7791F}.mode.m{background:#D9571F}
+    .sub{font-weight:700;color:#173F67;padding:2mm 0 1mm}
     td.status{font-weight:700}td.status.over{color:#A61B12}td.status.done{color:#2F6B3A}
   </style></head><body>
     <div class="head"><div>${header.logo?`<img class="logo" src="${header.logo}" alt=""/>`:''}<b>${t(header.companyName)}</b>${header.contactLine?`<div class="contact">${t(header.contactLine)}</div>`:''}</div>
       <div class="head-right"><h1>${t(report.title)}</h1><div class="subtitle">Project: ${t(report.project.name)}</div><div class="subtitle">Customer: ${t(report.project.customerName)}</div><div class="when">As of ${e(when(report.generatedAt))} · ${prices?'With prices':'Without prices'}</div></div></div>
-    ${summary}${items}${overruns}${notCounted}
+    ${summary}${items}${entries}${overruns}${notCounted}
   </body></html>`;
 }

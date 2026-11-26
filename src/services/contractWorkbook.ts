@@ -10,10 +10,11 @@ import {buildWorkbookFromSheets,type SheetSpec} from './businessWorkbook';
 export function contractWorkbookSheets(report:ContractReport,company:{name:string}):SheetSpec[]{
   const prices=report.includePrices;
   const items:WorkbookRow[]=report.rows.map(row=>{
-    const value:WorkbookRow={Item:row.name,Materials:row.materials,Unit:row.unit,'Target Quantity':row.contract,'From Loads':row.fromLoads,Adjustments:row.adjustments,Used:row.used,Remaining:row.remaining,'% Used':row.percentUsed,Status:row.status};
+    const value:WorkbookRow={Item:row.name,Tracking:row.tracking,Materials:row.materials,Unit:row.unit,'Target Quantity':row.contract,'From Loads':row.manual?null:row.fromLoads,'Site Entries':row.siteEntries,'Delivered In Loads (Not Counted)':row.delivered,Adjustments:row.adjustments,Used:row.used,Remaining:row.remaining,'% Used':row.percentUsed,Status:row.status};
     if(prices){value['Target Price USD']=row.contractPriceUsd;value['Leftover']=row.leftover;value['Saving USD']=row.savingUsd;value['Saving Is Estimate']=row.savingUsd===null?'':row.savingIsEstimate?'Yes':'No';}
     return value;
   });
+  const siteEntries:WorkbookRow[]=report.siteEntries.flatMap(target=>target.entries.map(entry=>({Item:target.name,Tracking:target.tracking,Date:entry.date,Amount:entry.amount,Unit:target.unit,'Entries Total After':entry.totalAfter,'Note / Reason':entry.note})));
   const notCounted:WorkbookRow[]=report.notCounted.map(value=>({Load:value.load,Item:value.item,Quantity:value.quantity,Why:value.why}));
   const info:WorkbookRow[]=[
     {Metric:'Report',Value:report.title},{Metric:'Company',Value:company.name},{Metric:'Project',Value:report.project.name},{Metric:'Customer',Value:report.project.customerName},
@@ -24,13 +25,14 @@ export function contractWorkbookSheets(report:ContractReport,company:{name:strin
   ];
   const dictionary:WorkbookRow[]=[
     {Sheet:'Targets',Column:'From Loads / Adjustments / Used',Meaning:'Used is the quantity from the Active loads linked to the item plus the adjustments, each with a reason. All three are in the item\'s unit.'},
+    {Sheet:'Targets',Column:'Tracking / Site Entries',Meaning:'AUTOMATIC targets are calculated from loads. LINKED MANUAL and MANUAL targets use the sum of their site entries instead; loads linked to a LINKED MANUAL target are shown in their own unit under Delivered In Loads and are never added to Used.'},
     {Sheet:'Targets',Column:'% Used',Meaning:'Used ÷ Target Quantity, one decimal. It is the true quantity used and does not change when an item is marked Complete.'},
     {Sheet:'Targets',Column:'Status',Meaning:'The work status: In progress, Over target or Complete with its day. It is separate from % Used.'},
     ...(prices?[{Sheet:'Targets',Column:'Leftover / Saving USD',Meaning:'Leftover is what was not used (never below zero); Saving is Leftover × Target Price, empty without a price. An item still in progress is marked as an estimate.'}]:[]),
     {Sheet:'Not Counted',Column:'Why',Meaning:'A linked load in another unit, or without a quantity. It is never converted or added to Used.'},
     {Sheet:'All sheets',Column:'Unit',Meaning:'Every item keeps its own unit. Quantities of different units are never added together.'},
   ];
-  return [{name:'Report Info',rows:info},{name:'Targets',rows:items},{name:'Not Counted',rows:notCounted},{name:'Data Dictionary',rows:dictionary}];
+  return [{name:'Report Info',rows:info},{name:'Targets',rows:items},...(siteEntries.length?[{name:'Site Entries',rows:siteEntries}]:[]),{name:'Not Counted',rows:notCounted},{name:'Data Dictionary',rows:dictionary}];
 }
 
 export const buildContractWorkbook=(report:ContractReport,company:{name:string}):Uint8Array=>buildWorkbookFromSheets(contractWorkbookSheets(report,company));

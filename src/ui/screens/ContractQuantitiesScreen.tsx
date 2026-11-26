@@ -2,7 +2,7 @@ import {useCallback,useEffect,useState} from 'react';
 import {ActivityIndicator,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import type {ContractQuantitiesRepository,ContractRowView} from '../../data/repositories/ContractQuantitiesRepository';
-import type {ContractProjectSummary} from '../../domain/contractQuantities';
+import {contractDeliveredLines,contractTrackingLine,contractTrackingMode,type ContractProjectSummary} from '../../domain/contractQuantities';
 import type {Project} from '../../domain/loads';
 import {AppButton,AppCard,AppPage,EmptyState,Feedback,PageHeader} from '../components/AppPrimitives';
 import {ContractExportSheet} from '../components/contracts/ContractExportSheet';
@@ -10,7 +10,7 @@ import {ContractItemCard,contractUsd} from '../components/contracts/ContractPart
 import {colors} from '../theme';
 
 const plural=(count:number,word:string)=>`${count} ${word}${count===1?'':'s'}`;
-export const contractMaterialLine=(row:ContractRowView)=>row.materials.map(material=>material.name).join(', ')+` · ${row.item.unitSymbol}`;
+export const contractMaterialLine=(row:ContractRowView)=>`${contractTrackingLine(contractTrackingMode(row.item),row.materials.map(material=>material.name))} · ${row.item.unitSymbol}`;
 
 /**
  * DEC-522 Phase D1 (mockup tab 1). A project's targets: the whole-project summary, then one card per item with its bar and
@@ -56,7 +56,7 @@ function Ready({rows,summary,showCancelled,onToggleCancelled,onAdd,onOpenItem}:{
       {priced&&summary.estimatedSavingUsd>0?<Text style={styles.helper}>Estimated, items still in progress: {contractUsd(summary.estimatedSavingUsd)}</Text>:null}
     </AppCard>
     <AppButton label="+ Add target" onPress={onAdd}/>
-    {live.map(row=><ContractItemCard key={row.item.id} item={row.item} usage={row.usage} materialLine={contractMaterialLine(row)} onPress={()=>onOpenItem(row.item.id)}/>)}
+    {live.map(row=><ContractItemCard key={row.item.id} item={row.item} usage={row.usage} materialLine={contractMaterialLine(row)} deliveredLines={contractDeliveredLines(row.usage,id=>row.materials.find(material=>material.id===id)?.name??'Material')} onPress={()=>onOpenItem(row.item.id)}/>)}
     {cancelled.length?<CancelledList rows={cancelled} open={showCancelled} onToggle={onToggleCancelled} onOpenItem={onOpenItem}/>:null}
   </>;
 }
@@ -68,7 +68,7 @@ function Metric({value,label,tone}:{value:string;label:string;tone?:'money'|'ove
 function CancelledList({rows,open,onToggle,onOpenItem}:{rows:ContractRowView[];open:boolean;onToggle:()=>void;onOpenItem:(id:string)=>void}){
   return <View style={styles.cancelled}>
     <TouchableOpacity style={styles.cancelledHead} onPress={onToggle} accessibilityRole="button" accessibilityState={{expanded:open}}><Text style={styles.cancelledTitle}>Cancelled items · {rows.length}</Text><Text style={styles.mark}>{open?'×':'+'}</Text></TouchableOpacity>
-    {open?rows.map(row=><ContractItemCard key={row.item.id} item={row.item} usage={row.usage} materialLine={contractMaterialLine(row)} onPress={()=>onOpenItem(row.item.id)}/>):null}
+    {open?rows.map(row=><ContractItemCard key={row.item.id} item={row.item} usage={row.usage} materialLine={contractMaterialLine(row)} deliveredLines={contractDeliveredLines(row.usage,id=>row.materials.find(material=>material.id===id)?.name??'Material')} onPress={()=>onOpenItem(row.item.id)}/>):null}
   </View>;
 }
 
