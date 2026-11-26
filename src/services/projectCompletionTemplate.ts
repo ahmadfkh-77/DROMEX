@@ -3,6 +3,7 @@ import {breakAfterHyphens,colgroup,columnWidths} from './pdfColumns';
 import {netWorkMinutes,type DailyProjectReport,type ProjectCompletionLoad,type ProjectCompletionWasteDump,type ProjectReportSetup,type ReportProject} from '../domain/projectReports';
 import {loadNumberLabel} from '../domain/loadNumberSeries';
 import type {ContractFinalReport} from '../domain/contractQuantities';
+import {contractModeBadgeHtml} from './contractModeBadge';
 
 const e=(value:unknown)=>String(value??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]??c));
 const display=(value:string|null|undefined)=>value?.trim()?e(value):'&mdash;';
@@ -24,7 +25,7 @@ function contractFinalHtml(targets:ProjectCompletionTargets|undefined):string{
     const tone=usage.warning==='over'?'over':usage.warning==='near'?'near':'';
     const status=usage.overContract?['o','Over target']:item.status==='complete'?['d','Completed']:['p','In progress'];
     const notCounted=usage.notCounted.length?`<div class="target-note">${usage.notCounted.length} load${usage.notCounted.length===1?'':'s'} in another unit not counted</div>`:'';
-    return `<tr><td dir="auto">${e(item.name)}${notCounted}</td><td class="number">${fmtQty(item.quantity)} ${e(item.unitSymbol)}</td><td class="number">${fmtQty(usage.used)} ${e(item.unitSymbol)}</td><td class="number">${usage.overContract?`over ${fmtQty(usage.overBy)} ${e(item.unitSymbol)}`:`${fmtQty(usage.remaining)} ${e(item.unitSymbol)}`}</td><td><b class="${tone?`pct-${tone}`:''}">${pct(usage.percentUsed)}</b><div class="target-bar ${tone}"><i style="width:${Math.min(100,Math.max(0,usage.percentUsed))}%"></i></div></td><td><span class="status-pill ${status[0]}">${status[1]}</span></td></tr>`;
+    return `<tr><td dir="auto">${e(item.name)}${contractModeBadgeHtml(usage.tracking)}${notCounted}</td><td class="number">${fmtQty(item.quantity)} ${e(item.unitSymbol)}</td><td class="number">${fmtQty(usage.used)} ${e(item.unitSymbol)}</td><td class="number">${usage.overContract?`over ${fmtQty(usage.overBy)} ${e(item.unitSymbol)}`:`${fmtQty(usage.remaining)} ${e(item.unitSymbol)}`}</td><td><b class="${tone?`pct-${tone}`:''}">${pct(usage.percentUsed)}</b><div class="target-bar ${tone}"><i style="width:${Math.min(100,Math.max(0,usage.percentUsed))}%"></i></div></td><td><span class="status-pill ${status[0]}">${status[1]}</span></td></tr>`;
   }).join('');
   const {summary}=report;
   const whole=targets!.includeWholeProject&&summary.overallPercentUsed!==null

@@ -1,4 +1,5 @@
 import type {ContractDayReport} from '../domain/contractQuantities';
+import {contractModeBadgeHtml} from './contractModeBadge';
 import {normalizeCustomResourceSnapshots,type CustomResourceSnapshot} from '../domain/customDirectories';
 import type {LinkedQuarryLoad} from '../domain/projectReports';
 import {groupSupplierLoads,type UnitQuantity} from '../domain/supplierLoadGroups';
@@ -76,7 +77,7 @@ export function contractProgressHtml(progress:ContractDayReport|null|undefined,i
     const tone=usage.warning==='over'?'over':usage.warning==='near'?'near':'';
     const remaining=usage.overContract?`over ${fmt(usage.overBy)} ${e(item.unitSymbol)}`:`${fmt(usage.remaining)} ${e(item.unitSymbol)}`;
     const note=target.notCountedToday?`<div class="target-note">${target.notCountedToday} load${target.notCountedToday===1?'':'s'} in another unit not counted</div>`:'';
-    return `<tr><td dir="auto">${e(item.name)}${note}</td><td class="number">${fmt(target.usedToday)} ${e(item.unitSymbol)}</td><td class="number">${fmt(usage.used)} ${e(item.unitSymbol)}</td><td class="number">${fmt(item.quantity)} ${e(item.unitSymbol)}</td><td class="number">${remaining}</td><td class="number target-percent"><b class="${tone?`pct-${tone}`:''}">${percentText(usage.percentUsed)}</b><div class="target-bar ${tone}"><i style="width:${Math.min(100,Math.max(0,usage.percentUsed))}%"></i></div></td></tr>`;
+    return `<tr><td dir="auto">${e(item.name)}${contractModeBadgeHtml(usage.tracking)}${note}</td><td class="number">${fmt(target.usedToday)} ${e(item.unitSymbol)}</td><td class="number">${fmt(usage.used)} ${e(item.unitSymbol)}</td><td class="number">${fmt(item.quantity)} ${e(item.unitSymbol)}</td><td class="number">${remaining}</td><td class="number target-percent"><b class="${tone?`pct-${tone}`:''}">${percentText(usage.percentUsed)}</b><div class="target-bar ${tone}"><i style="width:${Math.min(100,Math.max(0,usage.percentUsed))}%"></i></div></td></tr>`;
   }).join('')||'<tr><td colspan="6" class="empty">No quantity target received a load on this date</td></tr>';
   const {summary}=progress;
   const whole=includeWholeProject&&summary.overallPercentUsed!==null

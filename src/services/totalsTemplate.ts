@@ -2,6 +2,7 @@ import type {CompanyTotalsRecord} from '../data/repositories/CompanyTotalsReposi
 import {buildMaterialTree,treeTotals,unitDifferences,type CompanyTotalsData,type MaterialNode,type RecordedValue,type UnitMeasures} from '../domain/companyTotals';
 import type {ContractTotalsTarget} from '../domain/contractQuantities';
 import {formatFuelPriceUsd,fuelPriceFromStored,fuelTypeLabels} from '../domain/fuel';
+import {contractModeBadgeHtml} from './contractModeBadge';
 import {breakAfterHyphens,colgroup,columnWidths,type ColumnSpec} from './pdfColumns';
 import {reportCss} from './pdfTheme';
 import {formatTotalQuantity,summarizeFuelFills,type ProjectFuelFill} from '../domain/projectTotals';
@@ -69,7 +70,7 @@ function targetTiles(material:MaterialNode,targets:readonly ContractTotalsTarget
   const materialId=material.itemKey.slice(3);
   return targets.filter(target=>target.materialIds.includes(materialId)).map(target=>{
     const tone=target.warning==='over'?'over':target.warning==='near'?'near':'';
-    return `<div class="figure target"><div class="target-name">Target &middot; ${t(target.name)}</div><div class="target-cells">
+    return `<div class="figure target"><div class="target-name">Target &middot; ${t(target.name)}${contractModeBadgeHtml(target.tracking)}</div><div class="target-cells">
       <div class="figure-cell"><span class="figure-label">Target</span><b>${e(formatTotalQuantity(target.quantity,target.unitSymbol))}</b></div>
       <div class="figure-cell"><span class="figure-label">Counted</span><b>${e(formatTotalQuantity(target.counted,target.unitSymbol))}</b></div>
       <div class="figure-cell"><span class="figure-label">% complete</span><b class="${tone?`pct-${tone}`:''}">${target.percentUsed.toFixed(1)}%</b></div></div>

@@ -414,6 +414,8 @@ const siteEntriesOn=(entries:readonly ContractSiteEntry[],day:string)=>entries.f
 /** A target as the Project Totals PDF prints it (DEC-539): its own figures, as of the To date or today. */
 export type ContractTotalsTarget={
   id:string;name:string;unitSymbol:string;materialIds:string[];
+  /** How its used quantity is tracked on the date asked for (DEC-556). Absent means automatic. */
+  tracking?:ContractTrackingMode;
   quantity:number;/** What counts toward the target: loads linked to it plus adjustments, never the material's Delivered figure. */counted:number;
   percentUsed:number;warning:ContractWarning;overBy:number;
 };
@@ -422,7 +424,7 @@ export type ContractTotalsTarget={
 export function contractTotalsTargets(entries:readonly ContractDayEntry[],asOf:string|null):ContractTotalsTarget[]{
   return entries.filter(entry=>!entry.item.cancelledAt).map(entry=>{
     const {item,usage}=contractUsageAsOf(entry,asOf);
-    return{id:item.id,name:item.name,unitSymbol:item.unitSymbol,materialIds:[...item.materialIds],quantity:item.quantity,counted:usage.used,percentUsed:usage.percentUsed,warning:usage.warning,overBy:usage.overBy};
+    return{id:item.id,name:item.name,unitSymbol:item.unitSymbol,materialIds:[...item.materialIds],tracking:usage.tracking,quantity:item.quantity,counted:usage.used,percentUsed:usage.percentUsed,warning:usage.warning,overBy:usage.overBy};
   });
 }
 
@@ -448,7 +450,7 @@ export function dailyContractProgress(entries:readonly ContractDayEntry[],workDa
 }
 
 /** One live target as the Company Daily Report prints it, as of the end of the work date: the same usage rules as the Daily Report (DEC-537). */
-export type ContractTargetRow={itemId:string;name:string;unitSymbol:string;quantity:number;usedBefore:number;usedToday:number;used:number;percentUsed:number;left:number;overBy:number;warning:ContractWarning};
+export type ContractTargetRow={itemId:string;name:string;/** DEC-556: how its used quantity is tracked on that date. Absent means automatic. */tracking?:ContractTrackingMode;unitSymbol:string;quantity:number;usedBefore:number;usedToday:number;used:number;percentUsed:number;left:number;overBy:number;warning:ContractWarning};
 
 /**
  * Every live target of one project as of the end of `workDate`, whether or not it moved that day (the Daily Report lists only the ones that moved).
@@ -463,7 +465,7 @@ export function dailyContractTargetTable(entries:readonly ContractDayEntry[],wor
     const adjustedToday=adjustments.filter(value=>value.contractItemId===item.id&&localDateKey(new Date(value.createdAt))===workDate);
     const enteredToday=siteEntriesOn(siteEntries.filter(value=>value.contractItemId===item.id),workDate);
     const usedToday=round6(usage.countedLoads.filter(load=>load.date===workDate).reduce((sum,load)=>sum+load.quantity!,0)+adjustedToday.reduce((sum,value)=>sum+value.amount,0)+enteredToday.reduce((sum,value)=>sum+value.amount,0));
-    rows.push({itemId:item.id,name:item.name,unitSymbol:item.unitSymbol,quantity:item.quantity,usedBefore:round6(usage.used-usedToday),usedToday,used:usage.used,percentUsed:usage.percentUsed,left:usage.leftover,overBy:usage.overBy,warning:usage.warning});
+    rows.push({itemId:item.id,name:item.name,tracking:usage.tracking,unitSymbol:item.unitSymbol,quantity:item.quantity,usedBefore:round6(usage.used-usedToday),usedToday,used:usage.used,percentUsed:usage.percentUsed,left:usage.leftover,overBy:usage.overBy,warning:usage.warning});
   }
   return rows;
 }

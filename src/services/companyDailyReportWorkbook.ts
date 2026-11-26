@@ -1,3 +1,4 @@
+import {contractTrackingLabel} from '../domain/contractQuantities';
 import type {WorkbookRow} from '../domain/businessReports';
 import {equipmentTypeLabel,localTime,sumAmounts,type CompanyDailyReport,type DayPlace} from '../domain/companyDailyReport';
 import type {SheetSpec} from './businessWorkbook';
@@ -66,7 +67,7 @@ export function companyDailyReportSheets(report:CompanyDailyReport,options:{pric
     const group=(name:string,rows:typeof sheet.people)=>rows.flatMap(r=>r.places.map((p):WorkbookRow=>({Date:report.day,Group:name,'Record ID':r.id,Name:r.name,Role:r.detail,'Place Type':p.type==='project'?'Project':p.type==='company_site'?'Company site':'Typed place',Place:p.name})));
     sheets.push({name:'Attendance',rows:[...group('People',sheet.people),...group('Trucks',sheet.trucks),...group('Machines',sheet.machines)]});
   }
-  const contract:WorkbookRow[]=report.places.filter(p=>p.contract?.included).flatMap(p=>p.contract!.rows.map((r):WorkbookRow=>({Project:p.name,Item:r.name,Unit:r.unitSymbol,'Contract Quantity':round3(r.quantity),'Used Before Today':round3(r.usedBefore),'Used Today':round3(r.usedToday),Used:round3(r.used),'Percent Used':r.percentUsed,Left:round3(r.left),'Over By':r.overBy>0?round3(r.overBy):null})));
+  const contract:WorkbookRow[]=report.places.filter(p=>p.contract?.included).flatMap(p=>p.contract!.rows.map((r):WorkbookRow=>({Project:p.name,Item:r.name,Tracking:contractTrackingLabel(r.tracking??'automatic'),Unit:r.unitSymbol,'Contract Quantity':round3(r.quantity),'Used Before Today':round3(r.usedBefore),'Used Today':round3(r.usedToday),Used:round3(r.used),'Percent Used':r.percentUsed,Left:round3(r.left),'Over By':r.overBy>0?round3(r.overBy):null})));
   if(contract.length)sheets.push({name:'Contract target',rows:contract});
   const dictionary:WorkbookRow[]=[
     {Sheet:'Contract target',Column:'Used Before Today / Used Today / Percent Used / Left',Meaning:'Only for projects whose Contract target switch was ON. The figures of Contract Quantities as of the end of the day: loads linked to the target in its own unit plus reasoned adjustments; other units are never converted.'},

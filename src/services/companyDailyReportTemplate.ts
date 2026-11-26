@@ -1,5 +1,6 @@
 import type {AttendanceRow,AttendanceSheet} from '../domain/attendance';
 import {equipmentTypeLabel,placeMaterials,sumAmounts,supplierLoadDriver,localTime,type ArrivalGroup,type CompanyDailyReport,type DayPlace,type DayTile,type PlaceMaterial} from '../domain/companyDailyReport';
+import {contractModeBadgeHtml} from './contractModeBadge';
 import {reportCss} from './pdfTheme';
 
 /**
@@ -69,7 +70,7 @@ const material=(m:PlaceMaterial,prices:boolean,companyName:string):string=>{
 
 function contractBox(place:DayPlace,day:string):string{
   if(!place.contract||!place.contract.included)return '';
-  const rows=place.contract.rows.map(r=>`<tr><td>${t(r.name)}</td><td class="num">${e(amount(r.quantity,r.unitSymbol))}</td><td class="num">${e(amount(r.usedBefore,r.unitSymbol))}</td><td class="num">${e(amount(r.usedToday,r.unitSymbol))}</td><td class="num">${e(number(r.percentUsed))}%${r.overBy>0?` (over by ${e(amount(r.overBy,r.unitSymbol))})`:''}</td><td class="num">${e(amount(r.left,r.unitSymbol))}</td></tr>`).join('');
+  const rows=place.contract.rows.map(r=>`<tr><td>${t(r.name)}${contractModeBadgeHtml(r.tracking)}</td><td class="num">${e(amount(r.quantity,r.unitSymbol))}</td><td class="num">${e(amount(r.usedBefore,r.unitSymbol))}</td><td class="num">${e(amount(r.usedToday,r.unitSymbol))}</td><td class="num">${e(number(r.percentUsed))}%${r.overBy>0?` (over by ${e(amount(r.overBy,r.unitSymbol))})`:''}</td><td class="num">${e(amount(r.left,r.unitSymbol))}</td></tr>`).join('');
   return `<div class="mat"><div class="mat-head"><span>Contract target</span><span class="mat-figures">as of ${e(longDay(day))}</span></div><table class="sum"><colgroup><col style="width:22%"/><col style="width:15%"/><col style="width:16%"/><col style="width:14%"/><col style="width:13%"/><col style="width:20%"/></colgroup><thead><tr><th>Item</th><th class="num">Contract quantity</th><th class="num">Used before today</th><th class="num">Used today</th><th class="num">% used</th><th class="num">Left</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function fuelBox(place:DayPlace,prices:boolean):string{

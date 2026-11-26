@@ -21,7 +21,7 @@ import {describeWallConsumptionQuantity,formatCubicMetres,formatVolumeCalculatio
 import {baseStatusLabels} from '../../domain/wallBase';
 import {describeFoundationQuantity,hasLegacyMaterialRecord} from '../../domain/foundations';
 import {CONTRACT_SECTION_PREFERENCE_KEY,CONTRACT_WHOLE_PROJECT_PREFERENCE_KEY,WALL_SECTION_PREFERENCE_KEY,describeContractSectionPreference,describeContractWholeProjectPreference,describeFoundationSectionPreference,describeWallSectionPreference,parseFoundationSectionPreference,parseSectionPreference,serializeFoundationSectionPreference,serializeSectionPreference,FOUNDATION_SECTION_PREFERENCE_KEY} from '../../domain/reportSectionPreferences';
-import type {ContractDayReport} from '../../domain/contractQuantities';
+import {contractTrackingLabel,type ContractDayReport} from '../../domain/contractQuantities';
 import { SearchableSelect } from '../components/SearchableSelect';
 import {CustomResourcePicker} from '../components/CustomResourcePicker';
 import {SupervisorSignoffPicker} from '../components/SupervisorSignoffPicker';
@@ -439,7 +439,7 @@ function DailyReportEditor({ setup, project, draft, reports, loadLinks={}, linke
           {contractProgress.targets.length?contractProgress.targets.map(target=>{
             const {item,usage}=target;const tone=usage.warning==='over'?colors.danger:usage.warning==='near'?colors.warning:colors.brand;
             return <View key={item.id} style={styles.recordRow}>
-              <View style={styles.recordTop}><Text style={styles.recordName}>{item.name}</Text><Text style={[styles.recordStrongValue,{color:tone}]}>{usage.percentUsed.toFixed(1)}%</Text></View>
+              <View style={styles.recordTop}><Text style={styles.recordName}>{item.name}  <Text style={{fontSize:10,fontWeight:'900',color:usage.tracking==='manual'?'#D9571F':usage.tracking==='linked_manual'?'#B7791F':'#1E7B4B'}}>{contractTrackingLabel(usage.tracking)}</Text></Text><Text style={[styles.recordStrongValue,{color:tone}]}>{usage.percentUsed.toFixed(1)}%</Text></View>
               <View style={{height:8,borderRadius:4,backgroundColor:'#ECE7DD',overflow:'hidden'}}><View style={{height:8,width:`${Math.min(100,Math.max(0,usage.percentUsed))}%`,backgroundColor:tone}}/></View>
               <Text style={styles.recordMeta}>Used today {targetQty(target.usedToday)} {item.unitSymbol} · Total used {targetQty(usage.used)} {item.unitSymbol}</Text>
               <Text style={styles.recordMeta}>Target {targetQty(item.quantity)} {item.unitSymbol} · {usage.overContract?`over by ${targetQty(usage.overBy)} ${item.unitSymbol}`:`${targetQty(usage.remaining)} ${item.unitSymbol} remaining`}</Text>

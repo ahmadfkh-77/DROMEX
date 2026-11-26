@@ -1,6 +1,7 @@
 import {useEffect,useMemo,useState,type ReactNode} from 'react';
 import {Pressable,StyleSheet,Text,View} from 'react-native';
 
+import {contractTrackingLabel} from '../../domain/contractQuantities';
 import type {AttendanceSheet} from '../../domain/attendance';
 import type {ArrivalGroup} from '../../domain/companyDailyReport';
 import {todayKey,equipmentTypeLabel,localTime,materialView,supplierLoadDriver,setContractSwitches,type CompanyDailyReport,type DayPlace,type DaySection} from '../../domain/companyDailyReport';
@@ -101,7 +102,7 @@ function PlaceTables({place,open,toggle,keyOf,onOpenRecord,onContract}:{onContra
     {projectId?<Switch48 label="Contract quantity target %" value={contract?.included===true} disabled={!contract} onChange={on=>onContract(projectId,on)} note={contract?undefined:'Needs contract quantities for this project'}/>:null}
     {contract?.included?<Fold nested title="Contract target" hint={`${contract.rows.length}`} open={open(`${place.key}|contract`)} onToggle={()=>toggle(`${place.key}|contract`)}>
       <Table columns={[{title:'Item',flex:1.4},{title:'Contract',flex:1.2,align:'right'},{title:'Before today',flex:1.2,align:'right'},{title:'Today',flex:1,align:'right'},{title:'% used',flex:1,align:'right'},{title:'Left',flex:1.2,align:'right'}]}
-        rows={contract.rows.map(r=>({key:r.itemId,cells:[r.name,formatTotalQuantity(r.quantity,r.unitSymbol),formatTotalQuantity(r.usedBefore,r.unitSymbol),formatTotalQuantity(r.usedToday,r.unitSymbol),`${r.percentUsed}%`,formatTotalQuantity(r.left,r.unitSymbol)]}))}/>
+        rows={contract.rows.map(r=>({key:r.itemId,cells:[`${r.name} · ${contractTrackingLabel(r.tracking??'automatic')}`,formatTotalQuantity(r.quantity,r.unitSymbol),formatTotalQuantity(r.usedBefore,r.unitSymbol),formatTotalQuantity(r.usedToday,r.unitSymbol),`${r.percentUsed}%`,formatTotalQuantity(r.left,r.unitSymbol)]}))}/>
     </Fold>:null}
     {place.sections.map(section=><Fold key={section} nested title={sectionTitle[section]} hint={`${place[section].length}`} open={open(keyOf(section))} onToggle={()=>toggle(keyOf(section))}>
       {section==='loadsOut'?<Table columns={[{title:'Time',flex:1},{title:'No.',flex:1.5},{title:'Item',flex:1.4},{title:'Qty',flex:1.2},{title:'Bitumen',flex:1.3},{title:'Truck / driver',flex:1.8}]}

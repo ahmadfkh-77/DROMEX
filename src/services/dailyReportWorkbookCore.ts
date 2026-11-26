@@ -2,7 +2,7 @@ import { normalizeCustomResourceSnapshots } from '../domain/customDirectories';
 import {loadNumberLabel} from '../domain/loadNumberSeries';
 import { normalizeSupervisorSignoffs } from '../domain/supervisors';
 import { groupSupplierLoads } from '../domain/supplierLoadGroups';
-import type { ContractDayReport } from '../domain/contractQuantities';
+import {contractTrackingLabel,type ContractDayReport} from '../domain/contractQuantities';
 import { netWorkMinutes, type DailyProjectReport, type DailyReportSectionOptions, type LinkedFoundationActivity, type LinkedFuelFill, type LinkedProjectLoad, type LinkedQuarryLoad, type LinkedWallWork, type LinkedWasteDump, type ProjectReportSetup, type ReportProject } from '../domain/projectReports';
 import { liftHasManualOverride, type ConstructionLiftReportGroup } from '../domain/constructionLiftReport';
 import { liftStatusText } from '../domain/constructionLiftDiagram';
@@ -147,7 +147,7 @@ export function constructionLiftRows(walls: LinkedWallWork[], foundationActivity
 export function contractProgressRows(progress: ContractDayReport, includeWholeProject: boolean) {
   const warningText = { none: 'In progress', near: 'Near target', full: 'At target', over: 'Over target' } as const;
   const rows: Record<string, string | number | null>[] = progress.targets.map((target) => ({
-    'Target ID': target.item.id, Target: target.item.name, Unit: target.item.unitSymbol,
+    'Target ID': target.item.id, Target: target.item.name, Tracking: contractTrackingLabel(target.usage.tracking), Unit: target.item.unitSymbol,
     'Used Today': target.usedToday, 'Total Used': target.usage.used, 'Target Quantity': target.item.quantity,
     'Quantity Left': target.usage.remaining, 'Over Target By': target.usage.overBy,
     'Percent Complete': target.usage.percentUsed, Status: warningText[target.usage.warning],
@@ -155,7 +155,7 @@ export function contractProgressRows(progress: ContractDayReport, includeWholePr
   }));
   const { summary } = progress;
   if (includeWholeProject && summary.overallPercentUsed !== null) rows.push({
-    'Target ID': null, Target: `Whole project (${summary.itemCount} target${summary.itemCount === 1 ? '' : 's'}, ${summary.overallBasis === 'value' ? 'weighted by target value' : 'average of the targets'})`, Unit: null,
+    'Target ID': null, Tracking: null, Target: `Whole project (${summary.itemCount} target${summary.itemCount === 1 ? '' : 's'}, ${summary.overallBasis === 'value' ? 'weighted by target value' : 'average of the targets'})`, Unit: null,
     'Used Today': null, 'Total Used': null, 'Target Quantity': null, 'Quantity Left': null, 'Over Target By': null,
     'Percent Complete': summary.overallPercentUsed, Status: null, 'Loads Not Counted Today': null,
   });
