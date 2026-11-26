@@ -174,14 +174,14 @@ describe('site entries',()=>{
     expect(['loads','quarry_purchases','stock_batches','stock_use','fuel_batches'].map(count)).toEqual(before);
   });
 
-  it('an entry makes later edits need a reason, and the mode cannot be changed yet',async()=>{
+  it('an entry makes later edits need a reason, and the mode cannot be changed in an edit',async()=>{
     const {contracts,manual}=await setup();
     const item=await manual();
     expect((await contracts.getItem(item.id)).editNeedsReason).toBe(false);
     await contracts.addSiteEntry(item.id,{date:'2026-10-20',amount:'5',note:''});
     expect((await contracts.getItem(item.id)).editNeedsReason).toBe(true);
     await expect(contracts.editItem(item.id,{name:'Site clearance',unitId:'unit_m3',quantity:'9000',unitPriceUsd:'',materialIds:[],trackingMode:'manual'},'')).rejects.toThrow('reason');
-    await expect(contracts.editItem(item.id,{name:'Site clearance',unitId:'unit_m3',quantity:'9000',unitPriceUsd:'',materialIds:['asphalt'],trackingMode:'linked_manual'},'Change')).rejects.toThrow('later phase');
+    await expect(contracts.editItem(item.id,{name:'Site clearance',unitId:'unit_m3',quantity:'9000',unitPriceUsd:'',materialIds:['asphalt'],trackingMode:'linked_manual'},'Change')).rejects.toThrow('its own change');
     expect(await contracts.editItem(item.id,{name:'Site clearance',unitId:'unit_m3',quantity:'9000',unitPriceUsd:'',materialIds:[]},'Variation order')).toMatchObject({quantity:9000,trackingMode:'manual'});
   });
 });

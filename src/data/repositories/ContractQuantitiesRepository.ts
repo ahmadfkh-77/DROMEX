@@ -1,5 +1,5 @@
 import type {
-  ContractHistoryKind,ContractSiteEntry,ContractItem,ContractTargetRow,ContractItemDraft,ContractLoad,ContractLoadDay,ContractProjectSummary,ContractTotalsTarget,ContractUsage,
+  ContractHistoryKind,ContractModePlan,ContractSiteEntry,ContractTrackingMode,ContractItem,ContractTargetRow,ContractItemDraft,ContractLoad,ContractLoadDay,ContractProjectSummary,ContractTotalsTarget,ContractUsage,
 } from '../../domain/contractQuantities';
 import type {ContractLoadSource} from './contractLinks';
 
@@ -39,6 +39,10 @@ export interface ContractQuantitiesRepository{
   addAdjustment(contractItemId:string,input:{amount:string;reason:string}):Promise<void>;
   /** A linked manual or manual target only: one dated entry in the target's unit; a negative amount is a correction and needs a note. Never edited or deleted. */
   addSiteEntry(contractItemId:string,input:{date:string;amount:string;note:string}):Promise<void>;
+  /** What changing how used is tracked would do (value carried over, or entries that would stop counting), before anything is saved. */
+  previewModeChange(contractItemId:string,to:ContractTrackingMode):Promise<ContractModePlan>;
+  /** Changes how used is tracked as an audited edit. Going back to Automatic needs `confirmed`; no site entry is ever deleted. */
+  changeTrackingMode(contractItemId:string,to:ContractTrackingMode,input:{reason:string;confirmed?:boolean}):Promise<ContractItem>;
   /** The target's site entries that count now, newest first. */
   listSiteEntries(contractItemId:string):Promise<ContractSiteEntry[]>;
   /** Links a load recorded earlier (or saved unlinked). A reason is required and kept in the history. */

@@ -60,7 +60,7 @@ export type ContractAdjustment={id:string;contractItemId:string;amount:number;re
  * edited or deleted; a mistake is fixed by a later negative entry with a reason. An `opening` entry is the calculated value carried over when
  * a target is switched from automatic, so it stays the starting point instead of resetting to zero.
  */
-export type ContractSiteEntry={id:string;contractItemId:string;kind:'entry'|'opening';entryDate:string;amount:number;note:string|null;createdAt:string};
+export type ContractSiteEntry={id:string;contractItemId:string;/** One stretch of manual tracking; absent means 1. A return to Automatic starts a new one, so earlier entries stop counting. */segment?:number;kind:'entry'|'opening';entryDate:string;amount:number;note:string|null;createdAt:string};
 
 /** What the linked loads delivered, per material and unit, in the material's own unit. A reference for a linked manual target; never part of used. */
 export type ContractDeliveredRow={materialId:string;unitId:string;unitSymbol:string;quantity:number;loadCount:number};
@@ -370,7 +370,16 @@ export function summarizeContractProject(rows:readonly ContractRow[]):ContractPr
 }
 
 /** Everything the Daily Report needs to know about one target: the item with the loads and adjustments that point at it. */
-export type ContractDayEntry={item:ContractItem;loads:readonly ContractLoad[];adjustments:readonly ContractAdjustment[];/** The live site entries of a linked manual or manual target. Absent means none. */siteEntries?:readonly ContractSiteEntry[]};
+/** A change of how a target is tracked, on the day it was made (from the target's audited history). */
+export type ContractModeChange={day:string;from:ContractTrackingMode;to:ContractTrackingMode};
+const modeAt=(item:ContractItem,changes:readonly ContractModeChange[],asOf:string|null):ContractTrackingMode=>{
+  if(!changes.length)return contractTrackingMode(item);
+  const applied=changes.filter(change=>asOf===null||change.day<=asOf);
+  return applied.length?applied[applied.length-1]!.to:changes[0]!.from;
+};
+const segmentAt=(changes:readonly ContractModeChange[],asOf:string|null)=>1+changes.filter(change=>change.from!=='automatic'&&change.to==='automatic'&&(asOf===null||change.day<=asOf)).length;
+
+export type ContractDayEntry={item:ContractItem;loads:readonly ContractLoad[];adjustments:readonly ContractAdjustment[];/** The live site entries of a linked manual or manual target. Absent means none. */siteEntries?:readonly ContractSiteEntry[];/** Every change of tracking mode with the day it was made, oldest first. Absent or empty means the target never switched. */modeChanges?:readonly ContractModeChange[]};
 /** One target on a Daily Report: `usage` is as of the work date, `usedToday` is what that day added (counted loads plus adjustments dated that day). */
 export type ContractDayProgress={item:ContractItem;usage:ContractUsage;usedToday:number;notCountedToday:number};
 export type ContractDayReport={
@@ -385,11 +394,15 @@ export type ContractDayReport={
  * finished after that day was still in progress then. The one place the as-of rule lives, for the Daily Report and the Totals PDF.
  */
 export function contractUsageAsOf(entry:ContractDayEntry,asOf:string|null):{item:ContractItem;adjustments:ContractAdjustment[];siteEntries:ContractSiteEntry[];usage:ContractUsage}{
-  const entries=entry.siteEntries??[];
+  // A target that switched how it is tracked is read, for each date, the way it was tracked then: before a switch day its loads, after it its
+  // site entries of that stretch (a return to Automatic starts a new stretch, so the earlier entries never count again).
+  const changes=entry.modeChanges??[];
+  const entries=changes.length?(entry.siteEntries??[]).filter(value=>(value.segment??1)===segmentAt(changes,asOf)):(entry.siteEntries??[]);
+  const base:ContractItem=changes.length?{...entry.item,trackingMode:modeAt(entry.item,changes,asOf)}:entry.item;
   // A site entry counts on its own day (the day the work was done), not the day it was typed.
-  if(asOf===null)return{item:entry.item,adjustments:[...entry.adjustments],siteEntries:[...entries],usage:computeContractUsage(entry.item,entry.loads,entry.adjustments,entries)};
-  const item:ContractItem=entry.item.status==='complete'&&entry.item.completedOn&&entry.item.completedOn>asOf
-    ?{...entry.item,status:'in_progress',completedOn:null}:entry.item;
+  if(asOf===null)return{item:base,adjustments:[...entry.adjustments],siteEntries:[...entries],usage:computeContractUsage(base,entry.loads,entry.adjustments,entries)};
+  const item:ContractItem=base.status==='complete'&&base.completedOn&&base.completedOn>asOf
+    ?{...base,status:'in_progress',completedOn:null}:base;
   const adjustments=entry.adjustments.filter(value=>localDateKey(new Date(value.createdAt))<=asOf);
   const siteEntries=entries.filter(value=>value.entryDate<=asOf);
   return{item,adjustments,siteEntries,usage:computeContractUsage(item,entry.loads.filter(load=>load.date<=asOf),adjustments,siteEntries)};
@@ -553,4 +566,68 @@ export function siteEntryPreview(usage:Pick<ContractUsage,'used'|'allowed'>,amou
 /** "340 m³ · Concrete C25 · 42 loads", one line per material and unit, for the From loads box of a Linked manual target. Never added to used. */
 export function contractDeliveredLines(usage:Pick<ContractUsage,'deliveredFromLoads'>,materialName:(id:string)=>string):string[]{
   return usage.deliveredFromLoads.map(row=>`${String(Number(row.quantity.toFixed(3)))} ${row.unitSymbol} · ${materialName(row.materialId)} · ${row.loadCount} load${row.loadCount===1?'':'s'}`);
+}
+
+/* ── Switching how used is tracked (DEC-556, Phase 3) ─────────────────────────────────────────────────────────────────────────── */
+
+export type ContractModePlan={
+  from:ContractTrackingMode;to:ContractTrackingMode;
+  /** Automatic to a manual mode: the quantity counted from loads, carried over as the starting point so used never resets to zero. Null when nothing was counted. */
+  opening:{amount:number;date:string;note:string}|null;
+  /** A manual mode back to Automatic: the site entries that stop counting (they stay in the database). Null when there are none. */
+  discards:{count:number;total:number}|null;
+  /** True when the site entries of the old stretch stop counting and a new stretch begins. */
+  startsNewSegment:boolean;
+  /** The Owner must confirm before this change is made. */
+  needsConfirm:boolean;
+  usedBefore:number;usedAfter:number;
+};
+
+/**
+ * What changing a target's tracking mode does, worked out before anything is saved. Automatic to a manual mode freezes the quantity counted
+ * from loads as an opening entry; a manual mode back to Automatic stops the site entries counting and needs the Owner's confirmation; the two
+ * manual modes share their entries. `calculatedFromLoads` is what the target would count from its loads if it were Automatic (needed only
+ * when going back to Automatic). Adjustments count in every mode and are never changed here.
+ */
+export function planTrackingModeChange(item:ContractItem,usage:ContractUsage,to:ContractTrackingMode,context:{today:string;calculatedFromLoads:number|null}):ContractModePlan{
+  const from=contractTrackingMode(item);
+  if(item.cancelledAt)throw new Error('A cancelled target cannot change how used is tracked.');
+  if(from===to)throw new Error('This target is already tracked that way.');
+  const base:ContractModePlan={from,to,opening:null,discards:null,startsNewSegment:false,needsConfirm:false,usedBefore:usage.used,usedAfter:usage.used};
+  if(to==='automatic'){
+    if(!item.materialIds.length)throw new Error('Link at least one material before switching to Automatic.');
+    const count=usage.siteEntries.length;
+    return{...base,discards:count?{count,total:usage.siteEntriesTotal}:null,startsNewSegment:true,needsConfirm:count>0,usedAfter:round6((context.calculatedFromLoads??0)+usage.adjustmentsTotal)};
+  }
+  if(to==='manual'&&item.materialIds.length)throw new Error(from==='automatic'
+    ?'A Manual target has no material. Switch to Linked manual instead, which keeps the linked materials.'
+    :'A Manual target has no material. Remove the linked materials first.');
+  if(from==='automatic'&&usage.fromLoads>0)return{...base,opening:{amount:usage.fromLoads,date:context.today,note:'Calculated from loads when switched from Automatic'}};
+  return base;
+}
+
+/* ── Words for the mode-switch screens (DEC-556, Phase 3) ──────────────────────────────────────────────────────────────────── */
+
+const quantityText=(value:number)=>String(Number(value.toFixed(3)));
+
+/** The headline and explanation shown before a mode change, from its plan. `tone` is red only when entries would stop counting. */
+export function contractModeChangeSummary(plan:ContractModePlan,unit:string):{tone:'green'|'red'|'blue';headline:string;body:string}{
+  if(plan.discards){
+    const {count,total}=plan.discards;
+    return{tone:'red',headline:`${count} site ${count===1?'entry':'entries'} (${quantityText(total)} ${unit}) will stop counting.`,
+      body:'Used switches to the quantity calculated from the loads. The entries stay in the history and are never deleted, but they will not count again.'};
+  }
+  if(plan.opening)return{tone:'green',headline:'Used does not change.',
+    body:`The ${quantityText(plan.opening.amount)} ${unit} counted from loads is kept as the starting point (Opening value), then you add site entries on top.`};
+  if(plan.to==='automatic')return{tone:'blue',headline:'Used is calculated from the loads again.',body:'There are no site entries to stop counting.'};
+  return{tone:'blue',headline:'Used does not change.',body:'Your site entries are kept.'};
+}
+
+/** The second line of a history entry that changed how used is tracked, or null for any other entry. */
+export function contractHistoryDetail(kind:ContractHistoryKind,details:Record<string,unknown>):string|null{
+  if(kind!=='edited')return null;
+  const change=(details.changes as {trackingMode?:{from?:ContractTrackingMode;to?:ContractTrackingMode}}|undefined)?.trackingMode;
+  if(!change?.from||!change.to)return null;
+  const used=typeof details.usedBefore==='number'&&typeof details.usedAfter==='number'?` · Used ${quantityText(details.usedBefore)} → ${quantityText(details.usedAfter)}`:'';
+  return `Tracking: ${contractTrackingLabel(change.from)} → ${contractTrackingLabel(change.to)}${used}`;
 }

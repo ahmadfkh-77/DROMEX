@@ -1,9 +1,9 @@
 import type {SQLiteDatabase} from 'expo-sqlite';
 
 import {
-  applyContractItemEdit,cancelContractItem,contractTrackingMode,validateSiteEntry,candidateContractItems,computeContractUsage,contractTotalsTargets,dailyContractProgress,dailyContractTargetTable,finalContractReport,finishContractItem,groupContractLoadsByDay,
+  applyContractItemEdit,cancelContractItem,contractTrackingMode,planTrackingModeChange,validateSiteEntry,candidateContractItems,computeContractUsage,contractTotalsTargets,dailyContractProgress,dailyContractTargetTable,finalContractReport,finishContractItem,groupContractLoadsByDay,
   reopenContractItem,summarizeContractProject,validateContractAdjustment,validateContractItemDraft,validateContractReason,
-  type ContractAdjustment,type ContractSiteEntry,type ContractDayEntry,type ContractDayReport,type ContractFinalReport,type ContractHistoryKind,type ContractTotalsTarget,type ContractTargetRow,type ContractItem,type ContractItemDraft,type ContractItemValues,
+  type ContractAdjustment,type ContractModeChange,type ContractModePlan,type ContractTrackingMode,type ContractSiteEntry,type ContractDayEntry,type ContractDayReport,type ContractFinalReport,type ContractHistoryKind,type ContractTotalsTarget,type ContractTargetRow,type ContractItem,type ContractItemDraft,type ContractItemValues,
 } from '../../domain/contractQuantities';
 import {localDateKey} from '../../domain/fuel';
 import type {
@@ -92,10 +92,63 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
   }
 
   /** The site entries that count now: those of the target's current segment, oldest first. Earlier segments stay in the table as history. */
-  private async siteEntries(itemId:string):Promise<ContractSiteEntry[]>{
-    const rows=await this.db.getAllAsync<{id:string;kind:'entry'|'opening';entry_date:string;amount:number;note:string|null;created_at:string}>(
-      'SELECT id,kind,entry_date,amount,note,created_at FROM contract_item_site_entries WHERE contract_item_id=? AND entries_segment=(SELECT entries_segment FROM contract_items WHERE id=?) ORDER BY entry_date,created_at,rowid',itemId,itemId);
-    return rows.map(row=>({id:row.id,contractItemId:itemId,kind:row.kind,entryDate:row.entry_date,amount:row.amount,note:row.note,createdAt:row.created_at}));
+  private async siteEntries(itemId:string,allSegments=false):Promise<ContractSiteEntry[]>{
+    const rows=await this.db.getAllAsync<{id:string;kind:'entry'|'opening';entries_segment:number;entry_date:string;amount:number;note:string|null;created_at:string}>(
+      `SELECT id,kind,entries_segment,entry_date,amount,note,created_at FROM contract_item_site_entries WHERE contract_item_id=? ${allSegments?'':'AND entries_segment=(SELECT entries_segment FROM contract_items WHERE id=?)'} ORDER BY entry_date,created_at,rowid`,
+      ...(allSegments?[itemId]:[itemId,itemId]));
+    return rows.map(row=>({id:row.id,contractItemId:itemId,segment:row.entries_segment,kind:row.kind,entryDate:row.entry_date,amount:row.amount,note:row.note,createdAt:row.created_at}));
+  }
+
+  /** Every change of tracking mode with its day, oldest first, read from the audited history (never stored twice). */
+  private async modeChanges(itemId:string):Promise<ContractModeChange[]>{
+    const rows=await this.db.getAllAsync<{details_json:string;created_at:string}>("SELECT details_json,created_at FROM contract_item_history WHERE contract_item_id=? AND kind='edited' ORDER BY created_at,rowid",itemId);
+    const changes:ContractModeChange[]=[];
+    for(const row of rows){
+      try{
+        const change=(JSON.parse(row.details_json) as {changes?:{trackingMode?:{from?:ContractModeChange['from'];to?:ContractModeChange['to']}}}).changes?.trackingMode;
+        if(change?.from&&change.to)changes.push({day:localDateKey(new Date(row.created_at)),from:change.from,to:change.to});
+      }catch{/* an unreadable line is not a mode change */}
+    }
+    return changes;
+  }
+
+  private async modePlan(contractItemId:string,to:ContractTrackingMode){
+    const {item,usage,loads}=await this.row(await this.item(contractItemId));
+    const adjustments=await this.adjustments(contractItemId);
+    const calculated=to==='automatic'?computeContractUsage({...item,trackingMode:'automatic'},loads,adjustments).fromLoads:null;
+    return{item,usage,plan:planTrackingModeChange(item,usage,to,{today:localDateKey(new Date()),calculatedFromLoads:calculated})};
+  }
+
+  /** What changing how used is tracked would do, before anything is saved: the value carried over, or the entries that would stop counting. */
+  async previewModeChange(contractItemId:string,to:ContractTrackingMode):Promise<ContractModePlan>{
+    return (await this.modePlan(contractItemId,to)).plan;
+  }
+
+  /**
+   * Changes how a target's used quantity is tracked, as an audited edit. Automatic to a manual mode saves the quantity counted from loads as
+   * an opening entry, so used never resets to zero. A manual mode back to Automatic needs `confirmed`: the site entries then stop counting
+   * (they stay in the database, in their own stretch) and used is calculated from the loads again. No load, stock or batch is touched.
+   */
+  async changeTrackingMode(contractItemId:string,to:ContractTrackingMode,input:{reason:string;confirmed?:boolean}):Promise<ContractItem>{
+    const {plan}=await this.modePlan(contractItemId,to);
+    if(plan.needsConfirm&&!input.confirmed)throw new Error(`Confirm to continue: ${plan.discards!.count} site ${plan.discards!.count===1?'entry stops':'entries stop'} counting and used changes from ${plan.usedBefore} to ${plan.usedAfter}.`);
+    const hasHistory=await this.editNeedsReason(contractItemId);
+    const reason=hasHistory?validateContractReason(input.reason,'changing how used is tracked for'):input.reason.trim().replace(/\s+/g,' ')||null;
+    const now=new Date().toISOString();
+    const details:Record<string,unknown>={changes:{trackingMode:{from:plan.from,to:plan.to}},usedBefore:plan.usedBefore,usedAfter:plan.usedAfter,
+      ...(plan.opening?{opening:{amount:plan.opening.amount,date:plan.opening.date}}:{}),...(plan.discards?{stoppedCounting:plan.discards}:{})};
+    await this.db.withTransactionAsync(async()=>{
+      await this.db.runAsync('UPDATE contract_items SET tracking_mode=?,entries_segment=entries_segment+?,updated_at=? WHERE id=?',plan.to,plan.startsNewSegment?1:0,now,contractItemId);
+      if(plan.opening){
+        const id=makeId('contract_site_entry');
+        await this.db.runAsync("INSERT INTO contract_item_site_entries (id,contract_item_id,entries_segment,kind,entry_date,amount,note,created_at) VALUES (?,?,(SELECT entries_segment FROM contract_items WHERE id=?),'opening',?,?,?,?)",
+          id,contractItemId,contractItemId,plan.opening.date,plan.opening.amount,plan.opening.note,now);
+        await this.enqueue('contractSiteEntry',id,{id,contractItemId,kind:'opening',entryDate:plan.opening.date,amount:plan.opening.amount,note:plan.opening.note},now);
+      }
+      await insertContractHistory(this.db,{contractItemId,kind:'edited',reason,details,createdAt:now});
+      await this.enqueue('contractItem',contractItemId,{id:contractItemId,change:'tracking_mode_changed',reason,...details},now);
+    });
+    return this.item(contractItemId);
   }
 
   private async row(item:ContractItem):Promise<ContractRowView&{loads:ContractLoadDetail[]}>{
@@ -164,12 +217,14 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
     const rows=await this.db.getAllAsync<{id:string;created_at:string}>('SELECT id,created_at FROM contract_items WHERE project_id=? ORDER BY created_at,rowid',projectId);
     const entries:ContractDayEntry[]=[];
     for(const {id,created_at} of rows){
-      const loads=await this.linkedLoads(id),adjustments=await this.adjustments(id),siteEntries=await this.siteEntries(id);
+      const loads=await this.linkedLoads(id),adjustments=await this.adjustments(id),modeChanges=await this.modeChanges(id);
+      // A target that never switched reads its current entries as before; one that did needs every stretch, so each date reads its own.
+      const siteEntries=await this.siteEntries(id,modeChanges.length>0);
       if(asOf!==null){
         const existed=localDateKey(new Date(created_at))<=asOf;
         if(!existed&&!loads.some(load=>load.date<=asOf)&&!adjustments.some(value=>localDateKey(new Date(value.createdAt))<=asOf)&&!siteEntries.some(value=>value.entryDate<=asOf))continue;
       }
-      entries.push({item:await this.item(id),loads,adjustments,siteEntries});
+      entries.push({item:await this.item(id),loads,adjustments,siteEntries,modeChanges});
     }
     return entries;
   }
@@ -218,9 +273,9 @@ export class SqliteContractQuantitiesRepository implements ContractQuantitiesRep
   async editItem(contractItemId:string,draft:ContractItemDraft,reason:string):Promise<ContractItem>{
     const current=await this.item(contractItemId);
     if(current.cancelledAt)throw new Error('A cancelled target cannot be edited.');
-    // Changing how used is tracked (freeze / warn-and-confirm) is a later phase; until then the mode is kept as it is.
+    // How used is tracked changes only through changeTrackingMode (freeze / confirm); a normal edit keeps the mode.
     const mode=contractTrackingMode(current);
-    if(draft.trackingMode!==undefined&&draft.trackingMode!==mode)throw new Error('Changing how used is tracked comes in a later phase.');
+    if(draft.trackingMode!==undefined&&draft.trackingMode!==mode)throw new Error('Change how used is tracked with its own change, not in this edit.');
     const values=await this.checkedValues({...draft,trackingMode:mode});
     const removed=current.materialIds.filter(id=>!values.materialIds.includes(id));
     for(const materialId of removed){

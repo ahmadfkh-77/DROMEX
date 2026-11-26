@@ -2,13 +2,13 @@ import {useEffect,useMemo,useState} from 'react';
 import {ActivityIndicator,Alert,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 
 import type {ContractFormSetup,ContractItemDetail,ContractQuantitiesRepository} from '../../data/repositories/ContractQuantitiesRepository';
-import {contractChangeLines,contractHistoryLabel,contractTrackingMode,validateContractItemDraft,type ContractItemDraft,type ContractTrackingMode} from '../../domain/contractQuantities';
+import {contractChangeLines,contractHistoryDetail,contractHistoryLabel,contractModeChangeSummary,contractTrackingMode,validateContractItemDraft,type ContractItemDraft,type ContractModePlan,type ContractTrackingMode} from '../../domain/contractQuantities';
 import {localDateKey} from '../../domain/fuel';
 import type {Project} from '../../domain/loads';
 import {AppButton,AppCard,AppField,AppPage,Feedback,PageHeader} from '../components/AppPrimitives';
 import {GroupedSearchableSelect} from '../components/GroupedSearchableSelect';
 import {SearchableSelect} from '../components/SearchableSelect';
-import {contractDay} from '../components/contracts/ContractParts';
+import {contractAmount,contractDay} from '../components/contracts/ContractParts';
 import {colors} from '../theme';
 
 const emptyDraft:ContractItemDraft={name:'',unitId:'',quantity:'',unitPriceUsd:'',materialIds:[],trackingMode:'automatic'};
@@ -51,6 +51,19 @@ export function ContractItemFormScreen({project,contracts,contractItemId,onBack,
 
   const change=(patch:Partial<ContractItemDraft>)=>{setDraft(current=>({...current,...patch}));setTouched(true);setError(null);};
   const mode=contractTrackingMode(draft);
+  /** DEC-556 Phase 3: changing how used is tracked on an existing target. Previewed first; going back to Automatic needs a tick. */
+  const[target,setTarget]=useState<ContractTrackingMode|null>(null);
+  const[plan,setPlan]=useState<ContractModePlan|null>(null);
+  const[planError,setPlanError]=useState<string|null>(null);
+  const[understood,setUnderstood]=useState(false);
+  const[modeReason,setModeReason]=useState('');
+  useEffect(()=>{
+    setPlan(null);setPlanError(null);setUnderstood(false);setModeReason('');
+    if(!target||!contractItemId)return;
+    let active=true;
+    contracts.previewModeChange(contractItemId,target).then(value=>{if(active)setPlan(value);}).catch(cause=>{if(active)setPlanError(cause instanceof Error?cause.message:'This change is not possible.');});
+    return()=>{active=false;};
+  },[contracts,contractItemId,target]);
   /** Manual has no material: choosing it clears any ticked material so the saved target is consistent. */
   const chooseMode=(next:ContractTrackingMode)=>change(next==='manual'?{trackingMode:next,materialIds:[]}:{trackingMode:next});
   const result=useMemo(()=>validateContractItemDraft(draft),[draft]);
@@ -72,6 +85,14 @@ export function ContractItemFormScreen({project,contracts,contractItemId,onBack,
     return [...byCategory.values()];
   },[setup,draft.materialIds]);
 
+  const needsModeReason=Boolean(detail?.editNeedsReason);
+  const canSwitch=!busy&&!cancelled&&Boolean(plan)&&(!plan?.needsConfirm||understood)&&(!needsModeReason||modeReason.trim().length>0);
+  async function switchMode(){
+    if(!detail||!target)return;
+    setBusy(true);setError(null);
+    try{await contracts.changeTrackingMode(detail.item.id,target,{reason:modeReason,confirmed:understood});onSaved();}
+    catch(cause){setError(cause instanceof Error?cause.message:'Could not change how used is tracked.');}finally{setBusy(false);}
+  }
   async function save(){
     setBusy(true);setError(null);
     try{
@@ -109,15 +130,35 @@ export function ContractItemFormScreen({project,contracts,contractItemId,onBack,
       <AppField label={`Target price per unit, USD${unitSymbol?` / ${unitSymbol}`:''} (optional)`} value={draft.unitPriceUsd} onChangeText={unitPriceUsd=>change({unitPriceUsd})} keyboardType="decimal-pad" placeholder="Not set" editable={!cancelled}/>
     </AppCard>
 
-    <AppCard title="How is “used” tracked?" hint={editing?'Chosen when the target was created. Changing it comes in a later phase.':undefined}>
-      {MODES.filter(option=>!editing||option.id===mode).map(option=>{
-        const on=option.id===mode;
-        return <TouchableOpacity key={option.id} style={[styles.mode,on&&styles.modeOn]} onPress={()=>chooseMode(option.id)} disabled={editing||cancelled} accessibilityRole="radio" accessibilityState={{checked:on,disabled:editing||cancelled}} accessibilityLabel={`${option.title}, ${option.badge}`}>
+    <AppCard title="How is “used” tracked?" hint={editing?'To change it, pick another way. You see exactly what changes before you confirm, and no site entry is ever deleted.':undefined}>
+      {MODES.map(option=>{
+        const current=editing&&option.id===mode;
+        const on=editing?option.id===(target??mode):option.id===mode;
+        return <TouchableOpacity key={option.id} style={[styles.mode,on&&styles.modeOn]} onPress={()=>editing?setTarget(option.id===mode?null:option.id):chooseMode(option.id)} disabled={cancelled||busy} accessibilityRole="radio" accessibilityState={{checked:on,disabled:cancelled}} accessibilityLabel={`${option.title}, ${option.badge}${current?', current':''}`}>
           <View style={styles.radio}>{on?<View style={styles.radioDot}/>:null}</View>
-          <View style={styles.flex}><Text style={styles.modeTitle}>{option.title}  <Text style={[styles.badge,option.id==='manual'?styles.badgeManual:option.id==='linked_manual'?styles.badgeLinked:styles.badgeAuto]}> {option.badge} </Text></Text><Text style={styles.helper}>{option.text}</Text></View>
+          <View style={styles.flex}><Text style={styles.modeTitle}>{option.title}  <Text style={[styles.badge,option.id==='manual'?styles.badgeManual:option.id==='linked_manual'?styles.badgeLinked:styles.badgeAuto]}> {option.badge} </Text>{current?<Text style={styles.currentTag}>  CURRENT</Text>:null}</Text><Text style={styles.helper}>{option.text}</Text></View>
         </TouchableOpacity>;
       })}
-      {mode==='manual'?<Text style={styles.quiet}>No material is linked. Used is the sum of the entries you log. After saving, open the target and tap Log used quantity to record what was done each day.</Text>:null}
+      {mode==='manual'&&!target?<Text style={styles.quiet}>No material is linked. Used is the sum of the entries you log. After saving, open the target and tap Log used quantity to record what was done each day.</Text>:null}
+      {editing&&target&&planError?<Text style={styles.problem}>{planError}</Text>:null}
+      {editing&&target&&plan?<View style={styles.switchBox}>
+        {(()=>{const summary=contractModeChangeSummary(plan,unitSymbol);return <Text style={summary.tone==='red'?styles.problem:summary.tone==='green'?styles.good:styles.quiet}><Text style={styles.bold}>{summary.headline}</Text> {summary.body}</Text>;})()}
+        <View style={styles.beforeAfter}>
+          <View style={styles.baCell}><Text style={styles.baLabel}>USED NOW</Text><Text style={styles.baValue}>{contractAmount(plan.usedBefore)} {unitSymbol}</Text></View>
+          <Text style={styles.baArrow}>→</Text>
+          <View style={styles.baCell}><Text style={styles.baLabel}>USED AFTER</Text><Text style={styles.baValue}>{contractAmount(plan.usedAfter)} {unitSymbol}</Text></View>
+        </View>
+        {plan.to==='automatic'&&mismatched.length?<Text style={styles.amber}><Text style={styles.bold}>Check the unit.</Text> Loads count only in the target's own unit ({unitSymbol}). Loads in another unit are listed as "not counted".</Text>:null}
+        {plan.to==='linked_manual'&&plan.from==='automatic'?<Text style={styles.quiet}>Loads stay linked and are shown as FROM LOADS, never added again. Adjustments keep counting.</Text>:null}
+        {plan.needsConfirm?<TouchableOpacity style={styles.confirm} onPress={()=>setUnderstood(value=>!value)} accessibilityRole="checkbox" accessibilityState={{checked:understood}}>
+          <View style={[styles.box,understood&&styles.boxOn]}>{understood?<Text style={styles.tick}>✓</Text>:null}</View>
+          <Text style={[styles.flex,styles.confirmText]}>I understand these entries will stop counting</Text>
+        </TouchableOpacity>:null}
+        <AppField label={needsModeReason?'Reason for the change *':'Reason for the change (optional)'} value={modeReason} onChangeText={setModeReason} placeholder="For example Tracked in metres on site"/>
+        {needsModeReason?<Text style={styles.helper}>Required because loads, adjustments or entries already count. It is kept in the history.</Text>:null}
+        <AppButton label="Change how used is tracked" onPress={()=>void switchMode()} disabled={!canSwitch} busy={busy}/>
+        {!canSwitch&&!busy?<Text style={styles.helper}>The button stays grey until {plan.needsConfirm?'the box is ticked and ':''}{needsModeReason?'a reason is written':'you are ready'}.</Text>:null}
+      </View>:null}
     </AppCard>
 
     {mode!=='manual'?<AppCard title={mode==='linked_manual'?'Materials (for reference)':'Materials that count'} hint={mode==='linked_manual'?'Ticking a material does not calculate used. Its delivered quantity is shown beside used, in its own unit.':"The Catalog materials whose loads can count toward this item. Each shows its usual unit beside the item's unit. Tap a material to take it off."}>
@@ -146,6 +187,7 @@ export function ContractItemFormScreen({project,contracts,contractItemId,onBack,
     {detail?<AppCard title="History">
       {detail.history.map(line=><View key={line.id} style={styles.history}>
         <Text style={styles.historyTitle}>{contractDay(localDateKey(new Date(line.createdAt)))} · {contractHistoryLabel(line.kind)}</Text>
+        {contractHistoryDetail(line.kind,line.details)?<Text style={styles.helper}>{contractHistoryDetail(line.kind,line.details)}</Text>:null}
         {line.reason?<Text style={styles.helper}>{line.reason}</Text>:null}
       </View>)}
     </AppCard>:null}
@@ -179,6 +221,17 @@ const styles=StyleSheet.create({
   radioDot:{width:10,height:10,borderRadius:5,backgroundColor:colors.navy},
   modeTitle:{color:colors.ink,fontSize:14,fontWeight:'800'},
   badge:{fontSize:10,fontWeight:'900',color:'#FFF',overflow:'hidden'},
+  currentTag:{color:colors.muted,fontSize:10,fontWeight:'800'},
+  switchBox:{gap:10,marginTop:6},
+  problem:{backgroundColor:'#FDECEA',borderColor:'#F0ABA4',borderWidth:1,borderRadius:12,padding:10,color:'#7A1912',fontSize:13,lineHeight:19,overflow:'hidden'},
+  good:{backgroundColor:'#E6F4EA',borderColor:'#A9D8B8',borderWidth:1,borderRadius:12,padding:10,color:'#17693B',fontSize:13,lineHeight:19,overflow:'hidden'},
+  beforeAfter:{flexDirection:'row',alignItems:'center',gap:8},
+  baCell:{flex:1,backgroundColor:'#FFF',borderColor:'#D3DDE7',borderWidth:1.5,borderRadius:10,padding:7,alignItems:'center'},
+  baLabel:{color:colors.muted,fontSize:9.5,fontWeight:'800'},
+  baValue:{color:colors.navy,fontSize:16,fontWeight:'900'},
+  baArrow:{color:colors.navy,fontSize:18,fontWeight:'900'},
+  confirm:{flexDirection:'row',alignItems:'center',gap:10,minHeight:44},
+  confirmText:{color:colors.ink,fontSize:13,fontWeight:'700'},
   badgeAuto:{backgroundColor:'#1E7B4B'},badgeLinked:{backgroundColor:'#B7791F'},badgeManual:{backgroundColor:'#D9571F'},
   amber:{backgroundColor:'#FFF4DC',borderColor:'#EFC979',borderWidth:1,borderRadius:12,padding:10,color:'#5E3A00',fontSize:13,lineHeight:19,overflow:'hidden'},
   quiet:{backgroundColor:'#EEF2F6',borderColor:'#D3DDE7',borderWidth:1,borderRadius:12,padding:10,color:'#24384D',fontSize:13,lineHeight:19,overflow:'hidden'},
