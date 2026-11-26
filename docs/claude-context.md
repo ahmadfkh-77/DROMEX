@@ -835,6 +835,15 @@ values on its next save.
 - **Open**: OQ-180 (backdating a fill against batch closure, batch edit and cancel rules, project reports). Two cost assumptions await the Owner: a whole-batch price is spread over the delivered kg, and VAT is left out of a fill's cost. EPM Phase 1 will take migration 71 (DEC-548 amended); no EPM code exists.
 - **Status**: awaiting the Owner's phone testing of the Record Fill screens and the Bitumen Batch Report PDF. `output/*.apk` is git-ignored; the accepted installer remains `output/DROMEX-0.20.0-build28.apk`. Nothing is merged into `main`.
 
+## Build 54 — DROMEX 0.30.0, Android version code 54 (built 2026-11-26, not yet accepted)
+
+- **Artifact**: `output/DROMEX-0.30.0-build54.apk` (84,607,319 bytes, SHA-256 `7b21bde77f4d61fb854105becd3a482ef3ff38fa2f4e4402297e2fe5a4186f8c`), package `com.dromex.management`, versionName 0.30.0. EAS build `ec73db01-ded6-4495-8401-3c6d167f5c3a` (profile `preview`, account drofk12, eas-cli 24.7.0), built from commit `c046d47` with the existing EAS signing credentials. Checked only as a structurally valid ZIP; not installed on a device.
+- **Why 54 and not 53**: `output/DROMEX-0.30.0-build53.apk` predates the Quantity Target screens and was left untouched. The version code was raised in `app.json` and `src/appVersion.ts`.
+- **New since build 53** (DEC-556, no new migration; database version stays 70): the Quantity Target screens for the three tracking modes (target form, badges, Log used quantity sheet, Site entries list, From loads box); changing how used is tracked with a preview, a confirmation and a reason (Automatic to a manual mode saves an Opening value, a manual mode back to Automatic stops the entries counting without deleting them); the Quantity Targets PDF and Excel Site entries column and section; the AUTOMATIC / LINKED MANUAL / MANUAL badge in the Daily Report, Company Daily Report, Project Totals PDF and Completed Project Report and the Tracking column in the two Excel sheets. Commits `e1d5a4d`, `03d367f`, `17ccfec`.
+- **Tests**: typecheck clean, 240 files and 3,175 tests green before the build.
+- **Open**: none of the new screens or PDFs has been run on a device. Whether the Site entries section should cap its list, and whether entries should be checked against a project completion date, are undecided. Automatic to Manual stays refused while materials are linked (use Linked manual).
+- **Status**: awaiting the Owner's phone testing. `output/*.apk` is git-ignored; the accepted installer remains `output/DROMEX-0.20.0-build28.apk`. The release commit `c046d47` is not pushed. Nothing is merged into `main`.
+
 ## Standing rules this project expects every session to follow
 
 Everything in `CLAUDE.md`'s "Operating rules" applies without exception, notably:
